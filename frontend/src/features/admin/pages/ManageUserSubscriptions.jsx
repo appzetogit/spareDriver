@@ -15,6 +15,7 @@ import {
   Star,
   CalendarRange,
   Filter,
+  Car,
 } from 'lucide-react';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
@@ -26,6 +27,11 @@ import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
 import { SUBSCRIPTION_ASSIGNMENT_STATUS } from '../../../constants/serviceTypes';
 import { formatDateTime12 } from '../../../utils/datetime';
+import {
+  DriverCarExperienceChips,
+  formatCarLabel,
+} from '../components/DriverCarExperienceChips';
+import AdminDriverDetailModal from '../components/AdminDriverDetailModal';
 
 const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
 
@@ -115,6 +121,16 @@ const ManageUserSubscriptions = () => {
               : ` · ${row.includedHoursPerDay}h/day`}
           </p>
         </div>
+      ),
+    },
+    {
+      key: 'car',
+      header: 'Car',
+      render: (_, row) => (
+        <span className="inline-flex items-center gap-1 text-sm text-slate-600">
+          <Car className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate max-w-[140px]">{formatCarLabel(row.carId)}</span>
+        </span>
       ),
     },
     {
@@ -320,8 +336,18 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [drivers, setDrivers] = useState([]);
   const [driversLoading, setDriversLoading] = useState(true);
   const [driversError, setDriversError] = useState(null);
+  const [subscriptionTerms, setSubscriptionTerms] = useState(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [driverFilters, setDriverFilters] = useState({
+    carTypeMatch: 'true',
+    zoneMatch: 'true',
+    minRating: '',
+    onlineOnly: false,
+    allIndiaOnly: false,
+    minDrivingHoursPerDay: '',
+  });
+  const [detailDriver, setDetailDriver] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
   const [releaseReason, setReleaseReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -333,16 +359,35 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   }, [search]);
 
   useEffect(() => {
+    api.get('/admin/settings/legal-documents?type=subscription')
+      .then((res) => {
+        const docs = res?.data?.data || [];
+        const active = docs.find((d) => d.isActive) || docs[0] || null;
+        setSubscriptionTerms(active);
+      })
+      .catch(() => setSubscriptionTerms(null));
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     setDriversLoading(true);
     setDrivers([]);
     const params = new URLSearchParams({ limit: 50, page: 1 });
     if (debouncedSearch) params.append('search', debouncedSearch);
+    if (driverFilters.carTypeMatch) params.append('carTypeMatch', driverFilters.carTypeMatch);
+    if (driverFilters.zoneMatch) params.append('zoneMatch', driverFilters.zoneMatch);
+    if (driverFilters.minRating) params.append('minRating', driverFilters.minRating);
+    if (driverFilters.onlineOnly) params.append('onlineOnly', 'true');
+    if (driverFilters.allIndiaOnly) params.append('allIndiaOnly', 'true');
+    if (driverFilters.minDrivingHoursPerDay) {
+      params.append('minDrivingHoursPerDay', driverFilters.minDrivingHoursPerDay);
+    }
     api
       .get(`/admin/subscriptions/users/${subscription._id}/available-drivers?${params}`)
       .then((res) => {
         if (!cancelled) {
-          setDrivers(res?.data?.data?.drivers || []);
+          const data = res?.data?.data || {};
+          setDrivers(data.drivers || []);
           setDriversError(null);
         }
       })
@@ -355,7 +400,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         if (!cancelled) setDriversLoading(false);
       });
     return () => { cancelled = true; };
-  }, [subscription._id, debouncedSearch]);
+  }, [subscription._id, debouncedSearch, driverFilters]);
 
   const selectedDriver = useMemo(
     () => drivers.find((d) => String(d._id) === String(selectedDriverId)) || null,
@@ -416,18 +461,33 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
       )}
     >
       <div className="p-5 space-y-4">
-        <div className="rounded-2xl bg-slate-50 p-4 text-sm space-y-2">
-          <div className="flex items-center gap-2 text-slate-700">
-            <UserIcon className="w-4 h-4" />
-            <span className="font-semibold">{subscription.userId?.name || 'Customer'}</span>
+        <div className="rounded-2xl bg-slate-50 p-4 text-sm space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Subscription details</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+            <DetailLine label="Customer" value={subscription.userId?.name || '—'} />
+            <DetailLine label="Plan" value={subscription.planNameSnapshot || subscription.planId?.name || '—'} />
+            <DetailLine label="Zone" value={`${subscription.zoneId?.name || '—'}${subscription.zoneId?.city ? ` · ${subscription.zoneId.city}` : ''}`} />
+            <DetailLine label="Car" value={formatCarLabel(subscription.carId)} />
+            <DetailLine
+              label="Driver hours"
+              value={subscription.includedHoursPerDay === 0 ? 'Full-time' : `${subscription.includedHoursPerDay}h/day`}
+            />
+            <DetailLine label="Duration" value={`${subscription.durationMonths} month(s)`} />
           </div>
-          <div className="flex items-center gap-2 text-slate-600">
-            <MapPin className="w-4 h-4" />
-            {subscription.zoneId?.name || 'Zone'}
-            {subscription.zoneId?.city ? ` · ${subscription.zoneId.city}` : ''}
-          </div>
+          {(subscription.dailyPickup || subscription.dailyDropoff) && (
+            <div className="pt-2 border-t border-slate-200 space-y-1.5">
+              <DetailLine
+                label="Daily pickup"
+                value={subscription.dailyPickup?.address || '—'}
+              />
+              <DetailLine
+                label="Daily drop-off"
+                value={subscription.dailyDropoff?.address || '—'}
+              />
+            </div>
+          )}
           {subscription.assignedDriverId && (
-            <div className="flex items-center gap-2 text-emerald-700">
+            <div className="flex items-center gap-2 text-emerald-700 pt-1">
               <UserCheck className="w-4 h-4" />
               Current: {subscription.assignedDriverId.name}
             </div>
@@ -458,6 +518,20 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
             </Button>
           </div>
         )}
+
+        {subscriptionTerms?.content && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Terms sent to customer on assignment
+            </p>
+            <p className="text-sm font-semibold text-slate-800">{subscriptionTerms.title}</p>
+            <div className="max-h-28 overflow-y-auto text-xs text-slate-600 whitespace-pre-wrap">
+              {subscriptionTerms.content}
+            </div>
+          </div>
+        )}
+
+        <DriverFilterBar filters={driverFilters} onChange={setDriverFilters} />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -500,18 +574,53 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-800 truncate">{driver.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-slate-800 truncate">{driver.name}</p>
+                        {driver.inSubscriptionZone ? (
+                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                            In zone ✓
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                            Outside zone
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                         <Phone className="w-3 h-3" />
                         {driver.phone || '—'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-amber-600 shrink-0">
-                      <Star className="w-3 h-3 fill-current" />
-                      {Number(driver.rating || 0).toFixed(1)}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center gap-1 text-xs text-amber-600">
+                        <Star className="w-3 h-3 fill-current" />
+                        {Number(driver.rating || 0).toFixed(1)}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailDriver(driver);
+                        }}
+                        className="text-[10px] font-bold text-primary hover:underline"
+                      >
+                        View detail
+                      </button>
                     </div>
                   </div>
+                  <DriverCarExperienceChips
+                    experience={driver.carTypeExperience}
+                    className="mt-2"
+                  />
+                  {(driver.outstationAllIndiaOk || driver.outstationMaxDrivingHoursPerDay) && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {driver.outstationAllIndiaOk ? 'All-India OK' : 'Zone-limited'}
+                      {driver.outstationMaxDrivingHoursPerDay
+                        ? ` · ${driver.outstationMaxDrivingHoursPerDay}h/day capacity`
+                        : ''}
+                    </p>
+                  )}
                   {driver.hasConflict && (
                     <p className="text-[10px] text-rose-600 mt-2 font-medium">
                       {driver.hasSubscriptionConflict
@@ -524,6 +633,14 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
             })
           )}
         </div>
+
+        {selectedDriver && (
+          <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 text-sm">
+            <p className="font-semibold text-slate-800">Selected: {selectedDriver.name}</p>
+            <p className="text-xs text-slate-500 mt-1">{selectedDriver.phone || '—'}</p>
+            <DriverCarExperienceChips experience={selectedDriver.carTypeExperience} className="mt-2" />
+          </div>
+        )}
 
         <Button
           fullWidth
@@ -540,7 +657,82 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
           )}
         </Button>
       </div>
+
+      <AdminDriverDetailModal
+        driver={detailDriver}
+        subscriptionZone={subscription.zoneId}
+        open={Boolean(detailDriver)}
+        onClose={() => setDetailDriver(null)}
+      />
     </Drawer>
+  );
+}
+
+function DetailLine({ label, value }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase text-slate-400 font-semibold">{label}</p>
+      <p className="text-sm font-medium text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function DriverFilterBar({ filters, onChange }) {
+  const set = (key, value) => onChange((prev) => ({ ...prev, [key]: value }));
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <label className="flex items-center gap-2 text-xs text-slate-600 col-span-2">
+        <input
+          type="checkbox"
+          checked={filters.zoneMatch === 'true'}
+          onChange={(e) => set('zoneMatch', e.target.checked ? 'true' : 'false')}
+        />
+        Only drivers in subscription zone
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-600 col-span-2">
+        <input
+          type="checkbox"
+          checked={filters.carTypeMatch === 'true'}
+          onChange={(e) => set('carTypeMatch', e.target.checked ? 'true' : 'false')}
+        />
+        Match subscription car type experience
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-600">
+        <input
+          type="checkbox"
+          checked={filters.onlineOnly}
+          onChange={(e) => set('onlineOnly', e.target.checked)}
+        />
+        Online only
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-600">
+        <input
+          type="checkbox"
+          checked={filters.allIndiaOnly}
+          onChange={(e) => set('allIndiaOnly', e.target.checked)}
+        />
+        All-India OK
+      </label>
+      <input
+        type="number"
+        min="0"
+        max="5"
+        step="0.1"
+        placeholder="Min rating"
+        value={filters.minRating}
+        onChange={(e) => set('minRating', e.target.value)}
+        className="h-9 px-3 rounded-xl border border-slate-200 text-xs"
+      />
+      <input
+        type="number"
+        min="4"
+        max="16"
+        placeholder="Min hrs/day"
+        value={filters.minDrivingHoursPerDay}
+        onChange={(e) => set('minDrivingHoursPerDay', e.target.value)}
+        className="h-9 px-3 rounded-xl border border-slate-200 text-xs"
+      />
+    </div>
   );
 }
 

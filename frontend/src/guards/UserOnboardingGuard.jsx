@@ -4,6 +4,7 @@ import useUserAuthStore from '../store/useUserAuthStore';
 import api from '../utils/api';
 import { Loader2 } from 'lucide-react';
 import { MAX_USER_CARS } from '../utils/constants';
+import { UserFcmBridge } from '../components/FcmBridge';
 import { userNeedsPhone } from '../features/auth/utils/authNavigation';
 
 // `/user/checklist` is the only page that's strictly part of the
@@ -101,14 +102,24 @@ const UserOnboardingGuard = () => {
     ) {
       return <Navigate to="/user/my-cars" replace />;
     }
-    return <Outlet />;
+    return (
+      <>
+        <UserFcmBridge />
+        <Outlet />
+      </>
+    );
   }
 
   if (carCount === 0) {
     if (!path.includes('/user/add-car')) {
       return <Navigate to="/user/add-car" replace />;
     }
-    return <Outlet />;
+    return (
+      <>
+        <UserFcmBridge />
+        <Outlet />
+      </>
+    );
   }
 
   if (!onPath([...GARAGE_PATHS, '/user/checklist'])) {
@@ -119,7 +130,12 @@ const UserOnboardingGuard = () => {
     return <Navigate to="/user/checklist" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <UserFcmBridge />
+      <Outlet />
+    </>
+  );
 };
 
 export default UserOnboardingGuard;

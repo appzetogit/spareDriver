@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Edit2, Trash2, Sparkles, Check, UserCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, Sparkles, Check, UserCheck, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../utils/api';
 import Button from '../../../components/Button';
@@ -45,6 +45,39 @@ const ManageSubscriptions = () => {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [featureInput, setFeatureInput] = useState('');
+  const [termsForm, setTermsForm] = useState({ title: '', content: '' });
+  const [termsLoading, setTermsLoading] = useState(true);
+  const [termsSaving, setTermsSaving] = useState(false);
+
+  useEffect(() => {
+    setTermsLoading(true);
+    api.get('/admin/settings/legal-documents?type=subscription')
+      .then((res) => {
+        const docs = res?.data?.data || [];
+        const active = docs.find((d) => d.isActive) || docs[0];
+        if (active) {
+          setTermsForm({ title: active.title || '', content: active.content || '' });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTermsLoading(false));
+  }, []);
+
+  const saveTerms = async () => {
+    if (!termsForm.title.trim() || !termsForm.content.trim()) {
+      toast.error('Title and content are required');
+      return;
+    }
+    setTermsSaving(true);
+    try {
+      await api.post('/admin/settings/subscription-terms', termsForm);
+      toast.success('Subscription terms saved');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not save terms');
+    } finally {
+      setTermsSaving(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -238,6 +271,43 @@ const ManageSubscriptions = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <FileText className="w-5 h-5 text-primary" />
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Subscription terms & conditions</h2>
+            <p className="text-xs text-slate-500">
+              Customers must accept these before purchasing. A new version is sent on driver assignment.
+            </p>
+          </div>
+        </div>
+        {termsLoading ? (
+          <p className="text-sm text-slate-500">Loading terms…</p>
+        ) : (
+          <>
+            <Input
+              label="Title"
+              value={termsForm.title}
+              onChange={(e) => setTermsForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Subscription Terms & Conditions"
+            />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Content</label>
+              <textarea
+                value={termsForm.content}
+                onChange={(e) => setTermsForm((f) => ({ ...f, content: e.target.value }))}
+                rows={10}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Enter the full terms customers must accept…"
+              />
+            </div>
+            <Button variant="admin" onClick={saveTerms} disabled={termsSaving}>
+              {termsSaving ? 'Saving…' : 'Save terms'}
+            </Button>
+          </>
+        )}
       </div>
 
       <Modal

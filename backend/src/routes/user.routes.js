@@ -27,6 +27,8 @@ import {
   verifySubscriptionPayment,
   getMySubscription,
 } from '../controllers/pricing.controller.js';
+import { getSubscriptionTerms } from '../controllers/legalDocument.controller.js';
+import { registerUserFcmToken } from '../controllers/fcmToken.controller.js';
 import { getNearbyDriversForUser } from '../controllers/driverLocation.controller.js';
 import {
   createBooking,
@@ -66,6 +68,7 @@ router.post('/logout', logout);
 // Public pricing reads (used by the booking flow before checkout)
 router.get('/pricing/services', getActiveServicePricings);
 router.get('/pricing/subscriptions', getActiveSubscriptionPlans);
+router.get('/legal/subscription-terms', getSubscriptionTerms);
 
 // Profile — customer (own id) or staff (any customer id)
 router.get('/users/:userId/profile', protectProfileViewer, getUserProfile);
@@ -80,6 +83,8 @@ router.post('/bookings/estimate', estimateFare);
 router.get('/subscriptions/me', getMySubscription);
 router.post('/subscriptions/purchase', purchaseSubscription);
 router.post('/subscriptions/verify-payment', verifySubscriptionPayment);
+
+router.post('/fcm-token', registerUserFcmToken);
 
 // Booking lifecycle (Phase 4)
 router.post('/bookings', createBooking);

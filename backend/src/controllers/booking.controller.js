@@ -492,6 +492,11 @@ export const getOutstationAssignmentDrivers = asyncHandler(async (req, res) => {
     page: req.query?.page,
     limit: req.query?.limit,
     staff: req.staff,
+    carTypeMatch: req.query?.carTypeMatch,
+    minRating: req.query?.minRating,
+    onlineOnly: req.query?.onlineOnly,
+    allIndiaOnly: req.query?.allIndiaOnly,
+    minDrivingHoursPerDay: req.query?.minDrivingHoursPerDay,
   });
   return res
     .status(200)

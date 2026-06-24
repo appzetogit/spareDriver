@@ -426,18 +426,46 @@ export const getProfileService = async (driverId) => {
  */
 export const updateOutstationAvailabilityService = async (
   driverId,
-  { available, zoneIds },
+  { available, zoneIds, allIndiaOk, maxDrivingHoursPerDay },
 ) => {
   const next = !!available;
+  const existing = await Driver.findById(driverId)
+    .select('preferredOutstationZones outstationPreferencesCompletedAt')
+    .lean();
+  if (!existing) throw new ApiError(404, 'Driver not found');
+
   const update = {
     availableForOutstation: next,
     outstationAvailabilityUpdatedAt: new Date(),
   };
 
-  // Resolve the zone list we should persist. Caller-supplied wins;
-  // otherwise fall back to whatever is already on the driver. We
-  // only validate / persist zones when turning availability ON.
   if (next) {
+    const needsPreferences = !existing.outstationPreferencesCompletedAt;
+    if (needsPreferences) {
+      if (allIndiaOk == null) {
+        throw new ApiError(
+          400,
+          'Confirm whether you are OK with all-India multi-state outstation trips.',
+        );
+      }
+      const hours = Number(maxDrivingHoursPerDay);
+      if (!Number.isFinite(hours) || hours < 4 || hours > 16) {
+        throw new ApiError(400, 'Set your per-day driving capacity between 4 and 16 hours.');
+      }
+      update.outstationAllIndiaOk = !!allIndiaOk;
+      update.outstationMaxDrivingHoursPerDay = hours;
+      update.outstationPreferencesCompletedAt = new Date();
+    } else if (allIndiaOk != null || maxDrivingHoursPerDay != null) {
+      if (allIndiaOk != null) update.outstationAllIndiaOk = !!allIndiaOk;
+      if (maxDrivingHoursPerDay != null) {
+        const hours = Number(maxDrivingHoursPerDay);
+        if (!Number.isFinite(hours) || hours < 4 || hours > 16) {
+          throw new ApiError(400, 'Per-day driving capacity must be between 4 and 16 hours.');
+        }
+        update.outstationMaxDrivingHoursPerDay = hours;
+      }
+    }
+
     let resolvedZoneIds = null;
     if (Array.isArray(zoneIds)) {
       const seen = new Set();
@@ -453,10 +481,6 @@ export const updateOutstationAvailabilityService = async (
     }
 
     if (resolvedZoneIds === null) {
-      // Caller didn't pass zones — reuse what's already saved.
-      const existing = await Driver.findById(driverId)
-        .select('preferredOutstationZones')
-        .lean();
       resolvedZoneIds = (existing?.preferredOutstationZones || []).map(
         (id) => new mongoose.Types.ObjectId(String(id)),
       );

@@ -25,6 +25,7 @@ import {
 } from './driverConflict.service.js';
 import { getVehicleConflicts } from './vehicleConflict.service.js';
 import { loadScheduledDispatchConfig } from './bookingScheduled.service.js';
+import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
 
 /**
  * Outstation manual-assignment pipeline.
@@ -318,7 +319,17 @@ export async function getOutstationAssignmentDetailService(bookingId, staff) {
  */
 export async function listAvailableDriversForOutstationService(
   bookingId,
-  { search, page = 1, limit = 50, staff } = {},
+  {
+    search,
+    page = 1,
+    limit = 50,
+    staff,
+    carTypeMatch = 'true',
+    minRating,
+    onlineOnly,
+    allIndiaOnly,
+    minDrivingHoursPerDay,
+  } = {},
 ) {
   const detail = await getOutstationAssignmentDetailService(bookingId, staff);
   if (!detail) {
@@ -337,7 +348,7 @@ export async function listAvailableDriversForOutstationService(
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 300);
   const skip = (pageNum - 1) * limitNum;
 
-  const carTypeId = car?.carTypeId?._id || car?.carTypeId || null;
+  const carTypeId = await resolveCarTypeObjectId(car?.carTypeId?._id || car?.carTypeId);
 
   // Resolve the booking's zone IDs so we can filter to drivers who opted
   // into those zones. `zoneIds` on the booking is already populated with
@@ -360,10 +371,24 @@ export async function listAvailableDriversForOutstationService(
     match.preferredOutstationZones = { $in: bookingZoneIds };
   }
 
-  if (carTypeId) {
-    try {
-      match.carTypeExperience = new mongoose.Types.ObjectId(String(carTypeId));
-    } catch { /* ignore bad id */ }
+  if (carTypeId && carTypeMatch !== 'false') {
+    match.carTypeExperience = carTypeId;
+  }
+  if (minRating != null && minRating !== '') {
+    const rating = Number(minRating);
+    if (Number.isFinite(rating) && rating > 0) match.rating = { $gte: rating };
+  }
+  if (onlineOnly === 'true' || onlineOnly === true) {
+    match.isOnline = true;
+  }
+  if (allIndiaOnly === 'true' || allIndiaOnly === true) {
+    match.outstationAllIndiaOk = true;
+  }
+  if (minDrivingHoursPerDay != null && minDrivingHoursPerDay !== '') {
+    const hours = Number(minDrivingHoursPerDay);
+    if (Number.isFinite(hours) && hours > 0) {
+      match.outstationMaxDrivingHoursPerDay = { $gte: hours };
+    }
   }
   if (search) {
     const q = String(search).trim();
@@ -378,8 +403,10 @@ export async function listAvailableDriversForOutstationService(
   const [drivers, total] = await Promise.all([
     Driver.find(match)
       .select(
-        'name phone email rating experienceYears isOnline isOnTrip location lastLocationAt carTypeExperience availableForOutstation preferredOutstationZones outstationAvailabilityUpdatedAt cancellationStats',
+        'name phone email rating experienceYears isOnline isOnTrip location lastLocationAt carTypeExperience availableForOutstation preferredOutstationZones outstationAvailabilityUpdatedAt outstationAllIndiaOk outstationMaxDrivingHoursPerDay cancellationStats',
       )
+      .populate('carTypeExperience', 'name')
+      .populate('preferredOutstationZones', 'name city')
       .sort({
         'cancellationStats.priorityPenaltyPoints': 1,
         isOnline: -1,

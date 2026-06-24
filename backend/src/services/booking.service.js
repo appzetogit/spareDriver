@@ -865,6 +865,7 @@ export async function createBookingService(userId, body) {
   const estimate = await estimateFareService({
     serviceType,
     userId,
+    carId: body.carId,
     slabId: hourly?.slabId || undefined,
     bookedHours: hourly?.durationHours,
     scheduledAt: hourly?.scheduledStartAt || outstationPickupAt,

@@ -5,6 +5,16 @@ import {
   SUBSCRIPTION_ASSIGNMENT_STATUS,
 } from '../constants/serviceTypes.js';
 
+const subscriptionPlaceSchema = new mongoose.Schema(
+  {
+    address: { type: String, required: true, trim: true },
+    city: { type: String, default: '', trim: true },
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
 const userSubscriptionSchema = new mongoose.Schema(
   {
     userId: {
@@ -24,6 +34,17 @@ const userSubscriptionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    /** The customer's car this dedicated driver subscription covers. */
+    carId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Car',
+      required: true,
+      index: true,
+    },
+    /** Daily routine pickup for the dedicated driver subscription. */
+    dailyPickup: { type: subscriptionPlaceSchema, default: null },
+    /** Daily routine drop-off for the dedicated driver subscription. */
+    dailyDropoff: { type: subscriptionPlaceSchema, default: null },
 
     status: {
       type: String,
@@ -102,11 +123,17 @@ const userSubscriptionSchema = new mongoose.Schema(
     bookingDiscountValue: { type: Number, default: 0, min: 0 },
     bookingDiscountMinAmount: { type: Number, default: 0, min: 0 },
     planNameSnapshot: { type: String, default: '' },
+
+    // ── Terms acceptance at purchase ──
+    termsAcceptedAt: { type: Date, default: null },
+    termsVersionSnapshot: { type: Number, default: 0, min: 0 },
+    termsTitleSnapshot: { type: String, default: '' },
   },
   { timestamps: true },
 );
 
 userSubscriptionSchema.index({ userId: 1, status: 1 });
+userSubscriptionSchema.index({ userId: 1, carId: 1, status: 1 });
 userSubscriptionSchema.index({ zoneId: 1, status: 1, assignmentStatus: 1 });
 userSubscriptionSchema.index({ expiryDate: 1 });
 userSubscriptionSchema.index({ assignedDriverId: 1, status: 1, assignmentStatus: 1 });

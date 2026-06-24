@@ -83,6 +83,9 @@ const TripDetailsPage = lazy(
 );
 const UserAccountPage = lazy(() => import('./features/user/account/pages/UserAccountPage'));
 const SubscriptionsPage = lazy(() => import('./features/user/subscriptions/pages/SubscriptionsPage'));
+const SubscribeCheckoutPage = lazy(
+  () => import('./features/user/subscriptions/pages/SubscribeCheckoutPage'),
+);
 const MySubscriptionPage = lazy(() => import('./features/user/account/pages/MySubscriptionPage'));
 
 // Driver Registration
@@ -195,6 +198,9 @@ function App() {
               <Route path="/user/book/scheduled" element={<ScheduledConfirmedPage />} />
             </Route>
           </Route>
+
+          {/* ========== User Subscription Checkout ========== */}
+          <Route path="/user/subscriptions/checkout/:planId" element={<SubscribeCheckoutPage />} />
 
           {/* ========== User Booking Flow ========== */}
           {/* Legacy / outstation flow */}

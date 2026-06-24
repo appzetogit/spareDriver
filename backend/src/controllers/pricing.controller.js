@@ -73,6 +73,12 @@ export const adminListSubscriptionAvailableDrivers = asyncHandler(async (req, re
       page: Number(req.query.page) || 1,
       limit: Number(req.query.limit) || 50,
       staff: req.staff,
+      carTypeMatch: req.query.carTypeMatch,
+      minRating: req.query.minRating,
+      onlineOnly: req.query.onlineOnly,
+      allIndiaOnly: req.query.allIndiaOnly,
+      minDrivingHoursPerDay: req.query.minDrivingHoursPerDay,
+      zoneMatch: req.query.zoneMatch,
     },
   );
   return res.status(200).json(new ApiResponse(200, result, 'Available drivers fetched'));
@@ -110,11 +116,17 @@ export const getActiveSubscriptionPlans = asyncHandler(async (_req, res) => {
 });
 
 export const purchaseSubscription = asyncHandler(async (req, res) => {
-  const { planId, zoneId } = req.body || {};
+  const { planId, zoneId, carId, termsAccepted, dailyPickup, dailyDropoff } = req.body || {};
   const checkout = await pricingService.createSubscriptionPurchaseOrderService(
     req.user._id,
     planId,
     zoneId,
+    carId,
+    {
+      termsAccepted: termsAccepted === true || termsAccepted === 'true',
+      dailyPickup,
+      dailyDropoff,
+    },
   );
   return res.status(200).json(new ApiResponse(200, checkout, 'Subscription checkout created'));
 });
@@ -139,16 +151,9 @@ export const verifySubscriptionPayment = asyncHandler(async (req, res) => {
 });
 
 export const getMySubscription = asyncHandler(async (req, res) => {
-  const subscription = await pricingService.getActiveUserSubscriptionService(req.user._id);
-  if (!subscription) {
-    return res.status(200).json(new ApiResponse(200, null, 'Active subscription fetched'));
-  }
+  const subscriptions = await pricingService.listActiveUserSubscriptionsService(req.user._id);
   return res.status(200).json(
-    new ApiResponse(
-      200,
-      pricingService.serializeSubscriptionForUser(subscription),
-      'Active subscription fetched',
-    ),
+    new ApiResponse(200, subscriptions, 'Active subscriptions fetched'),
   );
 });
 
@@ -182,6 +187,7 @@ export const estimateFare = asyncHandler(async (req, res) => {
     tollParking = 0,
     days = null,
     actualKm = 0,
+    carId = null,
   } = req.body || {};
 
   const result = await pricingService.estimateFareService({
@@ -196,6 +202,7 @@ export const estimateFare = asyncHandler(async (req, res) => {
     days,
     actualKm,
     userId,
+    carId,
   });
 
   return res.status(200).json(new ApiResponse(200, result, 'Fare estimated'));

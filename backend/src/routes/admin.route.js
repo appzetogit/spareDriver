@@ -30,6 +30,11 @@ import {
   deleteTrainingVideo,
 } from '../controllers/platform.controller.js';
 import {
+  adminListLegalDocuments,
+  adminUpsertSubscriptionTerms,
+  adminUpdateLegalDocument,
+} from '../controllers/legalDocument.controller.js';
+import {
   getAdminFuelTypes,
   createFuelType,
   updateFuelType,
@@ -280,6 +285,10 @@ router.get('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS),
 router.post('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS), createTrainingVideo);
 router.put('/settings/training-videos/:id', protectStaff, restrictTo(...OPERATIONS), updateTrainingVideo);
 router.delete('/settings/training-videos/:id', protectStaff, restrictTo(...OPERATIONS), deleteTrainingVideo);
+
+router.get('/settings/legal-documents', protectStaff, restrictTo(...OPERATIONS), adminListLegalDocuments);
+router.post('/settings/subscription-terms', protectStaff, restrictTo(...OPERATIONS), adminUpsertSubscriptionTerms);
+router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateLegalDocument);
 
 router.post('/kits', protectStaff, restrictTo(...OPERATIONS), createKit);
 router.get('/kits', protectStaff, restrictTo(...ALL_STAFF), getKits);

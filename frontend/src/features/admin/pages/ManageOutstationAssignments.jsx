@@ -39,6 +39,7 @@ import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
 import { useSocketEvent } from '../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../constants/socketEvents';
 import { STAFF_ROLE_LABELS } from '../../../constants/staffRoles';
+import { DriverCarExperienceChips } from '../components/DriverCarExperienceChips';
 import {
   formatPickupDateTime,
   formatDateTime12,
@@ -582,6 +583,13 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [driverFilters, setDriverFilters] = useState({
+    carTypeMatch: 'true',
+    minRating: '',
+    onlineOnly: false,
+    allIndiaOnly: false,
+    minDrivingHoursPerDay: '',
+  });
   const [selectedDriverId, setSelectedDriverId] = useState(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -610,6 +618,19 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
   const [driversTotal, setDriversTotal] = useState(0);
   const [loadingMoreDrivers, setLoadingMoreDrivers] = useState(false);
 
+  const buildDriverParams = useCallback((pageNum) => {
+    const params = new URLSearchParams({ limit: LIMIT, page: pageNum });
+    if (debouncedSearch) params.append('search', debouncedSearch);
+    if (driverFilters.carTypeMatch) params.append('carTypeMatch', driverFilters.carTypeMatch);
+    if (driverFilters.minRating) params.append('minRating', driverFilters.minRating);
+    if (driverFilters.onlineOnly) params.append('onlineOnly', 'true');
+    if (driverFilters.allIndiaOnly) params.append('allIndiaOnly', 'true');
+    if (driverFilters.minDrivingHoursPerDay) {
+      params.append('minDrivingHoursPerDay', driverFilters.minDrivingHoursPerDay);
+    }
+    return params;
+  }, [debouncedSearch, driverFilters]);
+
   // Available drivers (initial load and search refetch)
   useEffect(() => {
     let cancelled = false;
@@ -617,10 +638,8 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
     setDrivers([]);
     setDriversPage(1);
     setDriversTotal(0);
-    const params = new URLSearchParams({ limit: LIMIT, page: 1 });
-    if (debouncedSearch) params.append('search', debouncedSearch);
     api
-      .get(`/admin/outstation-assignments/${booking._id}/available-drivers?${params.toString()}`)
+      .get(`/admin/outstation-assignments/${booking._id}/available-drivers?${buildDriverParams(1).toString()}`)
       .then((res) => {
         if (!cancelled) {
           const data = res?.data?.data || {};
@@ -633,15 +652,13 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
       .catch((err) => { if (!cancelled) setDriversError(err?.response?.data?.message || 'Failed to load drivers'); })
       .finally(() => { if (!cancelled) setDriversLoading(false); });
     return () => { cancelled = true; };
-  }, [booking._id, debouncedSearch]);
+  }, [booking._id, buildDriverParams]);
 
   const loadMoreDrivers = async () => {
     const nextPage = driversPage + 1;
     setLoadingMoreDrivers(true);
     try {
-      const params = new URLSearchParams({ limit: LIMIT, page: nextPage });
-      if (debouncedSearch) params.append('search', debouncedSearch);
-      const res = await api.get(`/admin/outstation-assignments/${booking._id}/available-drivers?${params}`);
+      const res = await api.get(`/admin/outstation-assignments/${booking._id}/available-drivers?${buildDriverParams(nextPage)}`);
       const data = res?.data?.data || {};
       setDrivers((prev) => [...prev, ...(data.drivers || [])]);
       setDriversTotal(data.total || 0);
@@ -945,6 +962,8 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
             </div>
           )}
 
+          <OutstationDriverFilterBar filters={driverFilters} onChange={setDriverFilters} />
+
           {/* Search */}
           <div className="mt-2 relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -1125,6 +1144,15 @@ function DriverRow({ driver, selected, onSelect }) {
               <span className="text-amber-500 font-semibold">On trip</span>
             )}
           </div>
+          <DriverCarExperienceChips experience={driver.carTypeExperience} className="mt-1.5" />
+          {(driver.outstationAllIndiaOk || driver.outstationMaxDrivingHoursPerDay) && (
+            <p className="text-[10px] text-slate-500 mt-1">
+              {driver.outstationAllIndiaOk ? 'All-India OK' : 'Zone trips only'}
+              {driver.outstationMaxDrivingHoursPerDay
+                ? ` · ${driver.outstationMaxDrivingHoursPerDay}h/day capacity`
+                : ''}
+            </p>
+          )}
           {/* Preferred zones */}
           {(driver.preferredOutstationZones || []).length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -1165,6 +1193,61 @@ function DriverRow({ driver, selected, onSelect }) {
         </div>
       )}
     </button>
+  );
+}
+
+function OutstationDriverFilterBar({ filters, onChange }) {
+  const set = (key, value) => onChange((prev) => ({ ...prev, [key]: value }));
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+      <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1">
+        <Filter className="w-3 h-3" />
+        Driver filters
+      </p>
+      <label className="flex items-center gap-2 text-[11px] text-slate-600 col-span-2">
+        <input
+          type="checkbox"
+          checked={filters.carTypeMatch === 'true'}
+          onChange={(e) => set('carTypeMatch', e.target.checked ? 'true' : 'false')}
+        />
+        Match vehicle car type experience
+      </label>
+      <label className="flex items-center gap-2 text-[11px] text-slate-600">
+        <input
+          type="checkbox"
+          checked={filters.onlineOnly}
+          onChange={(e) => set('onlineOnly', e.target.checked)}
+        />
+        Online only
+      </label>
+      <label className="flex items-center gap-2 text-[11px] text-slate-600">
+        <input
+          type="checkbox"
+          checked={filters.allIndiaOnly}
+          onChange={(e) => set('allIndiaOnly', e.target.checked)}
+        />
+        All-India OK
+      </label>
+      <input
+        type="number"
+        min="0"
+        max="5"
+        step="0.1"
+        placeholder="Min rating"
+        value={filters.minRating}
+        onChange={(e) => set('minRating', e.target.value)}
+        className="h-9 px-3 rounded-xl border border-slate-200 text-xs bg-white"
+      />
+      <input
+        type="number"
+        min="4"
+        max="16"
+        placeholder="Min hrs/day"
+        value={filters.minDrivingHoursPerDay}
+        onChange={(e) => set('minDrivingHoursPerDay', e.target.value)}
+        className="h-9 px-3 rounded-xl border border-slate-200 text-xs bg-white"
+      />
+    </div>
   );
 }
 

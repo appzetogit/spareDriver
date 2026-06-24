@@ -233,6 +233,9 @@ const DriverHomePage = () => {
         <OutstationOptInCard
           initial={!!driverProfile?.availableForOutstation}
           initialZones={driverProfile?.preferredOutstationZones || []}
+          preferencesCompleted={!!driverProfile?.outstationPreferencesCompletedAt}
+          initialAllIndiaOk={!!driverProfile?.outstationAllIndiaOk}
+          initialMaxHours={driverProfile?.outstationMaxDrivingHoursPerDay || 10}
         />
 
         {isOnline && location.error && location.permission === 'denied' && (

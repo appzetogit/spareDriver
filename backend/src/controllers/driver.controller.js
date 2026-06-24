@@ -77,12 +77,14 @@ export const uploadLiveVerification = asyncHandler(async (req, res) => {
  * flag set will appear in the picker. Body: `{ available: boolean }`.
  */
 export const updateOutstationAvailability = asyncHandler(async (req, res) => {
-  const { available, zoneIds } = req.body || {};
+  const { available, zoneIds, allIndiaOk, maxDrivingHoursPerDay } = req.body || {};
   const result = await driverService.updateOutstationAvailabilityService(
     req.driver._id,
     {
       available: !!available,
       zoneIds: Array.isArray(zoneIds) ? zoneIds : undefined,
+      allIndiaOk,
+      maxDrivingHoursPerDay,
     },
   );
   const message = result.availableForOutstation

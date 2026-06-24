@@ -35,7 +35,7 @@ const UserAccountPage = () => {
   const logout = useUserAuthStore((s) => s.logout);
   const wallet = useUserWalletStore((s) => s.wallet);
   const fetchWallet = useUserWalletStore((s) => s.fetchWallet);
-  const mySubscription = useUserSubscriptionStore((s) => s.mySubscription);
+  const mySubscriptions = useUserSubscriptionStore((s) => s.mySubscriptions);
   const fetchMySubscription = useUserSubscriptionStore((s) => s.fetchMySubscription);
 
   useEffect(() => {
@@ -44,9 +44,13 @@ const UserAccountPage = () => {
   }, [fetchWallet, fetchMySubscription]);
 
   const subscriptionLabel = useMemo(() => {
-    if (!mySubscription?._id) return 'No active plan';
-    return mySubscription.planNameSnapshot || mySubscription.planId?.name || 'Active';
-  }, [mySubscription]);
+    const list = mySubscriptions || [];
+    if (!list.length) return 'No active plan';
+    if (list.length === 1) {
+      return list[0].planNameSnapshot || list[0].planId?.name || 'Active';
+    }
+    return `${list.length} active subscriptions`;
+  }, [mySubscriptions]);
 
   const walletLabel = useMemo(
     () =>

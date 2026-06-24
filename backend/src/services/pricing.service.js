@@ -2,6 +2,7 @@ import ServicePricing from '../models/servicePricing.model.js';
 import SubscriptionPlan from '../models/subscriptionPlan.model.js';
 import UserSubscription from '../models/userSubscription.model.js';
 import User from '../models/user.model.js';
+import Car from '../models/user/car.model.js';
 import Zone from '../models/zone.model.js';
 import Payment from '../models/payment.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
@@ -34,6 +35,11 @@ import {
 } from './platformRevenue.service.js';
 import { normaliseOutstationPolicy } from './bookingOutstationCancellation.service.js';
 import { normaliseHourlyPolicy } from './bookingCancellation.service.js';
+import { getActiveLegalDocumentService } from './legalDocument.service.js';
+import { sendPushNotification } from './pushNotification.service.js';
+import { LEGAL_DOCUMENT_TYPES } from '../models/legalDocument.model.js';
+import mongoose from 'mongoose';
+import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -364,23 +370,75 @@ export const deleteSubscriptionPlanService = async (id) => {
 
 // ─── Active subscription helpers ──────────────────────────────────────────────
 
-export const getActiveUserSubscriptionService = async (userId) => {
+export const getActiveUserSubscriptionService = async (userId, { carId } = {}) => {
   if (!userId) return null;
   const now = new Date();
-  return UserSubscription.findOne({
+  const filter = {
+    userId,
+    status: SUBSCRIPTION_STATUS.ACTIVE,
+    expiryDate: { $gt: now },
+  };
+  if (carId) filter.carId = carId;
+  return UserSubscription.findOne(filter)
+    .populate('planId', 'name includedHoursPerDay bookingDiscountType bookingDiscountValue durationMonths price')
+    .populate('assignedDriverId', 'name phone profilePicture rating')
+    .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    });
+};
+
+export const listActiveUserSubscriptionsService = async (userId) => {
+  if (!userId) return [];
+  const now = new Date();
+  const subs = await UserSubscription.find({
     userId,
     status: SUBSCRIPTION_STATUS.ACTIVE,
     expiryDate: { $gt: now },
   })
+    .sort({ createdAt: -1 })
     .populate('planId', 'name includedHoursPerDay bookingDiscountType bookingDiscountValue durationMonths price')
     .populate('assignedDriverId', 'name phone profilePicture rating')
-    .populate('zoneId', 'name city');
+    .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId image',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    });
+  return subs.map((s) => serializeSubscriptionForUser(s));
 };
 
 function addMonths(date, months) {
   const next = new Date(date);
   next.setMonth(next.getMonth() + Math.max(1, Number(months) || 1));
   return next;
+}
+
+function normalizeSubscriptionPlace(place, label) {
+  if (!place?.address?.trim()) {
+    throw new ApiError(400, `${label} address is required`);
+  }
+  const lat = Number(place.lat);
+  const lng = Number(place.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new ApiError(400, `${label} location coordinates are required`);
+  }
+  return {
+    address: String(place.address).trim(),
+    city: String(place.city || '').trim(),
+    lat,
+    lng,
+  };
 }
 
 function buildSubscriptionSnapshot(plan) {
@@ -425,36 +483,58 @@ async function syncSubscriptionPaymentRecord(subscription, razorpayOrderId) {
   );
 }
 
-export const createSubscriptionPurchaseOrderService = async (userId, planId, zoneId) => {
-  if (!planId || !zoneId) {
-    throw new ApiError(400, 'planId and zoneId are required');
+export const createSubscriptionPurchaseOrderService = async (
+  userId,
+  planId,
+  zoneId,
+  carId,
+  { termsAccepted, dailyPickup, dailyDropoff } = {},
+) => {
+  if (!planId || !zoneId || !carId) {
+    throw new ApiError(400, 'planId, zoneId and carId are required');
+  }
+  if (!termsAccepted) {
+    throw new ApiError(400, 'You must accept the subscription terms and conditions');
   }
 
-  const [user, plan, zone] = await Promise.all([
+  const pickup = normalizeSubscriptionPlace(dailyPickup, 'Daily pickup');
+  const dropoff = normalizeSubscriptionPlace(dailyDropoff, 'Daily drop-off');
+
+  const terms = await getActiveLegalDocumentService(LEGAL_DOCUMENT_TYPES.SUBSCRIPTION);
+  if (!terms) {
+    throw new ApiError(503, 'Subscription terms are not configured yet. Please try again later.');
+  }
+
+  const [user, plan, zone, car] = await Promise.all([
     User.findById(userId).select('name email phone_no').lean(),
     SubscriptionPlan.findOne({ _id: planId, isActive: true }),
     Zone.findOne({ _id: zoneId, isActive: true }).select('_id name city').lean(),
+    Car.findOne({ _id: carId, userId, isActive: { $ne: false } }).select('_id carTypeId vehicleNumber').lean(),
   ]);
 
   if (!user) throw new ApiError(404, 'User not found');
   if (!plan) throw new ApiError(404, 'Subscription plan not found or inactive');
   if (!zone) throw new ApiError(400, 'Invalid or inactive service zone');
+  if (!car) throw new ApiError(400, 'Invalid car selection');
 
   const existingActive = await UserSubscription.findOne({
     userId,
+    carId,
     status: SUBSCRIPTION_STATUS.ACTIVE,
     expiryDate: { $gt: new Date() },
   });
   if (existingActive) {
-    throw new ApiError(409, 'You already have an active subscription');
+    throw new ApiError(409, 'This car already has an active subscription');
   }
 
   const now = new Date();
+  const termsAcceptedAt = now;
   const snapshot = buildSubscriptionSnapshot(plan);
   const totalPayable = round2(snapshot.basePrice + snapshot.serviceCharge + snapshot.gstAmount);
   let subscription = await UserSubscription.findOne({
     userId,
     planId,
+    carId,
     status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
   });
 
@@ -463,18 +543,30 @@ export const createSubscriptionPurchaseOrderService = async (userId, planId, zon
       userId,
       planId,
       zoneId,
+      carId,
       status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
       startDate: now,
       expiryDate: addMonths(now, plan.durationMonths),
       amount: totalPayable,
       assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING,
+      termsAcceptedAt,
+      termsVersionSnapshot: terms.version,
+      termsTitleSnapshot: terms.title,
+      dailyPickup: pickup,
+      dailyDropoff: dropoff,
       ...snapshot,
     });
   } else {
     subscription.zoneId = zoneId;
+    subscription.carId = carId;
     subscription.amount = totalPayable;
     subscription.startDate = now;
     subscription.expiryDate = addMonths(now, plan.durationMonths);
+    subscription.termsAcceptedAt = termsAcceptedAt;
+    subscription.termsVersionSnapshot = terms.version;
+    subscription.termsTitleSnapshot = terms.title;
+    subscription.dailyPickup = pickup;
+    subscription.dailyDropoff = dropoff;
     Object.assign(subscription, snapshot);
     await subscription.save();
   }
@@ -595,7 +687,29 @@ export const verifySubscriptionPaymentService = async (
     { path: 'planId', select: 'name durationMonths includedHoursPerDay bookingDiscountType bookingDiscountValue' },
     { path: 'zoneId', select: 'name city' },
     { path: 'assignedDriverId', select: 'name phone rating profilePicture' },
+    {
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId image',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    },
   ]);
+
+  await sendPushNotification(
+    { userId: subscription.userId },
+    {
+      title: 'Subscription successful',
+      body: 'You are subscribed successfully. We will assign the best driver for your car soon.',
+      severity: 'success',
+      data: {
+        kind: 'subscription_purchased',
+        subscriptionId: String(subscription._id),
+      },
+    },
+  );
 
   return { subscription: serializeSubscriptionForUser(subscription), alreadyPaid: false };
 };
@@ -1050,13 +1164,16 @@ export const estimateFareService = async ({
   tollParking = 0,
   foodProvided = true,
   userId = null,
+  carId = null,
 }) => {
   const pricing = await getServicePricingByTypeService(serviceType);
   if (!pricing || !pricing.isActive) {
     throw new ApiError(404, 'Pricing for this service type is not available');
   }
 
-  const subscription = userId ? await getActiveUserSubscriptionService(userId) : null;
+  const subscription = userId
+    ? await getActiveUserSubscriptionService(userId, { carId: carId || undefined })
+    : null;
   // Outstation only checks the start; hourly checks the whole booked
   // window so a 6-hour ride that starts at 18:00 still triggers night.
   const isNight =
@@ -1262,6 +1379,9 @@ export function serializeSubscriptionForUser(subscription) {
     planNameSnapshot: doc.planNameSnapshot,
     planId: doc.planId,
     zoneId: doc.zoneId,
+    carId: doc.carId,
+    dailyPickup: doc.dailyPickup || null,
+    dailyDropoff: doc.dailyDropoff || null,
     durationMonths: doc.durationMonths,
     includedHoursPerDay: doc.includedHoursPerDay,
     bookingDiscountType: doc.bookingDiscountType,
@@ -1290,6 +1410,9 @@ export function serializeSubscriptionForUser(subscription) {
       }
       : null,
     driverSharePaidAt: doc.driverSharePaidAt,
+    termsAcceptedAt: doc.termsAcceptedAt,
+    termsVersionSnapshot: doc.termsVersionSnapshot,
+    termsTitleSnapshot: doc.termsTitleSnapshot,
   };
 }
 
@@ -1372,7 +1495,11 @@ async function assertDriverAvailableForSubscription(subscription, driverId, { ex
 }
 
 export const assignDriverToSubscriptionService = async (subscriptionId, driverId, staffId) => {
-  const sub = await UserSubscription.findById(subscriptionId);
+  const sub = await UserSubscription.findById(subscriptionId).populate({
+    path: 'carId',
+    select: 'carTypeId vehicleNumber brandId modelId',
+    populate: { path: 'carTypeId', select: 'name' },
+  });
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (sub.status !== SUBSCRIPTION_STATUS.ACTIVE) {
     throw new ApiError(400, 'Cannot assign a driver to an inactive subscription');
@@ -1382,8 +1509,24 @@ export const assignDriverToSubscriptionService = async (subscriptionId, driverId
     _id: driverId,
     isDeleted: { $ne: true },
     approvalStatus: 'approved',
-  }).select('_id name');
+  })
+    .select('_id name phone rating profilePicture carTypeExperience')
+    .populate('carTypeExperience', 'name')
+    .lean();
   if (!driver) throw new ApiError(404, 'Driver not found or not approved');
+
+  const carTypeId = await resolveCarTypeObjectId(
+    sub.carId?.carTypeId?._id || sub.carId?.carTypeId,
+  );
+  if (carTypeId) {
+    const hasExperience = (driver.carTypeExperience || []).some((ct) => {
+      const id = ct?._id || ct;
+      return String(id) === String(carTypeId);
+    });
+    if (!hasExperience) {
+      throw new ApiError(409, 'Driver does not have experience with this car type');
+    }
+  }
 
   await assertDriverAvailableForSubscription(sub, driverId);
 
@@ -1404,6 +1547,26 @@ export const assignDriverToSubscriptionService = async (subscriptionId, driverId
   sub.releaseReason = '';
   await creditDriverSubscriptionShare(sub, driverId);
   await sub.save();
+
+  const terms = await getActiveLegalDocumentService(LEGAL_DOCUMENT_TYPES.SUBSCRIPTION);
+  const carLabel = sub.carId?.vehicleNumber || 'your car';
+  await sendPushNotification(
+    { userId: sub.userId },
+    {
+      title: 'Dedicated driver assigned',
+      body: `${driver.name} has been assigned for ${carLabel}. Please review the terms and driver details in the app.`,
+      severity: 'success',
+      data: {
+        kind: 'subscription_driver_assigned',
+        subscriptionId: String(sub._id),
+        driverId: String(driverId),
+        driverName: driver.name || '',
+        driverPhone: driver.phone || '',
+        termsVersion: terms?.version ? String(terms.version) : '',
+      },
+    },
+  );
+
   return sub;
 };
 
@@ -1430,10 +1593,30 @@ export const releaseSubscriptionDriverService = async (subscriptionId, reason = 
 
 export const listSubscriptionAvailableDriversService = async (
   subscriptionId,
-  { search, page = 1, limit = 50, staff } = {},
+  {
+    search,
+    page = 1,
+    limit = 50,
+    staff,
+    carTypeMatch = 'true',
+    minRating,
+    onlineOnly,
+    allIndiaOnly,
+    minDrivingHoursPerDay,
+    zoneMatch,
+  } = {},
 ) => {
   const sub = await UserSubscription.findById(subscriptionId)
     .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'carTypeId vehicleNumber brandId modelId',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    })
     .lean();
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (sub.status !== SUBSCRIPTION_STATUS.ACTIVE) {
@@ -1456,6 +1639,41 @@ export const listSubscriptionAvailableDriversService = async (
     approvalStatus: 'approved',
     isDeleted: { $ne: true },
   };
+
+  const subscriptionCarTypeId = await resolveCarTypeObjectId(
+    sub.carId?.carTypeId?._id || sub.carId?.carTypeId,
+  );
+  const subscriptionZoneId = sub.zoneId?._id || sub.zoneId || null;
+
+  if (carTypeMatch !== 'false' && subscriptionCarTypeId) {
+    match.carTypeExperience = subscriptionCarTypeId;
+  }
+
+  if (zoneMatch === 'true' || zoneMatch === true) {
+    if (subscriptionZoneId) {
+      try {
+        match.preferredOutstationZones = new mongoose.Types.ObjectId(String(subscriptionZoneId));
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (minRating != null && minRating !== '') {
+    const rating = Number(minRating);
+    if (Number.isFinite(rating) && rating > 0) match.rating = { $gte: rating };
+  }
+  if (onlineOnly === 'true' || onlineOnly === true) {
+    match.isOnline = true;
+  }
+  if (allIndiaOnly === 'true' || allIndiaOnly === true) {
+    match.outstationAllIndiaOk = true;
+  }
+  if (minDrivingHoursPerDay != null && minDrivingHoursPerDay !== '') {
+    const hours = Number(minDrivingHoursPerDay);
+    if (Number.isFinite(hours) && hours > 0) {
+      match.outstationMaxDrivingHoursPerDay = { $gte: hours };
+    }
+  }
+
   if (search) {
     const q = String(search).trim();
     if (q) {
@@ -1469,8 +1687,12 @@ export const listSubscriptionAvailableDriversService = async (
   const [total, drivers] = await Promise.all([
     Driver.countDocuments(match),
     Driver.find(match)
-      .select('name phone rating profilePicture isOnline carTypeExperience')
-      .sort({ isOnline: -1, rating: -1, createdAt: -1 })
+      .select(
+        'name phone rating profilePicture isOnline experienceYears carTypeExperience outstationAllIndiaOk outstationMaxDrivingHoursPerDay preferredOutstationZones',
+      )
+      .populate('carTypeExperience', 'name')
+      .populate('preferredOutstationZones', 'name city')
+      .sort({ isOnline: -1, rating: -1, experienceYears: -1, createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean(),
@@ -1506,11 +1728,16 @@ export const listSubscriptionAvailableDriversService = async (
     const id = String(driver._id);
     const bookingConflicts = conflictMap[id] || [];
     const hasSubscriptionConflict = busySubscriptionDrivers.has(id);
+    const zoneIds = (driver.preferredOutstationZones || []).map((z) => String(z?._id || z));
+    const inSubscriptionZone = subscriptionZoneId
+      ? zoneIds.includes(String(subscriptionZoneId))
+      : false;
     return {
       ...driver,
       conflicts: bookingConflicts,
       hasConflict: bookingConflicts.length > 0 || hasSubscriptionConflict,
       hasSubscriptionConflict,
+      inSubscriptionZone,
     };
   });
 
@@ -1520,6 +1747,15 @@ export const listSubscriptionAvailableDriversService = async (
     page: pageNum,
     limit: limitNum,
     subscriptionZone: sub.zoneId || null,
+    subscriptionCarTypeId: subscriptionCarTypeId ? String(subscriptionCarTypeId) : null,
+    subscriptionCar: sub.carId || null,
+    subscription: {
+      dailyPickup: sub.dailyPickup || null,
+      dailyDropoff: sub.dailyDropoff || null,
+      includedHoursPerDay: sub.includedHoursPerDay,
+      durationMonths: sub.durationMonths,
+      planNameSnapshot: sub.planNameSnapshot,
+    },
   };
 };
 
@@ -1562,7 +1798,16 @@ export const listUserSubscriptionsService = async ({
       .populate('userId', 'name phone_no email')
       .populate('planId', 'name durationMonths price includedHoursPerDay')
       .populate('zoneId', 'name city')
-      .populate('assignedDriverId', 'name phone rating profilePicture'),
+      .populate('assignedDriverId', 'name phone rating profilePicture')
+      .populate({
+        path: 'carId',
+        select: 'vehicleNumber carTypeId brandId modelId',
+        populate: [
+          { path: 'carTypeId', select: 'name' },
+          { path: 'brandId', select: 'name' },
+          { path: 'modelId', select: 'name' },
+        ],
+      }),
     UserSubscription.countDocuments(filter),
   ]);
   return { items, total, page: Math.max(1, page), limit };
