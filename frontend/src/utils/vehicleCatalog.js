@@ -1,9 +1,12 @@
-/** Map catalog API items to Select component options */
+/** Map catalog API items to Select component options and sort them alphabetically */
 export function toSelectOptions(items = [], labelKey = 'name') {
-  return items.map((item) => ({
+  const options = items.map((item) => ({
     value: String(item._id),
     label: item[labelKey] || item.name,
   }));
+  return options.sort((a, b) =>
+    (a.label || '').localeCompare(b.label || '', undefined, { sensitivity: 'base' })
+  );
 }
 
 /** Display helpers for populated or legacy car documents */

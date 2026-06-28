@@ -3,6 +3,7 @@ import Car from '../models/user/car.model.js';
 import User from '../models/user.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import { findDriversInExpandingRadius } from './driverFinder.service.js';
+import { syncFirebaseDriverStatus } from './driverLocation.service.js';
 import {
   adminMarkNoDriversFoundService,
   driverEarningFromFareSnapshot,
@@ -588,6 +589,7 @@ export async function acceptBookingService(bookingId, driverId) {
   const shouldLockDriver = await shouldImmediatelyLockDriver(booking);
   if (shouldLockDriver) {
     await Driver.updateOne({ _id: driverId }, { $set: { isOnTrip: true } });
+    syncFirebaseDriverStatus(driverId).catch(() => {});
   }
 
   // Kick off the auto-cancel timer only for the standard (unpaid) flow.

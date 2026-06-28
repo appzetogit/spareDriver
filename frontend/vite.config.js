@@ -1,13 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { firebaseMessagingSwPlugin } from './vite/firebaseMessagingSwPlugin.js'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  server: {
-    port: 5173,
-    host: true,
-  },
+  plugins: [react(), tailwindcss(), firebaseMessagingSwPlugin()],
+  // server: {
+  //   port: 5173,
+  //   host: true,
+  // },
   build: {
     // Bump the warning threshold to 800kb — our biggest single chunk (the
     // Google Maps loader) is right around the default 500kb noise floor.

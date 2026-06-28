@@ -13,9 +13,11 @@ import { ArrowLeft, FileText, Calendar, Briefcase } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { useDocumentsManager } from '../../../../hooks/useDocumentsManager';
+import { useFormDraft } from '../../../../hooks/useFormDraft';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 const CREDENTIAL_DOC_TYPES = ['driving_license', 'selfie'];
+const CREDENTIALS_DRAFT_KEY = 'driver-onboarding:step2';
 
 const CREDENTIAL_DOCUMENTS = [
   {
@@ -62,12 +64,33 @@ const validateVehicles = (vehicles) => {
   return { valid, fieldErrors };
 };
 
+const defaultForm = { license: '', expiry: '', experience: '', availability: '' };
+
 const DrivingCredentialsPage = () => {
   const navigate = useNavigate();
   const updateDriver = useDriverAuthStore((state) => state.updateDriver);
 
-  const [form, setForm] = useState({ license: '', expiry: '', experience: '', availability: '' });
-  const [vehicles, setVehicles] = useState([{ ...emptyVehicleFormValues }]);
+  const [draft, setDraft, clearDraft, replaceDraft] = useFormDraft(CREDENTIALS_DRAFT_KEY, {
+    form: defaultForm,
+    vehicles: [{ ...emptyVehicleFormValues }],
+  });
+  const form = draft.form;
+  const vehicles = draft.vehicles;
+
+  const setForm = (updater) => {
+    setDraft((prev) => ({
+      ...prev,
+      form: typeof updater === 'function' ? updater(prev.form) : updater,
+    }));
+  };
+  const setVehicles = (updater) => {
+    setDraft((prev) => ({
+      ...prev,
+      vehicles: typeof updater === 'function' ? updater(prev.vehicles) : updater,
+    }));
+  };
+
+  const [licenseError, setLicenseError] = useState('');
   const [vehicleErrors, setVehicleErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -75,6 +98,7 @@ const DrivingCredentialsPage = () => {
     documents,
     loadFromApiDocuments,
     uploadDocument,
+    uploadAllPending,
     isAnyUploading,
     allRequiredUploaded,
     toPayloadArray,
@@ -82,6 +106,22 @@ const DrivingCredentialsPage = () => {
 
   const handleSelectChange = (f) => (val) => setForm((p) => ({ ...p, [f]: val }));
   const handleChange = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+
+  const handleLicenseChange = (e) => {
+    const rawVal = e.target.value;
+    const hasHyphen = rawVal.includes('-');
+    const cleanedVal = rawVal.replace(/-/g, '');
+
+    setForm((p) => ({ ...p, license: cleanedVal }));
+
+    if (hasHyphen) {
+      setLicenseError("Do not include hyphens ('-')");
+    } else if (cleanedVal.length > 0 && cleanedVal.length !== 15) {
+      setLicenseError("License number must be exactly 15 characters");
+    } else {
+      setLicenseError('');
+    }
+  };
 
   const handleContinue = async () => {
     if (!allRequiredUploaded(CREDENTIAL_DOC_TYPES)) {
@@ -95,6 +135,7 @@ const DrivingCredentialsPage = () => {
 
     try {
       setIsSubmitting(true);
+      const uploadedDocs = await uploadAllPending();
 
       const payloadVehicles = vehicles.map((v) => ({
         carTypeId: v.carTypeId,
@@ -103,6 +144,12 @@ const DrivingCredentialsPage = () => {
         fuelTypeId: v.fuelTypeId,
         transmission: v.transmission,
       }));
+
+      const documentsPayload = toPayloadArray(uploadedDocs);
+      if (documentsPayload.length < CREDENTIAL_DOC_TYPES.length) {
+        alert('Please select both required documents');
+        return;
+      }
 
       await api.put('/driver/onboarding/step', {
         stepNumber: 2,
@@ -114,10 +161,11 @@ const DrivingCredentialsPage = () => {
           experienceYears: Number(form.experience) || 0,
           availability: form.availability.toLowerCase().replace(' ', '-'),
           vehicleExperience: payloadVehicles,
-          documents: toPayloadArray(),
+          documents: documentsPayload,
         },
       });
 
+      clearDraft();
       updateDriver({ onboardingStep: 3 });
       navigate('/driver/register/bank');
     } catch (error) {
@@ -135,31 +183,46 @@ const DrivingCredentialsPage = () => {
         const data = profileRes.data.data;
         if (!data) return;
 
-        setForm({
-          license: data.drivingLicense?.number || '',
-          expiry: data.drivingLicense?.expiryDate
-            ? data.drivingLicense.expiryDate.split('T')[0]
-            : '',
-          experience: data.experienceYears?.toString() || '',
-          availability:
-            data.availability === 'full-time'
-              ? 'Full-time'
-              : data.availability === 'part-time'
-                ? 'Part-time'
-                : data.availability === 'weekends-only'
-                  ? 'Weekends Only'
-                  : '',
-        });
+        const licenseNum = data.drivingLicense?.number || '';
+        const hasSavedStep =
+          licenseNum ||
+          data.vehicleExperience?.length ||
+          data.carTypeExperience?.length;
 
-        if (data.vehicleExperience?.length) {
-          setVehicles(data.vehicleExperience.map(mapVehicleFromApi));
-        } else if (data.carTypeExperience?.length) {
-          setVehicles(
-            data.carTypeExperience.map((t) => ({
-              ...emptyVehicleFormValues,
-              carTypeId: String(typeof t === 'object' ? t._id : t),
-            })),
-          );
+        if (hasSavedStep) {
+          replaceDraft({
+            form: {
+              license: licenseNum,
+              expiry: data.drivingLicense?.expiryDate
+                ? data.drivingLicense.expiryDate.split('T')[0]
+                : '',
+              experience: data.experienceYears?.toString() || '',
+              availability:
+                data.availability === 'full-time'
+                  ? 'Full-time'
+                  : data.availability === 'part-time'
+                    ? 'Part-time'
+                    : data.availability === 'weekends-only'
+                      ? 'Weekends Only'
+                      : '',
+            },
+            vehicles: data.vehicleExperience?.length
+              ? data.vehicleExperience.map(mapVehicleFromApi)
+              : data.carTypeExperience?.length
+                ? data.carTypeExperience.map((t) => ({
+                    ...emptyVehicleFormValues,
+                    carTypeId: String(typeof t === 'object' ? t._id : t),
+                  }))
+                : [{ ...emptyVehicleFormValues }],
+          });
+        }
+
+        if (licenseNum) {
+          if (licenseNum.includes('-')) {
+            setLicenseError("Do not include hyphens ('-')");
+          } else if (licenseNum.length !== 15) {
+            setLicenseError("License number must be exactly 15 characters");
+          }
         }
 
         if (data.documents) loadFromApiDocuments(data.documents);
@@ -168,10 +231,12 @@ const DrivingCredentialsPage = () => {
       }
     };
     fetchData();
-  }, [loadFromApiDocuments]);
+  }, [loadFromApiDocuments, replaceDraft]);
 
   const continueDisabled =
     !form.license ||
+    form.license.length !== 15 ||
+    !!licenseError ||
     !form.experience ||
     !form.availability ||
     vehicles.length === 0 ||
@@ -202,7 +267,8 @@ const DrivingCredentialsPage = () => {
             label="License number"
             placeholder="DL-XXXX-XXXX"
             value={form.license}
-            onChange={handleChange('license')}
+            onChange={handleLicenseChange}
+            error={licenseError}
             icon={FileText}
           />
           <Input
@@ -265,7 +331,7 @@ const DrivingCredentialsPage = () => {
             loading={isSubmitting}
             className="mt-6 rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20"
           >
-            {isAnyUploading ? 'UPLOADING...' : 'CONTINUE'}
+            {isSubmitting || isAnyUploading ? 'UPLOADING...' : 'CONTINUE'}
           </Button>
         </div>
       </form>

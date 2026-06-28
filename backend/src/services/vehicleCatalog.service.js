@@ -29,7 +29,7 @@ export const createFuelTypeService = async (data) => {
 
 export const getFuelTypesService = async (onlyActive = false) => {
   const filter = onlyActive ? { isActive: true } : {};
-  return FuelType.find(filter).sort({ sortOrder: 1, name: 1 });
+  return FuelType.find(filter).sort({ name: 1 });
 };
 
 export const updateFuelTypeService = async (id, data) => {
@@ -63,7 +63,7 @@ export const createCarBrandService = async (data) => {
 
 export const getCarBrandsService = async (onlyActive = false) => {
   const filter = onlyActive ? { isActive: true } : {};
-  return CarBrand.find(filter).sort({ sortOrder: 1, name: 1 });
+  return CarBrand.find(filter).sort({ name: 1 });
 };
 
 export const updateCarBrandService = async (id, data) => {
@@ -121,7 +121,7 @@ export const getCarModelsService = async ({ onlyActive = false, brandId, carType
   return CarModel.find(filter)
     .populate('brandId', 'name')
     .populate('carTypeId', 'name')
-    .sort({ sortOrder: 1, name: 1 });
+    .sort({ name: 1 });
 };
 
 export const updateCarModelService = async (id, data) => {

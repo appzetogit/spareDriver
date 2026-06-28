@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "fix:payment-index": "node scripts/fixPaymentIndex.js"
+    "fix:payment-index": "node scripts/fixPaymentIndex.js",
+    "seed": "node scripts/seed.js"
   },
   "keywords": [],
   "author": "",

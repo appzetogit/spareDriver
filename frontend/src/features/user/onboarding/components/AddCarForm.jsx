@@ -7,18 +7,14 @@ import VehicleDetailsForm, {
 import api from '../../../../utils/api';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { useDocumentsManager } from '../../../../hooks/useDocumentsManager';
+import { useFormDraft } from '../../../../hooks/useFormDraft';
+
+const ADD_CAR_DRAFT_KEY = 'user-onboarding:add-car';
 
 /**
  * Self-contained "Add a car" form. Handles validation, image upload and the
  * `POST /auth/cars` call. Used by both the standalone `AddCarPage` and the
  * in-flow `AddCarModal` from the booking screens.
- *
- *   props:
- *     - onSuccess   ({ car, carCount }) => void
- *     - onCancel    optional secondary button handler
- *     - cancelLabel label for the cancel button (default "Cancel")
- *     - submitLabel label for the submit button (default "Save & Continue")
- *     - compact     when true uses tighter vertical padding (modal usage)
  */
 const AddCarForm = ({
   onSuccess,
@@ -29,10 +25,17 @@ const AddCarForm = ({
 }) => {
   const setOnboarding = useUserAuthStore((s) => s.setOnboarding);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState(emptyVehicleFormValues);
+  const [formData, setFormData, clearDraft] = useFormDraft(ADD_CAR_DRAFT_KEY, emptyVehicleFormValues);
   const [errors, setErrors] = useState({});
 
-  const { documents, uploadDocument, isAnyUploading } = useDocumentsManager(['car_image']);
+  const {
+    documents,
+    uploadDocument,
+    uploadAllPending,
+    isAnyUploading,
+    allRequiredUploaded,
+    toPayloadArray,
+  } = useDocumentsManager(['car_image']);
 
   const validate = () => {
     const next = {};
@@ -42,7 +45,7 @@ const AddCarForm = ({
     if (!formData.vehicleNumber?.trim()) next.vehicleNumber = 'Enter vehicle number';
     if (!formData.fuelTypeId) next.fuelTypeId = 'Select fuel type';
     if (!formData.transmission) next.transmission = 'Select transmission';
-    if (!documents.car_image?.url) next.image = 'Car image is required';
+    if (!allRequiredUploaded(['car_image'])) next.image = 'Car image is required';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -52,6 +55,13 @@ const AddCarForm = ({
     if (!validate()) return;
     setLoading(true);
     try {
+      const uploadedDocs = await uploadAllPending();
+      const imagePayload = toPayloadArray(uploadedDocs).find((d) => d.type === 'car_image');
+      if (!imagePayload?.fileUrl) {
+        setErrors((prev) => ({ ...prev, image: 'Car image is required' }));
+        return;
+      }
+
       const res = await api.post('/auth/cars', {
         carTypeId: formData.carTypeId,
         brandId: formData.brandId,
@@ -59,11 +69,12 @@ const AddCarForm = ({
         fuelTypeId: formData.fuelTypeId,
         vehicleNumber: formData.vehicleNumber.trim(),
         transmission: formData.transmission,
-        image: documents.car_image.url,
+        image: imagePayload.fileUrl,
       });
 
       const data = res.data?.data ?? {};
       const carCount = data.carCount ?? 1;
+      clearDraft();
       setOnboarding({
         carCount,
         hasCar: carCount > 0,
@@ -72,7 +83,7 @@ const AddCarForm = ({
       onSuccess?.({ car: data.car, carCount });
     } catch (err) {
       console.error('Failed to add car', err);
-      const message = err?.response?.data?.message || 'Failed to add car';
+      const message = err?.response?.data?.message || err?.message || 'Failed to add car';
       setErrors((prev) => ({ ...prev, submit: message }));
     } finally {
       setLoading(false);
@@ -89,7 +100,7 @@ const AddCarForm = ({
         doc={documents.car_image}
         onUpload={(file) => uploadDocument('car_image', file)}
         hint="Clear photo of the car"
-        disabled={isAnyUploading}
+        disabled={loading || isAnyUploading}
       />
       {errors.image && <p className="text-danger text-xs -mt-3">{errors.image}</p>}
 
@@ -110,11 +121,11 @@ const AddCarForm = ({
         <Button
           type="submit"
           fullWidth
-          loading={loading}
-          disabled={isAnyUploading || loading}
+          loading={loading || isAnyUploading}
+          disabled={loading || isAnyUploading}
           className="rounded-full py-3.5 text-base font-bold"
         >
-          {isAnyUploading ? 'Uploading image...' : submitLabel}
+          {loading || isAnyUploading ? 'Uploading...' : submitLabel}
         </Button>
         {onCancel && (
           <Button

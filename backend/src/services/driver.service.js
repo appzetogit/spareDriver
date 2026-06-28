@@ -144,6 +144,14 @@ export const updateOnboardingStepService = async (driverId, data) => {
   }
 
   if (stepNumber === 2) {
+    const licenseNumber = stepData.drivingLicense?.number || '';
+    if (licenseNumber.includes('-')) {
+      throw new ApiError(400, "License number must not contain hyphens ('-')");
+    }
+    if (licenseNumber.length !== 15) {
+      throw new ApiError(400, 'License number must be exactly 15 characters');
+    }
+
     const {
       normalizeDriverVehicleExperience,
       syncCarTypeExperienceFromVehicles,
@@ -166,7 +174,47 @@ export const updateOnboardingStepService = async (driverId, data) => {
     if (stepData.documents) mergeDocumentsByType(driver.documents, stepData.documents);
     if (driver.onboardingStep < 2) driver.onboardingStep = 2;
   } else if (stepNumber === 3) {
-    driver.bankDetails = stepData.bankDetails;
+    const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = stepData.bankDetails || {};
+
+    if (!accountHolderName || !accountHolderName.trim()) {
+      throw new ApiError(400, 'Account holder name is required');
+    }
+    if (accountHolderName.trim().length < 3 || !/^[a-zA-Z\s.]+$/.test(accountHolderName)) {
+      throw new ApiError(400, 'Account holder name must be at least 3 characters and contain only letters, spaces, and dots');
+    }
+
+    if (!accountNumber || !accountNumber.trim()) {
+      throw new ApiError(400, 'Account number is required');
+    }
+    if (!/^\d+$/.test(accountNumber.trim()) || accountNumber.trim().length < 9 || accountNumber.trim().length > 18) {
+      throw new ApiError(400, 'Account number must be between 9 and 18 digits');
+    }
+
+    if (!ifscCode || !ifscCode.trim()) {
+      throw new ApiError(400, 'IFSC code is required');
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(ifscCode.trim())) {
+      throw new ApiError(400, 'Invalid IFSC code format (e.g., SBIN0001234)');
+    }
+
+    if (!bankName || !bankName.trim()) {
+      throw new ApiError(400, 'Bank name is required');
+    }
+    if (bankName.trim().length < 3 || !/^[a-zA-Z\s.\-()]+$/.test(bankName)) {
+      throw new ApiError(400, 'Bank name must be at least 3 characters and contain only letters, spaces, dots, hyphens, or parentheses');
+    }
+
+    if (upiId && upiId.trim() && !/^[\w.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/.test(upiId.trim())) {
+      throw new ApiError(400, 'Invalid UPI ID format (e.g., user@upi)');
+    }
+
+    driver.bankDetails = {
+      accountHolderName: accountHolderName.trim(),
+      accountNumber: accountNumber.trim(),
+      ifscCode: ifscCode.trim().toUpperCase(),
+      bankName: bankName.trim(),
+      upiId: upiId ? upiId.trim() : '',
+    };
     if (driver.onboardingStep < 3) driver.onboardingStep = 3;
   } else if (stepNumber === 4) {
     if (stepData.safetyDeclaration) {

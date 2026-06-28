@@ -10,17 +10,14 @@ import { C2S_EVENTS } from '../constants/socketEvents';
  *   2. We throttle emits to the backend to one every `MIN_EMIT_INTERVAL_MS`.
  *   3. Each accepted emit travels over Socket.IO to the backend, which writes
  *      to Firebase + (throttled) Mongo.
- *
- * The hook returns granular state so the UI can show "Waiting for GPS",
- * "Sharing location", "Location permission required", etc.
  */
 
 const MIN_EMIT_INTERVAL_MS = 5_000;
 
 const GEO_OPTIONS = Object.freeze({
   enableHighAccuracy: true,
-  maximumAge: 2_000,
-  timeout: 15_000,
+  maximumAge: 0,
+  timeout: 20_000,
 });
 
 const PERMISSION = Object.freeze({
@@ -42,7 +39,8 @@ export function useDriverLocation({ enabled }) {
 
   const watchIdRef = useRef(null);
   const lastEmitRef = useRef(0);
-  const lastCoordsRef = useRef(null);
+  const hasFirstEmitRef = useRef(false);
+  const pendingPayloadRef = useRef(null);
 
   /* ---- permission probe ------------------------------------------- */
 
@@ -74,9 +72,11 @@ export function useDriverLocation({ enabled }) {
   /* ---- emit helper ------------------------------------------------- */
 
   const emitLocation = useCallback(
-    (position) => {
+    (position, { force = false } = {}) => {
       const now = Date.now();
-      if (now - lastEmitRef.current < MIN_EMIT_INTERVAL_MS) return;
+      if (!force && hasFirstEmitRef.current && now - lastEmitRef.current < MIN_EMIT_INTERVAL_MS) {
+        return false;
+      }
 
       const { latitude, longitude, accuracy, heading, speed } = position.coords;
       const payload = {
@@ -86,8 +86,15 @@ export function useDriverLocation({ enabled }) {
         heading: Number.isFinite(heading) ? heading : null,
         speed: Number.isFinite(speed) ? speed : null,
       };
+
+      if (!isConnected) {
+        pendingPayloadRef.current = payload;
+        return false;
+      }
+
       lastEmitRef.current = now;
-      lastCoordsRef.current = payload;
+      hasFirstEmitRef.current = true;
+      pendingPayloadRef.current = null;
 
       const sent = emit(C2S_EVENTS.DRIVER_LOCATION_UPDATE, payload, (ack) => {
         if (ack?.ok === false && ack.reason !== 'throttled') {
@@ -95,16 +102,37 @@ export function useDriverLocation({ enabled }) {
         }
       });
       if (sent) setLastEmittedAt(now);
+      return sent;
     },
-    [emit],
+    [emit, isConnected],
   );
+
+  /* ---- flush pending coords once the socket connects -------------- */
+
+  useEffect(() => {
+    if (!enabled || !isConnected || !pendingPayloadRef.current) return;
+    const pending = pendingPayloadRef.current;
+    emitLocation(
+      {
+        coords: {
+          latitude: pending.lat,
+          longitude: pending.lng,
+          accuracy: pending.accuracy,
+          heading: pending.heading,
+          speed: pending.speed,
+        },
+        timestamp: Date.now(),
+      },
+      { force: true },
+    );
+    emit(C2S_EVENTS.DRIVER_ONLINE);
+  }, [enabled, isConnected, emit, emitLocation]);
 
   /* ---- main effect: start/stop the GPS watch ---------------------- */
 
   useEffect(() => {
     if (!enabled) return undefined;
     if (permission === PERMISSION.UNSUPPORTED || permission === PERMISSION.DENIED) return undefined;
-    if (!isConnected) return undefined;
 
     const onSuccess = (position) => {
       setError(null);
@@ -115,7 +143,7 @@ export function useDriverLocation({ enabled }) {
         accuracy: position.coords.accuracy,
         ts: position.timestamp,
       });
-      emitLocation(position);
+      emitLocation(position, { force: !hasFirstEmitRef.current });
     };
 
     const onError = (err) => {
@@ -131,20 +159,21 @@ export function useDriverLocation({ enabled }) {
       }
     };
 
+    navigator.geolocation.getCurrentPosition(onSuccess, () => {}, GEO_OPTIONS);
     const id = navigator.geolocation.watchPosition(onSuccess, onError, GEO_OPTIONS);
     watchIdRef.current = id;
 
-    // Announce online to the socket (Firebase status mirror). The REST online
-    // toggle has already set the DB flag — this just nudges Firebase.
-    emit(C2S_EVENTS.DRIVER_ONLINE);
+    if (isConnected) {
+      emit(C2S_EVENTS.DRIVER_ONLINE);
+    }
 
     return () => {
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      // Don't emit DRIVER_OFFLINE here — the REST off-toggle path already
-      // wipes the live presence. Emitting here too would race that.
+      hasFirstEmitRef.current = false;
+      pendingPayloadRef.current = null;
     };
   }, [enabled, permission, isConnected, emit, emitLocation]);
 
@@ -161,8 +190,6 @@ export function useDriverLocation({ enabled }) {
     socket.on('disconnect', onDisconnect);
     return () => socket.off('disconnect', onDisconnect);
   }, [socket]);
-
-  /* ---- API --------------------------------------------------------- */
 
   const isSharing = enabled && permission === PERMISSION.GRANTED && coords != null;
 

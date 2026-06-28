@@ -6,27 +6,32 @@ import StepIndicator from '../../../../components/StepIndicator';
 import { ArrowLeft, User, Hash, Building2, CreditCard } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
+import { useFormDraft } from '../../../../hooks/useFormDraft';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
+
+const BANK_DRAFT_KEY = 'driver-onboarding:step3';
+const defaultBankForm = { holder: '', account: '', ifsc: '', bank: '', upi: '' };
 
 const BankDetailsPage = () => {
   const navigate = useNavigate();
   const updateDriver = useDriverAuthStore((state) => state.updateDriver);
-  const [form, setForm] = useState({ holder: '', account: '', ifsc: '', bank: '', upi: '' });
+  const [form, setForm, clearDraft, replaceDraft] = useFormDraft(BANK_DRAFT_KEY, defaultBankForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({ holder: '', account: '', ifsc: '', bank: '', upi: '' });
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const res = await api.get('/driver/profile');
         const data = res.data.data;
-        if (data && data.bankDetails) {
-          setForm({
+        if (data?.bankDetails?.accountHolderName || data?.bankDetails?.accountNumber) {
+          replaceDraft({
             holder: data.bankDetails.accountHolderName || '',
             account: data.bankDetails.accountNumber || '',
             ifsc: data.bankDetails.ifscCode || '',
             bank: data.bankDetails.bankName || '',
-            upi: data.bankDetails.upiId || ''
+            upi: data.bankDetails.upiId || '',
           });
         }
       } catch (error) {
@@ -34,11 +39,80 @@ const BankDetailsPage = () => {
       }
     };
     fetchProfile();
-  }, []);
+  }, [replaceDraft]);
 
-  const handleChange = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+  const validateField = (name, value) => {
+    let error = '';
+    switch (name) {
+      case 'holder':
+        if (!value.trim()) {
+          error = 'Account holder name is required';
+        } else if (value.trim().length < 3) {
+          error = 'Name must be at least 3 characters';
+        } else if (!/^[a-zA-Z\s.]+$/.test(value)) {
+          error = 'Name can only contain letters, spaces, and dots';
+        }
+        break;
+      case 'account':
+        if (!value.trim()) {
+          error = 'Account number is required';
+        } else if (!/^\d+$/.test(value)) {
+          error = 'Account number must contain digits only';
+        } else if (value.length < 9 || value.length > 18) {
+          error = 'Account number must be between 9 and 18 digits';
+        }
+        break;
+      case 'ifsc':
+        if (!value.trim()) {
+          error = 'IFSC code is required';
+        } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(value)) {
+          error = 'Invalid IFSC format (e.g. SBIN0001234)';
+        }
+        break;
+      case 'bank':
+        if (!value.trim()) {
+          error = 'Bank name is required';
+        } else if (value.trim().length < 3) {
+          error = 'Bank name must be at least 3 characters';
+        } else if (!/^[a-zA-Z\s.\-()]+$/.test(value)) {
+          error = 'Bank name can only contain letters, spaces, dots, hyphens, or parentheses';
+        }
+        break;
+      case 'upi':
+        if (value.trim() && !/^[\w.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/.test(value.trim())) {
+          error = 'Invalid UPI ID format (e.g. name@bank)';
+        }
+        break;
+      default:
+        break;
+    }
+    return error;
+  };
+
+  const validateForm = () => {
+    const newErrors = {
+      holder: validateField('holder', form.holder),
+      account: validateField('account', form.account),
+      ifsc: validateField('ifsc', form.ifsc),
+      bank: validateField('bank', form.bank),
+      upi: validateField('upi', form.upi),
+    };
+    setErrors(newErrors);
+    return !Object.values(newErrors).some((err) => err !== '');
+  };
+
+  const handleChange = (f) => (e) => {
+    let val = e.target.value;
+    if (f === 'ifsc') {
+      val = val.toUpperCase();
+    }
+    setForm((p) => ({ ...p, [f]: val }));
+    const error = validateField(f, val);
+    setErrors((prev) => ({ ...prev, [f]: error }));
+  };
 
   const handleContinue = async () => {
+    if (!validateForm()) return;
     try {
       setIsSubmitting(true);
 
@@ -57,15 +131,20 @@ const BankDetailsPage = () => {
         stepData
       });
 
+      clearDraft();
       updateDriver({ onboardingStep: 4 });
       navigate('/driver/register/safety');
     } catch (error) {
       console.error('Failed to save step 3', error);
-      alert('Failed to save bank details. Please try again.');
+      alert(error.response?.data?.message || 'Failed to save bank details. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const hasRequired = form.holder && form.account && form.ifsc && form.bank;
+  const hasErrors = Object.values(errors).some(err => err);
+  const continueDisabled = !hasRequired || hasErrors || isSubmitting;
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
@@ -84,16 +163,51 @@ const BankDetailsPage = () => {
       </div>
       <form className="flex-1 flex flex-col px-6 pb-8">
         <div className="flex-1 space-y-4 animate-fade-in-up">
-          <Input label="Account holder name" placeholder="Name as in bank" value={form.holder} onChange={handleChange('holder')} icon={User} />
-          <Input label="Account number" placeholder="Bank account number" value={form.account} onChange={handleChange('account')} icon={Hash} />
-          <Input label="IFSC code" placeholder="HDFC0001234" value={form.ifsc} onChange={handleChange('ifsc')} icon={Building2} />
-          <Input label="Bank name" placeholder="Bank name" value={form.bank} onChange={handleChange('bank')} icon={Building2} />
-          <Input label="UPI ID (optional)" placeholder="user@upi" value={form.upi} onChange={handleChange('upi')} icon={CreditCard} />
+          <Input 
+            label="Account holder name" 
+            placeholder="Name as in bank" 
+            value={form.holder} 
+            onChange={handleChange('holder')} 
+            error={errors.holder}
+            icon={User} 
+          />
+          <Input 
+            label="Account number" 
+            placeholder="Bank account number" 
+            value={form.account} 
+            onChange={handleChange('account')} 
+            error={errors.account}
+            icon={Hash} 
+          />
+          <Input 
+            label="IFSC code" 
+            placeholder="HDFC0001234" 
+            value={form.ifsc} 
+            onChange={handleChange('ifsc')} 
+            error={errors.ifsc}
+            icon={Building2} 
+          />
+          <Input 
+            label="Bank name" 
+            placeholder="Bank name" 
+            value={form.bank} 
+            onChange={handleChange('bank')} 
+            error={errors.bank}
+            icon={Building2} 
+          />
+          <Input 
+            label="UPI ID (optional)" 
+            placeholder="user@upi" 
+            value={form.upi} 
+            onChange={handleChange('upi')} 
+            error={errors.upi}
+            icon={CreditCard} 
+          />
         </div>
         <Button 
           fullWidth 
           onClick={handleContinue} 
-          disabled={!form.holder || !form.account || !form.ifsc || !form.bank || isSubmitting}
+          disabled={continueDisabled}
           className="rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20"
         >
           {isSubmitting ? 'SAVING...' : 'CONTINUE'}
