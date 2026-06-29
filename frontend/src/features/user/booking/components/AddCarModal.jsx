@@ -18,7 +18,7 @@ const AddCarModal = ({ open, onClose, onCarAdded }) => {
   };
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="Add a vehicle" size="lg">
+    <Modal isOpen={open} onClose={onClose} title="Add a vehicle" size="xl">
       <div className="px-5 py-5">
         <AddCarForm
           onSuccess={handleSuccess}

@@ -1,4 +1,4 @@
-/** Registration checklist items for Platform Settings → Registration Checklist */
+/** Per-vehicle safety checklist items (Platform Settings → Registration Checklist) */
 export const REGISTRATION_CONDITIONS = [
   {
     question: 'Do you have a valid driving licence?',

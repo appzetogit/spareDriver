@@ -10,6 +10,7 @@ import {
   addCar,
   getUserCars,
   deleteUserCar,
+  updateCar,
   listSavedLocations,
   addSavedLocation,
   deleteSavedLocation,
@@ -121,6 +122,7 @@ router.put('/onboarding/step', updateUserOnboardingStep);
 // Cars management
 router.post('/cars', addCar);
 router.get('/cars', getUserCars);
+router.put('/cars/:id', updateCar);
 router.delete('/cars/:id', deleteUserCar);
 
 // Favourite / saved locations

@@ -5,6 +5,7 @@ import {
   getFuelTypes,
   getCarBrands,
   getCarModels,
+  getVehicleCatalog,
 } from '../controllers/vehicleCatalog.controller.js';
 import { listActiveZones, checkZoneForPoint } from '../controllers/zone.controller.js';
 import { listActiveAds } from '../controllers/ad.controller.js';
@@ -16,6 +17,7 @@ router.post('/upload', upload.single('image'), uploadImage);
 router.post('/upload/video', uploadVideoMiddleware.single('video'), uploadVideo);
 
 // Publicly available config
+router.get('/vehicle-catalog', getVehicleCatalog);
 router.get('/car-types', getCarTypes);
 router.get('/fuel-types', getFuelTypes);
 router.get('/car-brands', getCarBrands);

@@ -1,8 +1,27 @@
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import * as catalogService from '../services/vehicleCatalog.service.js';
+import * as platformService from '../services/platform.service.js';
 
 const onlyActive = (req) => req.query.active === 'true';
+
+/** Single request for car registration dropdowns + safety checklist. */
+export const getVehicleCatalog = asyncHandler(async (req, res) => {
+  const active = onlyActive(req);
+  const [carTypes, fuelTypes, carBrands, conditions] = await Promise.all([
+    platformService.getAllCarTypesService(active),
+    catalogService.getFuelTypesService(active),
+    catalogService.getCarBrandsService(active),
+    platformService.getAllConditionsService(active),
+  ]);
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { carTypes, fuelTypes, carBrands, conditions },
+      'Vehicle catalog fetched successfully',
+    ),
+  );
+});
 
 // ─── Fuel types ───────────────────────────────────────────────────────────────
 

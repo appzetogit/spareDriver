@@ -15,6 +15,7 @@ function revokeLocalPreview(doc) {
  * @param {{ deferUpload?: boolean }} options
  */
 export function useDocumentsManager(documentTypes = [], { deferUpload = true } = {}) {
+  const documentTypesKey = documentTypes.join('|');
   const [documents, setDocuments] = useState(() =>
     documentTypes.reduce((acc, type) => ({ ...acc, [type]: { ...EMPTY_DOCUMENT } }), {}),
   );
@@ -40,7 +41,7 @@ export function useDocumentsManager(documentTypes = [], { deferUpload = true } =
         return next;
       });
     },
-    [documentTypes],
+    [documentTypesKey],
   );
 
   const stageDocument = useCallback((type, file) => {
@@ -164,11 +165,11 @@ export function useDocumentsManager(documentTypes = [], { deferUpload = true } =
     }
 
     return nextDocs;
-  }, [documentTypes]);
+  }, [documentTypesKey]);
 
   const hasPendingUploads = useMemo(
     () => documentTypes.some((type) => Boolean(documents[type]?.pendingFile)),
-    [documentTypes, documents],
+    [documentTypesKey, documents],
   );
 
   const isAnyUploading = useMemo(

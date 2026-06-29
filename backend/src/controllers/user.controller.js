@@ -58,6 +58,11 @@ export const deleteUserCar = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, null, 'Car deleted successfully'));
 });
 
+export const updateCar = asyncHandler(async (req, res) => {
+  const result = await userService.updateCarService(req.user._id, req.params.id, req.body);
+  return res.status(200).json(new ApiResponse(200, result, 'Car details updated successfully'));
+});
+
 // Saved (favourite) locations
 export const listSavedLocations = asyncHandler(async (req, res) => {
   const result = await userService.listSavedLocationsService(req.user._id);

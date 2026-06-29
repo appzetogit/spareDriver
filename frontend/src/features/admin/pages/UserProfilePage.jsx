@@ -49,7 +49,7 @@ const UserProfilePage = () => {
     );
   }
 
-  const { user, cars, checklist, hasChecklist, carsCount } = profile;
+  const { user, cars, hasChecklist, carsCount } = profile;
 
   return (
     <div className="space-y-6 animate-fade-in-up pb-8">
@@ -93,43 +93,12 @@ const UserProfilePage = () => {
               { label: 'Phone verified', value: user.isPhoneVerified ? 'Yes' : 'No' },
               { label: 'Email verified', value: user.isEmailVerified ? 'Yes' : 'No' },
               { label: 'Vehicles', value: String(carsCount) },
-              { label: 'Safety checklist', value: hasChecklist ? 'Complete' : 'Incomplete' },
+              {
+                label: 'Safety checklist',
+                value: hasChecklist ? 'Complete for all vehicles' : 'Incomplete',
+              },
             ]}
           />
-        </SectionCard>
-
-        <SectionCard title="Safety checklist">
-          {!checklist?.length ? (
-            <p className="text-sm text-slate-500">No checklist items configured.</p>
-          ) : (
-            <ul className="space-y-3">
-              {checklist.map((item) => {
-                const answerLabel =
-                  item.value === true ? 'Yes' : item.value === false ? 'No' : 'Unanswered';
-                const answerClass =
-                  item.value === true
-                    ? 'text-emerald-700 bg-emerald-50'
-                    : item.value === false
-                      ? 'text-slate-700 bg-slate-100'
-                      : 'text-amber-700 bg-amber-50';
-                return (
-                  <li key={item._id} className="flex items-start justify-between gap-3 text-sm">
-                    <div>
-                      <p className="font-medium text-slate-800">{item.question}</p>
-                      {item.isRequired && (
-                        <span className="text-[10px] font-bold uppercase text-rose-600">Required</span>
-                      )}
-                    </div>
-                    <span
-                      className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shrink-0 ${answerClass}`}
-                    >
-                      {answerLabel}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </SectionCard>
       </div>
 
@@ -137,35 +106,80 @@ const UserProfilePage = () => {
         {!cars?.length ? (
           <p className="text-sm text-slate-500">No vehicles registered.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {cars.map((car) => (
-              <div key={car._id} className="flex gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50">
-                <div className="w-20 h-20 rounded-xl overflow-hidden bg-white border border-slate-200 shrink-0">
-                  {car.image ? (
-                    <img src={car.image} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Car className="w-8 h-8 text-slate-300" />
+              <div key={car._id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 space-y-4">
+                <div className="flex gap-4">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden bg-white border border-slate-200 shrink-0">
+                    {car.image ? (
+                      <img src={car.image} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Car className="w-8 h-8 text-slate-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <p className="font-bold text-slate-900">
+                        {getCarBrandName(car)} {getCarModelName(car)}
+                      </p>
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                          car.hasChecklist
+                            ? 'text-emerald-700 bg-emerald-50'
+                            : 'text-amber-700 bg-amber-50'
+                        }`}
+                      >
+                        {car.hasChecklist ? 'Checklist complete' : 'Checklist incomplete'}
+                      </span>
                     </div>
-                  )}
+                    <p className="text-xs font-mono font-semibold text-slate-700 mt-1 uppercase">{car.vehicleNumber}</p>
+                    <InfoGrid
+                      columns={1}
+                      items={[
+                        { label: 'Category', value: getCarCategoryName(car) },
+                        {
+                          label: 'Fuel / Transmission',
+                          value: `${getCarFuelName(car)} · ${car.transmission}`,
+                          capitalize: true,
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-900">
-                    {getCarBrandName(car)} {getCarModelName(car)}
-                  </p>
-                  <p className="text-xs font-mono font-semibold text-slate-700 mt-1 uppercase">{car.vehicleNumber}</p>
-                  <InfoGrid
-                    columns={1}
-                    items={[
-                      { label: 'Category', value: getCarCategoryName(car) },
-                      {
-                        label: 'Fuel / Transmission',
-                        value: `${getCarFuelName(car)} · ${car.transmission}`,
-                        capitalize: true,
-                      },
-                    ]}
-                  />
-                </div>
+
+                {!car.checklist?.length ? (
+                  <p className="text-sm text-slate-500">No checklist items configured.</p>
+                ) : (
+                  <ul className="space-y-2 border-t border-slate-200 pt-3">
+                    {car.checklist.map((item) => {
+                      const answerLabel =
+                        item.value === true ? 'Yes' : item.value === false ? 'No' : 'Unanswered';
+                      const answerClass =
+                        item.value === true
+                          ? 'text-emerald-700 bg-emerald-50'
+                          : item.value === false
+                            ? 'text-slate-700 bg-slate-100'
+                            : 'text-amber-700 bg-amber-50';
+                      return (
+                        <li key={item._id} className="flex items-start justify-between gap-3 text-sm">
+                          <div>
+                            <p className="font-medium text-slate-800">{item.question}</p>
+                            {item.isRequired && (
+                              <span className="text-[10px] font-bold uppercase text-rose-600">Required</span>
+                            )}
+                          </div>
+                          <span
+                            className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shrink-0 ${answerClass}`}
+                          >
+                            {answerLabel}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             ))}
           </div>

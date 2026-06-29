@@ -22,6 +22,7 @@ const VehicleDetailsForm = ({
   errors = {},
   disabled = false,
   showVehicleNumber = true,
+  editLabels = null,
 }) => {
   const {
     categoryOptions,
@@ -64,6 +65,7 @@ const VehicleDetailsForm = ({
         error={errors.carTypeId}
         searchable
         disabled={disabled || loading}
+        prefilledLabel={editLabels?.carType}
       />
 
       <Select
@@ -75,6 +77,7 @@ const VehicleDetailsForm = ({
         error={errors.brandId}
         searchable
         disabled={disabled || loading}
+        prefilledLabel={editLabels?.brand}
       />
 
       <Select
@@ -94,6 +97,7 @@ const VehicleDetailsForm = ({
         error={errors.modelId}
         searchable
         disabled={disabled || !values.brandId || modelsLoading}
+        prefilledLabel={editLabels?.model}
       />
 
       {showVehicleNumber && (
@@ -118,6 +122,7 @@ const VehicleDetailsForm = ({
           placeholder="Fuel"
           error={errors.fuelTypeId}
           disabled={disabled || loading}
+          prefilledLabel={editLabels?.fuelType}
         />
         <Select
           label="Transmission"

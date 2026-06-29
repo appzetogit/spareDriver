@@ -15,6 +15,7 @@
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.79.2",
     "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -22,6 +23,7 @@
     "express": "^4.21.2",
     "firebase-admin": "^13.10.0",
     "google-auth-library": "^10.6.2",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
     "multer": "^2.1.1",

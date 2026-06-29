@@ -2,14 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Button from '../../../../components/Button';
 import Card from '../../../../components/Card';
-import { ArrowLeft, Plus, Car, Fuel, Settings, Trash2, ChevronRight } from 'lucide-react';
+import Modal from '../../../../components/Modal';
+import ConfirmDialog from '../../../../components/ConfirmDialog';
+import AddCarForm from '../components/AddCarForm';
+import { ArrowLeft, Plus, Car, Fuel, Settings, Trash2, ChevronRight, Pencil } from 'lucide-react';
 import api from '../../../../utils/api';
 import { MAX_USER_CARS } from '../../../../utils/constants';
 import {
   getCarBrandName,
   getCarModelName,
   getCarFuelName,
-  getCarCategoryName,
 } from '../../../../utils/vehicleCatalog';
 
 const MyCarsPage = () => {
@@ -17,6 +19,13 @@ const MyCarsPage = () => {
   const location = useLocation();
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Edit modal state
+  const [editingCar, setEditingCar] = useState(null);
+
+  // Delete confirm dialog state
+  const [deleteTarget, setDeleteTarget] = useState(null); // car object to delete
+  const [deleting, setDeleting] = useState(false);
 
   const fetchCars = useCallback(async () => {
     setLoading(true);
@@ -34,24 +43,33 @@ const MyCarsPage = () => {
     fetchCars();
   }, [fetchCars, location.key]);
 
-  const removeCar = async (id) => {
-    if (!window.confirm('Remove this vehicle?')) return;
+  const handleEditSuccess = () => {
+    setEditingCar(null);
+    fetchCars();
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api.delete(`/auth/cars/${id}`);
-      setCars((prev) => prev.filter((c) => c._id !== id));
+      await api.delete(`/auth/cars/${deleteTarget._id}`);
+      setCars((prev) => prev.filter((c) => c._id !== deleteTarget._id));
+      setDeleteTarget(null);
     } catch (err) {
       console.error('Failed to remove car', err);
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const goToChecklist = () => navigate('/user/checklist');
+  const goToHome = () => navigate('/user/home', { replace: true });
 
   const canContinue = cars.length > 0;
   const slotsLeft = MAX_USER_CARS - cars.length;
 
   return (
     <div className="flex-1 flex flex-col bg-[#F8FAFC] min-h-dvh">
-      <PageHeader cars={cars} canContinue={canContinue} onSkip={goToChecklist} />
+      <PageHeader cars={cars} canContinue={canContinue} onDone={goToHome} />
 
       <div className="flex-1 p-5 space-y-4">
         {loading ? (
@@ -107,14 +125,24 @@ const MyCarsPage = () => {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeCar(car._id)}
-                    className="p-3 rounded-2xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                    aria-label="Remove vehicle"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCar(car)}
+                      className="p-3 rounded-2xl bg-slate-50 text-slate-400 hover:bg-primary/10 hover:text-primary transition-colors"
+                      aria-label="Edit vehicle"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(car)}
+                      className="p-3 rounded-2xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      aria-label="Remove vehicle"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </Card>
             ))}
@@ -144,28 +172,67 @@ const MyCarsPage = () => {
         <div className="p-6 bg-white border-t border-slate-100 space-y-3">
           <Button
             fullWidth
-            onClick={goToChecklist}
+            onClick={goToHome}
             className="rounded-full py-4 text-base font-bold flex items-center justify-center gap-2"
           >
-            Continue to safety checklist
+            Continue to home
             <ChevronRight className="w-5 h-5" />
           </Button>
           <Button
             type="button"
             variant="outline"
             fullWidth
-            onClick={goToChecklist}
+            onClick={goToHome}
             className="rounded-full py-3.5 text-sm font-semibold border-2 border-slate-400 text-slate-900 bg-white hover:bg-slate-50"
           >
             Skip — I&apos;m done adding cars
           </Button>
         </div>
       )}
+
+      {/* ── Edit car modal ──────────────────────────────────────── */}
+      <Modal
+        isOpen={Boolean(editingCar)}
+        onClose={() => setEditingCar(null)}
+        title="Edit vehicle"
+        size="xl"
+      >
+        <div className="px-5 py-5">
+          {editingCar && (
+            <AddCarForm
+              key={editingCar._id}
+              editCar={editingCar}
+              onSuccess={handleEditSuccess}
+              onCancel={() => setEditingCar(null)}
+              submitLabel="Save changes"
+              cancelLabel="Cancel"
+              compact
+            />
+          )}
+        </div>
+      </Modal>
+
+      {/* ── Delete confirmation dialog ──────────────────────────── */}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Remove this vehicle?"
+        description={
+          deleteTarget
+            ? `${getCarBrandName(deleteTarget)} ${getCarModelName(deleteTarget)} (${deleteTarget.vehicleNumber}) will be removed from your garage.`
+            : ''
+        }
+        confirmLabel="Remove vehicle"
+        cancelLabel="Keep it"
+        variant="danger"
+        loading={deleting}
+      />
     </div>
   );
 };
 
-function PageHeader({ cars, canContinue, onSkip }) {
+function PageHeader({ cars, canContinue, onDone }) {
   return (
     <div className="bg-white px-4 pt-6 pb-6 shadow-sm border-b border-slate-100">
       <div className="flex items-center gap-3">
@@ -179,8 +246,8 @@ function PageHeader({ cars, canContinue, onSkip }) {
           </p>
         </div>
         {canContinue && (
-          <Button type="button" variant="dark" size="sm" onClick={onSkip} className="shrink-0 rounded-full px-4">
-            Skip
+          <Button type="button" variant="dark" size="sm" onClick={onDone} className="shrink-0 rounded-full px-4">
+            Done
           </Button>
         )}
       </div>
@@ -189,3 +256,5 @@ function PageHeader({ cars, canContinue, onSkip }) {
 }
 
 export default MyCarsPage;
+
+

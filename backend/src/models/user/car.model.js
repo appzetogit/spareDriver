@@ -47,6 +47,18 @@ const carSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    conditions: [
+      {
+        conditionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'PlatformCondition',
+        },
+        value: {
+          type: Boolean,
+          default: null,
+        },
+      },
+    ],
   },
   { timestamps: true },
 );

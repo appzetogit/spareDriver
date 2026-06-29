@@ -35,7 +35,6 @@ const MapSimulatorPage = lazy(() => import('./features/dev/pages/MapSimulatorPag
 // User Onboarding
 const AddCarPage = lazy(() => import('./features/user/onboarding/pages/AddCarPage'));
 const MyCarsPage = lazy(() => import('./features/user/onboarding/pages/MyCarsPage'));
-const RegistrationChecklistPage = lazy(() => import('./features/user/onboarding/pages/RegistrationChecklistPage'));
 
 // User Home
 const UserHomePage = lazy(() => import('./features/user/home/pages/UserHomePage'));
@@ -180,7 +179,6 @@ function App() {
           <Route element={<UserOnboardingGuard />}>
             <Route path="/user/add-car" element={<AddCarPage />} />
             <Route path="/user/my-cars" element={<MyCarsPage />} />
-            <Route path="/user/checklist" element={<RegistrationChecklistPage />} />
 
             {/* ========== User Dashboard (with bottom nav) ========== */}
             <Route element={<UserDashboardLayout />}>
