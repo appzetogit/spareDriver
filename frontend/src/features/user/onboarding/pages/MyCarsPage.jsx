@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Button from '../../../../components/Button';
 import Card from '../../../../components/Card';
 import Modal from '../../../../components/Modal';
@@ -56,7 +57,7 @@ const MyCarsPage = () => {
       setCars((prev) => prev.filter((c) => c._id !== deleteTarget._id));
       setDeleteTarget(null);
     } catch (err) {
-      console.error('Failed to remove car', err);
+      toast.error(err?.response?.data?.message || 'Failed to remove vehicle');
     } finally {
       setDeleting(false);
     }

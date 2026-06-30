@@ -85,21 +85,30 @@ export const adminListSubscriptionAvailableDrivers = asyncHandler(async (req, re
 });
 
 export const adminAssignDriverToSubscription = asyncHandler(async (req, res) => {
-  const { driverId } = req.body || {};
+  const {
+    driverId,
+    workingStartDate,
+    workingEndDate,
+    previousDriverLastWorkingDate,
+  } = req.body || {};
   if (!driverId) throw new ApiError(400, 'driverId is required');
+  if (!workingStartDate) throw new ApiError(400, 'workingStartDate is required');
   const updated = await pricingService.assignDriverToSubscriptionService(
     req.params.id,
     driverId,
     req.staff?._id,
+    { workingStartDate, workingEndDate, previousDriverLastWorkingDate },
   );
   return res.status(200).json(new ApiResponse(200, updated, 'Driver assigned'));
 });
 
 export const adminReleaseSubscriptionDriver = asyncHandler(async (req, res) => {
-  const updated = await pricingService.releaseSubscriptionDriverService(
-    req.params.id,
-    req.body?.reason || '',
-  );
+  const { reason, lastWorkingDate } = req.body || {};
+  if (!lastWorkingDate) throw new ApiError(400, 'lastWorkingDate is required');
+  const updated = await pricingService.releaseSubscriptionDriverService(req.params.id, {
+    reason: reason || '',
+    lastWorkingDate,
+  });
   return res.status(200).json(new ApiResponse(200, updated, 'Driver released'));
 });
 
@@ -167,6 +176,19 @@ export const adminListSubscriptionRevenue = asyncHandler(async (req, res) => {
     to: req.query.to || '',
   });
   return res.status(200).json(new ApiResponse(200, result, 'Subscription revenue fetched'));
+});
+
+export const adminGetSubscriptionDriverPayouts = asyncHandler(async (req, res) => {
+  const result = await pricingService.getSubscriptionDriverPayoutDetailService(req.params.id);
+  return res.status(200).json(new ApiResponse(200, result, 'Driver payout detail fetched'));
+});
+
+export const adminPaySubscriptionDrivers = asyncHandler(async (req, res) => {
+  const result = await pricingService.paySubscriptionDriverSharesService(
+    req.params.id,
+    req.staff?._id,
+  );
+  return res.status(200).json(new ApiResponse(200, result, 'Driver shares paid'));
 });
 
 /**

@@ -33,7 +33,9 @@ export const updateUserOnboardingStep = asyncHandler(async (req, res) => {
 });
 
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const result = await userService.getUserProfileService(req.params.userId);
+  const result = await userService.getUserProfileService(req.params.userId, {
+    includeInactiveCars: Boolean(req.staff),
+  });
   return res.status(200).json(new ApiResponse(200, result, 'User profile fetched'));
 });
 

@@ -29,10 +29,6 @@ import {
   applyBuffer,
   getDriverConflictMap,
 } from './driverConflict.service.js';
-import {
-  recordPlatformRevenue,
-  PLATFORM_REVENUE_SOURCE,
-} from './platformRevenue.service.js';
 import { normaliseOutstationPolicy } from './bookingOutstationCancellation.service.js';
 import { normaliseHourlyPolicy } from './bookingCancellation.service.js';
 import { getActiveLegalDocumentService } from './legalDocument.service.js';
@@ -653,24 +649,6 @@ export const verifySubscriptionPaymentService = async (
   subscription.paidAt = now;
   subscription.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING;
   await subscription.save();
-
-  if (subscription.platformShareRupees > 0) {
-    await recordPlatformRevenue({
-      source: PLATFORM_REVENUE_SOURCE.SUBSCRIPTION,
-      amountRupees: subscription.platformShareRupees,
-      userSubscriptionId: subscription._id,
-      userId: subscription.userId,
-      meta: {
-        planName: subscription.planNameSnapshot,
-        basePrice: subscription.basePrice,
-        totalPaid: subscription.amount,
-        driverShareRupees: subscription.driverShareRupees,
-        serviceCharge: subscription.serviceCharge,
-        gstAmount: subscription.gstAmount,
-      },
-      occurredAt: now,
-    }).catch(() => {});
-  }
 
   await Payment.findOneAndUpdate(
     { referenceId: subscription._id, referenceModel: 'UserSubscription' },
@@ -1416,28 +1394,247 @@ export function serializeSubscriptionForUser(subscription) {
   };
 }
 
-async function creditDriverSubscriptionShare(subscription, driverId) {
-  const share = round2(Number(subscription.driverShareRupees) || 0);
-  if (share <= 0 || subscription.driverSharePaidAt) return;
-
-  const updated = await Driver.findOneAndUpdate(
-    {
-      _id: driverId,
-      isDeleted: { $ne: true },
-    },
-    {
-      $inc: {
-        'wallet.balance': share,
-        'wallet.totalEarnings': share,
-      },
-    },
-    { new: true },
-  );
-  if (!updated) return;
-
-  subscription.driverSharePaidAt = new Date();
-  subscription.driverSharePaidTo = driverId;
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
 }
+
+function inclusiveCalendarDays(start, end) {
+  const s = startOfDay(start);
+  const e = startOfDay(end);
+  if (e < s) return 0;
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  return Math.floor((e - s) / MS_PER_DAY) + 1;
+}
+
+function endOfDay(d) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function parseWorkingDateInput(value, label) {
+  if (!value) throw new ApiError(400, `${label} is required`);
+  const d = startOfDay(new Date(value));
+  if (Number.isNaN(d.getTime())) throw new ApiError(400, `Invalid ${label}`);
+  return d;
+}
+
+function parseOptionalWorkingDate(value) {
+  if (!value) return null;
+  const d = startOfDay(new Date(value));
+  if (Number.isNaN(d.getTime())) throw new ApiError(400, 'Invalid working end date');
+  return d;
+}
+
+function assertDateWithinSubscription(date, subscription, label) {
+  const d = startOfDay(date);
+  const subStart = startOfDay(subscription.startDate);
+  const subEnd = startOfDay(subscription.expiryDate);
+  if (d < subStart || d > subEnd) {
+    throw new ApiError(400, `${label} must be within the subscription period`);
+  }
+  return d;
+}
+
+function subscriptionStintKey(driverId, assignedAt) {
+  return `${String(driverId)}_${new Date(assignedAt).getTime()}`;
+}
+
+function buildSubscriptionDriverStints(doc) {
+  const subStart = doc.startDate ? new Date(doc.startDate) : null;
+  const subEnd = doc.expiryDate ? new Date(doc.expiryDate) : null;
+  if (!subStart || !subEnd) {
+    return { stints: [], totalSubscriptionDays: 0 };
+  }
+
+  const totalSubscriptionDays = inclusiveCalendarDays(subStart, subEnd);
+  const stints = [];
+  const now = new Date();
+
+  for (const prev of doc.previousAssignments || []) {
+    const driverId = prev.driverId?._id || prev.driverId;
+    if (!driverId || !prev.assignedAt) continue;
+    const stintStart = new Date(
+      Math.max(startOfDay(prev.assignedAt).getTime(), subStart.getTime()),
+    );
+    const endRaw = prev.releasedAt ? endOfDay(prev.releasedAt) : subEnd;
+    const stintEnd = new Date(Math.min(endRaw.getTime(), subEnd.getTime()));
+    if (stintEnd < stintStart) continue;
+    stints.push({
+      driverId,
+      driver:
+        typeof prev.driverId === 'object' && prev.driverId?.name
+          ? {
+            _id: driverId,
+            name: prev.driverId.name,
+            phone: prev.driverId.phone || prev.driverId.phone_no || '',
+          }
+          : null,
+      assignedAt: prev.assignedAt,
+      releasedAt: prev.releasedAt || null,
+      workingDays: inclusiveCalendarDays(stintStart, stintEnd),
+      stintStart,
+      stintEnd,
+      isCurrent: false,
+    });
+  }
+
+  const assignedId = doc.assignedDriverId?._id || doc.assignedDriverId;
+  if (assignedId && doc.assignedAt) {
+    const stintStart = new Date(
+      Math.max(startOfDay(doc.assignedAt).getTime(), subStart.getTime()),
+    );
+    const plannedEndRaw = doc.assignedWorkingEndDate
+      ? endOfDay(doc.assignedWorkingEndDate)
+      : subEnd;
+    const stintEnd = new Date(Math.min(plannedEndRaw.getTime(), subEnd.getTime()));
+    const effectiveEnd = new Date(Math.min(stintEnd.getTime(), now.getTime()));
+    if (effectiveEnd >= stintStart) {
+      stints.push({
+        driverId: assignedId,
+        driver:
+          typeof doc.assignedDriverId === 'object' && doc.assignedDriverId?.name
+            ? {
+              _id: assignedId,
+              name: doc.assignedDriverId.name,
+              phone: doc.assignedDriverId.phone || doc.assignedDriverId.phone_no || '',
+            }
+            : null,
+        assignedAt: doc.assignedAt,
+        releasedAt: null,
+        assignedWorkingEndDate: doc.assignedWorkingEndDate || null,
+        workingDays: inclusiveCalendarDays(stintStart, effectiveEnd),
+        stintStart,
+        stintEnd,
+        plannedStintEnd: stintEnd,
+        isCurrent: true,
+      });
+    }
+  }
+
+  return { stints, totalSubscriptionDays };
+}
+
+function summarizeSubscriptionPayouts(doc) {
+  const { stints, totalSubscriptionDays } = buildSubscriptionDriverStints(doc);
+  const driverSharePool = round2(Number(doc.driverShareRupees) || 0);
+  const dailyRate = totalSubscriptionDays > 0 ? driverSharePool / totalSubscriptionDays : 0;
+  const payouts = Array.isArray(doc.driverPayouts) ? doc.driverPayouts : [];
+  const paidMap = new Map(
+    payouts.map((p) => [subscriptionStintKey(p.driverId, p.assignedAt), p]),
+  );
+
+  let paidToDriver = round2(
+    payouts.reduce((sum, p) => sum + (Number(p.amountRupees) || 0), 0),
+  );
+  const legacyFullyPaid = !payouts.length && !!doc.driverSharePaidAt;
+  if (legacyFullyPaid) {
+    paidToDriver = driverSharePool;
+  }
+
+  const enrichedStints = stints.map((stint) => {
+    const key = subscriptionStintKey(stint.driverId, stint.assignedAt);
+    const amountRupees = round2(dailyRate * stint.workingDays);
+    const paid = paidMap.get(key);
+    const isPaid = legacyFullyPaid || !!paid;
+    return {
+      ...stint,
+      key,
+      amountRupees,
+      paidAt: paid?.paidAt || (legacyFullyPaid ? doc.driverSharePaidAt : null),
+      isPaid,
+    };
+  });
+
+  const remainingDriverShare = round2(Math.max(0, driverSharePool - paidToDriver));
+  const unpaidAmount = round2(
+    enrichedStints.filter((s) => !s.isPaid).reduce((sum, s) => sum + s.amountRupees, 0),
+  );
+
+  return {
+    driverSharePool,
+    paidToDriver,
+    remainingDriverShare,
+    unpaidAmount,
+    totalSubscriptionDays,
+    dailyRate: round2(dailyRate),
+    stints: enrichedStints,
+  };
+}
+
+export const getSubscriptionDriverPayoutDetailService = async (subscriptionId) => {
+  const sub = await UserSubscription.findById(subscriptionId)
+    .populate('userId', 'name phone_no email')
+    .populate('zoneId', 'name city')
+    .populate('assignedDriverId', 'name phone')
+    .populate('previousAssignments.driverId', 'name phone')
+    .lean();
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+  if (!sub.paidAt) throw new ApiError(400, 'Subscription has not been paid yet');
+
+  const payoutSummary = summarizeSubscriptionPayouts(sub);
+  return {
+    subscription: {
+      _id: sub._id,
+      planNameSnapshot: sub.planNameSnapshot,
+      startDate: sub.startDate,
+      expiryDate: sub.expiryDate,
+      paidAt: sub.paidAt,
+      amount: sub.amount,
+      userId: sub.userId,
+      zoneId: sub.zoneId,
+    },
+    ...payoutSummary,
+  };
+};
+
+export const paySubscriptionDriverSharesService = async (subscriptionId, staffId) => {
+  const sub = await UserSubscription.findById(subscriptionId)
+    .populate('assignedDriverId', 'name phone')
+    .populate('previousAssignments.driverId', 'name phone');
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+  if (!sub.paidAt) throw new ApiError(400, 'Subscription has not been paid yet');
+
+  const summary = summarizeSubscriptionPayouts(sub.toObject());
+  const unpaid = summary.stints.filter((s) => !s.isPaid && s.amountRupees > 0);
+  if (!unpaid.length) {
+    throw new ApiError(400, 'No unpaid driver shares for this subscription');
+  }
+
+  for (const stint of unpaid) {
+    const credited = await Driver.findOneAndUpdate(
+      {
+        _id: stint.driverId,
+        isDeleted: { $ne: true },
+      },
+      {
+        $inc: {
+          'wallet.balance': stint.amountRupees,
+          'wallet.totalEarnings': stint.amountRupees,
+        },
+      },
+      { new: true },
+    );
+    if (!credited) {
+      throw new ApiError(404, `Driver ${stint.driverId} not found`);
+    }
+
+    sub.driverPayouts.push({
+      driverId: stint.driverId,
+      assignedAt: stint.assignedAt,
+      releasedAt: stint.releasedAt,
+      workingDays: stint.workingDays,
+      amountRupees: stint.amountRupees,
+      paidAt: new Date(),
+      paidBy: staffId || null,
+    });
+  }
+
+  await sub.save();
+  return getSubscriptionDriverPayoutDetailService(subscriptionId);
+};
 
 // ─── Admin: assign / release a dedicated driver to a subscription ─────────────
 
@@ -1494,7 +1691,16 @@ async function assertDriverAvailableForSubscription(subscription, driverId, { ex
   }
 }
 
-export const assignDriverToSubscriptionService = async (subscriptionId, driverId, staffId) => {
+export const assignDriverToSubscriptionService = async (
+  subscriptionId,
+  driverId,
+  staffId,
+  {
+    workingStartDate,
+    workingEndDate,
+    previousDriverLastWorkingDate,
+  } = {},
+) => {
   const sub = await UserSubscription.findById(subscriptionId).populate({
     path: 'carId',
     select: 'carTypeId vehicleNumber brandId modelId',
@@ -1503,6 +1709,22 @@ export const assignDriverToSubscriptionService = async (subscriptionId, driverId
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (sub.status !== SUBSCRIPTION_STATUS.ACTIVE) {
     throw new ApiError(400, 'Cannot assign a driver to an inactive subscription');
+  }
+
+  const workStart = assertDateWithinSubscription(
+    parseWorkingDateInput(workingStartDate, 'Working start date'),
+    sub,
+    'Working start date',
+  );
+  const workEnd = workingEndDate
+    ? assertDateWithinSubscription(
+      parseWorkingDateInput(workingEndDate, 'Working end date'),
+      sub,
+      'Working end date',
+    )
+    : null;
+  if (workEnd && workEnd < workStart) {
+    throw new ApiError(400, 'Working end date cannot be before start date');
   }
 
   const driver = await Driver.findOne({
@@ -1531,21 +1753,35 @@ export const assignDriverToSubscriptionService = async (subscriptionId, driverId
   await assertDriverAvailableForSubscription(sub, driverId);
 
   if (sub.assignedDriverId) {
+    const prevLastDay = assertDateWithinSubscription(
+      parseWorkingDateInput(
+        previousDriverLastWorkingDate,
+        'Previous driver last working date',
+      ),
+      sub,
+      'Previous driver last working date',
+    );
+    if (sub.assignedAt && prevLastDay < startOfDay(sub.assignedAt)) {
+      throw new ApiError(
+        400,
+        'Previous driver last working date cannot be before their start date',
+      );
+    }
     sub.previousAssignments.push({
       driverId: sub.assignedDriverId,
       assignedAt: sub.assignedAt,
-      releasedAt: new Date(),
+      releasedAt: endOfDay(prevLastDay),
       releaseReason: 'reassigned by admin',
     });
   }
 
   sub.assignedDriverId = driverId;
-  sub.assignedAt = new Date();
+  sub.assignedAt = workStart;
+  sub.assignedWorkingEndDate = workEnd ? endOfDay(workEnd) : null;
   sub.assignedBy = staffId || null;
   sub.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED;
   sub.releasedAt = null;
   sub.releaseReason = '';
-  await creditDriverSubscriptionShare(sub, driverId);
   await sub.save();
 
   const terms = await getActiveLegalDocumentService(LEGAL_DOCUMENT_TYPES.SUBSCRIPTION);
@@ -1570,20 +1806,34 @@ export const assignDriverToSubscriptionService = async (subscriptionId, driverId
   return sub;
 };
 
-export const releaseSubscriptionDriverService = async (subscriptionId, reason = '') => {
+export const releaseSubscriptionDriverService = async (
+  subscriptionId,
+  { reason = '', lastWorkingDate } = {},
+) => {
   const sub = await UserSubscription.findById(subscriptionId);
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (!sub.assignedDriverId) {
     throw new ApiError(400, 'No driver is currently assigned to this subscription');
   }
+
+  const lastDay = assertDateWithinSubscription(
+    parseWorkingDateInput(lastWorkingDate, 'Last working date'),
+    sub,
+    'Last working date',
+  );
+  if (sub.assignedAt && lastDay < startOfDay(sub.assignedAt)) {
+    throw new ApiError(400, 'Last working date cannot be before the driver start date');
+  }
+
   sub.previousAssignments.push({
     driverId: sub.assignedDriverId,
     assignedAt: sub.assignedAt,
-    releasedAt: new Date(),
+    releasedAt: endOfDay(lastDay),
     releaseReason: reason || 'released by admin',
   });
   sub.assignedDriverId = null;
   sub.assignedAt = null;
+  sub.assignedWorkingEndDate = null;
   sub.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.RELEASED;
   sub.releasedAt = new Date();
   sub.releaseReason = reason || '';
@@ -1842,7 +2092,7 @@ export const listSubscriptionRevenueService = async ({
   const safePage = Math.max(1, Number(page) || 1);
   const skip = (safePage - 1) * safeLimit;
 
-  const [items, total, aggregates] = await Promise.all([
+  const [items, total, allForTotals] = await Promise.all([
     UserSubscription.find(filter)
       .sort({ paidAt: -1 })
       .skip(skip)
@@ -1850,43 +2100,50 @@ export const listSubscriptionRevenueService = async ({
       .populate('userId', 'name phone_no email')
       .populate('zoneId', 'name city')
       .populate('assignedDriverId', 'name phone')
-      .populate('driverSharePaidTo', 'name phone')
+      .populate('previousAssignments.driverId', 'name phone')
       .lean(),
     UserSubscription.countDocuments(filter),
-    UserSubscription.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: null,
-          totalCollected: { $sum: '$amount' },
-          totalPlatform: { $sum: '$platformShareRupees' },
-          totalDriver: { $sum: '$driverShareRupees' },
-          totalBase: { $sum: '$basePrice' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
+    UserSubscription.find(filter)
+      .select(
+        'driverShareRupees driverSharePaidAt driverPayouts startDate expiryDate assignedDriverId assignedAt previousAssignments',
+      )
+      .populate('assignedDriverId', 'name phone')
+      .populate('previousAssignments.driverId', 'name phone')
+      .lean(),
   ]);
 
-  const totals = aggregates[0] || {
-    totalCollected: 0,
-    totalPlatform: 0,
-    totalDriver: 0,
-    totalBase: 0,
-    count: 0,
-  };
+  const enrichedItems = items.map((item) => {
+    const payout = summarizeSubscriptionPayouts(item);
+    return {
+      ...item,
+      paidToDriver: payout.paidToDriver,
+      remainingDriverShare: payout.remainingDriverShare,
+      driverSharePool: payout.driverSharePool,
+      unpaidAmount: payout.unpaidAmount,
+      driverStintCount: payout.stints.length,
+    };
+  });
+
+  let totalDriverPool = 0;
+  let totalPaidToDriver = 0;
+  let totalRemaining = 0;
+  for (const doc of allForTotals) {
+    const payout = summarizeSubscriptionPayouts(doc);
+    totalDriverPool += payout.driverSharePool || 0;
+    totalPaidToDriver += payout.paidToDriver || 0;
+    totalRemaining += payout.remainingDriverShare || 0;
+  }
 
   return {
-    items,
+    items: enrichedItems,
     total,
     page: safePage,
     limit: safeLimit,
     totals: {
-      count: totals.count || 0,
-      totalCollected: round2(totals.totalCollected || 0),
-      totalPlatform: round2(totals.totalPlatform || 0),
-      totalDriver: round2(totals.totalDriver || 0),
-      totalBase: round2(totals.totalBase || 0),
+      count: total,
+      totalDriverPool: round2(totalDriverPool),
+      totalPaidToDriver: round2(totalPaidToDriver),
+      totalRemaining: round2(totalRemaining),
     },
   };
 };

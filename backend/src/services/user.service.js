@@ -103,6 +103,8 @@ export const loginUserService = async (phone, password) => {
 };
 
 import Car from '../models/user/car.model.js';
+import Booking from '../models/booking.model.js';
+import UserSubscription from '../models/userSubscription.model.js';
 import PlatformCondition from '../models/platformCondition.model.js';
 import { validateCarCatalogRefs } from './vehicleCatalog.service.js';
 
@@ -194,13 +196,17 @@ function buildChecklistView(activeConditions, answerMap) {
   }));
 }
 
-export const getUserProfileService = async (userId) => {
+export const getUserProfileService = async (userId, { includeInactiveCars = false } = {}) => {
   const user = await User.findById(userId);
   if (!user || user.isDeleted || user.role !== USER_ROLES.USER) {
     throw new ApiError(404, 'User not found');
   }
 
-  let cars = await Car.find({ userId, isActive: true })
+  const carFilter = includeInactiveCars
+    ? { userId }
+    : { userId, isActive: true };
+
+  let cars = await Car.find(carFilter)
     .populate('carTypeId', 'name')
     .populate('brandId', 'name')
     .populate('modelId', 'name')
@@ -225,8 +231,8 @@ export const getUserProfileService = async (userId) => {
   return {
     user: sanitizeUser(user),
     cars: carsWithChecklist,
-    carsCount: carsWithChecklist.length,
-    hasChecklist: await isOnboardingComplete(user, cars),
+    carsCount: carsWithChecklist.filter((c) => c.isActive !== false).length,
+    hasChecklist: await isOnboardingComplete(user, cars.filter((c) => c.isActive !== false)),
   };
 };
 
@@ -334,8 +340,26 @@ export const getUserCarsService = async (userId) => {
 };
 
 export const deleteUserCarService = async (userId, carId) => {
-  const car = await Car.findOne({ _id: carId, userId });
+  const car = await Car.findOne({ _id: carId, userId, isActive: true });
   if (!car) throw new ApiError(404, 'Car not found');
+
+  const [bookingCount, subscriptionCount] = await Promise.all([
+    Booking.countDocuments({ carId, isDeleted: false }),
+    UserSubscription.countDocuments({ carId }),
+  ]);
+
+  if (bookingCount > 0) {
+    throw new ApiError(
+      409,
+      'This vehicle cannot be removed because it is linked to a trip. Contact support if you need help.',
+    );
+  }
+  if (subscriptionCount > 0) {
+    throw new ApiError(
+      409,
+      'This vehicle cannot be removed because it is linked to a subscription.',
+    );
+  }
 
   car.isActive = false;
   await car.save();

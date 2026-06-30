@@ -15,6 +15,7 @@ const routeTitles = {
   '/admin/emergency-pool': 'Emergency Pool',
   '/admin/settings': 'Settings',
   '/admin/account/revenue': 'Revenue',
+  '/admin/account/subscription-revenue': 'Subscription Revenue',
   '/admin/account/refunds': 'Refunds',
   '/admin/profile': 'My Profile',
 };
@@ -23,7 +24,9 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const pageTitle =
-    location.pathname.includes('/admin/users/') && location.pathname.endsWith('/profile')
+    location.pathname.includes('/admin/users/') && location.pathname.endsWith('/history')
+      ? 'User History'
+      : location.pathname.includes('/admin/users/') && location.pathname.endsWith('/profile')
       ? 'User Profile'
       : location.pathname.includes('/admin/drivers/') && location.pathname.endsWith('/profile')
         ? 'Driver Profile'

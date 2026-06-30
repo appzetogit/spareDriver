@@ -8,7 +8,6 @@ import {
   Search,
   Loader2,
   AlertOctagon,
-  Sparkles,
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import useAdminRevenueStore from '../../../store/admin/useAdminRevenueStore';
@@ -50,12 +49,6 @@ const SOURCE_META = {
     variant: 'danger',
     icon: AlertOctagon,
     tone: 'text-rose-700',
-  },
-  subscription: {
-    label: 'Subscription',
-    variant: 'primary',
-    icon: Sparkles,
-    tone: 'text-primary-dark',
   },
 };
 
@@ -190,7 +183,6 @@ const ManageRevenue = () => {
           <option value="commission">Commission</option>
           <option value="cancellation_fee">Cancellation fee</option>
           <option value="driver_penalty">Driver penalty</option>
-          <option value="subscription">Subscription</option>
         </select>
         <input
           type="date"

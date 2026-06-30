@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   Sparkles,
   RefreshCw,
   Search,
   Loader2,
   Banknote,
-  TrendingUp,
   Users,
+  Wallet,
+  IndianRupee,
+  CalendarRange,
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
+import Button from '../../../components/Button';
 import Card from '../../../components/Card';
+import Drawer from '../../../components/Drawer';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import api from '../../../utils/api';
 import { formatCurrency } from '../../../utils/fareCalculator';
@@ -24,6 +29,194 @@ function formatDate(d) {
   });
 }
 
+function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+
+  const fetchDetail = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get(`/admin/subscriptions/${subscription._id}/driver-payouts`);
+      setDetail(res?.data?.data || null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to load driver payout detail');
+      setDetail(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [subscription._id]);
+
+  useEffect(() => {
+    fetchDetail();
+  }, [fetchDetail]);
+
+  const handlePay = async () => {
+    setPaying(true);
+    try {
+      const res = await api.post(`/admin/subscriptions/${subscription._id}/pay-drivers`);
+      setDetail(res?.data?.data || null);
+      toast.success('Driver wallet credited successfully');
+      onPaid?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to pay drivers');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const sub = detail?.subscription || subscription;
+  const unpaidAmount = detail?.unpaidAmount ?? 0;
+  const canPay = unpaidAmount > 0 && !loading;
+
+  const drawerHeader = (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pay drivers</p>
+      <h2 className="text-lg font-extrabold text-slate-900 mt-0.5">
+        {sub.planNameSnapshot || 'Subscription'}
+      </h2>
+      <p className="text-sm text-slate-500 mt-1">
+        {sub.userId?.name || 'Customer'} · {formatDate(sub.startDate)} – {formatDate(sub.expiryDate)}
+      </p>
+    </div>
+  );
+
+  const drawerFooter = (
+    <div className="flex items-center justify-between gap-3 w-full">
+      <div className="text-sm text-slate-600">
+        <span className="font-semibold text-slate-900">{formatCurrency(unpaidAmount)}</span>
+        {' '}
+        unpaid
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onClose} disabled={paying}>
+          Close
+        </Button>
+        <Button onClick={handlePay} disabled={!canPay || paying}>
+          {paying ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Paying…
+            </>
+          ) : (
+            <>
+              <IndianRupee className="w-4 h-4" />
+              Pay drivers
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <Drawer isOpen onClose={onClose} header={drawerHeader} footer={drawerFooter} width="max-w-xl">
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <Card padding="p-3">
+              <p className="text-xs text-slate-500">Driver pool</p>
+              <p className="text-lg font-bold text-slate-900 mt-0.5">
+                {formatCurrency(detail?.driverSharePool)}
+              </p>
+            </Card>
+            <Card padding="p-3">
+              <p className="text-xs text-slate-500">Daily rate</p>
+              <p className="text-lg font-bold text-slate-900 mt-0.5">
+                {formatCurrency(detail?.dailyRate)}
+              </p>
+            </Card>
+            <Card padding="p-3">
+              <p className="text-xs text-slate-500">Paid to drivers</p>
+              <p className="text-lg font-bold text-emerald-700 mt-0.5">
+                {formatCurrency(detail?.paidToDriver)}
+              </p>
+            </Card>
+            <Card padding="p-3">
+              <p className="text-xs text-slate-500">Remaining</p>
+              <p className="text-lg font-bold text-amber-700 mt-0.5">
+                {formatCurrency(detail?.remainingDriverShare)}
+              </p>
+            </Card>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-slate-800 mb-2 flex items-center gap-2">
+              <CalendarRange className="w-4 h-4" />
+              Driver working periods
+              <span className="text-slate-400 font-normal">
+                ({detail?.totalSubscriptionDays ?? 0} subscription days)
+              </span>
+            </p>
+
+            {!detail?.stints?.length ? (
+              <p className="text-sm text-slate-500 py-6 text-center border rounded-xl">
+                No drivers assigned yet for this subscription.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {detail.stints.map((stint) => (
+                  <div
+                    key={stint.key}
+                    className="border border-slate-200 rounded-xl p-4 bg-slate-50/50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {stint.driver?.name || 'Driver'}
+                        </p>
+                        <p className="text-xs text-slate-500">{stint.driver?.phone || '—'}</p>
+                      </div>
+                      {stint.isPaid ? (
+                        <Badge variant="success">Paid</Badge>
+                      ) : (
+                        <Badge variant="warning">Unpaid</Badge>
+                      )}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-500">From</p>
+                        <p className="font-medium">{formatDate(stint.stintStart || stint.assignedAt)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">To</p>
+                        <p className="font-medium">
+                          {stint.isCurrent
+                            ? `${formatDate(stint.stintStart || stint.assignedAt)} – ${formatDate(stint.plannedStintEnd || stint.stintEnd)} (ongoing)`
+                            : formatDate(stint.stintEnd || stint.releasedAt)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Working days</p>
+                        <p className="font-medium">{stint.workingDays}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Amount</p>
+                        <p className="font-semibold text-slate-900">
+                          {formatCurrency(stint.amountRupees)}
+                        </p>
+                      </div>
+                    </div>
+                    {stint.paidAt && (
+                      <p className="text-xs text-slate-500 mt-2">
+                        Paid on {formatDateTime12(stint.paidAt)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
 const ManageSubscriptionRevenue = () => {
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
@@ -34,6 +227,7 @@ const ManageSubscriptionRevenue = () => {
   const [totals, setTotals] = useState(null);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
+  const [payTarget, setPayTarget] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -65,8 +259,8 @@ const ManageSubscriptionRevenue = () => {
     () => [
       {
         key: 'customer',
-        header: 'Customer',
-        render: (row) => (
+        label: 'Customer',
+        render: (_, row) => (
           <div>
             <p className="font-semibold text-slate-800">{row.userId?.name || '—'}</p>
             <p className="text-xs text-slate-500">{row.userId?.phone_no || '—'}</p>
@@ -75,8 +269,8 @@ const ManageSubscriptionRevenue = () => {
       },
       {
         key: 'plan',
-        header: 'Plan',
-        render: (row) => (
+        label: 'Plan',
+        render: (_, row) => (
           <div>
             <p className="font-medium">{row.planNameSnapshot || '—'}</p>
             <p className="text-xs text-slate-500">{row.zoneId?.name || '—'}</p>
@@ -84,49 +278,72 @@ const ManageSubscriptionRevenue = () => {
         ),
       },
       {
-        key: 'paid',
-        header: 'Paid at',
-        render: (row) => (
-          <span className="text-xs text-slate-600">{formatDateTime12(row.paidAt)}</span>
+        key: 'period',
+        label: 'Period',
+        render: (_, row) => (
+          <span className="text-xs text-slate-600">
+            {formatDate(row.startDate)} – {formatDate(row.expiryDate)}
+          </span>
         ),
       },
       {
-        key: 'collected',
-        header: 'Collected',
-        render: (row) => <span className="font-semibold">{formatCurrency(row.amount)}</span>,
-      },
-      {
-        key: 'platform',
-        header: 'Platform',
-        render: (row) => formatCurrency(row.platformShareRupees),
-      },
-      {
-        key: 'driver',
-        header: 'Driver share',
-        render: (row) => (
-          <div>
-            <p>{formatCurrency(row.driverShareRupees)}</p>
-            {row.driverSharePaidAt ? (
-              <Badge variant="success">Paid to driver</Badge>
-            ) : (
-              <Badge variant="warning">Pending assign</Badge>
-            )}
-          </div>
+        key: 'driverPool',
+        label: 'Driver pool',
+        render: (_, row) => (
+          <span className="font-semibold">{formatCurrency(row.driverSharePool ?? row.driverShareRupees)}</span>
         ),
       },
       {
-        key: 'driverName',
-        header: 'Assigned driver',
-        render: (row) => row.assignedDriverId?.name || row.driverSharePaidTo?.name || '—',
+        key: 'paidToDriver',
+        label: 'Paid to driver',
+        render: (_, row) => (
+          <span className="font-semibold text-emerald-700">
+            {formatCurrency(row.paidToDriver)}
+          </span>
+        ),
+      },
+      {
+        key: 'remaining',
+        label: 'Remaining',
+        render: (_, row) => (
+          <span className="font-semibold text-amber-700">
+            {formatCurrency(row.remainingDriverShare)}
+          </span>
+        ),
+      },
+      {
+        key: 'drivers',
+        label: 'Drivers',
+        render: (_, row) => (
+          <span className="text-sm text-slate-600">{row.driverStintCount ?? 0}</span>
+        ),
+      },
+      {
+        key: 'actions',
+        label: 'Pay',
+        sortable: false,
+        unclamp: true,
+        render: (_, row) => (
+          <button
+            type="button"
+            data-row-action
+            onClick={() => setPayTarget(row)}
+            disabled={(row.unpaidAmount ?? row.remainingDriverShare ?? 0) <= 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-dark text-xs font-bold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            Pay
+          </button>
+        ),
       },
     ],
     [],
   );
 
   const summary = [
-    { label: 'Total collected', value: formatCurrency(totals?.totalCollected), icon: Banknote },
-    { label: 'Platform share', value: formatCurrency(totals?.totalPlatform), icon: TrendingUp },
-    { label: 'Driver share', value: formatCurrency(totals?.totalDriver), icon: Users },
+    { label: 'Driver pool', value: formatCurrency(totals?.totalDriverPool), icon: Banknote },
+    { label: 'Paid to drivers', value: formatCurrency(totals?.totalPaidToDriver), icon: Users },
+    { label: 'Remaining', value: formatCurrency(totals?.totalRemaining), icon: Wallet },
     { label: 'Subscriptions', value: totals?.count ?? 0, icon: Sparkles },
   ];
 
@@ -139,7 +356,7 @@ const ManageSubscriptionRevenue = () => {
             Subscription Revenue
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Paid subscriptions with platform vs driver revenue split.
+            Manual driver payouts by working days. Subscription amounts are not shown in platform revenue.
           </p>
         </div>
         <button
@@ -188,6 +405,16 @@ const ManageSubscriptionRevenue = () => {
         entityLabel="subscriptions"
         emptyMessage="No paid subscriptions in this range."
       />
+
+      {payTarget && (
+        <DriverPayoutDrawer
+          subscription={payTarget}
+          onClose={() => setPayTarget(null)}
+          onPaid={() => {
+            fetchData();
+          }}
+        />
+      )}
     </div>
   );
 };

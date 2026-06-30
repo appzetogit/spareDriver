@@ -3,6 +3,8 @@ import {
   loginAdmin,
   getStaffMe,
   getCustomers,
+  getAdminUserTrips,
+  getAdminUserSubscriptions,
   getDrivers,
   getDriverById,
   updateDriverStatus,
@@ -85,6 +87,8 @@ import {
   adminAssignDriverToSubscription,
   adminReleaseSubscriptionDriver,
   adminListSubscriptionRevenue,
+  adminGetSubscriptionDriverPayouts,
+  adminPaySubscriptionDrivers,
 } from '../controllers/pricing.controller.js';
 import {
   getTaskAssignees,
@@ -132,6 +136,13 @@ router.post('/auth/login', loginAdmin);
 router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
 
 router.get('/users', protectStaff, restrictTo(...ALL_STAFF), getCustomers);
+router.get('/users/:userId/trips', protectStaff, restrictTo(...ALL_STAFF), getAdminUserTrips);
+router.get(
+  '/users/:userId/subscriptions',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminUserSubscriptions,
+);
 
 router.get('/tasks/assignees', protectStaff, restrictTo(...OPERATIONS), getTaskAssignees);
 router.get('/tasks/activity', protectStaff, restrictTo(...SUPER_ADMIN), listTaskActivity);
@@ -318,6 +329,18 @@ router.get(
   protectStaff,
   restrictTo(...SUPER_ADMIN),
   adminListSubscriptionRevenue,
+);
+router.get(
+  '/subscriptions/:id/driver-payouts',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  adminGetSubscriptionDriverPayouts,
+);
+router.post(
+  '/subscriptions/:id/pay-drivers',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  adminPaySubscriptionDrivers,
 );
 router.get(
   '/subscriptions/users/:id/available-drivers',

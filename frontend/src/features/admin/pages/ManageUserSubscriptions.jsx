@@ -332,6 +332,20 @@ function StatTile({ label, value, desc, icon: Icon, accent }) {
   );
 }
 
+function toDateInputValue(d) {
+  if (!d) return '';
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return '';
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, '0');
+  const day = String(x.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function todayInputValue() {
+  return toDateInputValue(new Date());
+}
+
 function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [drivers, setDrivers] = useState([]);
   const [driversLoading, setDriversLoading] = useState(true);
@@ -350,8 +364,19 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [detailDriver, setDetailDriver] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
   const [releaseReason, setReleaseReason] = useState('');
+  const [workingStartDate, setWorkingStartDate] = useState(() => todayInputValue());
+  const [workingEndDate, setWorkingEndDate] = useState('');
+  const [previousDriverLastWorkingDate, setPreviousDriverLastWorkingDate] = useState(() => todayInputValue());
+  const [releaseLastWorkingDate, setReleaseLastWorkingDate] = useState(() => todayInputValue());
   const [submitting, setSubmitting] = useState(false);
   const searchRef = useRef(null);
+
+  const subscriptionPeriodLabel = useMemo(() => {
+    const start = toDateInputValue(subscription.startDate);
+    const end = toDateInputValue(subscription.expiryDate);
+    if (!start || !end) return '—';
+    return `${start} → ${end}`;
+  }, [subscription.startDate, subscription.expiryDate]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search), 250);
@@ -412,6 +437,14 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
       toast.error('Pick a driver first');
       return;
     }
+    if (!workingStartDate) {
+      toast.error('Working start date is required');
+      return;
+    }
+    if (subscription.assignedDriverId && !previousDriverLastWorkingDate) {
+      toast.error('Previous driver last working date is required for reassignment');
+      return;
+    }
     if (selectedDriver?.hasConflict) {
       toast.error('This driver has a scheduling conflict. Pick another.');
       return;
@@ -420,6 +453,11 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     try {
       await api.post(`/admin/subscriptions/users/${subscription._id}/assign`, {
         driverId: selectedDriverId,
+        workingStartDate,
+        workingEndDate: workingEndDate || undefined,
+        previousDriverLastWorkingDate: subscription.assignedDriverId
+          ? previousDriverLastWorkingDate
+          : undefined,
       });
       toast.success('Driver assigned successfully');
       onUpdated();
@@ -433,10 +471,15 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
 
   const handleRelease = async () => {
     if (!subscription.assignedDriverId) return;
+    if (!releaseLastWorkingDate) {
+      toast.error('Last working date is required');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post(`/admin/subscriptions/users/${subscription._id}/release`, {
         reason: releaseReason.trim() || 'Released by admin',
+        lastWorkingDate: releaseLastWorkingDate,
       });
       toast.success('Driver released');
       onUpdated();
@@ -473,6 +516,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               value={subscription.includedHoursPerDay === 0 ? 'Full-time' : `${subscription.includedHoursPerDay}h/day`}
             />
             <DetailLine label="Duration" value={`${subscription.durationMonths} month(s)`} />
+            <DetailLine label="Subscription period" value={subscriptionPeriodLabel} />
           </div>
           {(subscription.dailyPickup || subscription.dailyDropoff) && (
             <div className="pt-2 border-t border-slate-200 space-y-1.5">
@@ -495,21 +539,38 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         </div>
 
         {subscription.assignedDriverId && (
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              Release reason (optional, for reassignment)
-            </label>
-            <textarea
-              value={releaseReason}
-              onChange={(e) => setReleaseReason(e.target.value)}
-              rows={2}
-              placeholder="e.g. Driver on leave for 3 days"
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+              Release current driver
+            </p>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">
+                Last working day <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={releaseLastWorkingDate}
+                min={toDateInputValue(subscription.assignedAt || subscription.startDate)}
+                max={toDateInputValue(subscription.expiryDate)}
+                onChange={(e) => setReleaseLastWorkingDate(e.target.value)}
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Release reason (optional)
+              </label>
+              <textarea
+                value={releaseReason}
+                onChange={(e) => setReleaseReason(e.target.value)}
+                rows={2}
+                placeholder="e.g. Driver on leave for 3 days"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
             <Button
               variant="outline"
               size="sm"
-              className="mt-2"
               disabled={submitting}
               onClick={handleRelease}
             >
@@ -518,6 +579,61 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
             </Button>
           </div>
         )}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            {subscription.assignedDriverId ? 'New driver working period' : 'Driver working period'}
+          </p>
+          {subscription.assignedDriverId && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600">
+                Previous driver last working day <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={previousDriverLastWorkingDate}
+                min={toDateInputValue(subscription.assignedAt || subscription.startDate)}
+                max={toDateInputValue(subscription.expiryDate)}
+                onChange={(e) => setPreviousDriverLastWorkingDate(e.target.value)}
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Required when reassigning — closes the current driver&apos;s stint.
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600">
+                Start date <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={workingStartDate}
+                min={toDateInputValue(subscription.startDate)}
+                max={toDateInputValue(subscription.expiryDate)}
+                onChange={(e) => setWorkingStartDate(e.target.value)}
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">
+                End date <span className="text-slate-400">(optional)</span>
+              </label>
+              <input
+                type="date"
+                value={workingEndDate}
+                min={workingStartDate || toDateInputValue(subscription.startDate)}
+                max={toDateInputValue(subscription.expiryDate)}
+                onChange={(e) => setWorkingEndDate(e.target.value)}
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Defaults to subscription end ({toDateInputValue(subscription.expiryDate)}).
+              </p>
+            </div>
+          </div>
+        </div>
 
         {subscriptionTerms?.content && (
           <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">

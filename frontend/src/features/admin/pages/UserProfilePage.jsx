@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Car, Loader2, Mail, Phone, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Car, Loader2, Mail, Phone, RefreshCw, History } from 'lucide-react';
 import Avatar from '../../../components/Avatar';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
@@ -55,15 +55,24 @@ const UserProfilePage = () => {
     <div className="space-y-6 animate-fade-in-up pb-8">
       <div className="flex items-center justify-between gap-4">
         <BackLink />
-        <button
-          type="button"
-          onClick={() => refetch()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/admin/users/${userId}/history`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+          >
+            <History className="w-4 h-4" />
+            Trip & Subscription History
+          </Link>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
@@ -126,12 +135,18 @@ const UserProfilePage = () => {
                       </p>
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                          car.hasChecklist
-                            ? 'text-emerald-700 bg-emerald-50'
-                            : 'text-amber-700 bg-amber-50'
+                          car.isActive === false
+                            ? 'text-slate-600 bg-slate-200'
+                            : car.hasChecklist
+                              ? 'text-emerald-700 bg-emerald-50'
+                              : 'text-amber-700 bg-amber-50'
                         }`}
                       >
-                        {car.hasChecklist ? 'Checklist complete' : 'Checklist incomplete'}
+                        {car.isActive === false
+                          ? 'Removed from garage'
+                          : car.hasChecklist
+                            ? 'Checklist complete'
+                            : 'Checklist incomplete'}
                       </span>
                     </div>
                     <p className="text-xs font-mono font-semibold text-slate-700 mt-1 uppercase">{car.vehicleNumber}</p>

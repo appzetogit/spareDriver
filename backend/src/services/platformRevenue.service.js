@@ -93,6 +93,8 @@ export async function listPlatformRevenueService({
   const filter = {};
   if (source && Object.values(PLATFORM_REVENUE_SOURCE).includes(source)) {
     filter.source = source;
+  } else {
+    filter.source = { $ne: PLATFORM_REVENUE_SOURCE.SUBSCRIPTION };
   }
   if (serviceType) filter.serviceType = String(serviceType).trim();
   if (search) {

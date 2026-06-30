@@ -73,6 +73,24 @@ const userSubscriptionSchema = new mongoose.Schema(
       ref: 'Driver',
       default: null,
     },
+    /** Per-driver stint payouts (pro-rated by working days). */
+    driverPayouts: {
+      type: [
+        new mongoose.Schema(
+          {
+            driverId: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', required: true },
+            assignedAt: { type: Date, required: true },
+            releasedAt: { type: Date, default: null },
+            workingDays: { type: Number, required: true, min: 0 },
+            amountRupees: { type: Number, required: true, min: 0 },
+            paidAt: { type: Date, required: true },
+            paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+          },
+          { _id: true },
+        ),
+      ],
+      default: [],
+    },
     razorpayOrderId: { type: String, default: '' },
     razorpayPaymentId: { type: String, default: '' },
     razorpaySignature: { type: String, default: '' },
@@ -93,6 +111,8 @@ const userSubscriptionSchema = new mongoose.Schema(
       index: true,
     },
     assignedAt: { type: Date, default: null },
+    /** Last calendar day this driver is scheduled to work (null → subscription expiry). */
+    assignedWorkingEndDate: { type: Date, default: null },
     assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     releasedAt: { type: Date, default: null },
     releaseReason: { type: String, default: '' },
