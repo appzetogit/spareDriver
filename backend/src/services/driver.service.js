@@ -40,7 +40,11 @@ export const sendOtpService = async (phone) => {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-  await OTP.findOneAndUpdate({ phone }, { otp, expiresAt }, { upsert: true, new: true });
+  await OTP.findOneAndUpdate(
+    { phone, purpose: 'registration' },
+    { otp, expiresAt, purpose: 'registration' },
+    { upsert: true, new: true },
+  );
 
   await sendSmsOtp(phone, otp);
   return { message: 'OTP sent successfully' };
@@ -53,7 +57,7 @@ export const verifyOtpAndRegisterService = async (data) => {
     throw new ApiError(400, 'Missing required fields');
   }
 
-  const otpRecord = await OTP.findOne({ phone, otp });
+  const otpRecord = await OTP.findOne({ phone, otp, purpose: 'registration' });
   if (!otpRecord) {
     throw new ApiError(400, 'Invalid or expired OTP');
   }
@@ -572,4 +576,70 @@ export const updateOutstationAvailabilityService = async (
   }
   driver.documents = dedupeDocumentsByType(driver.documents);
   return driver.toObject();
+};
+
+// ─── Forgot / Reset Password (phone OTP only) ───────────────────────────────
+
+export const sendDriverForgotPasswordOtpService = async (phone) => {
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+
+  const driver = await Driver.findOne({ phone, isDeleted: false });
+  if (!driver) {
+    return { message: 'If this number is registered, an OTP will be sent', via: 'phone' };
+  }
+  if (driver.authProvider === 'google') {
+    throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await OTP.findOneAndUpdate(
+    { phone, purpose: 'forgot-password' },
+    { otp, expiresAt, purpose: 'forgot-password' },
+    { upsert: true, new: true },
+  );
+
+  await sendSmsOtp(phone, otp);
+  return { message: 'OTP sent to your registered mobile number', via: 'phone' };
+};
+
+export const verifyDriverForgotPasswordOtpService = async ({ phone, otp } = {}) => {
+  if (!otp) throw new ApiError(400, 'OTP is required');
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+
+  const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+  if (!record || record.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+  return { valid: true };
+};
+
+export const resetDriverPasswordWithOtpService = async ({ phone, otp, newPassword } = {}) => {
+  if (!otp) throw new ApiError(400, 'OTP is required');
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+  if (!newPassword || newPassword.length < 6) {
+    throw new ApiError(400, 'Password must be at least 6 characters');
+  }
+
+  const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+  if (!record || record.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+
+  const driver = await Driver.findOne({ phone, isDeleted: false }).select('+password');
+  if (!driver) throw new ApiError(404, 'Driver not found');
+
+  const salt = await bcrypt.genSalt(10);
+  driver.password = await bcrypt.hash(newPassword, salt);
+  await driver.save();
+  await OTP.deleteOne({ _id: record._id });
+
+  return { message: 'Password changed successfully' };
 };

@@ -3,6 +3,9 @@ import {
   sendOtp,
   verifyOtpAndRegister,
   loginDriver,
+  sendDriverForgotPasswordOtp,
+  verifyDriverForgotPasswordOtp,
+  resetDriverPasswordWithOtp,
   updateOnboardingStep,
   submitApplication,
   getProfile,
@@ -65,6 +68,9 @@ const router = express.Router();
 router.post('/auth/send-otp', sendOtp);
 router.post('/auth/verify-otp', verifyOtpAndRegister);
 router.post('/auth/login', loginDriver);
+router.post('/auth/forgot-password/send-otp', sendDriverForgotPasswordOtp);
+router.post('/auth/forgot-password/verify-otp', verifyDriverForgotPasswordOtp);
+router.post('/auth/forgot-password/reset', resetDriverPasswordWithOtp);
 router.post('/auth/google', googleSignInDriver);
 
 router.put('/onboarding/step', protectDriver, updateOnboardingStep);

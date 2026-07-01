@@ -102,7 +102,13 @@ const DriverLoginPage = () => {
             icon={Lock}
           />
 
-          <Button type="submit" fullWidth loading={loading} className="mt-6 rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20">
+          <div className="flex justify-end">
+            <Link to="/driver/forgot-password" className="text-sm text-primary font-medium hover:underline">
+              Forgot Password?
+            </Link>
+          </div>
+
+          <Button type="submit" fullWidth loading={loading} className="mt-2 rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20">
             LOGIN
           </Button>
         </form>

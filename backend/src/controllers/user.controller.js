@@ -45,8 +45,7 @@ export const completeRegistration = asyncHandler(async (req, res) => {
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
-  const { phone, password } = req.body;
-  const result = await userService.loginUserService(phone, password);
+  const result = await userService.loginUserService(req.body);
   setAuthCookies(res, {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,

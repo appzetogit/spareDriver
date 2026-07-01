@@ -31,6 +31,21 @@ export const loginDriver = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, { driver: result.driver }, 'Login successful'));
 });
 
+export const sendDriverForgotPasswordOtp = asyncHandler(async (req, res) => {
+  const result = await driverService.sendDriverForgotPasswordOtpService(req.body.phone);
+  return res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const verifyDriverForgotPasswordOtp = asyncHandler(async (req, res) => {
+  const result = await driverService.verifyDriverForgotPasswordOtpService(req.body);
+  return res.status(200).json(new ApiResponse(200, result, 'OTP verified'));
+});
+
+export const resetDriverPasswordWithOtp = asyncHandler(async (req, res) => {
+  const result = await driverService.resetDriverPasswordWithOtpService(req.body);
+  return res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
 export const updateOnboardingStep = asyncHandler(async (req, res) => {
   const result = await driverService.updateOnboardingStepService(req.driver._id, req.body);
   return res.status(200).json(new ApiResponse(200, result, `Step ${req.body.stepNumber} completed successfully`));

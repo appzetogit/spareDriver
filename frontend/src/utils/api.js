@@ -25,6 +25,7 @@ function shouldSkipTokenRefresh(config) {
     url.includes('/driver/auth/google') ||
     url.includes('/driver/auth/send-otp') ||
     url.includes('/driver/auth/verify-otp') ||
+    url.includes('/driver/auth/forgot-password/') ||
     url.includes('/auth/forgot-password/')
   );
 }

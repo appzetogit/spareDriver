@@ -294,12 +294,29 @@ export const verifyUserOtpAndRegisterService = async ({ name, phone, password, o
   };
 };
 
-export const loginUserService = async (phone, password) => {
-  if (!phone || !password) {
-    throw new ApiError(400, 'Phone and password required');
+export const loginUserService = async ({ phone, email, password } = {}) => {
+  if (!password) {
+    throw new ApiError(400, 'Password is required');
+  }
+  if (!phone && !email) {
+    throw new ApiError(400, 'Phone or email is required');
   }
 
-  const user = await User.findOne({ phone_no: phone }).select('+password');
+  let user;
+  if (phone) {
+    if (phone.length !== 10) {
+      throw new ApiError(400, 'Valid 10-digit phone number required');
+    }
+    user = await User.findOne({ phone_no: phone }).select('+password');
+  } else {
+    const normalized = assertValidEmail(email);
+    user = await User.findOne({
+      email: normalized,
+      isDeleted: false,
+      isEmailVerified: true,
+    }).select('+password');
+  }
+
   if (!user || user.isDeleted) {
     throw new ApiError(401, 'Invalid credentials');
   }

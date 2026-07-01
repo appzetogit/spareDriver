@@ -56,11 +56,12 @@ export function ChangePasswordWidget({
   prefillPhone = '',
   prefillEmail = '',
   readOnly = false,
+  phoneOnly = false,
+  apiPrefix = '/auth/forgot-password',
   onSuccess,
   onCancel,
 }) {
-  // Default to phone mode if phone available, else email
-  const defaultMode = prefillPhone ? 'phone' : 'email';
+  const defaultMode = phoneOnly ? 'phone' : (prefillPhone ? 'phone' : 'email');
   const [mode, setMode] = useState(defaultMode);
   const [step, setStep] = useState(STEP.IDLE);
 
@@ -99,7 +100,7 @@ export function ChangePasswordWidget({
     setError('');
     try {
       const payload = mode === 'phone' ? { phone: identifier } : { email: identifier };
-      await api.post('/auth/forgot-password/send-otp', payload);
+      await api.post(`${apiPrefix}/send-otp`, payload);
       setStep(STEP.OTP_SENT);
       toast.success(mode === 'phone' ? 'OTP sent to your mobile' : 'OTP sent to your email');
     } catch (err) {
@@ -118,7 +119,7 @@ export function ChangePasswordWidget({
       const payload = mode === 'phone'
         ? { phone: identifier, otp }
         : { email: identifier, otp };
-      await api.post('/auth/forgot-password/verify-otp', payload);
+      await api.post(`${apiPrefix}/verify-otp`, payload);
       setStep(STEP.SET_PASSWORD);
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid or expired OTP');
@@ -136,7 +137,7 @@ export function ChangePasswordWidget({
       const payload = mode === 'phone'
         ? { phone: identifier, otp, newPassword }
         : { email: identifier, otp, newPassword };
-      await api.post('/auth/forgot-password/reset', payload);
+      await api.post(`${apiPrefix}/reset`, payload);
       setStep(STEP.DONE);
       toast.success('Password changed successfully!');
       onSuccess?.();
@@ -172,6 +173,7 @@ export function ChangePasswordWidget({
       {step === STEP.IDLE && (
         <>
           {/* Mode toggle */}
+          {!phoneOnly && (
           <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-slate-50 p-1 gap-1">
             {['phone', 'email'].map((m) => (
               <button
@@ -191,6 +193,7 @@ export function ChangePasswordWidget({
               </button>
             ))}
           </div>
+          )}
 
           {/* Identifier field */}
           {mode === 'phone' ? (

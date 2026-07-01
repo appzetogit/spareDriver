@@ -91,6 +91,7 @@ const MySubscriptionPage = lazy(() => import('./features/user/account/pages/MySu
 
 // Driver Registration
 const DriverLoginPage = lazy(() => import('./features/driver/auth/pages/DriverLoginPage'));
+const DriverForgotPasswordPage = lazy(() => import('./features/driver/auth/pages/DriverForgotPasswordPage'));
 const DriverSignUpPage = lazy(() => import('./features/driver/registration/pages/DriverSignUpPage'));
 const IdentityDetailsPage = lazy(() => import('./features/driver/registration/pages/IdentityDetailsPage'));
 const DrivingCredentialsPage = lazy(() => import('./features/driver/registration/pages/DrivingCredentialsPage'));
@@ -247,6 +248,7 @@ function App() {
 
           {/* ========== Driver Registration ========== */}
           <Route path="/driver/login" element={<DriverLoginPage />} />
+          <Route path="/driver/forgot-password" element={<DriverForgotPasswordPage />} />
           <Route path="/driver/signup" element={<DriverSignUpPage />} />
           <Route path="/driver/register/identity" element={<IdentityDetailsPage />} />
 
