@@ -17,6 +17,7 @@ import {
   emitToBooking,
   emitToAdmins,
 } from '../utils/socketEmitters.js';
+import { notifyDriverOrderAssigned, notifyAdminEmergencyPoolEntered } from '../utils/notificationDispatch.js';
 import { withdrawCurrentOfferService } from './bookingDispatch.service.js';
 import {
   cancelScheduledBookingJobs,
@@ -141,16 +142,7 @@ export async function escalateToEmergencyPool(bookingId) {
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, payload);
   emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, payload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
-  emitToAdmins(S2C_EVENTS.ADMIN_ALERT, {
-    kind: 'emergency_pool_entered',
-    severity: 'warn',
-    message: `Booking ${booking.bookingNumber} needs manual driver assignment`,
-    data: {
-      bookingId: String(booking._id),
-      scheduledStartAt: booking.hourly?.scheduledStartAt || null,
-      zoneIds: (booking.zoneIds || []).map(String),
-    },
-  });
+  notifyAdminEmergencyPoolEntered(booking).catch(() => null);
 
   return { ok: true };
 }
@@ -402,18 +394,7 @@ export async function adminAssignDriverToEmergencyPoolService(
   emitToDriver(driver._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, userPayload);
 
-  // Bubble out the gross fare so the driver app's earnings card can
-  // render the same number the user sees on their receipt — we don't
-  // wait for the next refresh.
-  emitToDriver(driver._id, S2C_EVENTS.NOTIFICATION, {
-    title: 'New assignment',
-    body: `Admin assigned booking ${booking.bookingNumber} to you.`,
-    severity: 'info',
-    data: {
-      bookingId: String(booking._id),
-      scheduledStartAt: booking.hourly?.scheduledStartAt || null,
-    },
-  });
+  notifyDriverOrderAssigned(driver._id, booking).catch(() => null);
 
   return {
     booking: await Booking.findById(booking._id)

@@ -7,6 +7,15 @@ export function userNeedsPhone(user) {
   return Boolean(user.needsPhone) || !phone;
 }
 
+export function userNeedsEmail(user) {
+  if (!user) return false;
+  if (Boolean(user.needsEmail)) return true;
+  if (user.isEmailVerified && user.email && !user.email.endsWith('@phone.sparedriver.local')) {
+    return false;
+  }
+  return !user.email || user.email.endsWith('@phone.sparedriver.local') || !user.isEmailVerified;
+}
+
 export function driverNeedsPhone(driver) {
   if (!driver) return false;
   const phone = String(driver.phone || '').trim();
@@ -47,6 +56,11 @@ export function navigateDriverAfterAuth(navigate, driver, needsPhone) {
 export function navigateUserAfterAuth(navigate, user, needsPhone) {
   if (needsPhone || userNeedsPhone(user)) {
     navigate('/link-phone', { replace: true });
+    return;
+  }
+
+  if (userNeedsEmail(user)) {
+    navigate('/user/verify-email', { replace: true });
     return;
   }
 

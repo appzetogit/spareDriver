@@ -105,6 +105,16 @@ import {
   listRefunds,
   updateRefundStatus,
 } from '../controllers/refund.controller.js';
+import {
+  getAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead,
+} from '../controllers/notification.controller.js';
+import {
+  listFailedJobs,
+  retryFailedJob,
+  resolveFailedJob,
+} from '../controllers/failedJob.controller.js';
 import { listPlatformRevenue } from '../controllers/revenue.controller.js';
 import {
   getAdminBookings,
@@ -365,6 +375,14 @@ router.patch('/kit-orders/:id/deliver', protectStaff, restrictTo(...ALL_STAFF), 
 // driven and the PATCH is the authoritative state-transition.
 router.get('/refunds', protectStaff, restrictTo(...SUPER_ADMIN), listRefunds);
 router.patch('/refunds/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateRefundStatus);
+
+router.get('/notifications', protectStaff, restrictTo(...ALL_STAFF), getAdminNotifications);
+router.patch('/notifications/read-all', protectStaff, restrictTo(...ALL_STAFF), markAllAdminNotificationsRead);
+router.patch('/notifications/:id/read', protectStaff, restrictTo(...ALL_STAFF), markAdminNotificationRead);
+
+router.get('/failed-jobs', protectStaff, restrictTo(...SUPER_ADMIN), listFailedJobs);
+router.post('/failed-jobs/:id/retry', protectStaff, restrictTo(...SUPER_ADMIN), retryFailedJob);
+router.post('/failed-jobs/:id/resolve', protectStaff, restrictTo(...SUPER_ADMIN), resolveFailedJob);
 
 /* ---- Account → Revenue ----------------------------------------------- */
 // Read-only paginated view over the `PlatformRevenue` ledger. Each row

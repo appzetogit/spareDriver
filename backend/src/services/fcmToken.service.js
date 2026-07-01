@@ -48,3 +48,33 @@ export function collectFcmTokens(doc) {
     .filter(Boolean);
   return [...new Set(tokens)];
 }
+
+function pickClear(platform) {
+  if (platform === 'web') {
+    return { fcmTokenWeb: '', fcmToken: '' };
+  }
+  if (platform === 'mobile') {
+    return { fcmTokenMobile: '' };
+  }
+  return { fcmToken: '', fcmTokenWeb: '', fcmTokenMobile: '' };
+}
+
+export async function unregisterUserFcmTokenService(userId, { platform = 'all' } = {}) {
+  const updated = await User.findByIdAndUpdate(
+    userId,
+    { $set: pickClear(platform) },
+    { new: true },
+  ).select('fcmToken fcmTokenWeb fcmTokenMobile');
+  if (!updated) throw new ApiError(404, 'User not found');
+  return updated;
+}
+
+export async function unregisterDriverFcmTokenService(driverId, { platform = 'all' } = {}) {
+  const updated = await Driver.findByIdAndUpdate(
+    driverId,
+    { $set: pickClear(platform) },
+    { new: true },
+  ).select('fcmToken fcmTokenWeb fcmTokenMobile');
+  if (!updated) throw new ApiError(404, 'Driver not found');
+  return updated;
+}

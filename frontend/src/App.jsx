@@ -35,6 +35,7 @@ const MapSimulatorPage = lazy(() => import('./features/dev/pages/MapSimulatorPag
 // User Onboarding
 const AddCarPage = lazy(() => import('./features/user/onboarding/pages/AddCarPage'));
 const MyCarsPage = lazy(() => import('./features/user/onboarding/pages/MyCarsPage'));
+const VerifyEmailPage = lazy(() => import('./features/user/onboarding/pages/VerifyEmailPage'));
 
 // User Home
 const UserHomePage = lazy(() => import('./features/user/home/pages/UserHomePage'));
@@ -81,6 +82,7 @@ const TripDetailsPage = lazy(
   () => import('./features/user/activity/pages/TripDetailsPage'),
 );
 const UserAccountPage = lazy(() => import('./features/user/account/pages/UserAccountPage'));
+const MyProfilePage = lazy(() => import('./features/user/account/pages/UserProfilePage'));
 const SubscriptionsPage = lazy(() => import('./features/user/subscriptions/pages/SubscriptionsPage'));
 const SubscribeCheckoutPage = lazy(
   () => import('./features/user/subscriptions/pages/SubscribeCheckoutPage'),
@@ -178,6 +180,7 @@ function App() {
 
           {/* ========== User Onboarding ========== */}
           <Route element={<UserOnboardingGuard />}>
+            <Route path="/user/verify-email" element={<VerifyEmailPage />} />
             <Route path="/user/add-car" element={<AddCarPage />} />
             <Route path="/user/my-cars" element={<MyCarsPage />} />
 
@@ -189,6 +192,7 @@ function App() {
               <Route path="/user/activity" element={<ActivityPage />} />
               <Route path="/user/trips/:id" element={<TripDetailsPage />} />
               <Route path="/user/account" element={<UserAccountPage />} />
+              <Route path="/user/profile" element={<MyProfilePage />} />
               <Route path="/user/account/subscription" element={<MySubscriptionPage />} />
               <Route path="/user/subscriptions" element={<SubscriptionsPage />} />
               <Route path="/user/wallet" element={<WalletPage />} />

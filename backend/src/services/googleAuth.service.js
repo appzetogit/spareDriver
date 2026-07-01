@@ -14,11 +14,13 @@ import {
   tokenPayloadFromDriver,
 } from '../utils/jwt.util.js';
 import { sendSmsOtp } from '../utils/otpService.js';
+import { userNeedsEmail as computeUserNeedsEmail } from '../utils/email.util.js';
 
 function sanitizeUser(doc) {
   const o = doc.toObject();
   delete o.password;
   o.needsPhone = userNeedsPhone(doc);
+  o.needsEmail = computeUserNeedsEmail(o);
   return o;
 }
 

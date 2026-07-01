@@ -80,13 +80,27 @@ export async function startScheduledBookingWorker() {
       { connection, concurrency: 5 },
     );
 
-    workerInstance.on('failed', (job, err) => {
+    workerInstance.on('failed', async (job, err) => {
       console.warn(
         '[scheduledBooking] job failed:',
         job?.name,
         job?.data?.bookingId,
         err?.message || err,
       );
+      try {
+        const { recordFailedJobService } = await import('../services/failedJob.service.js');
+        await recordFailedJobService({
+          jobName: job?.name || 'unknown',
+          queueName: SCHEDULED_BOOKING_QUEUE_NAME,
+          payload: job?.data || {},
+          error: err?.message || String(err),
+          bookingId: job?.data?.bookingId || null,
+          escalateBooking: job?.name === SCHEDULED_JOB_NAMES.ASSIGN
+            || job?.name === SCHEDULED_JOB_NAMES.RETRY,
+        });
+      } catch (recordErr) {
+        console.warn('[scheduledBooking] failed to record failed job:', recordErr?.message);
+      }
     });
     workerInstance.on('error', (err) => {
       console.warn('[scheduledBooking] worker error:', err?.message || err);

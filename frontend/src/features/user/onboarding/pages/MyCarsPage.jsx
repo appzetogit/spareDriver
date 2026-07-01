@@ -6,6 +6,7 @@ import Card from '../../../../components/Card';
 import Modal from '../../../../components/Modal';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import AddCarForm from '../components/AddCarForm';
+import RowActionsMenu from '../../../admin/components/RowActionsMenu';
 import { ArrowLeft, Plus, Car, Fuel, Settings, Trash2, ChevronRight, Pencil } from 'lucide-react';
 import api from '../../../../utils/api';
 import { MAX_USER_CARS } from '../../../../utils/constants';
@@ -97,52 +98,59 @@ const MyCarsPage = () => {
                 className="group border-transparent hover:border-primary/20 transition-all shadow-sm hover:shadow-md animate-fade-in-up"
                 style={{ animationDelay: `${idx * 0.08}s` }}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 bg-slate-50 border border-slate-100 rounded-2xl overflow-hidden shrink-0">
+                <div className="flex gap-3 sm:gap-4 relative">
+                  {/* Vehicle Image */}
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl overflow-hidden shrink-0">
                     {car.image ? (
                       <img src={car.image} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Car className="w-8 h-8 text-slate-200" />
+                        <Car className="w-7 h-7 sm:w-8 sm:h-8 text-slate-200" />
                       </div>
                     )}
                   </div>
+
+                  {/* Vehicle Details */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="font-bold text-slate-900 text-base">{getCarBrandName(car)}</h3>
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-600 uppercase">
-                        {getCarModelName(car)}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                          <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">{getCarBrandName(car)}</h3>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] sm:text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                            {getCarModelName(car)}
+                          </span>
+                        </div>
+                        <p className="text-[10px] sm:text-xs font-bold font-mono text-slate-700 bg-slate-100 inline-block px-2 py-0.5 sm:py-1 rounded-md uppercase tracking-wide mb-2">
+                          {car.vehicleNumber}
+                        </p>
+                      </div>
+                      
+                      {/* Three dot actions */}
+                      <RowActionsMenu
+                        items={[
+                          {
+                            label: 'Edit',
+                            icon: Pencil,
+                            onClick: () => setEditingCar(car),
+                          },
+                          {
+                            label: 'Remove',
+                            icon: Trash2,
+                            variant: 'danger',
+                            onClick: () => setDeleteTarget(car),
+                          },
+                        ]}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-3 text-[9px] sm:text-[10px] font-semibold text-slate-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        <Fuel className="w-3 text-slate-400" /> {getCarFuelName(car)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Settings className="w-3 text-slate-400" /> {car.transmission}
                       </span>
                     </div>
-                    <p className="text-xs font-bold font-mono text-slate-800 bg-slate-100 inline-block px-2 py-1 rounded-lg uppercase tracking-wide">
-                      {car.vehicleNumber}
-                    </p>
-                    <div className="flex items-center gap-4 mt-2 text-[10px] font-semibold text-slate-500 uppercase">
-                      <span className="inline-flex items-center gap-1">
-                        <Fuel className="w-3.5 h-3.5" /> {getCarFuelName(car)}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Settings className="w-3.5 h-3.5" /> {car.transmission}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingCar(car)}
-                      className="p-3 rounded-2xl bg-slate-50 text-slate-400 hover:bg-primary/10 hover:text-primary transition-colors"
-                      aria-label="Edit vehicle"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(car)}
-                      className="p-3 rounded-2xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                      aria-label="Remove vehicle"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
               </Card>

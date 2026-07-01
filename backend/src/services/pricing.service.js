@@ -1790,7 +1790,7 @@ export const assignDriverToSubscriptionService = async (
     { userId: sub.userId },
     {
       title: 'Dedicated driver assigned',
-      body: `${driver.name} has been assigned for ${carLabel}. Please review the terms and driver details in the app.`,
+      body: `${driver.name} has been assigned for ${carLabel}. Check your email for terms and driver details.`,
       severity: 'success',
       data: {
         kind: 'subscription_driver_assigned',
@@ -1802,6 +1802,13 @@ export const assignDriverToSubscriptionService = async (
       },
     },
   );
+
+  const { sendSubscriptionDriverAssignmentEmail } = await import(
+    './subscriptionAssignmentEmail.service.js'
+  );
+  sendSubscriptionDriverAssignmentEmail({ subscription: sub, driver, terms }).catch((err) => {
+    console.error('[email] subscription assignment email failed:', err?.message || err);
+  });
 
   return sub;
 };

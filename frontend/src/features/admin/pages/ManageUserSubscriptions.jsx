@@ -350,7 +350,6 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [drivers, setDrivers] = useState([]);
   const [driversLoading, setDriversLoading] = useState(true);
   const [driversError, setDriversError] = useState(null);
-  const [subscriptionTerms, setSubscriptionTerms] = useState(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [driverFilters, setDriverFilters] = useState({
@@ -382,16 +381,6 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     const id = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(id);
   }, [search]);
-
-  useEffect(() => {
-    api.get('/admin/settings/legal-documents?type=subscription')
-      .then((res) => {
-        const docs = res?.data?.data || [];
-        const active = docs.find((d) => d.isActive) || docs[0] || null;
-        setSubscriptionTerms(active);
-      })
-      .catch(() => setSubscriptionTerms(null));
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,7 +448,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
           ? previousDriverLastWorkingDate
           : undefined,
       });
-      toast.success('Driver assigned successfully');
+      toast.success('Driver assigned successfully — customer will receive an email with terms and driver details');
       onUpdated();
     } catch (err) {
       const data = err?.response?.data;
@@ -634,18 +623,6 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
             </div>
           </div>
         </div>
-
-        {subscriptionTerms?.content && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Terms sent to customer on assignment
-            </p>
-            <p className="text-sm font-semibold text-slate-800">{subscriptionTerms.title}</p>
-            <div className="max-h-28 overflow-y-auto text-xs text-slate-600 whitespace-pre-wrap">
-              {subscriptionTerms.content}
-            </div>
-          </div>
-        )}
 
         <DriverFilterBar filters={driverFilters} onChange={setDriverFilters} />
 

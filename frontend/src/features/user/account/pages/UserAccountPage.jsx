@@ -19,7 +19,7 @@ import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import { useUserSubscriptionStore } from '../../../../store/user/useUserPricingStore';
 
 const menuItems = [
-  { id: 'profile', icon: User, label: 'My Profile', path: '#' },
+  { id: 'profile', icon: User, label: 'My Profile', path: '/user/profile' },
   { id: 'cars', icon: Car, label: 'My Cars', path: '/user/my-cars' },
   { id: 'subscription', icon: Sparkles, label: 'My Subscription', path: '/user/account/subscription', dynamic: 'subscription' },
   { id: 'payments', icon: CreditCard, label: 'Payment Methods', path: '#' },

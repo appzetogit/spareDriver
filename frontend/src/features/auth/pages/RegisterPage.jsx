@@ -1,71 +1,187 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { CheckCircle2 } from 'lucide-react';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
-import Modal from '../../../components/Modal';
-import { User, Phone, Lock, ArrowLeft } from 'lucide-react';
+import { User, Phone, Lock, Mail, ArrowLeft } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
-import GoogleSignInButton from '../components/GoogleSignInButton';
-import AuthDivider from '../components/AuthDivider';
-import useGoogleAuth from '../hooks/useGoogleAuth';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
+
+function VerifiedBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+      <CheckCircle2 className="w-4 h-4" />
+      Verified
+    </span>
+  );
+}
 
 const RegisterPage = () => {
   const navigate = useNavigate();
   const setAuth = useUserAuthStore((state) => state.setAuth);
-  
-  const [formData, setFormData] = useState({ name: '', phone: '', password: '' });
-  const { handleGoogleSuccess, handleGoogleError, loading: googleLoading } = useGoogleAuth('user');
-  const [otp, setOtp] = useState('');
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
-  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState({ name: '', phone: '', email: '', password: '' });
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
+  const [phoneAlreadyRegistered, setPhoneAlreadyRegistered] = useState(false);
 
   const handleChange = (field) => (e) => {
-    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (error) setError('');
+    if (phoneAlreadyRegistered) setPhoneAlreadyRegistered(false);
+
+    if (field === 'phone') {
+      setPhoneVerified(false);
+      setPhoneOtpSent(false);
+      setPhoneOtp('');
+      setEmailVerified(false);
+      setEmailOtpSent(false);
+      setEmailOtp('');
+    }
+    if (field === 'email') {
+      setEmailVerified(false);
+      setEmailOtpSent(false);
+      setEmailOtp('');
+    }
   };
 
-  const handleSendOtp = async (e) => {
-    if (e) e.preventDefault();
-    if (!formData.name || !formData.phone || !formData.password) {
-      setError('Please fill all required fields');
+  const handleSendPhoneOtp = async () => {
+    if (!/^[0-9]{10}$/.test(formData.phone)) {
+      setError('Enter a valid 10-digit mobile number');
       return;
     }
-    
-    setLoading(true);
+    setPhoneLoading(true);
     setError('');
+    setPhoneAlreadyRegistered(false);
     try {
       await api.post('/auth/send-otp', { phone: formData.phone });
-      setShowOtpModal(true);
+      setPhoneOtpSent(true);
+      setPhoneOtp('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send OTP');
+      const message = err.response?.data?.message || 'Failed to send OTP';
+      setError(message);
+      if (message.toLowerCase().includes('already registered')) {
+        setPhoneAlreadyRegistered(true);
+      }
     } finally {
-      setLoading(false);
+      setPhoneLoading(false);
     }
   };
 
-  const handleVerifyOtp = async () => {
-    setLoading(true);
+  const handleVerifyPhoneOtp = async () => {
+    if (phoneOtp.length !== 6) return;
+    setPhoneLoading(true);
     setError('');
     try {
-      const res = await api.post('/auth/verify-otp', {
-        ...formData,
-        otp
+      await api.post('/auth/register/verify-phone', {
+        phone: formData.phone,
+        otp: phoneOtp,
+      });
+      setPhoneVerified(true);
+      setPhoneOtpSent(false);
+      setPhoneOtp('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid mobile OTP');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleSendEmailOtp = async () => {
+    const email = formData.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter a valid email address');
+      return;
+    }
+    if (!phoneVerified) {
+      setError('Verify your mobile number first');
+      return;
+    }
+    setEmailLoading(true);
+    setError('');
+    try {
+      await api.post('/auth/register/email/send-otp', {
+        phone: formData.phone,
+        email,
+      });
+      setEmailOtpSent(true);
+      setEmailOtp('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send email code');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (emailOtp.length !== 6) return;
+    setEmailLoading(true);
+    setError('');
+    try {
+      await api.post('/auth/register/email/verify', {
+        phone: formData.phone,
+        email: formData.email.trim(),
+        otp: emailOtp,
+      });
+      setEmailVerified(true);
+      setEmailOtpSent(false);
+      setEmailOtp('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid email OTP');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleContinue = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
+    if (!formData.password || formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (!phoneVerified || !emailVerified) {
+      setError('Verify mobile and email before continuing');
+      return;
+    }
+
+    setSubmitLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/register/complete', {
+        name: formData.name.trim(),
+        phone: formData.phone,
+        email: formData.email.trim(),
+        password: formData.password,
       });
       const { user } = res.data.data;
       setAuth(user);
-      setIsPhoneVerified(true);
-      setShowOtpModal(false);
       navigateUserAfterAuth(navigate, user);
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP');
+      setError(err.response?.data?.message || 'Could not create account');
     } finally {
-      setLoading(false);
+      setSubmitLoading(false);
     }
   };
+
+  const canVerifyPhone = /^[0-9]{10}$/.test(formData.phone) && !phoneVerified;
+  const canVerifyEmail =
+  phoneVerified &&
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim()) &&
+  !emailVerified;
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
@@ -75,13 +191,13 @@ const RegisterPage = () => {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col px-6 pt-4 pb-8">
+      <div className="flex-1 flex flex-col px-4 sm:px-6 pt-4 pb-8">
         <div className="mb-6 animate-fade-in-up">
           <h1 className="text-2xl font-bold text-text mb-1">Create Account</h1>
-          <p className="text-text-secondary text-sm">Join SpareDriver and get started</p>
+          <p className="text-text-secondary text-sm">Verify mobile and email, then continue</p>
         </div>
 
-        <form onSubmit={handleSendOtp} className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+        <form onSubmit={handleContinue} className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <Input
             label="Full Name"
             placeholder="Enter your full name"
@@ -101,81 +217,132 @@ const RegisterPage = () => {
             required
           />
 
-          <div>
-            <label className="text-sm font-medium text-text mb-1.5 block">Mobile Number</label>
-            <div className="flex gap-2">
-              <div className="h-12 px-3 bg-gray-50 border border-border rounded-xl flex items-center text-sm text-text-secondary font-medium shrink-0">
-                +91
-              </div>
-              <Input
-                type="tel"
-                placeholder="10-digit number"
-                value={formData.phone}
-                onChange={handleChange('phone')}
-                icon={Phone}
-                maxLength={10}
-                required
-              />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-text">Mobile Number</label>
+              {phoneVerified && <VerifiedBadge />}
             </div>
+            <div className="flex gap-2">
+              <div className="relative flex-grow flex-1">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+                  <Phone className="w-4 h-4 text-text-muted" />
+                  <span>+91</span>
+                </div>
+                <Input
+                  type="tel"
+                  placeholder="10-digit number"
+                  value={formData.phone}
+                  onChange={handleChange('phone')}
+                  maxLength={10}
+                  disabled={phoneVerified}
+                  required
+                  className="pl-[4.5rem]"
+                  containerClassName="w-full"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                className="shrink-0 h-12 px-3 sm:px-4 text-sm font-semibold rounded-xl"
+                disabled={!canVerifyPhone || phoneLoading}
+                loading={phoneLoading && !phoneOtpSent}
+                onClick={phoneOtpSent ? handleVerifyPhoneOtp : handleSendPhoneOtp}
+              >
+                {phoneVerified ? 'Done' : phoneOtpSent ? 'Confirm' : 'Verify'}
+              </Button>
+            </div>
+            {phoneOtpSent && !phoneVerified && (
+              <div className="mt-2 animate-fade-in">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Enter 6-digit mobile OTP"
+                  value={phoneOtp}
+                  onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength={6}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-text">Email Address</label>
+              {emailVerified && <VerifiedBadge />}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={handleChange('email')}
+                icon={Mail}
+                autoComplete="email"
+                disabled={emailVerified || !phoneVerified}
+                required
+                containerClassName="flex-grow flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                className="shrink-0 h-12 px-3 sm:px-4 text-sm font-semibold rounded-xl"
+                disabled={!canVerifyEmail || emailLoading}
+                loading={emailLoading && !emailOtpSent}
+                onClick={emailOtpSent ? handleVerifyEmailOtp : handleSendEmailOtp}
+              >
+                {emailVerified ? 'Done' : emailOtpSent ? 'Confirm' : 'Verify'}
+              </Button>
+            </div>
+            {!phoneVerified && (
+              <p className="text-xs text-text-muted">Verify mobile number first to enable email verification.</p>
+            )}
+            {emailOtpSent && !emailVerified && (
+              <div className="mt-2 animate-fade-in">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Enter 6-digit email OTP"
+                  value={emailOtp}
+                  onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength={6}
+                />
+              </div>
+            )}
           </div>
 
           {error && <p className="text-danger text-xs font-medium">{error}</p>}
 
+          {phoneAlreadyRegistered && (
+            <p className="text-sm text-text-secondary">
+              Already have an account?{' '}
+              <Link to="/login" className="text-primary font-semibold hover:underline">
+                Login here
+              </Link>
+            </p>
+          )}
+
           <div className="pt-2">
-            <Button type="submit" fullWidth loading={loading} className="rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20">
-              {loading ? 'Sending OTP...' : 'Verify Mobile Number'}
+            <Button
+              type="submit"
+              fullWidth
+              loading={submitLoading}
+              disabled={!phoneVerified || !emailVerified}
+              className="rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20"
+            >
+              Continue
             </Button>
           </div>
         </form>
 
-        <AuthDivider />
-        <GoogleSignInButton
-          onSuccess={handleGoogleSuccess}
-          onError={handleGoogleError}
-          text="signup_with"
-          disabled={loading || googleLoading}
-        />
-
-        <p className="text-center text-sm text-text-secondary mt-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        <p className="text-center text-sm text-text-secondary mt-6">
           Already have an account?{' '}
           <Link to="/login" className="text-primary font-semibold hover:underline">
             Sign In
           </Link>
         </p>
       </div>
-
-      {/* OTP Modal */}
-      <Modal isOpen={showOtpModal} onClose={() => setShowOtpModal(false)} title="Verify Mobile">
-        <div className="p-2 text-center">
-          <p className="text-sm text-text-secondary mb-6">We sent a verification code to<br/><span className="font-bold text-text">+91 {formData.phone}</span></p>
-          <Input
-            type="text"
-            placeholder="000000"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            maxLength={6}
-            className="text-center text-2xl tracking-widest font-mono"
-            autoFocus
-          />
-          {error && <p className="text-danger text-xs mt-2">{error}</p>}
-          <Button
-            fullWidth
-            className="mt-8 rounded-full py-4"
-            onClick={handleVerifyOtp}
-            disabled={otp.length !== 6 || loading}
-            loading={loading}
-          >
-            Verify & Continue
-          </Button>
-          <button 
-            onClick={handleSendOtp} 
-            disabled={loading}
-            className="mt-6 text-sm font-bold text-primary hover:underline disabled:opacity-50"
-          >
-            Resend Code
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 };

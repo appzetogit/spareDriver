@@ -1,7 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { isApplicationSubmitted } from '../utils/driverOnboarding';
-import { DriverFcmBridge } from '../components/FcmBridge';
 
 const DriverGuard = () => {
   const { isAuthenticated, driver } = useDriverAuthStore();
@@ -31,12 +30,7 @@ const DriverGuard = () => {
     return <Navigate to="/driver/register/approval" replace />;
   }
 
-  return (
-    <>
-      <DriverFcmBridge />
-      <Outlet />
-    </>
-  );
+  return <Outlet />;
 };
 
 export default DriverGuard;

@@ -4,12 +4,11 @@ import useUserAuthStore from '../store/useUserAuthStore';
 import api from '../utils/api';
 import { Loader2 } from 'lucide-react';
 import { MAX_USER_CARS } from '../utils/constants';
-import { UserFcmBridge } from '../components/FcmBridge';
-import { userNeedsPhone } from '../features/auth/utils/authNavigation';
+import { userNeedsPhone, userNeedsEmail } from '../features/auth/utils/authNavigation';
 
-// Garage pages double as everyday "manage my vehicles" surfaces, so they
-// remain reachable post-onboarding (e.g. when adding a car from booking).
-const GARAGE_PATHS = ['/user/my-cars', '/user/add-car'];
+// Paths that are always reachable regardless of onboarding completion status
+// (garage pages, account pages, profile page).
+const GARAGE_PATHS = ['/user/my-cars', '/user/add-car', '/user/account', '/user/profile', '/user/wallet'];
 
 const UserOnboardingGuard = () => {
   const { isAuthenticated, user, setAuth, onboarding, setOnboarding } = useUserAuthStore();
@@ -77,6 +76,10 @@ const UserOnboardingGuard = () => {
     return <Navigate to="/link-phone" replace />;
   }
 
+  if (userNeedsEmail(user) && path !== '/user/verify-email') {
+    return <Navigate to="/user/verify-email" replace />;
+  }
+
   const resolved = hasOptimisticCars ? { ...status, ...onboarding } : status;
   const carCount = resolved?.carCount ?? 0;
   const hasChecklist = Boolean(resolved?.hasChecklist);
@@ -91,7 +94,6 @@ const UserOnboardingGuard = () => {
     }
     return (
       <>
-        <UserFcmBridge />
         <Outlet />
       </>
     );
@@ -103,7 +105,6 @@ const UserOnboardingGuard = () => {
     }
     return (
       <>
-        <UserFcmBridge />
         <Outlet />
       </>
     );
@@ -119,7 +120,6 @@ const UserOnboardingGuard = () => {
 
   return (
     <>
-      <UserFcmBridge />
       <Outlet />
     </>
   );

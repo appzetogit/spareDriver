@@ -5,9 +5,6 @@ import Input from '../../../../components/Input';
 import { Phone, Lock, ArrowLeft } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
-import GoogleSignInButton from '../../../auth/components/GoogleSignInButton';
-import AuthDivider from '../../../auth/components/AuthDivider';
-import useGoogleAuth from '../../../auth/hooks/useGoogleAuth';
 import { navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 
 const DriverLoginPage = () => {
@@ -22,7 +19,6 @@ const DriverLoginPage = () => {
   const [formData, setFormData] = useState({ phone: '', password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const { handleGoogleSuccess, handleGoogleError, loading: googleLoading } = useGoogleAuth('driver');
 
   const handleChange = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -67,7 +63,7 @@ const DriverLoginPage = () => {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col px-6 pt-6">
+      <div className="flex-1 flex flex-col px-4 sm:px-6 pt-6">
         {/* Title */}
         <div className="mb-8 animate-fade-in-up">
           <h1 className="text-2xl font-bold text-text mb-1">Driver Login</h1>
@@ -78,9 +74,10 @@ const DriverLoginPage = () => {
         <form onSubmit={handleSubmit} className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div>
             <label className="text-sm font-medium text-text mb-1.5 block">Mobile number</label>
-            <div className="flex gap-2">
-              <div className="h-12 px-3 bg-gray-50 border border-border rounded-xl flex items-center text-sm text-text-secondary font-medium shrink-0">
-                +91
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+                <Phone className="w-4 h-4 text-text-muted" />
+                <span>+91</span>
               </div>
               <Input
                 type="tel"
@@ -88,8 +85,9 @@ const DriverLoginPage = () => {
                 value={formData.phone}
                 onChange={handleChange('phone')}
                 error={errors.phone}
-                icon={Phone}
                 maxLength={10}
+                className="pl-[4.5rem]"
+                containerClassName="w-full"
               />
             </div>
           </div>
@@ -109,6 +107,7 @@ const DriverLoginPage = () => {
           </Button>
         </form>
 
+        {/*
         <AuthDivider />
         <GoogleSignInButton
           onSuccess={handleGoogleSuccess}
@@ -116,6 +115,7 @@ const DriverLoginPage = () => {
           text="signin_with"
           disabled={loading || googleLoading}
         />
+        */}
 
         {/* Register Link */}
         <p className="text-center text-sm text-text-secondary mt-8 mb-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>

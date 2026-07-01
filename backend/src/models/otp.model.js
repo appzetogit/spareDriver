@@ -16,6 +16,11 @@ const otpSchema = new mongoose.Schema(
       required: true,
       expires: 0, // MongoDB TTL index. Document will be deleted when current time >= expiresAt
     },
+    purpose: {
+      type: String,
+      enum: ['registration', 'forgot-password'],
+      default: 'registration',
+    },
   },
   { timestamps: true }
 );

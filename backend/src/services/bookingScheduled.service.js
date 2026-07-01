@@ -14,6 +14,10 @@ import {
 } from '../utils/socketEmitters.js';
 import { dispatchNextDriverService } from './bookingDispatch.service.js';
 import {
+  notifyUserBookingReminder,
+  notifyDriverBookingReminder,
+} from '../utils/notificationDispatch.js';
+import {
   enqueueScheduledBookingJobs,
   enqueueAssignmentRetry,
   enqueueReminderJobsForBooking,
@@ -263,25 +267,10 @@ export async function sendScheduledReminder(bookingId, minutesAhead) {
     return { ok: false, reason: 'terminal_status' };
   }
 
-  const payload = {
-    bookingId: String(booking._id),
-    bookingNumber: booking.bookingNumber,
-    minutesAhead: Number(minutesAhead) || 0,
-    scheduledStartAt: booking.hourly?.scheduledStartAt || null,
-  };
-  emitToUser(booking.userId, S2C_EVENTS.NOTIFICATION, {
-    title: 'Scheduled ride reminder',
-    body: `Your ride starts in ${payload.minutesAhead} minutes.`,
-    severity: 'info',
-    data: payload,
-  });
+  const minutes = Number(minutesAhead) || 0;
+  await notifyUserBookingReminder(booking.userId, booking, minutes);
   if (booking.driverId) {
-    emitToBooking(booking._id, S2C_EVENTS.NOTIFICATION, {
-      title: 'Upcoming pickup',
-      body: `Pickup in ${payload.minutesAhead} minutes.`,
-      severity: 'info',
-      data: payload,
-    });
+    await notifyDriverBookingReminder(booking.driverId, booking, minutes);
   }
   return { ok: true };
 }

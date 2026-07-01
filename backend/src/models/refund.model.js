@@ -26,6 +26,8 @@ import mongoose from 'mongoose';
 
 const REFUND_STATUS = Object.freeze({
   PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
   PROCESSED: 'processed',
   FAILED: 'failed',
 });
@@ -86,6 +88,8 @@ const refundSchema = new mongoose.Schema(
 
     /** Audit timestamps complementing `timestamps: true`. */
     processedAt: { type: Date, default: null },
+    approvedAt: { type: Date, default: null },
+    rejectedAt: { type: Date, default: null },
     failedAt: { type: Date, default: null },
 
     /** Optional cross-link to our internal `Payment` doc (kit/booking). */

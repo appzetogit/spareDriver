@@ -8,25 +8,80 @@ import {
 } from '../utils/jwt.util.js';
 import { USER_ROLES } from '../constants/roles.js';
 
+import { isPlaceholderUserEmail, userNeedsEmail as computeUserNeedsEmail } from '../utils/email.util.js';
+import { EmailVerification } from '../models/emailVerification.model.js';
+import { sendEmail } from './email.service.js';
+
 function sanitizeUser(doc) {
   const o = doc.toObject();
   delete o.password;
   o.needsPhone = !o.phone_no || !o.isPhoneVerified;
+  o.needsEmail = computeUserNeedsEmail(o);
   return o;
 }
 
 import { OTP } from '../models/otp.model.js';
 import { sendSmsOtp } from '../utils/otpService.js';
+import { RegistrationDraft } from '../models/registrationDraft.model.js';
+
+const REGISTRATION_DRAFT_TTL_MS = 30 * 60 * 1000;
+
+function assertValidEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    throw new ApiError(400, 'Valid email address required');
+  }
+  if (isPlaceholderUserEmail(normalized)) {
+    throw new ApiError(400, 'Valid email address required');
+  }
+  return normalized;
+}
+
+async function assertPhoneAvailable(phone) {
+  const existingUser = await User.findOne({ phone_no: phone, isDeleted: false });
+  if (existingUser) {
+    throw new ApiError(400, 'This number is already registered. Please login to continue.');
+  }
+}
+
+async function assertEmailAvailable(email, { excludeUserId } = {}) {
+  const filter = { email, isDeleted: false, isEmailVerified: true };
+  if (excludeUserId) filter._id = { $ne: excludeUserId };
+  const taken = await User.findOne(filter);
+  if (taken) {
+    throw new ApiError(400, 'This email is already registered to another account');
+  }
+}
+
+async function upsertRegistrationDraft(phone, patch = {}) {
+  const expiresAt = new Date(Date.now() + REGISTRATION_DRAFT_TTL_MS);
+  return RegistrationDraft.findOneAndUpdate(
+    { phone },
+    { ...patch, expiresAt },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+}
+
+const EMAIL_OTP_TTL_MS = 10 * 60 * 1000;
+
+function buildEmailVerificationHtml(name, otp) {
+  return `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;background:#f8fafc;padding:24px;">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;border:1px solid #e2e8f0;">
+    <h1 style="margin:0 0 8px;font-size:18px;color:#0f172a;">Verify your email</h1>
+    <p style="margin:0 0 16px;color:#64748b;font-size:14px;">Hi ${name || 'there'}, use this code to verify your SpareDriver account email.</p>
+    <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:0.2em;color:#0f172a;">${otp}</p>
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">This code expires in 10 minutes.</p>
+  </div>
+</body></html>`;
+}
 
 export const sendUserOtpService = async (phone) => {
   if (!phone || phone.length !== 10) {
     throw new ApiError(400, 'Valid 10-digit phone number required');
   }
 
-  const existingUser = await User.findOne({ phone_no: phone });
-  if (existingUser) {
-    throw new ApiError(400, 'Number already exists, please login');
-  }
+  await assertPhoneAvailable(phone);
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -37,9 +92,175 @@ export const sendUserOtpService = async (phone) => {
   return { message: 'OTP sent successfully' };
 };
 
-export const verifyUserOtpAndRegisterService = async ({ name, phone, password, otp }) => {
+export const verifyRegistrationPhoneOtpService = async (phone, otp) => {
+  if (!phone || phone.length !== 10 || !otp) {
+    throw new ApiError(400, 'Phone and OTP are required');
+  }
+
+  await assertPhoneAvailable(phone);
+
+  const otpRecord = await OTP.findOne({ phone, otp });
+  if (!otpRecord || otpRecord.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+
+  await OTP.deleteOne({ _id: otpRecord._id });
+
+  const draft = await upsertRegistrationDraft(phone, {
+    phoneVerified: true,
+    emailVerified: false,
+    email: '',
+  });
+
+  return { phoneVerified: true, emailVerified: draft.emailVerified };
+};
+
+export const sendRegistrationEmailOtpService = async (phone, email) => {
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+
+  const normalizedEmail = assertValidEmail(email);
+
+  const draft = await RegistrationDraft.findOne({ phone, phoneVerified: true });
+  if (!draft) {
+    throw new ApiError(400, 'Verify your mobile number first');
+  }
+
+  await assertEmailAvailable(normalizedEmail);
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
+
+  await EmailVerification.findOneAndUpdate(
+    { phone },
+    { phone, email: normalizedEmail, otp, expiresAt, userId: null },
+    { upsert: true, new: true },
+  );
+
+  await upsertRegistrationDraft(phone, {
+    email: normalizedEmail,
+    emailVerified: false,
+  });
+
+  await sendEmail({
+    to: normalizedEmail,
+    subject: 'Your SpareDriver email verification code',
+    html: buildEmailVerificationHtml('', otp),
+    text: `Your SpareDriver verification code is: ${otp}. It expires in 10 minutes.`,
+  });
+
+  return { message: 'Verification code sent to your email' };
+};
+
+export const verifyRegistrationEmailOtpService = async (phone, email, otp) => {
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid phone number required');
+  }
+
+  const normalizedEmail = assertValidEmail(email);
+  if (!otp) {
+    throw new ApiError(400, 'Verification code is required');
+  }
+
+  const draft = await RegistrationDraft.findOne({ phone, phoneVerified: true });
+  if (!draft) {
+    throw new ApiError(400, 'Verify your mobile number first');
+  }
+
+  const record = await EmailVerification.findOne({
+    phone,
+    email: normalizedEmail,
+    otp,
+  });
+  if (!record || record.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired verification code');
+  }
+
+  await EmailVerification.deleteOne({ _id: record._id });
+
+  await upsertRegistrationDraft(phone, {
+    email: normalizedEmail,
+    emailVerified: true,
+  });
+
+  return { phoneVerified: true, emailVerified: true };
+};
+
+export const completeRegistrationService = async ({ name, phone, email, password }) => {
+  if (!name?.trim() || !phone || !password) {
+    throw new ApiError(400, 'All fields are required');
+  }
+  if (password.length < 6) {
+    throw new ApiError(400, 'Password must be at least 6 characters');
+  }
+
+  const normalizedEmail = assertValidEmail(email);
+
+  const draft = await RegistrationDraft.findOne({
+    phone,
+    phoneVerified: true,
+    emailVerified: true,
+    email: normalizedEmail,
+  });
+  if (!draft) {
+    throw new ApiError(400, 'Please verify your mobile number and email first');
+  }
+
+  await assertPhoneAvailable(phone);
+  await assertEmailAvailable(normalizedEmail);
+
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
+  const user = await User.create({
+    name: name.trim(),
+    email: normalizedEmail,
+    phone_no: phone,
+    password: hashedPassword,
+    role: USER_ROLES.USER,
+    authProvider: 'local',
+    isPhoneVerified: true,
+    isEmailVerified: true,
+  });
+
+  await RegistrationDraft.deleteOne({ _id: draft._id });
+
+  const payload = tokenPayloadFromUser(user);
+  const { notifyAdminNewUserRegistration } = await import('../utils/notificationDispatch.js');
+  notifyAdminNewUserRegistration(user).catch(() => null);
+  return {
+    user: sanitizeUser(user),
+    accessToken: generateAccessToken(payload),
+    refreshToken: generateRefreshToken(payload),
+  };
+};
+
+export const verifyUserOtpAndRegisterService = async ({ name, phone, password, otp, email }) => {
   if (!name || !phone || !password || !otp) {
     throw new ApiError(400, 'All fields are required');
+  }
+
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    throw new ApiError(400, 'Valid email address required');
+  }
+  if (isPlaceholderUserEmail(normalizedEmail)) {
+    throw new ApiError(400, 'Valid email address required');
+  }
+
+  const existingPhone = await User.findOne({ phone_no: phone, isDeleted: false });
+  if (existingPhone) {
+    throw new ApiError(400, 'This number is already registered. Please login to continue.');
+  }
+
+  const emailTaken = await User.findOne({
+    email: normalizedEmail,
+    isDeleted: false,
+    isEmailVerified: true,
+  });
+  if (emailTaken) {
+    throw new ApiError(400, 'This email is already registered to another account');
   }
 
   const otpRecord = await OTP.findOne({ phone, otp });
@@ -54,15 +275,18 @@ export const verifyUserOtpAndRegisterService = async ({ name, phone, password, o
 
   const user = await User.create({
     name,
-    email: `${phone}@phone.sparedriver.local`,
+    email: normalizedEmail,
     phone_no: phone,
     password: hashedPassword,
     role: USER_ROLES.USER,
     authProvider: 'local',
     isPhoneVerified: true,
+    isEmailVerified: false,
   });
 
   const payload = tokenPayloadFromUser(user);
+  const { notifyAdminNewUserRegistration } = await import('../utils/notificationDispatch.js');
+  notifyAdminNewUserRegistration(user).catch(() => null);
   return {
     user: sanitizeUser(user),
     accessToken: generateAccessToken(payload),
@@ -249,8 +473,82 @@ export const getRegistrationStatusService = async (userId) => {
     hasChecklist: await isOnboardingComplete(user, cars),
     carCount,
     needsPhone: !user.phone_no || !user.isPhoneVerified,
+    needsEmail: computeUserNeedsEmail(user),
     user: sanitizeUser(user),
   };
+};
+
+export const sendUserEmailVerificationOtpService = async (userId, email) => {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    throw new ApiError(400, 'Valid email address required');
+  }
+  if (isPlaceholderUserEmail(normalized)) {
+    throw new ApiError(400, 'Please enter your personal email address');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+
+  const taken = await User.findOne({
+    email: normalized,
+    _id: { $ne: userId },
+    isDeleted: false,
+    isEmailVerified: true,
+  });
+  if (taken) {
+    throw new ApiError(400, 'This email is already registered to another account');
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
+
+  await EmailVerification.findOneAndUpdate(
+    { userId },
+    { email: normalized, otp, expiresAt },
+    { upsert: true, new: true },
+  );
+
+  await sendEmail({
+    to: normalized,
+    subject: 'Your SpareDriver email verification code',
+    html: buildEmailVerificationHtml(user.name, otp),
+    text: `Your SpareDriver verification code is: ${otp}. It expires in 10 minutes.`,
+  });
+
+  return { message: 'Verification code sent to your email' };
+};
+
+export const verifyUserEmailOtpService = async (userId, { email, otp }) => {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized || !otp) {
+    throw new ApiError(400, 'Email and verification code are required');
+  }
+
+  const record = await EmailVerification.findOne({ userId, email: normalized, otp });
+  if (!record || record.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired verification code');
+  }
+
+  const taken = await User.findOne({
+    email: normalized,
+    _id: { $ne: userId },
+    isDeleted: false,
+    isEmailVerified: true,
+  });
+  if (taken) {
+    throw new ApiError(400, 'This email is already registered to another account');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+
+  user.email = normalized;
+  user.isEmailVerified = true;
+  await user.save();
+  await EmailVerification.deleteOne({ _id: record._id });
+
+  return sanitizeUser(user);
 };
 
 export const updateUserOnboardingStepService = async (userId, data) => {
@@ -494,3 +792,164 @@ export const deleteSavedLocationService = async (userId, locationId) => {
   await user.save();
   return { id: locationId };
 };
+
+// ─── Forgot / Reset Password ──────────────────────────────────────────────────
+
+/**
+ * Send a forgot-password OTP via phone (SMS) or email.
+ * Does NOT require the user to be authenticated.
+ * Pass { phone } or { email } in the options object.
+ */
+export const sendForgotPasswordOtpService = async ({ phone, email } = {}) => {
+  // ── Phone flow ──────────────────────────────────────────────────────────────
+  if (phone) {
+    if (phone.length !== 10) {
+      throw new ApiError(400, 'Valid 10-digit phone number required');
+    }
+
+    const user = await User.findOne({ phone_no: phone, isDeleted: false });
+    if (!user) {
+      return { message: 'If this number is registered, an OTP will be sent', via: 'phone' };
+    }
+    if (user.authProvider === 'google') {
+      throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await OTP.findOneAndUpdate(
+      { phone, purpose: 'forgot-password' },
+      { otp, expiresAt, purpose: 'forgot-password' },
+      { upsert: true, new: true },
+    );
+
+    await sendSmsOtp(phone, otp);
+    return { message: 'OTP sent to your registered mobile number', via: 'phone' };
+  }
+
+  // ── Email flow ──────────────────────────────────────────────────────────────
+  if (email) {
+    const normalized = assertValidEmail(email);
+
+    const user = await User.findOne({ email: normalized, isDeleted: false, isEmailVerified: true });
+    if (!user) {
+      return { message: 'If this email is registered, an OTP will be sent', via: 'email' };
+    }
+    if (user.authProvider === 'google') {
+      throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    // Reuse EmailVerification model — purpose differentiated by a prefix on userId
+    await EmailVerification.findOneAndUpdate(
+      { email: normalized, phone: 'forgot-password' },
+      { email: normalized, phone: 'forgot-password', otp, expiresAt, userId: user._id },
+      { upsert: true, new: true },
+    );
+
+    await sendEmail({
+      to: normalized,
+      subject: 'Your SpareDriver password reset OTP',
+      html: buildEmailVerificationHtml(user.name, otp),
+      text: `Your SpareDriver password reset OTP is: ${otp}. It expires in 10 minutes.`,
+    });
+
+    return { message: 'OTP sent to your registered email address', via: 'email' };
+  }
+
+  throw new ApiError(400, 'Provide a registered phone number or email address');
+};
+
+/**
+ * Verify the OTP and set a new password.
+ * Accepts { phone, otp, newPassword } or { email, otp, newPassword }.
+ */
+export const resetPasswordWithOtpService = async ({ phone, email, otp, newPassword } = {}) => {
+  if (!otp) throw new ApiError(400, 'OTP is required');
+  if (!newPassword || newPassword.length < 6) {
+    throw new ApiError(400, 'Password must be at least 6 characters');
+  }
+
+  // ── Phone flow ──────────────────────────────────────────────────────────────
+  if (phone) {
+    if (phone.length !== 10) throw new ApiError(400, 'Valid 10-digit phone number required');
+
+    const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+
+    const user = await User.findOne({ phone_no: phone, isDeleted: false }).select('+password');
+    if (!user) throw new ApiError(404, 'User not found');
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+    await OTP.deleteOne({ _id: record._id });
+
+    return { message: 'Password changed successfully' };
+  }
+
+  // ── Email flow ──────────────────────────────────────────────────────────────
+  if (email) {
+    const normalized = assertValidEmail(email);
+
+    const record = await EmailVerification.findOne({
+      email: normalized,
+      phone: 'forgot-password',
+      otp,
+    });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+
+    const user = await User.findById(record.userId).select('+password');
+    if (!user || user.isDeleted) throw new ApiError(404, 'User not found');
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+    await EmailVerification.deleteOne({ _id: record._id });
+
+    return { message: 'Password changed successfully' };
+  }
+
+  throw new ApiError(400, 'Provide a registered phone number or email address');
+};
+
+/**
+ * Verify OTP validity only — does NOT consume the OTP or change the password.
+ * Used by the UI to confirm the OTP before asking for a new password.
+ */
+export const verifyForgotPasswordOtpService = async ({ phone, email, otp } = {}) => {
+  if (!otp) throw new ApiError(400, 'OTP is required');
+
+  if (phone) {
+    if (phone.length !== 10) throw new ApiError(400, 'Valid 10-digit phone number required');
+    const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+    return { valid: true };
+  }
+
+  if (email) {
+    const normalized = assertValidEmail(email);
+    const record = await EmailVerification.findOne({
+      email: normalized,
+      phone: 'forgot-password',
+      otp,
+    });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+    return { valid: true };
+  }
+
+  throw new ApiError(400, 'Provide a registered phone number or email address');
+};
+
+

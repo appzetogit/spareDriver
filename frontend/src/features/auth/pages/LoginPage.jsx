@@ -5,9 +5,6 @@ import Input from '../../../components/Input';
 import { Phone, Lock, ArrowLeft } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
-import GoogleSignInButton from '../components/GoogleSignInButton';
-import AuthDivider from '../components/AuthDivider';
-import useGoogleAuth from '../hooks/useGoogleAuth';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 
 const LoginPage = () => {
@@ -16,7 +13,6 @@ const LoginPage = () => {
   const [formData, setFormData] = useState({ phone: '', password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const { handleGoogleSuccess, handleGoogleError, loading: googleLoading } = useGoogleAuth('user');
 
   const handleChange = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -47,7 +43,6 @@ const LoginPage = () => {
       setAuth(user);
       navigateUserAfterAuth(navigate, user);
     } catch (error) {
-      console.error('Login failed', error);
       setErrors({ phone: error.response?.data?.message || 'Login failed' });
     } finally {
       setLoading(false);
@@ -62,7 +57,7 @@ const LoginPage = () => {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col px-6 pt-6">
+      <div className="flex-1 flex flex-col px-4 sm:px-6 pt-6">
         <div className="mb-8 animate-fade-in-up">
           <h1 className="text-2xl font-bold text-text mb-1">Welcome Back!</h1>
           <p className="text-text-secondary text-sm">Login to continue</p>
@@ -71,9 +66,10 @@ const LoginPage = () => {
         <form onSubmit={handleSubmit} className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div>
             <label className="text-sm font-medium text-text mb-1.5 block">Phone Number</label>
-            <div className="flex gap-2">
-              <div className="h-12 px-3 bg-gray-50 border border-border rounded-xl flex items-center text-sm text-text-secondary font-medium shrink-0">
-                +91
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+                <Phone className="w-4 h-4 text-text-muted" />
+                <span>+91</span>
               </div>
               <Input
                 type="tel"
@@ -81,8 +77,9 @@ const LoginPage = () => {
                 value={formData.phone}
                 onChange={handleChange('phone')}
                 error={errors.phone}
-                icon={Phone}
                 maxLength={10}
+                className="pl-[4.5rem]"
+                containerClassName="w-full"
               />
             </div>
           </div>
@@ -108,6 +105,7 @@ const LoginPage = () => {
           </Button>
         </form>
 
+        {/*
         <AuthDivider />
         <GoogleSignInButton
           onSuccess={handleGoogleSuccess}
@@ -115,6 +113,8 @@ const LoginPage = () => {
           text="signin_with"
           disabled={loading || googleLoading}
         />
+        */}
+
         <p className="text-center text-sm text-text-secondary mt-8 mb-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
           Don&apos;t have an account?{' '}
           <Link to="/register" className="text-primary font-semibold hover:underline">

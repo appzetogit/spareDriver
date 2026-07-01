@@ -13,7 +13,7 @@ createRoot(document.getElementById('root')).render(
     <GoogleOAuthProvider clientId={googleClientId}>
       <BrowserRouter>
         <App />
-        <Toaster position="top-center" />
+        <Toaster position="top-center" containerStyle={{ zIndex: 99999 }} />
       </BrowserRouter>
     </GoogleOAuthProvider>
   </StrictMode>,

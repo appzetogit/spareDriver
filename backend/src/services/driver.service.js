@@ -421,6 +421,9 @@ export const submitApplicationService = async (driverId) => {
   const { upsertDriverReviewTask } = await import('./adminTask.service.js');
   await upsertDriverReviewTask(driver);
 
+  const { notifyAdminNewDriverRegistration } = await import('../utils/notificationDispatch.js');
+  notifyAdminNewDriverRegistration(driver).catch(() => null);
+
   return driver;
 };
 

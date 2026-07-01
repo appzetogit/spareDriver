@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { unregisterFcmToken } from '../hooks/useFcmRegistration';
+import { useDriverNotificationStore } from './useNotificationStore';
 
 const useDriverAuthStore = create(
   persist(
@@ -9,7 +11,11 @@ const useDriverAuthStore = create(
 
       setAuth: (driver) => set({ driver, isAuthenticated: !!driver }),
       updateDriver: (updates) => set((state) => ({ driver: { ...state.driver, ...updates } })),
-      logout: () => set({ driver: null, isAuthenticated: false }),
+      logout: () => {
+        unregisterFcmToken('driver').catch(() => null);
+        useDriverNotificationStore.getState().reset();
+        set({ driver: null, isAuthenticated: false });
+      },
     }),
     {
       name: 'driver-session',

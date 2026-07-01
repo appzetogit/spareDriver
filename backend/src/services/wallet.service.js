@@ -141,6 +141,14 @@ export async function creditWalletService({
     razorpay: razorpay || undefined,
     status: WALLET_TXN_STATUS.SUCCESS,
     initiatedBy: initiatedBy || null,
+  }).then(async (txn) => {
+    const { notifyUserWalletCredited } = await import('../utils/notificationDispatch.js');
+    notifyUserWalletCredited(userId, {
+      amountRupees: amt,
+      source,
+      description,
+    }).catch(() => null);
+    return txn;
   });
 }
 
@@ -241,6 +249,14 @@ export async function debitWalletService({
     refId: refId ? String(refId) : '',
     status: WALLET_TXN_STATUS.SUCCESS,
     initiatedBy: initiatedBy || null,
+  }).then(async (txn) => {
+    const { notifyUserWalletDebited } = await import('../utils/notificationDispatch.js');
+    notifyUserWalletDebited(userId, {
+      amountRupees: amt,
+      source,
+      description,
+    }).catch(() => null);
+    return txn;
   });
 }
 

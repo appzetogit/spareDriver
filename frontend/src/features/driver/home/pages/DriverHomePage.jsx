@@ -31,6 +31,8 @@ import OnlineBlockedDialog from '../../kit/components/OnlineBlockedDialog';
 import DriverKitHomeCard from '../../kit/components/DriverKitHomeCard';
 import OutstationOptInCard from '../components/OutstationOptInCard';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
+import { useNotificationPanel } from '../../../../components/notifications/NotificationCenter';
+import { useDriverNotificationStore } from '../../../../store/useNotificationStore';
 
 const ACTIVE_STATUS_COPY = {
   [BOOKING_STATUS.DRIVER_ASSIGNED]: 'Heading to customer',
@@ -42,6 +44,10 @@ const ACTIVE_STATUS_COPY = {
 
 const DriverHomePage = () => {
   const navigate = useNavigate();
+  const { setOpen: openNotifications, unreadCount, panel: notificationPanel } = useNotificationPanel(
+    useDriverNotificationStore,
+    { audience: 'driver', title: 'Notifications' },
+  );
   const updateDriver = useDriverAuthStore((s) => s.updateDriver);
   const onlineKey = buildCacheKey('driver-online-status', {});
   const activeKey = buildCacheKey('driver-kit-active', {});
@@ -124,8 +130,18 @@ const DriverHomePage = () => {
       <div className="bg-dark px-4 pt-4 pb-6 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-bold text-white">Home</h1>
-          <button type="button" className="relative p-2.5 rounded-xl bg-white/10">
+          <button
+            type="button"
+            className="relative p-2.5 rounded-xl bg-white/10 hover:bg-white/15 transition-colors"
+            aria-label="Notifications"
+            onClick={() => openNotifications(true)}
+          >
             <Bell className="w-5 h-5 text-white" />
+            {unreadCount > 0 ? (
+              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            ) : null}
           </button>
         </div>
         <Card className="!bg-white/10 backdrop-blur-sm !shadow-none">
@@ -265,6 +281,7 @@ const DriverHomePage = () => {
         blocked={blocked}
         onGoToKit={goToKitPage}
       />
+      {notificationPanel}
     </div>
   );
 };

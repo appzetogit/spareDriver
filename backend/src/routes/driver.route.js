@@ -12,7 +12,13 @@ import {
   reopenRejectedApplication,
   updateOutstationAvailability,
 } from '../controllers/driver.controller.js';
-import { registerDriverFcmToken } from '../controllers/fcmToken.controller.js';
+import { registerDriverFcmToken, unregisterDriverFcmToken } from '../controllers/fcmToken.controller.js';
+import {
+  getDriverNotifications,
+  getDriverUnreadNotifications,
+  markDriverNotificationRead,
+  markAllDriverNotificationsRead,
+} from '../controllers/notification.controller.js';
 import { uploadVideo as uploadVideoMiddleware } from '../middlewares/multer.js';
 import {
   googleSignInDriver,
@@ -75,6 +81,12 @@ router.post('/onboarding/submit', protectDriver, submitApplication);
 router.post('/application/reopen', protectDriver, reopenRejectedApplication);
 router.get('/profile', protectDriver, getProfile);
 router.post('/fcm-token', protectDriver, registerDriverFcmToken);
+router.delete('/fcm-token', protectDriver, unregisterDriverFcmToken);
+
+router.get('/notifications', protectDriver, getDriverNotifications);
+router.get('/notifications/unread', protectDriver, getDriverUnreadNotifications);
+router.patch('/notifications/read-all', protectDriver, markAllDriverNotificationsRead);
+router.patch('/notifications/:id/read', protectDriver, markDriverNotificationRead);
 // Driver-side preferences \u2014 currently only the outstation opt-in
 // for the admin-managed outstation queue.
 router.put(

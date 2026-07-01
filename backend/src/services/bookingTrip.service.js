@@ -25,6 +25,12 @@ import {
   emitToAdmins,
   emitToDriver,
 } from '../utils/socketEmitters.js';
+import {
+  notifyUserDriverArrived,
+  notifyUserTripStarted,
+  notifyUserTripCompleted,
+  notifyDriverEarningsCredited,
+} from '../utils/notificationDispatch.js';
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { cancelScheduledBookingJobs } from './bookingScheduled.service.js';
 import {
@@ -39,6 +45,7 @@ import {
   REFUND_INITIATED_BY,
 } from './refund.service.js';
 import { dispatchNextDriverService } from './bookingDispatch.service.js';
+import { driverEarningFromFareSnapshot } from './booking.service.js';
 import {
   recordPlatformRevenue,
   PLATFORM_REVENUE_SOURCE,
@@ -495,6 +502,7 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   );
 
   broadcastUpdate(booking);
+  notifyUserDriverArrived(booking.userId, booking).catch(() => null);
   return booking.toObject();
 }
 
@@ -562,6 +570,7 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   await booking.save();
 
   broadcastUpdate(booking);
+  notifyUserTripStarted(booking.userId, booking).catch(() => null);
   return booking.toObject();
 }
 
@@ -736,6 +745,16 @@ export async function completeTripService(driverId, bookingId) {
   );
 
   broadcastUpdate(booking);
+  notifyUserTripCompleted(booking.userId, booking).catch(() => null);
+  if (booking.driverId) {
+    const earning = driverEarningFromFareSnapshot(booking.fareSnapshot);
+    if (earning > 0) {
+      notifyDriverEarningsCredited(booking.driverId, {
+        amountRupees: earning,
+        bookingId: booking._id,
+      }).catch(() => null);
+    }
+  }
   return booking.toObject();
 }
 

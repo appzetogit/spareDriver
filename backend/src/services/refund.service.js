@@ -4,6 +4,13 @@ import Refund, {
 } from '../models/refund.model.js';
 import Booking from '../models/booking.model.js';
 import { ApiError } from '../utils/apiError.js';
+import {
+  notifyUserRefundInitiated,
+  notifyUserRefundApproved,
+  notifyUserRefundProcessed,
+  notifyUserRefundRejected,
+  notifyAdminRefundRequest,
+} from '../utils/notificationDispatch.js';
 import { BOOKING_PAYMENT_STATUS } from '../constants/bookingStatus.js';
 
 /**
@@ -103,7 +110,7 @@ async function createRefundRecord(booking, breakdown, meta) {
 async function findActiveRefund(bookingId) {
   return Refund.findOne({
     bookingId,
-    status: { $in: [REFUND_STATUS.PENDING, REFUND_STATUS.PROCESSED] },
+    status: { $in: [REFUND_STATUS.PENDING, REFUND_STATUS.APPROVED, REFUND_STATUS.PROCESSED] },
   }).sort({ createdAt: -1 });
 }
 
@@ -158,7 +165,10 @@ export async function issueBookingRefundService(booking, options = {}) {
   const existing = await findActiveRefund(booking._id);
   if (existing) return existing.toObject();
 
-  return createRefundRecord(booking, breakdown, options);
+  const refund = await createRefundRecord(booking, breakdown, options);
+  notifyUserRefundInitiated(booking.userId, refund).catch(() => null);
+  notifyAdminRefundRequest(refund).catch(() => null);
+  return refund;
 }
 
 /**
@@ -181,17 +191,30 @@ export async function updateRefundStatusService(refundId, payload = {}, admin = 
   if (!refund) throw new ApiError(404, 'Refund not found');
 
   const nextStatus = payload?.status;
-  if (![REFUND_STATUS.PROCESSED, REFUND_STATUS.FAILED].includes(nextStatus)) {
-    throw new ApiError(400, 'status must be "processed" or "failed"');
+  const allowed = [
+    REFUND_STATUS.APPROVED,
+    REFUND_STATUS.REJECTED,
+    REFUND_STATUS.PROCESSED,
+    REFUND_STATUS.FAILED,
+  ];
+  if (!allowed.includes(nextStatus)) {
+    throw new ApiError(400, 'status must be "approved", "rejected", "processed", or "failed"');
   }
 
   const now = new Date();
   refund.status = nextStatus;
-  refund.error = nextStatus === REFUND_STATUS.FAILED
-    ? String(payload.error || '').slice(0, 500)
+  refund.error = [REFUND_STATUS.FAILED, REFUND_STATUS.REJECTED].includes(nextStatus)
+    ? String(payload.error || payload.reason || '').slice(0, 500)
     : '';
 
-  if (nextStatus === REFUND_STATUS.PROCESSED) {
+  if (nextStatus === REFUND_STATUS.APPROVED) {
+    refund.approvedAt = now;
+    notifyUserRefundApproved(refund.userId, refund).catch(() => null);
+  } else if (nextStatus === REFUND_STATUS.REJECTED) {
+    refund.rejectedAt = now;
+    if (payload.reason) refund.reason = String(payload.reason).slice(0, 500);
+    notifyUserRefundRejected(refund.userId, refund).catch(() => null);
+  } else if (nextStatus === REFUND_STATUS.PROCESSED) {
     refund.processedAt = now;
     refund.failedAt = null;
     if (payload.razorpayRefundId) {
@@ -204,7 +227,8 @@ export async function updateRefundStatusService(refundId, payload = {}, admin = 
         ? `${refund.reason} · processed by ${admin?.name || admin?._id}`
         : `processed by ${admin?.name || admin?._id}`;
     }
-  } else {
+    notifyUserRefundProcessed(refund.userId, refund).catch(() => null);
+  } else if (nextStatus === REFUND_STATUS.FAILED) {
     refund.failedAt = now;
     refund.processedAt = null;
   }

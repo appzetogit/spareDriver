@@ -24,6 +24,15 @@ import {
   REFUND_INITIATED_BY,
 } from './refund.service.js';
 import {
+  notifyUserBookingCreated,
+  notifyUserDriverSearching,
+  notifyUserBookingCancelled,
+  notifyUserPaymentSuccessful,
+  notifyUserWalletDebited,
+  notifyDriverBookingCancelled,
+  notifyDriverCustomerCancelled,
+} from '../utils/notificationDispatch.js';
+import {
   releaseBookingBufferHold,
   clearPendingExtensionsOnTerminate,
 } from './bookingExtension.service.js';
@@ -1109,6 +1118,11 @@ export async function createBookingService(userId, body) {
       // user isn't stuck with a booking that never searches.
       shouldDispatchNow = true;
     }
+  }
+
+  notifyUserBookingCreated(booking.userId, booking).catch(() => null);
+  if (shouldDispatchNow !== false && booking.status === BOOKING_STATUS.SEARCHING) {
+    notifyUserDriverSearching(booking.userId, booking).catch(() => null);
   }
 
   return {

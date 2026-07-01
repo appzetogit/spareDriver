@@ -8,7 +8,7 @@ import Modal from '../../../components/Modal';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
 import useDriverAuthStore from '../../../store/useDriverAuthStore';
-import { userNeedsPhone, driverNeedsPhone } from '../utils/authNavigation';
+import { userNeedsPhone, userNeedsEmail, driverNeedsPhone } from '../utils/authNavigation';
 
 /**
  * @param {{ accountType: 'user' | 'driver' }} props
@@ -45,7 +45,11 @@ const LinkPhonePage = ({ accountType = 'user' }) => {
       navigate('/driver/register/credentials', { replace: true });
     } else if (!isDriver && !userNeedsPhone(user)) {
       redirectedRef.current = true;
-      navigate('/user/home', { replace: true });
+      if (userNeedsEmail(user)) {
+        navigate('/user/verify-email', { replace: true });
+      } else {
+        navigate('/user/home', { replace: true });
+      }
     }
   }, [isAuthenticated, user, driver, isDriver, navigate, loginPath, location.pathname]);
 
@@ -86,7 +90,11 @@ const LinkPhonePage = ({ accountType = 'user' }) => {
       } else {
         const linkedUser = { ...res.data.data.user, needsPhone: false };
         setUserAuth(linkedUser);
-        navigate('/user/add-car', { replace: true });
+        if (userNeedsEmail(linkedUser)) {
+          navigate('/user/verify-email', { replace: true });
+        } else {
+          navigate('/user/add-car', { replace: true });
+        }
       }
       toast.success('Phone number linked');
     } catch (err) {
@@ -110,7 +118,7 @@ const LinkPhonePage = ({ accountType = 'user' }) => {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col px-6 pt-6">
+      <div className="flex-1 flex flex-col px-4 sm:px-6 pt-6">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-text mb-1">Link your mobile</h1>
           <p className="text-text-secondary text-sm">
@@ -122,9 +130,10 @@ const LinkPhonePage = ({ accountType = 'user' }) => {
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-text mb-1.5 block">Mobile number</label>
-            <div className="flex gap-2">
-              <div className="h-12 px-3 bg-gray-50 border border-border rounded-xl flex items-center text-sm text-text-secondary font-medium shrink-0">
-                +91
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+                <Phone className="w-4 h-4 text-text-muted" />
+                <span>+91</span>
               </div>
               <Input
                 type="tel"
@@ -134,8 +143,9 @@ const LinkPhonePage = ({ accountType = 'user' }) => {
                   setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
                   if (error) setError('');
                 }}
-                icon={Phone}
                 maxLength={10}
+                className="pl-[4.5rem]"
+                containerClassName="w-full"
               />
             </div>
             {error && !showOtpModal && (

@@ -30,6 +30,12 @@ import {
   emitToAdmins,
   emitToBooking,
 } from '../utils/socketEmitters.js';
+import {
+  notifyUserDriverAssigned,
+  notifyUserDriverAccepted,
+  notifyDriverNewBookingRequest,
+  notifyAdminEmergencyPoolEntered,
+} from '../utils/notificationDispatch.js';
 
 /**
  * Wave-broadcast booking dispatcher.
@@ -399,6 +405,7 @@ export async function dispatchNextDriverService(bookingId) {
       S2C_EVENTS.BOOKING_OFFERED,
       buildOfferPayload(booking, driver, { customer, car }),
     );
+    notifyDriverNewBookingRequest(driver._id, booking).catch(() => null);
   }
   emitUserDispatchUpdate(booking);
 
@@ -435,23 +442,12 @@ async function failBookingNoDrivers(bookingId) {
     );
     const outcome = await scheduleAssignmentRetryOrEscalate(bookingId);
     if (outcome.retried) {
-      emitToAdmins(S2C_EVENTS.ADMIN_ALERT, {
-        kind: 'scheduled_dispatch_retry',
-        severity: 'info',
-        message:
-          `Scheduled booking ${peek.bookingNumber} found no drivers — ` +
-          `retry #${outcome.attempt} queued.`,
-        data: { bookingId: String(bookingId), attempt: outcome.attempt },
-      });
+      const { notifyAdminScheduledDispatchRetry } = await import('../utils/notificationDispatch.js');
+      notifyAdminScheduledDispatchRetry(peek, outcome.attempt).catch(() => null);
       return { ok: false, reason: 'scheduled_retry_queued', attempt: outcome.attempt };
     }
     if (outcome.escalated) {
-      emitToAdmins(S2C_EVENTS.ADMIN_ALERT, {
-        kind: 'emergency_pool_entered',
-        severity: 'warn',
-        message: `Scheduled booking ${peek.bookingNumber} needs manual driver assignment`,
-        data: { bookingId: String(bookingId) },
-      });
+      notifyAdminEmergencyPoolEntered(peek).catch(() => null);
       return { ok: false, reason: 'in_emergency_pool' };
     }
     // Unknown failure path (e.g. booking deleted out from under us);
@@ -646,6 +642,9 @@ export async function acceptBookingService(bookingId, driverId) {
   emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToDriver(driverId, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, userPayload);
+
+  notifyUserDriverAccepted(booking.userId, booking).catch(() => null);
+  notifyUserDriverAssigned(booking.userId, booking).catch(() => null);
 
   return { ok: true, status: booking.status };
 }

@@ -17,6 +17,7 @@ import {
   emitToBooking,
   emitToAdmins,
 } from '../utils/socketEmitters.js';
+import { notifyDriverOrderAssigned } from '../utils/notificationDispatch.js';
 import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
 import {
   estimateBookingWindow,
@@ -653,27 +654,7 @@ export async function adminAssignDriverToOutstationService(
   emitToDriver(driver._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, userPayload);
 
-  emitToDriver(driver._id, S2C_EVENTS.NOTIFICATION, {
-    title: 'New outstation assignment',
-    body: `Admin assigned booking ${updatedBooking.bookingNumber} to you.`,
-    severity: 'info',
-    data: {
-      bookingId: String(updatedBooking._id),
-      // Forward both naming conventions so the driver app can switch
-      // over to pickupAt/expectedReturnAt at its own pace.
-      pickupAt:
-        updatedBooking.outstation?.pickupAt ||
-        updatedBooking.outstation?.startDate ||
-        null,
-      expectedReturnAt:
-        updatedBooking.outstation?.expectedReturnAt ||
-        updatedBooking.outstation?.endDate ||
-        null,
-      startDate: updatedBooking.outstation?.startDate || null,
-      endDate: updatedBooking.outstation?.endDate || null,
-      destinationAddress: updatedBooking.outstation?.destinationAddress || '',
-    },
-  });
+  notifyDriverOrderAssigned(driver._id, updatedBooking).catch(() => null);
 
   return {
     booking: await Booking.findById(updatedBooking._id)
