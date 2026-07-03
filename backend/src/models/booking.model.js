@@ -71,6 +71,9 @@ const fareSnapshotSchema = new mongoose.Schema(
     serviceCharge: { type: Number, default: 0, min: 0 },
     gst: { type: Number, default: 0, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
+    couponDiscount: { type: Number, default: 0, min: 0 },
+    couponCode: { type: String, default: null, trim: true },
+    couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', default: null },
     total: { type: Number, required: true, min: 0 },
     /** Full pricing engine output retained for display + audit. */
     breakdown: { type: mongoose.Schema.Types.Mixed, default: {} },

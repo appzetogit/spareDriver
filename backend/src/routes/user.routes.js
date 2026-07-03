@@ -37,6 +37,7 @@ import {
   verifySubscriptionPayment,
   getMySubscription,
 } from '../controllers/pricing.controller.js';
+import { validateCoupon } from '../controllers/coupon.controller.js';
 import { getSubscriptionTerms } from '../controllers/legalDocument.controller.js';
 import { registerUserFcmToken, unregisterUserFcmToken } from '../controllers/fcmToken.controller.js';
 import {
@@ -113,6 +114,7 @@ router.use(protectUser);
 
 // Fare estimate (auth required so we can apply the user's subscription discount)
 router.post('/bookings/estimate', estimateFare);
+router.post('/coupons/validate', validateCoupon);
 
 // Subscriptions — purchase + active subscription read
 router.get('/subscriptions/me', getMySubscription);

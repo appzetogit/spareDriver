@@ -74,6 +74,7 @@ const DEFAULT_STATE = {
     needsFood: false,
   },
   fareEstimate: null,
+  couponCode: null,
 };
 
 const useBookingDraftStore = create(
@@ -133,6 +134,10 @@ const useBookingDraftStore = create(
 
       setFareEstimate(fareEstimate) {
         set({ fareEstimate });
+      },
+
+      setCouponCode(couponCode) {
+        set({ couponCode: couponCode || null, fareEstimate: null });
       },
 
       reset() {
@@ -219,6 +224,7 @@ const useBookingDraftStore = create(
             needsFood: s.outstation.needsFood,
           };
         }
+        if (s.couponCode) payload.couponCode = s.couponCode;
         return payload;
       },
     }),

@@ -125,7 +125,7 @@ export const getActiveSubscriptionPlans = asyncHandler(async (_req, res) => {
 });
 
 export const purchaseSubscription = asyncHandler(async (req, res) => {
-  const { planId, zoneId, carId, termsAccepted, dailyPickup, dailyDropoff } = req.body || {};
+  const { planId, zoneId, carId, termsAccepted, dailyPickup, dailyDropoff, couponCode } = req.body || {};
   const checkout = await pricingService.createSubscriptionPurchaseOrderService(
     req.user._id,
     planId,
@@ -135,6 +135,7 @@ export const purchaseSubscription = asyncHandler(async (req, res) => {
       termsAccepted: termsAccepted === true || termsAccepted === 'true',
       dailyPickup,
       dailyDropoff,
+      couponCode,
     },
   );
   return res.status(200).json(new ApiResponse(200, checkout, 'Subscription checkout created'));
@@ -223,6 +224,7 @@ export const estimateFare = asyncHandler(async (req, res) => {
     days = null,
     actualKm = 0,
     carId = null,
+    couponCode = null,
   } = req.body || {};
 
   const result = await pricingService.estimateFareService({
@@ -238,6 +240,7 @@ export const estimateFare = asyncHandler(async (req, res) => {
     actualKm,
     userId,
     carId,
+    couponCode,
   });
 
   return res.status(200).json(new ApiResponse(200, result, 'Fare estimated'));

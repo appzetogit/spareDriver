@@ -19,6 +19,23 @@ export function isNightRideAt(date, nightConfig) {
   return start < end ? cur >= start && cur < end : cur >= start || cur < end;
 }
 
+function applyCouponDiscount(subtotal, coupon) {
+  if (!coupon) return 0;
+  const minAmount = Number(coupon.minOrderAmount) || 0;
+  if (subtotal < minAmount) return 0;
+  const value = Number(coupon.discountValue) || 0;
+  if (value <= 0) return 0;
+  let discount =
+    coupon.discountType === 'percentage'
+      ? (subtotal * value) / 100
+      : value;
+  const maxCap = Number(coupon.maxDiscountAmount) || 0;
+  if (maxCap > 0 && coupon.discountType === 'percentage') {
+    discount = Math.min(discount, maxCap);
+  }
+  return Math.min(round2(discount), round2(subtotal));
+}
+
 function applySubscriptionDiscount(subtotal, subscription) {
   if (!subscription) return 0;
   const minAmount = Number(subscription.bookingDiscountMinAmount) || 0;
@@ -32,19 +49,23 @@ function applySubscriptionDiscount(subtotal, subscription) {
   return Math.min(round2(discount), round2(subtotal));
 }
 
-export function calculateSubscriptionCheckout(plan) {
+export function calculateSubscriptionCheckout(plan, coupon = null) {
   const basePrice = round2(Number(plan?.price) || 0);
   const serviceChargePercent = Number(plan?.serviceChargePercent) || 0;
   const gstPercent = plan?.gstPercent != null ? Number(plan.gstPercent) : 18;
   const platformSharePercent = Number(plan?.platformSharePercent ?? 50);
   const driverSharePercent = Number(plan?.driverSharePercent ?? 50);
-  const serviceCharge = round2((basePrice * serviceChargePercent) / 100);
-  const gstAmount = round2(((basePrice + serviceCharge) * gstPercent) / 100);
-  const totalPayable = round2(basePrice + serviceCharge + gstAmount);
-  const platformShareRupees = round2((basePrice * platformSharePercent) / 100);
-  const driverShareRupees = round2((basePrice * driverSharePercent) / 100);
+  const couponDiscount = applyCouponDiscount(basePrice, coupon);
+  const netBasePrice = round2(Math.max(0, basePrice - couponDiscount));
+  const serviceCharge = round2((netBasePrice * serviceChargePercent) / 100);
+  const gstAmount = round2(((netBasePrice + serviceCharge) * gstPercent) / 100);
+  const totalPayable = round2(netBasePrice + serviceCharge + gstAmount);
+  const platformShareRupees = round2((netBasePrice * platformSharePercent) / 100);
+  const driverShareRupees = round2((netBasePrice * driverSharePercent) / 100);
   return {
     basePrice,
+    couponDiscount,
+    netBasePrice,
     serviceCharge,
     serviceChargePercent,
     gstAmount,
@@ -67,13 +88,16 @@ export function calculateSubscriptionCheckout(plan) {
  *   subtotal — they're customer-facing fees, not platform-vs-driver
  *   math.
  */
-function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrough = 0) {
+function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrough = 0, coupon = null) {
+  const couponDiscount = applyCouponDiscount(subtotal, coupon);
+  const netSubtotal = Math.max(0, round2(subtotal - couponDiscount));
+
   const serviceChargePercent = pricing.serviceChargePercent || 0;
   const gstPercent = pricing.gstPercent || 0;
-  const serviceCharge = (subtotal * serviceChargePercent) / 100;
-  const gstAmount = ((subtotal + serviceCharge) * gstPercent) / 100;
-  const subscriptionDiscount = applySubscriptionDiscount(subtotal, subscription);
-  const totalPayable = Math.max(0, subtotal + serviceCharge + gstAmount - subscriptionDiscount);
+  const serviceCharge = (netSubtotal * serviceChargePercent) / 100;
+  const gstAmount = ((netSubtotal + serviceCharge) * gstPercent) / 100;
+  const subscriptionDiscount = applySubscriptionDiscount(netSubtotal, subscription);
+  const totalPayable = Math.max(0, netSubtotal + serviceCharge + gstAmount - subscriptionDiscount);
 
   const platformCommissionPercent = pricing.platformCommissionPercent || 0;
   const passThrough = Math.max(0, Math.min(Number(allowancePassThrough) || 0, subtotal));
@@ -84,6 +108,8 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
   const driverAllowanceEarning = passThrough;
 
   return {
+    couponDiscount: round2(couponDiscount),
+    netSubtotal: round2(netSubtotal),
     serviceCharge: round2(serviceCharge),
     serviceChargePercent,
     gstAmount: round2(gstAmount),

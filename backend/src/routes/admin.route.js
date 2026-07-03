@@ -92,6 +92,12 @@ import {
   adminUpdateUserSubscriptionStatus,
 } from '../controllers/pricing.controller.js';
 import {
+  adminListCoupons,
+  adminCreateCoupon,
+  adminUpdateCoupon,
+  adminDeleteCoupon,
+} from '../controllers/coupon.controller.js';
+import {
   getTaskAssignees,
   getTaskSummary,
   listTasks,
@@ -359,6 +365,11 @@ router.get('/pricing/subscriptions', protectStaff, restrictTo(...OPERATIONS), ad
 router.post('/pricing/subscriptions', protectStaff, restrictTo(...OPERATIONS), adminCreateSubscriptionPlan);
 router.put('/pricing/subscriptions/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateSubscriptionPlan);
 router.delete('/pricing/subscriptions/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteSubscriptionPlan);
+
+router.get('/coupons', protectStaff, restrictTo(...OPERATIONS), adminListCoupons);
+router.post('/coupons', protectStaff, restrictTo(...OPERATIONS), adminCreateCoupon);
+router.put('/coupons/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateCoupon);
+router.delete('/coupons/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteCoupon);
 
 router.get('/subscriptions/users', protectStaff, restrictTo(...ALL_STAFF), adminListUserSubscriptions);
 router.get(

@@ -159,6 +159,7 @@ const ManageWithdrawals = lazy(() => import('./features/admin/pages/ManageWithdr
 // const ManageAccountDeletions = lazy(() => import('./features/admin/pages/ManageAccountDeletions'));
 const ManageRevenue = lazy(() => import('./features/admin/pages/ManageRevenue'));
 const ManageSubscriptions = lazy(() => import('./features/admin/pages/ManageSubscriptions'));
+const ManageCoupons = lazy(() => import('./features/admin/pages/ManageCoupons'));
 const ManageSubscriptionRevenue = lazy(() => import('./features/admin/pages/ManageSubscriptionRevenue'));
 const LiveDriverMap = lazy(() => import('./features/admin/pages/LiveDriverMap'));
 const ManageKitOrders = lazy(() => import('./features/admin/pages/ManageKitOrders'));
@@ -377,6 +378,7 @@ function App() {
             <Route path="/admin/settings/zones" element={<ManageZones />} />
             <Route path="/admin/settings/pricing" element={<ManagePricing />} />
             <Route path="/admin/settings/subscriptions" element={<ManageSubscriptions />} />
+            <Route path="/admin/settings/coupons" element={<ManageCoupons />} />
             {/* Top-level /admin/revenue now forwards into the Account section
                 so all revenue management lives under one roof. */}
             <Route path="/admin/revenue" element={<Navigate to="/admin/account/revenue" replace />} />

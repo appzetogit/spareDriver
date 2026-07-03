@@ -14,6 +14,7 @@ const routeTitles = {
   '/admin/bookings': 'Manage Bookings',
   '/admin/emergency-pool': 'Emergency Pool',
   '/admin/settings': 'Settings',
+  '/admin/settings/coupons': 'Coupon Codes',
   '/admin/account/revenue': 'Revenue',
   '/admin/account/subscription-revenue': 'Subscription Revenue',
   '/admin/account/refunds': 'Refunds',

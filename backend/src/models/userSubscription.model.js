@@ -59,6 +59,10 @@ const userSubscriptionSchema = new mongoose.Schema(
     /** Total amount the customer paid (base + service charge + GST). */
     amount: { type: Number, required: true, min: 0 },
     basePrice: { type: Number, default: 0, min: 0 },
+    couponDiscount: { type: Number, default: 0, min: 0 },
+    couponCode: { type: String, default: null, trim: true },
+    couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', default: null },
+    netBasePrice: { type: Number, default: 0, min: 0 },
     serviceCharge: { type: Number, default: 0, min: 0 },
     serviceChargePercent: { type: Number, default: 0, min: 0, max: 100 },
     gstAmount: { type: Number, default: 0, min: 0 },

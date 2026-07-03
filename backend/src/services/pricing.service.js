@@ -37,6 +37,12 @@ import { notifyDriverSubscriptionAssigned } from '../utils/notificationDispatch.
 import { LEGAL_DOCUMENT_TYPES } from '../models/legalDocument.model.js';
 import mongoose from 'mongoose';
 import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
+import {
+  computeCouponDiscount,
+  resolveCouponByCodeService,
+  incrementCouponUsageService,
+} from './coupon.service.js';
+import { COUPON_APPLICABLE_SERVICES } from '../constants/couponTypes.js';
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -287,21 +293,25 @@ function validateSubscriptionPlanFields(data) {
   }
 }
 
-export function calculateSubscriptionCheckout(plan) {
+export function calculateSubscriptionCheckout(plan, coupon = null) {
   const basePrice = round2(Number(plan.price) || 0);
   const serviceChargePercent = Number(plan.serviceChargePercent) || 0;
   const gstPercent = plan.gstPercent != null ? Number(plan.gstPercent) : 18;
   const platformSharePercent = Number(plan.platformSharePercent ?? 50);
   const driverSharePercent = Number(plan.driverSharePercent ?? 50);
 
-  const serviceCharge = round2((basePrice * serviceChargePercent) / 100);
-  const gstAmount = round2(((basePrice + serviceCharge) * gstPercent) / 100);
-  const totalPayable = round2(basePrice + serviceCharge + gstAmount);
-  const platformShareRupees = round2((basePrice * platformSharePercent) / 100);
-  const driverShareRupees = round2((basePrice * driverSharePercent) / 100);
+  const couponDiscount = computeCouponDiscount(basePrice, coupon);
+  const netBasePrice = round2(Math.max(0, basePrice - couponDiscount));
+  const serviceCharge = round2((netBasePrice * serviceChargePercent) / 100);
+  const gstAmount = round2(((netBasePrice + serviceCharge) * gstPercent) / 100);
+  const totalPayable = round2(netBasePrice + serviceCharge + gstAmount);
+  const platformShareRupees = round2((netBasePrice * platformSharePercent) / 100);
+  const driverShareRupees = round2((netBasePrice * driverSharePercent) / 100);
 
   return {
     basePrice,
+    couponDiscount,
+    netBasePrice,
     serviceCharge,
     serviceChargePercent,
     gstAmount,
@@ -438,8 +448,8 @@ function normalizeSubscriptionPlace(place, label) {
   };
 }
 
-function buildSubscriptionSnapshot(plan) {
-  const checkout = calculateSubscriptionCheckout(plan);
+function buildSubscriptionSnapshot(plan, coupon = null) {
+  const checkout = calculateSubscriptionCheckout(plan, coupon);
   return {
     durationMonths: plan.durationMonths,
     includedHoursPerDay: plan.includedHoursPerDay ?? 0,
@@ -448,6 +458,10 @@ function buildSubscriptionSnapshot(plan) {
     bookingDiscountMinAmount: plan.bookingDiscountMinAmount ?? 0,
     planNameSnapshot: plan.name || '',
     basePrice: checkout.basePrice,
+    couponDiscount: checkout.couponDiscount ?? 0,
+    couponCode: coupon?.code || null,
+    couponId: coupon?._id || null,
+    netBasePrice: checkout.netBasePrice ?? checkout.basePrice,
     serviceCharge: checkout.serviceCharge,
     serviceChargePercent: checkout.serviceChargePercent,
     gstAmount: checkout.gstAmount,
@@ -485,7 +499,7 @@ export const createSubscriptionPurchaseOrderService = async (
   planId,
   zoneId,
   carId,
-  { termsAccepted, dailyPickup, dailyDropoff } = {},
+  { termsAccepted, dailyPickup, dailyDropoff, couponCode } = {},
 ) => {
   if (!planId || !zoneId || !carId) {
     throw new ApiError(400, 'planId, zoneId and carId are required');
@@ -526,8 +540,15 @@ export const createSubscriptionPurchaseOrderService = async (
 
   const now = new Date();
   const termsAcceptedAt = now;
-  const snapshot = buildSubscriptionSnapshot(plan);
-  const totalPayable = round2(snapshot.basePrice + snapshot.serviceCharge + snapshot.gstAmount);
+  const coupon = couponCode
+    ? await resolveCouponByCodeService(couponCode, {
+        serviceType: COUPON_APPLICABLE_SERVICES.SUBSCRIPTION,
+      })
+    : null;
+  const snapshot = buildSubscriptionSnapshot(plan, coupon);
+  const totalPayable = round2(
+    (snapshot.netBasePrice ?? snapshot.basePrice) + snapshot.serviceCharge + snapshot.gstAmount,
+  );
   let subscription = await UserSubscription.findOne({
     userId,
     planId,
@@ -652,6 +673,10 @@ export const verifySubscriptionPaymentService = async (
   subscription.paidAt = now;
   subscription.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING;
   await subscription.save();
+
+  if (subscription.couponId) {
+    await incrementCouponUsageService(subscription.couponId);
+  }
 
   await Payment.findOneAndUpdate(
     { referenceId: subscription._id, referenceModel: 'UserSubscription' },
@@ -784,6 +809,9 @@ function applySubscriptionDiscount(subtotal, subscription) {
  * discount) and split the booked subtotal into platform commission +
  * driver earning.
  *
+ * Coupon discount is applied to the ride subtotal BEFORE service charge
+ * and GST. GST is calculated on (netSubtotal + serviceCharge).
+ *
  * `allowancePassThrough` is the portion of `subtotal` we treat as a
  * pure driver allowance (food + stay): the platform doesn't take any
  * commission on it — the rupees flow 1:1 to the driver to offset
@@ -791,31 +819,24 @@ function applySubscriptionDiscount(subtotal, subscription) {
  * only to `commissionableSubtotal = subtotal − allowancePassThrough`
  * (the daily-rate / slab-price portion the platform actually brokered).
  *
- * Service charge + GST are still computed on the full `subtotal` —
- * those are customer-facing fees, not platform-vs-driver math.
- *
- * Defaults to 0 so callers that don't carry an allowance (extensions,
- * waiting buffer reservations, etc.) keep the original "commission on
- * full subtotal" behaviour.
+ * Platform commission is computed on the pre-coupon subtotal so drivers
+ * are not penalised when a coupon is used.
  */
-function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrough = 0) {
+function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrough = 0, coupon = null) {
+  const couponDiscount = computeCouponDiscount(subtotal, coupon);
+  const netSubtotal = Math.max(0, round2(subtotal - couponDiscount));
+
   const serviceChargePercent = pricing.serviceChargePercent || 0;
   const gstPercent = pricing.gstPercent || 0;
-  const serviceCharge = (subtotal * serviceChargePercent) / 100;
-  const gstAmount = ((subtotal + serviceCharge) * gstPercent) / 100;
-  const subscriptionDiscount = applySubscriptionDiscount(subtotal, subscription);
-  const totalPayable = Math.max(0, subtotal + serviceCharge + gstAmount - subscriptionDiscount);
+  const serviceCharge = (netSubtotal * serviceChargePercent) / 100;
+  const gstAmount = ((netSubtotal + serviceCharge) * gstPercent) / 100;
+  const subscriptionDiscount = applySubscriptionDiscount(netSubtotal, subscription);
+  const totalPayable = Math.max(0, netSubtotal + serviceCharge + gstAmount - subscriptionDiscount);
 
   const platformCommissionPercent = pricing.platformCommissionPercent || 0;
-  // Allowance is pass-through to the driver — never commissionable.
   const passThrough = Math.max(0, Math.min(Number(allowancePassThrough) || 0, subtotal));
   const commissionableSubtotal = Math.max(0, subtotal - passThrough);
   const platformCommission = (commissionableSubtotal * platformCommissionPercent) / 100;
-  // Driver gets:
-  //   commissionable × (1 − commission%)   the daily-rate / slab portion they earned
-  //  + passThrough                          the customer-paid allowance, untouched
-  // = subtotal − platformCommission (kept as the headline number for
-  //   back-compat — downstream aggregations and ledgers consume this).
   const driverEarning = Math.max(0, subtotal - platformCommission);
   const driverFareEarning = Math.max(
     0,
@@ -824,6 +845,8 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
   const driverAllowanceEarning = passThrough;
 
   return {
+    couponDiscount: round2(couponDiscount),
+    netSubtotal: round2(netSubtotal),
     serviceCharge: round2(serviceCharge),
     serviceChargePercent,
     gstAmount: round2(gstAmount),
@@ -832,9 +855,6 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
     totalPayable: round2(totalPayable),
     platformCommission: round2(platformCommission),
     platformCommissionPercent,
-    // New explicit fields. `driverEarning` keeps its existing meaning
-    // (= driverFareEarning + driverAllowanceEarning) so legacy
-    // aggregations don't need to be touched.
     commissionableSubtotal: round2(commissionableSubtotal),
     allowancePassThrough: round2(passThrough),
     driverFareEarning: round2(driverFareEarning),
@@ -863,10 +883,10 @@ export function calculateHourlyFare({
   foodProvided = true,
   stayProvided = true,
   subscription = null,
+  coupon = null,
 } = {}) {
   if (!pricing) throw new ApiError(400, 'Service pricing is required for fare calculation');
 
-  // Package price: slab → fixed, custom → hourly rate × bookedHours.
   let packagePrice = 0;
   let slabMaxHours = 0;
   if (isCustomDuration) {
@@ -962,6 +982,7 @@ export function calculateHourlyFare({
     pricing,
     subscription,
     foodAllowance + stayAllowance,
+    coupon,
   );
 
   return {
@@ -1033,6 +1054,7 @@ export function calculateOutstationFare({
   stayProvided = true,
   tollParking: _tollParking = 0, // eslint-disable-line no-unused-vars
   subscription = null,
+  coupon = null,
 } = {}) {
   if (!pricing) throw new ApiError(400, 'Service pricing is required for fare calculation');
   const o = pricing.outstation || {};
@@ -1087,6 +1109,7 @@ export function calculateOutstationFare({
     pricing,
     subscription,
     allowanceTotal,
+    coupon,
   );
 
   return {
@@ -1146,6 +1169,7 @@ export const estimateFareService = async ({
   foodProvided = true,
   userId = null,
   carId = null,
+  couponCode = null,
 }) => {
   const pricing = await getServicePricingByTypeService(serviceType);
   if (!pricing || !pricing.isActive) {
@@ -1154,6 +1178,13 @@ export const estimateFareService = async ({
 
   const subscription = userId
     ? await getActiveUserSubscriptionService(userId, { carId: carId || undefined })
+    : null;
+
+  const coupon = couponCode
+    ? await resolveCouponByCodeService(couponCode, { serviceType })
+    : null;
+  const couponMeta = coupon
+    ? { _id: coupon._id, code: coupon.code, discountType: coupon.discountType, discountValue: coupon.discountValue }
     : null;
   // Outstation only checks the start; hourly checks the whole booked
   // window so a 6-hour ride that starts at 18:00 still triggers night.
@@ -1211,6 +1242,7 @@ export const estimateFareService = async ({
       foodProvided,
       stayProvided,
       subscription,
+      coupon,
     });
 
     const waitingBuffer = buildWaitingBufferPreview(pricing);
@@ -1269,6 +1301,7 @@ export const estimateFareService = async ({
       },
       fareBreakdown: breakdown,
       subscription: serializeSubscriptionForUser(subscription),
+      coupon: couponMeta,
       // Hourly cancellation snapshot — status-driven (searching is free,
       // pre-arrival flat ₹, post-arrival flat ₹ or %). Surfaced so the
       // review/confirm page can render a "Cancellation policy" summary
@@ -1292,6 +1325,7 @@ export const estimateFareService = async ({
       stayProvided,
       tollParking,
       subscription,
+      coupon,
     });
 
     return {
@@ -1316,6 +1350,7 @@ export const estimateFareService = async ({
       isNightRide: isNight,
       fareBreakdown: breakdown,
       subscription: serializeSubscriptionForUser(subscription),
+      coupon: couponMeta,
       // Outstation cancellation policy snapshot — surfaced so the
       // review/confirm page can render a "Cancellation policy"
       // summary without a separate fetch. Mirrors the

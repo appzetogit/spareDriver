@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Car, CalendarCheck, DollarSign, Settings,
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
-  LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert,
+  LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag,
 } from 'lucide-react';
 import { APP_NAME } from '../../../utils/constants';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
@@ -142,6 +142,12 @@ const navItems = [
         path: '/admin/settings/subscriptions',
         label: 'Subscription Plans',
         icon: Sparkles,
+        roles: ['admin', 'sub_admin'],
+      },
+      {
+        path: '/admin/settings/coupons',
+        label: 'Coupon Codes',
+        icon: Tag,
         roles: ['admin', 'sub_admin'],
       },
       {

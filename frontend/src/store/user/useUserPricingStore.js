@@ -52,7 +52,7 @@ export const useUserSubscriptionStore = create((set, get) => ({
     }
   },
 
-  async createPurchaseOrder(planId, zoneId, carId, { termsAccepted = false, dailyPickup, dailyDropoff } = {}) {
+  async createPurchaseOrder(planId, zoneId, carId, { termsAccepted = false, dailyPickup, dailyDropoff, couponCode } = {}) {
     set({ purchaseLoading: true });
     try {
       const res = await api.post('/auth/subscriptions/purchase', {
@@ -62,6 +62,7 @@ export const useUserSubscriptionStore = create((set, get) => ({
         termsAccepted,
         dailyPickup,
         dailyDropoff,
+        couponCode: couponCode || undefined,
       });
       const order = res?.data?.data || null;
       set({ purchaseLoading: false });

@@ -5,6 +5,7 @@ import {
   estimateFareService,
   getServicePricingByTypeService,
 } from './pricing.service.js';
+import { incrementCouponUsageService } from './coupon.service.js';
 import {
   cancelPaymentTimeout,
   releaseDriverFromBooking,
@@ -123,10 +124,13 @@ function buildFareSnapshot(estimate) {
     extras: round2(extras),
     serviceCharge: round2(bd.serviceCharge || 0),
     gst: round2(bd.gstAmount || 0),
-    discount: round2(bd.subscriptionDiscount || 0),
+    couponDiscount: round2(bd.couponDiscount || 0),
+    discount: round2((bd.couponDiscount || 0) + (bd.subscriptionDiscount || 0)),
     total: round2(bd.totalPayable || 0),
     breakdown: bd,
     subscriptionId: estimate?.subscription?._id || null,
+    couponId: estimate?.coupon?._id || null,
+    couponCode: estimate?.coupon?.code || null,
   };
 }
 
@@ -794,7 +798,7 @@ async function assertCarAvailableForWindow({ userId, carId, body }) {
 export async function createBookingService(userId, body) {
   validateCreateInput(body);
 
-  const { serviceType, bookingType, carId, pickup, dropoff, hourly, outstation } = body;
+  const { serviceType, bookingType, carId, pickup, dropoff, hourly, outstation, couponCode } = body;
 
   // Scheduled rides must be created with enough lead time for the
   // emergency-pool safety window to fire. Anything sooner is treated as
@@ -880,9 +884,6 @@ export async function createBookingService(userId, body) {
     bookedHours: hourly?.durationHours,
     scheduledAt: hourly?.scheduledStartAt || outstationPickupAt,
     days: outstationDuration?.days,
-    // Outstation: `needsStay` and `needsFood` are AND'd in the engine
-    // into a single "customer arranges everything" toggle. Both must
-    // be `true` for the per-night allowance to be waived.
     stayProvided:
       serviceType === SERVICE_TYPES.OUTSTATION
         ? (outstation?.needsStay ?? true)
@@ -891,6 +892,7 @@ export async function createBookingService(userId, body) {
       serviceType === SERVICE_TYPES.OUTSTATION
         ? (outstation?.needsFood ?? true)
         : (hourly?.foodProvided ?? true),
+    couponCode: couponCode || undefined,
   });
   const fareSnapshot = buildFareSnapshot(estimate);
   if (!fareSnapshot.total || fareSnapshot.total <= 0) {
@@ -1090,6 +1092,10 @@ export async function createBookingService(userId, body) {
     await walletTx.save();
   } catch (linkErr) {
     console.warn('[booking] failed to link wallet txn to booking:', linkErr?.message);
+  }
+
+  if (fareSnapshot.couponId) {
+    await incrementCouponUsageService(fareSnapshot.couponId);
   }
 
   // Scheduled hourly bookings branch through the scheduled-ride

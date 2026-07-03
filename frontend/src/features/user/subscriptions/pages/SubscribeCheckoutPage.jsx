@@ -18,6 +18,9 @@ import {
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { useRazorpayCheckout } from '../../../../hooks/useRazorpayCheckout';
 import { calculateSubscriptionCheckout, formatCurrency } from '../../../../utils/fareCalculator';
+import CouponCodeInput from '../../booking/components/CouponCodeInput';
+import api from '../../../../utils/api';
+import { COUPON_APPLICABLE_SERVICES } from '../../../../constants/couponTypes';
 
 const SubscribeCheckoutPage = () => {
   const navigate = useNavigate();
@@ -50,6 +53,9 @@ const SubscribeCheckoutPage = () => {
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [outOfServiceOpen, setOutOfServiceOpen] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   useEffect(() => {
     fetchMySubscription().catch(() => {});
@@ -71,9 +77,33 @@ const SubscribeCheckoutPage = () => {
   const isOutOfService = zoneCheck.status === 'uncovered';
 
   const checkout = useMemo(
-    () => (plan ? calculateSubscriptionCheckout(plan) : null),
-    [plan],
+    () => (plan ? calculateSubscriptionCheckout(plan, appliedCoupon) : null),
+    [plan, appliedCoupon],
   );
+
+  const handleApplyCoupon = useCallback(async (code) => {
+    if (!plan) return;
+    setValidatingCoupon(true);
+    setCouponError(null);
+    try {
+      const res = await api.post('/auth/coupons/validate', {
+        code,
+        serviceType: COUPON_APPLICABLE_SERVICES.SUBSCRIPTION,
+        subtotal: plan.price,
+      });
+      setAppliedCoupon(res?.data?.data?.coupon || null);
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(err?.response?.data?.message || 'Invalid coupon code');
+    } finally {
+      setValidatingCoupon(false);
+    }
+  }, [plan]);
+
+  const handleRemoveCoupon = useCallback(() => {
+    setAppliedCoupon(null);
+    setCouponError(null);
+  }, []);
 
   const handleOpenTerms = useCallback(async () => {
     setTermsModalOpen(true);
@@ -114,7 +144,12 @@ const SubscribeCheckoutPage = () => {
         plan._id,
         zoneCheck.zone._id,
         selectedCarId,
-        { termsAccepted: true, dailyPickup, dailyDropoff },
+        {
+          termsAccepted: true,
+          dailyPickup,
+          dailyDropoff,
+          couponCode: appliedCoupon?.code,
+        },
       );
       if (!order?.orderId) {
         toast.error('Payments are not configured. Please try again later.');
@@ -170,6 +205,7 @@ const SubscribeCheckoutPage = () => {
     verifyPurchase,
     user,
     navigate,
+    appliedCoupon,
   ]);
 
   if (plansLoading && !plan) {
@@ -246,6 +282,17 @@ const SubscribeCheckoutPage = () => {
           </ul>
 
           {checkout && <CheckoutLines checkout={checkout} />}
+        </Card>
+
+        <Card>
+          <h3 className="text-sm font-semibold text-text mb-3">Have a coupon?</h3>
+          <CouponCodeInput
+            appliedCode={appliedCoupon?.code || null}
+            onApply={handleApplyCoupon}
+            onRemove={handleRemoveCoupon}
+            applying={validatingCoupon}
+            error={couponError}
+          />
         </Card>
 
         <Card>
@@ -423,6 +470,18 @@ function CheckoutLines({ checkout }) {
         <span>Base</span>
         <span>{formatCurrency(checkout.basePrice)}</span>
       </div>
+      {checkout.couponDiscount > 0 && (
+        <div className="flex justify-between text-success">
+          <span>Coupon discount</span>
+          <span>-{formatCurrency(checkout.couponDiscount)}</span>
+        </div>
+      )}
+      {checkout.couponDiscount > 0 && (
+        <div className="flex justify-between text-text-secondary">
+          <span>Net subtotal</span>
+          <span>{formatCurrency(checkout.netBasePrice)}</span>
+        </div>
+      )}
       {checkout.serviceCharge > 0 && (
         <div className="flex justify-between text-text-secondary">
           <span>Service charge ({checkout.serviceChargePercent}%)</span>

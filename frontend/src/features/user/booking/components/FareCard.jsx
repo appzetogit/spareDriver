@@ -103,6 +103,8 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
   }, [breakdown, isOutstation]);
 
   const subtotal = Number(breakdown.subtotal) || 0;
+  const couponDiscount = Number(breakdown.couponDiscount) || 0;
+  const netSubtotal = Number(breakdown.netSubtotal) || Math.max(0, subtotal - couponDiscount);
   const serviceCharge = Number(breakdown.serviceCharge) || 0;
   const gst = Number(breakdown.gstAmount) || 0;
   const subscriptionDiscount = Number(breakdown.subscriptionDiscount) || 0;
@@ -140,8 +142,20 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
               detail is rich enough to be worth a separator. */}
           {subtotal > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Subtotal</span>
+              <span className="text-sm text-text-secondary">Ride fare</span>
               <span className="text-sm text-text">{rupees(subtotal)}</span>
+            </div>
+          )}
+          {couponDiscount > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Coupon discount</span>
+              <span className="text-sm text-success">{rupees(-couponDiscount)}</span>
+            </div>
+          )}
+          {couponDiscount > 0 && netSubtotal >= 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Net ride subtotal</span>
+              <span className="text-sm text-text">{rupees(netSubtotal)}</span>
             </div>
           )}
           {serviceCharge > 0 && (

@@ -36,6 +36,7 @@ import { formatPickupDateTime } from '../../../../utils/datetime';
 import { computeOutstationDuration } from '../../../../utils/outstationSchedule';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import FareCard from '../components/FareCard';
+import CouponCodeInput from '../components/CouponCodeInput';
 import useFareEstimate from '../hooks/useFareEstimate';
 import TopupSheet from '../../wallet/components/TopupSheet';
 import DateTimePickerField from '../../../../components/inputs/DateTimePickerField';
@@ -77,6 +78,8 @@ const ConfirmAndPayPage = () => {
   const navigate = useNavigate();
   const draft = useBookingDraftStore();
   const setFareEstimate = useBookingDraftStore((s) => s.setFareEstimate);
+  const setCouponCode = useBookingDraftStore((s) => s.setCouponCode);
+  const couponCode = useBookingDraftStore((s) => s.couponCode);
   const setOutstation = useBookingDraftStore((s) => s.setOutstation);
   const createBooking = useUserActiveBookingStore((s) => s.createBooking);
 
@@ -156,8 +159,9 @@ const ConfirmAndPayPage = () => {
       base.foodProvided = draft.outstation.needsFood;
       base.stayProvided = draft.outstation.needsStay;
     }
+    if (couponCode) base.couponCode = couponCode;
     return base;
-  }, [draft]);
+  }, [draft, couponCode]);
 
   const { estimate, loading: estimating, error: estimateError } = useFareEstimate(
     estimatePayload,
@@ -461,6 +465,16 @@ const ConfirmAndPayPage = () => {
             onStayChange={handleStayToggle}
           />
         )}
+        <Card>
+          <h3 className="text-sm font-semibold text-text mb-3">Have a coupon?</h3>
+          <CouponCodeInput
+            appliedCode={!estimateError && estimate?.coupon?.code ? estimate.coupon.code : null}
+            onApply={(code) => setCouponCode(code)}
+            onRemove={() => setCouponCode(null)}
+            applying={estimating}
+            error={couponCode && estimateError ? estimateError : null}
+          />
+        </Card>
         <FareCard estimate={estimate} estimating={estimating} error={estimateError} />
         <FareNotices estimate={estimate} />
         {isOutstation ? (
