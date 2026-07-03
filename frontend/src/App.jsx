@@ -26,6 +26,11 @@ const RegisterPage = lazy(() => import('./features/auth/pages/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('./features/auth/pages/ForgotPasswordPage'));
 const LinkPhonePage = lazy(() => import('./features/auth/pages/LinkPhonePage'));
 
+// Marketing / Landing
+const LandingPage = lazy(() => import('./features/landing/pages/LandingPage'));
+const PrivacyPolicyPage = lazy(() => import('./features/landing/pages/PrivacyPolicyPage'));
+const TermsAndConditionsPage = lazy(() => import('./features/landing/pages/TermsAndConditionsPage'));
+
 // Developer-only sandbox screens. Bundled in every build (so a tester can
 // reach `/dev/map-simulator` against the deployed dev/staging frontend),
 // but never linked from the user-facing UI. Safe to remove once the live
@@ -176,10 +181,15 @@ function App() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
+        {/* ========== Marketing / Landing Routes (Outside MobileLayout) ========== */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
+
         <Route element={<MobileLayout />}>
           {/* ========== Auth Routes ========== */}
           <Route element={<AuthLayout />}>
-            <Route path="/" element={<WelcomePage />} />
+            <Route path="/auth" element={<WelcomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -313,7 +323,7 @@ function App() {
           <Route path="/dev/map-simulator" element={<MapSimulatorPage />} />
 
           {/* Catch all for mobile */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/auth" replace />} />
         </Route>
 
         {/* ========== Admin Web Panel (Outside MobileLayout) ========== */}
