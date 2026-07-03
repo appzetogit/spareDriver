@@ -3,7 +3,10 @@ import { ApiResponse } from '../utils/apiResponse.js';
 import {
   listRefundsService,
   updateRefundStatusService,
+  getRefundSubjectWalletService,
+  createAdminManualRefundService,
 } from '../services/refund.service.js';
+import { createAdminManualRefundSchema } from '../validations/refund.validation.js';
 
 /**
  * Admin-only refund endpoints. The "Account → Refunds" admin page reads
@@ -41,4 +44,24 @@ export const updateRefundStatus = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { refund }, 'Refund status updated'));
+});
+
+/** GET /admin/refunds/subject-wallet/:subjectType/:subjectId */
+export const getRefundSubjectWallet = asyncHandler(async (req, res) => {
+  const result = await getRefundSubjectWalletService(
+    req.params.subjectType,
+    req.params.subjectId,
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Subject wallet fetched'));
+});
+
+/** POST /admin/refunds/manual */
+export const createAdminManualRefund = asyncHandler(async (req, res) => {
+  const body = createAdminManualRefundSchema.parse(req.body);
+  const result = await createAdminManualRefundService(body, req.staff);
+  return res
+    .status(201)
+    .json(new ApiResponse(201, result, 'Refund created'));
 });

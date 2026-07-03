@@ -51,4 +51,6 @@ export const PAYMENT_PURPOSE = Object.freeze({
    */
   TRIP_WAITING: 'trip_waiting',
   WITHDRAWAL: 'withdrawal',
+  /** Admin manual refund credited to a driver's wallet. */
+  ADMIN_REFUND: 'admin_refund',
 });

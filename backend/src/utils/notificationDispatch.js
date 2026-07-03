@@ -289,6 +289,23 @@ export function notifyDriverOrderAssigned(driverId, booking) {
   );
 }
 
+export function notifyDriverSubscriptionAssigned(driverId, { subscriptionId, carLabel }) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Subscription assigned',
+      body: `You have been assigned as dedicated driver for ${carLabel || 'a customer vehicle'}.`,
+      severity: 'success',
+      type: DRIVER_NOTIFICATION.SUBSCRIPTION_ASSIGNED,
+      data: {
+        kind: 'subscription_assigned',
+        subscriptionId: String(subscriptionId),
+        carLabel: carLabel || '',
+      },
+    },
+  );
+}
+
 export function notifyDriverBookingCancelled(driverId, booking, reason = '') {
   return sendPushNotification(
     { driverId },
@@ -428,11 +445,21 @@ export function notifyAdminNewDriverRegistration(driver) {
 
 export function notifyAdminSosTriggered(data) {
   return sendAdminNotification({
-    title: 'SOS triggered',
-    body: data.message || 'An SOS alert has been triggered.',
+    title: '🚨 Emergency SOS Alert',
+    body: data.message || 'Passenger has requested emergency assistance.',
     severity: 'error',
     type: ADMIN_NOTIFICATION.SOS_TRIGGERED,
     data,
+  });
+}
+
+export function notifyOperationsSosTriggered(data) {
+  return sendAdminNotification({
+    title: '🚨 Emergency SOS Alert',
+    body: data.message || 'Passenger has requested emergency assistance.',
+    severity: 'error',
+    type: ADMIN_NOTIFICATION.SOS_TRIGGERED,
+    data: { ...data, audience: 'operations' },
   });
 }
 

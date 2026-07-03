@@ -68,6 +68,16 @@ import {
   createWalletTopupOrder,
   verifyWalletTopupPayment,
 } from '../controllers/wallet.controller.js';
+import {
+  listEmergencyContacts,
+  createEmergencyContact,
+  updateEmergencyContact,
+  deleteEmergencyContact,
+} from '../controllers/sos.controller.js';
+import {
+  getMyUserAccountDeletionRequest,
+  requestUserAccountDeletion,
+} from '../controllers/accountDeletion.controller.js';
 import { protectUser, protectProfileViewer } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -164,5 +174,14 @@ router.delete('/saved-locations/:id', deleteSavedLocation);
 
 // Nearby drivers (home screen widget + future surfaces)
 router.get('/drivers/nearby', getNearbyDriversForUser);
+
+// Emergency contacts for SOS
+router.get('/emergency-contacts', listEmergencyContacts);
+router.post('/emergency-contacts', createEmergencyContact);
+router.patch('/emergency-contacts/:id', updateEmergencyContact);
+router.delete('/emergency-contacts/:id', deleteEmergencyContact);
+
+router.get('/account/deletion-request', getMyUserAccountDeletionRequest);
+router.post('/account/deletion-request', requestUserAccountDeletion);
 
 export default router;

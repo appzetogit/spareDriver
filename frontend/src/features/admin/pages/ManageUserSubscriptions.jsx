@@ -25,7 +25,7 @@ import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
-import { SUBSCRIPTION_ASSIGNMENT_STATUS } from '../../../constants/serviceTypes';
+import { SUBSCRIPTION_ASSIGNMENT_STATUS, SUBSCRIPTION_STATUS } from '../../../constants/serviceTypes';
 import { formatDateTime12 } from '../../../utils/datetime';
 import {
   DriverCarExperienceChips,
@@ -211,7 +211,7 @@ const ManageUserSubscriptions = () => {
             Subscription Requests
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Paid subscriptions waiting for a dedicated driver, zone-wise.
+            Paid subscription bookings awaiting driver assignment, zone-wise. Drivers are matched to the customer&apos;s car type.
           </p>
         </div>
         <Button variant="outline" onClick={fetchQueue} disabled={loading}>
@@ -367,6 +367,8 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [workingEndDate, setWorkingEndDate] = useState('');
   const [previousDriverLastWorkingDate, setPreviousDriverLastWorkingDate] = useState(() => todayInputValue());
   const [releaseLastWorkingDate, setReleaseLastWorkingDate] = useState(() => todayInputValue());
+  const [subscriptionStatusDraft, setSubscriptionStatusDraft] = useState(subscription.status || '');
+  const [subscriptionStatusReason, setSubscriptionStatusReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const searchRef = useRef(null);
 
@@ -421,9 +423,22 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     [drivers, selectedDriverId],
   );
 
+  const isSameAsCurrentDriver = Boolean(
+    subscription.assignedDriverId
+    && selectedDriverId
+    && String(subscription.assignedDriverId._id || subscription.assignedDriverId)
+      === String(selectedDriverId),
+  );
+
   const handleAssign = async () => {
     if (!selectedDriverId) {
       toast.error('Pick a driver first');
+      return;
+    }
+    if (isSameAsCurrentDriver) {
+      toast.error(
+        'This driver is already assigned. Release them first before reassigning.',
+      );
       return;
     }
     if (!workingStartDate) {
@@ -440,7 +455,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     }
     setSubmitting(true);
     try {
-      await api.post(`/admin/subscriptions/users/${subscription._id}/assign`, {
+      const res = await api.post(`/admin/subscriptions/users/${subscription._id}/assign`, {
         driverId: selectedDriverId,
         workingStartDate,
         workingEndDate: workingEndDate || undefined,
@@ -448,11 +463,43 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
           ? previousDriverLastWorkingDate
           : undefined,
       });
-      toast.success('Driver assigned successfully — customer will receive an email with terms and driver details');
+      const emailStatus = res?.data?.data?.assignmentEmail;
+      if (emailStatus?.sent) {
+        toast.success(
+          `Driver assigned — confirmation email sent to ${emailStatus.to}`,
+        );
+      } else if (emailStatus?.reason === 'no_email') {
+        toast.success('Driver assigned — customer has no registered email on file');
+      } else {
+        toast.success('Driver assigned successfully');
+        if (emailStatus?.reason) {
+          toast.error(`Could not send assignment email: ${emailStatus.reason}`);
+        }
+      }
       onUpdated();
     } catch (err) {
       const data = err?.response?.data;
       toast.error(data?.message || 'Could not assign driver');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubscriptionStatusUpdate = async () => {
+    if (!subscriptionStatusDraft || subscriptionStatusDraft === subscription.status) {
+      toast.error('Pick a different status');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.patch(`/admin/subscriptions/users/${subscription._id}/status`, {
+        status: subscriptionStatusDraft,
+        reason: subscriptionStatusReason.trim() || undefined,
+      });
+      toast.success('Subscription status updated');
+      onUpdated();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not update subscription status');
     } finally {
       setSubmitting(false);
     }
@@ -525,6 +572,41 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               Current: {subscription.assignedDriverId.name}
             </div>
           )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Subscription status
+          </p>
+          <p className="text-xs text-slate-500">
+            Cancel or expire to unblock account deletion requests.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <select
+              value={subscriptionStatusDraft}
+              onChange={(e) => setSubscriptionStatusDraft(e.target.value)}
+              className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            >
+              {Object.values(SUBSCRIPTION_STATUS).map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+            <input
+              value={subscriptionStatusReason}
+              onChange={(e) => setSubscriptionStatusReason(e.target.value)}
+              placeholder="Reason (optional)"
+              className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm"
+            />
+            <Button
+              type="button"
+              onClick={handleSubscriptionStatusUpdate}
+              disabled={submitting || subscriptionStatusDraft === subscription.status}
+            >
+              Update status
+            </Button>
+          </div>
         </div>
 
         {subscription.assignedDriverId && (
@@ -732,12 +814,22 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
             <p className="font-semibold text-slate-800">Selected: {selectedDriver.name}</p>
             <p className="text-xs text-slate-500 mt-1">{selectedDriver.phone || '—'}</p>
             <DriverCarExperienceChips experience={selectedDriver.carTypeExperience} className="mt-2" />
+            {isSameAsCurrentDriver && (
+              <p className="text-xs text-amber-700 mt-2 font-medium">
+                This driver is already assigned. Release them first before reassigning.
+              </p>
+            )}
           </div>
         )}
 
         <Button
           fullWidth
-          disabled={!selectedDriverId || submitting || selectedDriver?.hasConflict}
+          disabled={
+            !selectedDriverId
+            || submitting
+            || selectedDriver?.hasConflict
+            || isSameAsCurrentDriver
+          }
           onClick={handleAssign}
         >
           {submitting ? (

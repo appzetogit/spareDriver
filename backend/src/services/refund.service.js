@@ -1,8 +1,13 @@
 import Refund, {
   REFUND_STATUS,
   REFUND_INITIATED_BY,
+  REFUND_KIND,
+  REFUND_SUBJECT_TYPE,
+  REFUND_PAYOUT_METHOD,
 } from '../models/refund.model.js';
 import Booking from '../models/booking.model.js';
+import User from '../models/user.model.js';
+import { Driver } from '../models/driverModels/driver.model.js';
 import { ApiError } from '../utils/apiError.js';
 import {
   notifyUserRefundInitiated,
@@ -12,6 +17,13 @@ import {
   notifyAdminRefundRequest,
 } from '../utils/notificationDispatch.js';
 import { BOOKING_PAYMENT_STATUS } from '../constants/bookingStatus.js';
+import { creditWalletService, getWalletService } from './wallet.service.js';
+import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
+import {
+  creditDriverWalletService,
+  getDriverWalletService,
+} from './driverWallet.service.js';
+import { recordPlatformRevenueDebit } from './platformRevenue.service.js';
 
 /**
  * Booking refund pipeline.
@@ -281,7 +293,8 @@ export async function listRefundsService({
     filter.status = status;
   }
   if (search) {
-    filter.bookingNumber = { $regex: new RegExp(String(search).trim(), 'i') };
+    const q = new RegExp(String(search).trim(), 'i');
+    filter.$or = [{ bookingNumber: q }, { reason: q }, { 'transactionDetails.transactionId': q }, { 'transactionDetails.utr': q }];
   }
   if (from || to) {
     filter.createdAt = {};
@@ -295,6 +308,7 @@ export async function listRefundsService({
       .skip((safePage - 1) * safeLimit)
       .limit(safeLimit)
       .populate('userId', 'name phone')
+      .populate('driverId', 'name phone_no')
       .lean(),
     Refund.countDocuments(filter),
     Refund.aggregate([
@@ -328,4 +342,157 @@ export async function listRefundsService({
   };
 }
 
-export { REFUND_STATUS, REFUND_INITIATED_BY };
+/**
+ * Fetch wallet snapshot for an admin refund subject (user or driver).
+ */
+export async function getRefundSubjectWalletService(subjectType, subjectId) {
+  if (!Object.values(REFUND_SUBJECT_TYPE).includes(subjectType)) {
+    throw new ApiError(400, 'subjectType must be "user" or "driver"');
+  }
+  if (!subjectId) throw new ApiError(400, 'subjectId is required');
+
+  if (subjectType === REFUND_SUBJECT_TYPE.USER) {
+    const user = await User.findById(subjectId).select('name phone_no isDeleted').lean();
+    if (!user || user.isDeleted) throw new ApiError(404, 'User not found');
+    const wallet = await getWalletService(subjectId);
+    return {
+      subjectType,
+      subjectId,
+      name: user.name || '',
+      phone: user.phone_no || '',
+      wallet,
+    };
+  }
+
+  const wallet = await getDriverWalletService(subjectId);
+  return {
+    subjectType,
+    subjectId,
+    name: wallet.name,
+    phone: wallet.phone,
+    wallet: {
+      balance: wallet.balance,
+      totalEarnings: wallet.totalEarnings,
+      totalWithdrawn: wallet.totalWithdrawn,
+      availableRupees: wallet.balance,
+      heldRupees: 0,
+      totalCredited: wallet.totalEarnings,
+      totalSpent: wallet.totalWithdrawn,
+      currency: wallet.currency,
+    },
+  };
+}
+
+/**
+ * Admin-initiated manual refund to a user or driver.
+ *
+ *   wallet       — credits the subject wallet and debits platform revenue.
+ *   bank_account — records an off-platform payout; wallet is untouched.
+ */
+export async function createAdminManualRefundService(payload = {}, admin = null) {
+  const {
+    subjectType,
+    subjectId,
+    amountRupees,
+    payoutMethod,
+    reason,
+    transactionDetails = {},
+  } = payload;
+
+  if (!Object.values(REFUND_SUBJECT_TYPE).includes(subjectType)) {
+    throw new ApiError(400, 'subjectType must be "user" or "driver"');
+  }
+  if (!Object.values(REFUND_PAYOUT_METHOD).includes(payoutMethod)) {
+    throw new ApiError(400, 'payoutMethod must be "wallet" or "bank_account"');
+  }
+
+  const amt = round2(Number(amountRupees) || 0);
+  if (amt <= 0) throw new ApiError(400, 'amountRupees must be greater than zero');
+
+  const trimmedReason = String(reason || '').trim();
+  if (trimmedReason.length < 3) {
+    throw new ApiError(400, 'Refund reason is required (min 3 characters)');
+  }
+
+  const txnId = String(transactionDetails.transactionId || '').trim();
+  const txnUtr = String(transactionDetails.utr || '').trim();
+  if (payoutMethod === REFUND_PAYOUT_METHOD.BANK_ACCOUNT && !txnId && !txnUtr) {
+    throw new ApiError(400, 'Transaction ID or UTR is required for bank refunds');
+  }
+
+  const walletSnapshot = await getRefundSubjectWalletService(subjectType, subjectId);
+  const now = new Date();
+
+  const refundDoc = {
+    kind: REFUND_KIND.ADMIN_MANUAL,
+    subjectType,
+    userId: subjectType === REFUND_SUBJECT_TYPE.USER ? subjectId : null,
+    driverId: subjectType === REFUND_SUBJECT_TYPE.DRIVER ? subjectId : null,
+    bookingNumber: 'ADMIN-REFUND',
+    amountRupees: amt,
+    grossPaidRupees: amt,
+    cancellationFeeRupees: 0,
+    payoutMethod,
+    status: REFUND_STATUS.PROCESSED,
+    initiatedBy: REFUND_INITIATED_BY.ADMIN,
+    reason: trimmedReason.slice(0, 500),
+    processedAt: now,
+    transactionDetails: {
+      mode:
+        payoutMethod === REFUND_PAYOUT_METHOD.WALLET
+          ? 'wallet'
+          : String(transactionDetails.mode || '').slice(0, 80),
+      transactionId: txnId,
+      utr: txnUtr,
+      referenceNumber: String(transactionDetails.referenceNumber || '').slice(0, 120),
+      notes: String(transactionDetails.notes || '').slice(0, 500),
+    },
+  };
+
+  const refund = await Refund.create(refundDoc);
+
+  if (payoutMethod === REFUND_PAYOUT_METHOD.WALLET) {
+    if (subjectType === REFUND_SUBJECT_TYPE.USER) {
+      await creditWalletService({
+        userId: subjectId,
+        amount: amt,
+        source: WALLET_TXN_SOURCE.ADMIN_CREDIT,
+        description: `Admin refund — ${trimmedReason.slice(0, 200)}`,
+        refType: 'Admin',
+        refId: refund._id,
+        initiatedBy: admin?._id,
+      });
+    } else {
+      await creditDriverWalletService({
+        driverId: subjectId,
+        amount: amt,
+        refundId: refund._id,
+        description: trimmedReason,
+        initiatedBy: admin?._id,
+      });
+    }
+
+    await recordPlatformRevenueDebit({
+      amountRupees: amt,
+      userId: subjectType === REFUND_SUBJECT_TYPE.USER ? subjectId : null,
+      driverId: subjectType === REFUND_SUBJECT_TYPE.DRIVER ? subjectId : null,
+      meta: {
+        refundId: String(refund._id),
+        payoutMethod,
+        reason: trimmedReason,
+        walletBalanceAtRefund: walletSnapshot.wallet?.balance ?? 0,
+      },
+    });
+  }
+
+  if (subjectType === REFUND_SUBJECT_TYPE.USER) {
+    notifyUserRefundProcessed(subjectId, refund).catch(() => null);
+  }
+
+  return {
+    refund: refund.toObject(),
+    wallet: walletSnapshot.wallet,
+  };
+}
+
+export { REFUND_STATUS, REFUND_INITIATED_BY, REFUND_KIND, REFUND_SUBJECT_TYPE, REFUND_PAYOUT_METHOD };

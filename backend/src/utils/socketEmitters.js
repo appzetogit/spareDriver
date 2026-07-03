@@ -4,8 +4,11 @@ import {
   roomForDriver,
   roomForBooking,
   ADMIN_ROOM,
+  ADMIN_SOS_ROOM,
+  OPERATIONS_SOS_ROOM,
 } from '../config/socket.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
+import { SOS_SOCKET_EVENTS } from '../constants/sos.js';
 
 /**
  * Thin wrappers around `io.to(room).emit(...)` so feature code never imports
@@ -108,4 +111,22 @@ export function emitAdminAlert(alert) {
     data: alert.data || {},
     occurredAt: Date.now(),
   });
+}
+
+export function emitSosCreated(sosData) {
+  const okAdmin = safeEmit(ADMIN_SOS_ROOM, SOS_SOCKET_EVENTS.NEW_SOS, sosData);
+  const okOps = safeEmit(OPERATIONS_SOS_ROOM, SOS_SOCKET_EVENTS.NEW_SOS, sosData);
+  return okAdmin || okOps;
+}
+
+export function emitSosLocation(locationData) {
+  const okAdmin = safeEmit(ADMIN_SOS_ROOM, SOS_SOCKET_EVENTS.SOS_LOCATION, locationData);
+  const okOps = safeEmit(OPERATIONS_SOS_ROOM, SOS_SOCKET_EVENTS.SOS_LOCATION, locationData);
+  return okAdmin || okOps;
+}
+
+export function emitSosResolved(payload) {
+  const okAdmin = safeEmit(ADMIN_SOS_ROOM, SOS_SOCKET_EVENTS.SOS_RESOLVED, payload);
+  const okOps = safeEmit(OPERATIONS_SOS_ROOM, SOS_SOCKET_EVENTS.SOS_RESOLVED, payload);
+  return okAdmin || okOps;
 }

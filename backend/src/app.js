@@ -8,6 +8,7 @@ import driverRoutes from './routes/driver.route.js';
 import adminRoutes from './routes/admin.route.js';
 import authRoutes from './routes/user.routes.js';
 import webhookRoutes from './routes/webhook.route.js';
+import sosRoutes from './routes/sos.route.js';
 
 // Dev-only routes — imported lazily so they are fully tree-shaken in production.
 const loadDevRoutes = () => import('./routes/dev.route.js').then((m) => m.default);
@@ -30,6 +31,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/common', commonRoutes);
 app.use('/api/v1/driver', driverRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/sos', sosRoutes);
 
 // Mount dev test routes in non-production environments only.
 if (process.env.NODE_ENV !== 'production') {

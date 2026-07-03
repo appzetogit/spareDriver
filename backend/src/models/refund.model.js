@@ -32,6 +32,22 @@ const REFUND_STATUS = Object.freeze({
   FAILED: 'failed',
 });
 
+const REFUND_KIND = Object.freeze({
+  BOOKING_CANCELLATION: 'booking_cancellation',
+  WALLET_SETTLEMENT: 'wallet_settlement',
+  ADMIN_MANUAL: 'admin_manual',
+});
+
+const REFUND_SUBJECT_TYPE = Object.freeze({
+  USER: 'user',
+  DRIVER: 'driver',
+});
+
+const REFUND_PAYOUT_METHOD = Object.freeze({
+  WALLET: 'wallet',
+  BANK_ACCOUNT: 'bank_account',
+});
+
 const REFUND_INITIATED_BY = Object.freeze({
   USER: 'user',
   DRIVER: 'driver',
@@ -39,19 +55,59 @@ const REFUND_INITIATED_BY = Object.freeze({
   ADMIN: 'admin',
 });
 
+const transactionDetailsSchema = new mongoose.Schema(
+  {
+    mode: { type: String, default: '', trim: true },
+    transactionId: { type: String, default: '', trim: true },
+    utr: { type: String, default: '', trim: true },
+    referenceNumber: { type: String, default: '', trim: true },
+    notes: { type: String, default: '', trim: true, maxlength: 500 },
+  },
+  { _id: false },
+);
+
 const refundSchema = new mongoose.Schema(
   {
+    kind: {
+      type: String,
+      enum: Object.values(REFUND_KIND),
+      default: REFUND_KIND.BOOKING_CANCELLATION,
+      index: true,
+    },
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
-      required: true,
+      default: null,
       index: true,
     },
     bookingNumber: { type: String, default: '', trim: true, index: true },
+    subjectType: {
+      type: String,
+      enum: Object.values(REFUND_SUBJECT_TYPE),
+      default: REFUND_SUBJECT_TYPE.USER,
+      index: true,
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
+      index: true,
+    },
+    driverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Driver',
+      default: null,
+      index: true,
+    },
+    payoutMethod: {
+      type: String,
+      enum: Object.values(REFUND_PAYOUT_METHOD),
+      default: REFUND_PAYOUT_METHOD.BANK_ACCOUNT,
+    },
+    accountDeletionRequestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AccountDeletionRequest',
+      default: null,
       index: true,
     },
 
@@ -70,6 +126,7 @@ const refundSchema = new mongoose.Schema(
     razorpayPaymentId: { type: String, default: '', trim: true, index: true },
     /** Razorpay-issued refund id (populated once `status === processed`). */
     razorpayRefundId: { type: String, default: '', trim: true },
+    transactionDetails: { type: transactionDetailsSchema, default: () => ({}) },
 
     status: {
       type: String,
@@ -106,5 +163,11 @@ refundSchema.index({ status: 1, createdAt: -1 });
 
 const Refund = mongoose.models.Refund || mongoose.model('Refund', refundSchema);
 
-export { REFUND_STATUS, REFUND_INITIATED_BY };
+export {
+  REFUND_STATUS,
+  REFUND_KIND,
+  REFUND_INITIATED_BY,
+  REFUND_SUBJECT_TYPE,
+  REFUND_PAYOUT_METHOD,
+};
 export default Refund;

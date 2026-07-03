@@ -7,6 +7,8 @@ import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
+import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
+import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 
 /**
  * Driver-side trip-in-progress screen — replaces the legacy mock with the
@@ -114,6 +116,15 @@ const DriverTripInProgressPage = () => {
             END TRIP
           </Button>
         </Card>
+        {booking?._id ? (
+          <div className="flex justify-center">
+            <SosEmergencyButton
+              tripId={booking._id}
+              bookingStatus={booking.status || BOOKING_STATUS.STARTED}
+              className="w-full h-12 text-sm"
+            />
+          </div>
+        ) : null}
         <div className="flex gap-3 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           {[
             { icon: Phone, label: 'Call' },

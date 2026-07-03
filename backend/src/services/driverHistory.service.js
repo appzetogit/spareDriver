@@ -147,23 +147,11 @@ export const getDriverPaymentHistoryService = async (driverId) => {
 
   items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  // `trip` is a count of *trips*, not ledger rows — a single booking
-  // can produce two Payment rows (Trip fare + Food & stay allowance)
-  // but the driver only ran one trip. We dedupe by `meta.bookingNumber`
-  // (preferred when present, since it's the human handle) and fall
-  // back to referenceId so older fare-only rows still get counted.
-  const tripKeys = new Set();
-  for (const i of items) {
-    if (i.type !== 'trip') continue;
-    const key = i.orderNumber || String(i.referenceId || i.id);
-    tripKeys.add(key);
-  }
+  const kitPayments = items.filter((i) => i.type === 'kit');
   const summary = {
-    total: items.length,
-    kit: items.filter((i) => i.type === 'kit').length,
-    trip: tripKeys.size,
-    withdrawal: items.filter((i) => i.type === 'withdrawal').length,
+    total: kitPayments.length,
+    kit: kitPayments.length,
   };
 
-  return { payments: items, summary };
+  return { payments: kitPayments, summary };
 };

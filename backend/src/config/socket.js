@@ -11,6 +11,7 @@ import {
   S2C_EVENTS,
   SOCKET_ROOM_PREFIX,
 } from '../constants/socketEvents.js';
+import { SOS_SOCKET_ROOMS } from '../constants/sos.js';
 import { attachDriverSocketHandlers } from '../controllers/driverSocket.controller.js';
 
 /**
@@ -148,6 +149,8 @@ export function roomForBooking(bookingId) {
 }
 
 export const ADMIN_ROOM = SOCKET_ROOM_PREFIX.ADMIN;
+export const ADMIN_SOS_ROOM = SOS_SOCKET_ROOMS.ADMIN;
+export const OPERATIONS_SOS_ROOM = SOS_SOCKET_ROOMS.OPERATIONS;
 
 function joinIdentityRooms(socket) {
   const { principal } = socket.data;
@@ -163,6 +166,8 @@ function joinIdentityRooms(socket) {
     if (STAFF_ROLES.includes(principal.role)) {
       socket.join(ADMIN_ROOM);
       socket.join(`${ADMIN_ROOM}:role:${principal.role}`);
+      socket.join(ADMIN_SOS_ROOM);
+      socket.join(OPERATIONS_SOS_ROOM);
     }
   }
 }

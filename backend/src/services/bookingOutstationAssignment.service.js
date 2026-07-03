@@ -330,6 +330,7 @@ export async function listAvailableDriversForOutstationService(
     onlineOnly,
     allIndiaOnly,
     minDrivingHoursPerDay,
+    zoneId,
   } = {},
 ) {
   const detail = await getOutstationAssignmentDetailService(bookingId, staff);
@@ -366,10 +367,19 @@ export async function listAvailableDriversForOutstationService(
   };
 
   // Zone filter — only show drivers who opted into at least one of the
-  // booking's pickup zones. This is the key new behaviour: admins only
-  // see zone-relevant drivers in the picker.
-  if (bookingZoneIds.length) {
-    match.preferredOutstationZones = { $in: bookingZoneIds };
+  // booking's pickup zones. Optional `zoneId` narrows to a single zone.
+  let zoneFilterIds = bookingZoneIds;
+  if (zoneId) {
+    const selected = String(zoneId);
+    const allowed = bookingZoneIds.map((id) => String(id));
+    if (allowed.includes(selected)) {
+      try {
+        zoneFilterIds = [new mongoose.Types.ObjectId(selected)];
+      } catch { /* ignore bad id */ }
+    }
+  }
+  if (zoneFilterIds.length) {
+    match.preferredOutstationZones = { $in: zoneFilterIds };
   }
 
   if (carTypeId && carTypeMatch !== 'false') {

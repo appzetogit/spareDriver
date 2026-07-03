@@ -45,6 +45,7 @@ import {
   OUTSTATION_USER_CANCEL_TIER,
   previewUserCancellation,
 } from '../utils/cancellationPreview';
+import SosEmergencyButton from '../../tracking/components/SosEmergencyButton';
 
 /** How long the full-size map is shown before it auto-shrinks to the
  * floating preview card. Tuned for "long enough to glance at the driver,
@@ -1008,6 +1009,16 @@ const DriverAssignedPage = () => {
                     </p>
                   )}
                 </Card>
+
+                {booking?._id ? (
+                  <div className="flex justify-center">
+                    <SosEmergencyButton
+                      tripId={booking._id}
+                      bookingStatus={booking.status}
+                      className="w-full h-12 text-sm"
+                    />
+                  </div>
+                ) : null}
 
                 {/* (Cancel CTA lives in the always-visible peek row above
                     so it's reachable without expanding this sheet.) */}

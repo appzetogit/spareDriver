@@ -39,7 +39,11 @@ import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
 import { useSocketEvent } from '../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../constants/socketEvents';
 import { STAFF_ROLE_LABELS } from '../../../constants/staffRoles';
-import { DriverCarExperienceChips } from '../components/DriverCarExperienceChips';
+import OutstationDriverFilterBar, {
+  DEFAULT_DRIVER_FILTERS,
+  appendDriverFilterParams,
+} from '../components/OutstationDriverFilterBar';
+import AssignDriverPickerRow from '../components/AssignDriverPickerRow';
 import {
   formatPickupDateTime,
   formatDateTime12,
@@ -583,13 +587,7 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [driverFilters, setDriverFilters] = useState({
-    carTypeMatch: 'true',
-    minRating: '',
-    onlineOnly: false,
-    allIndiaOnly: false,
-    minDrivingHoursPerDay: '',
-  });
+  const [driverFilters, setDriverFilters] = useState(DEFAULT_DRIVER_FILTERS);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -621,13 +619,7 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
   const buildDriverParams = useCallback((pageNum) => {
     const params = new URLSearchParams({ limit: LIMIT, page: pageNum });
     if (debouncedSearch) params.append('search', debouncedSearch);
-    if (driverFilters.carTypeMatch) params.append('carTypeMatch', driverFilters.carTypeMatch);
-    if (driverFilters.minRating) params.append('minRating', driverFilters.minRating);
-    if (driverFilters.onlineOnly) params.append('onlineOnly', 'true');
-    if (driverFilters.allIndiaOnly) params.append('allIndiaOnly', 'true');
-    if (driverFilters.minDrivingHoursPerDay) {
-      params.append('minDrivingHoursPerDay', driverFilters.minDrivingHoursPerDay);
-    }
+    appendDriverFilterParams(params, driverFilters, { outstation: true });
     return params;
   }, [debouncedSearch, driverFilters]);
 
@@ -719,6 +711,11 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
     : detailLoading ? 'Loading…' : '—';
   const vehiclePlate = detail?.car?.vehicleNumber || null;
   const vehicleType = detail?.car?.carTypeId?.name || null;
+  const zoneOptions = useMemo(() => {
+    const fromBooking = (booking.zoneIds || []).filter((z) => z && typeof z === 'object');
+    if (fromBooking.length) return fromBooking;
+    return (bookingZones || []).map((id) => ({ _id: id, name: 'Zone' }));
+  }, [booking.zoneIds, bookingZones]);
 
   const availableCount = drivers.filter((d) => !d.hasConflict).length;
   const conflictCount = drivers.filter((d) => d.hasConflict).length;
@@ -962,7 +959,11 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
             </div>
           )}
 
-          <OutstationDriverFilterBar filters={driverFilters} onChange={setDriverFilters} />
+          <OutstationDriverFilterBar
+            filters={driverFilters}
+            onChange={setDriverFilters}
+            zones={zoneOptions}
+          />
 
           {/* Search */}
           <div className="mt-2 relative">
@@ -1010,7 +1011,7 @@ function AssignOutstationDrawer({ booking, onClose, onAssigned }) {
               </div>
             ) : (
               drivers.map((d) => (
-                <DriverRow
+                <AssignDriverPickerRow
                   key={d._id}
                   driver={d}
                   selected={String(selectedDriverId) === String(d._id)}
@@ -1078,175 +1079,6 @@ function DetailTile({ icon: Icon, label, children }) {
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{label}</p>
         <div className="text-xs font-semibold text-slate-800 mt-0.5">{children}</div>
       </div>
-    </div>
-  );
-}
-
-function DriverRow({ driver, selected, onSelect }) {
-  const hasConflict = driver.hasConflict;
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`w-full text-left flex flex-col gap-0 rounded-2xl border transition-all duration-150 overflow-hidden ${
-        selected
-          ? 'border-primary bg-primary/5 shadow-sm'
-          : hasConflict
-            ? 'border-rose-200 bg-rose-50/30 opacity-70'
-            : 'border-slate-100 hover:border-primary/30 hover:bg-slate-50/80'
-      }`}
-    >
-      <div className="flex items-center gap-3 p-3">
-        {/* Avatar */}
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm uppercase shrink-0 ${
-          selected
-            ? 'bg-primary text-dark'
-            : hasConflict
-              ? 'bg-rose-100 text-rose-600'
-              : 'bg-slate-100 text-slate-600'
-        }`}>
-          {driver.name?.charAt(0) || '?'}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-bold text-slate-900 truncate">{driver.name}</p>
-            {selected && !hasConflict && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
-                <CheckCircle2 className="w-2.5 h-2.5" /> Selected
-              </span>
-            )}
-            {hasConflict && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded-full">
-                <AlertTriangle className="w-2.5 h-2.5" /> Conflict
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-400 mt-0.5">
-            <span className="inline-flex items-center gap-1">
-              <Phone className="w-2.5 h-2.5" />
-              {driver.phone || '—'}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Star className="w-2.5 h-2.5 text-amber-400" />
-              {Number(driver.rating || 0).toFixed(1)}
-            </span>
-            <span>{driver.experienceYears || 0}y exp</span>
-            {driver.isOnline && (
-              <span className="inline-flex items-center gap-1 text-emerald-500 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Online
-              </span>
-            )}
-            {driver.isOnTrip && (
-              <span className="text-amber-500 font-semibold">On trip</span>
-            )}
-          </div>
-          <DriverCarExperienceChips experience={driver.carTypeExperience} className="mt-1.5" />
-          {(driver.outstationAllIndiaOk || driver.outstationMaxDrivingHoursPerDay) && (
-            <p className="text-[10px] text-slate-500 mt-1">
-              {driver.outstationAllIndiaOk ? 'All-India OK' : 'Zone trips only'}
-              {driver.outstationMaxDrivingHoursPerDay
-                ? ` · ${driver.outstationMaxDrivingHoursPerDay}h/day capacity`
-                : ''}
-            </p>
-          )}
-          {/* Preferred zones */}
-          {(driver.preferredOutstationZones || []).length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {driver.preferredOutstationZones.slice(0, 3).map((z) => (
-                <span
-                  key={z._id || z}
-                  className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded-full bg-indigo-50 text-indigo-500 text-[9px] font-semibold"
-                >
-                  <MapPin className="w-2 h-2" />
-                  {z?.name || 'Zone'}
-                </span>
-              ))}
-              {driver.preferredOutstationZones.length > 3 && (
-                <span className="text-[9px] text-slate-300">+{driver.preferredOutstationZones.length - 3}</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Conflict detail */}
-      {hasConflict && (
-        <div className="bg-rose-50/80 border-t border-rose-100 px-4 py-2.5 space-y-1.5">
-          {driver.conflicts.slice(0, 3).map((c) => (
-            <div key={c._id} className="flex items-start gap-2 text-[11px] text-rose-600">
-              <span className="w-1 h-1 rounded-full bg-rose-400 mt-1.5 shrink-0" />
-              <span className="font-mono text-[10px] bg-rose-100 px-1.5 py-0.5 rounded shrink-0">
-                {c.bookingNumber || c._id.slice(-6)}
-              </span>
-              <span className="truncate text-rose-500">
-                {formatDateTime12(c.startMs)} → {formatDateTime12(c.endMs)} · {c.serviceType}/{c.bookingType}
-              </span>
-            </div>
-          ))}
-          {driver.conflicts.length > 3 && (
-            <p className="text-[10px] text-rose-400 pl-3">+{driver.conflicts.length - 3} more conflicts</p>
-          )}
-        </div>
-      )}
-    </button>
-  );
-}
-
-function OutstationDriverFilterBar({ filters, onChange }) {
-  const set = (key, value) => onChange((prev) => ({ ...prev, [key]: value }));
-  return (
-    <div className="mt-2 grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
-      <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1">
-        <Filter className="w-3 h-3" />
-        Driver filters
-      </p>
-      <label className="flex items-center gap-2 text-[11px] text-slate-600 col-span-2">
-        <input
-          type="checkbox"
-          checked={filters.carTypeMatch === 'true'}
-          onChange={(e) => set('carTypeMatch', e.target.checked ? 'true' : 'false')}
-        />
-        Match vehicle car type experience
-      </label>
-      <label className="flex items-center gap-2 text-[11px] text-slate-600">
-        <input
-          type="checkbox"
-          checked={filters.onlineOnly}
-          onChange={(e) => set('onlineOnly', e.target.checked)}
-        />
-        Online only
-      </label>
-      <label className="flex items-center gap-2 text-[11px] text-slate-600">
-        <input
-          type="checkbox"
-          checked={filters.allIndiaOnly}
-          onChange={(e) => set('allIndiaOnly', e.target.checked)}
-        />
-        All-India OK
-      </label>
-      <input
-        type="number"
-        min="0"
-        max="5"
-        step="0.1"
-        placeholder="Min rating"
-        value={filters.minRating}
-        onChange={(e) => set('minRating', e.target.value)}
-        className="h-9 px-3 rounded-xl border border-slate-200 text-xs bg-white"
-      />
-      <input
-        type="number"
-        min="4"
-        max="16"
-        placeholder="Min hrs/day"
-        value={filters.minDrivingHoursPerDay}
-        onChange={(e) => set('minDrivingHoursPerDay', e.target.value)}
-        className="h-9 px-3 rounded-xl border border-slate-200 text-xs bg-white"
-      />
     </div>
   );
 }

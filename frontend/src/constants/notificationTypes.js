@@ -26,6 +26,7 @@ export const USER_NOTIFICATION = Object.freeze({
 export const DRIVER_NOTIFICATION = Object.freeze({
   NEW_BOOKING_REQUEST: 'new_booking_request',
   ORDER_ASSIGNED: 'order_assigned',
+  SUBSCRIPTION_ASSIGNED: 'subscription_assigned',
   BOOKING_CANCELLED: 'booking_cancelled',
   EARNINGS_CREDITED: 'earnings_credited',
   BOOKING_REMINDER: 'booking_reminder',
@@ -91,6 +92,9 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
   if (audience === 'driver') {
     if (kind === DRIVER_NOTIFICATION.NEW_BOOKING_REQUEST) {
       return '/driver/home';
+    }
+    if (kind === DRIVER_NOTIFICATION.SUBSCRIPTION_ASSIGNED || data.kind === 'subscription_assigned') {
+      return '/driver/account';
     }
     if (bookingId) return `/driver/trip/${bookingId}`;
     if (kind === DRIVER_NOTIFICATION.EARNINGS_CREDITED) return '/driver/earnings';

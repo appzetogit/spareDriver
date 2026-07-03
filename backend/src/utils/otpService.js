@@ -25,3 +25,13 @@ export const sendSmsOtp = async (phone, otp) => {
   // });
   */
 };
+
+export const sendEmergencySms = async (phone, message) => {
+  console.log(`\n=========================================`);
+  console.log(`[MOCK SMS] Emergency alert to +91${phone}`);
+  console.log(message);
+  console.log(`=========================================\n`);
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return { success: true, message: 'Emergency SMS sent' };
+};

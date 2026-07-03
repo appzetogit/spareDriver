@@ -9,6 +9,7 @@ import {
   updateOnboardingStep,
   submitApplication,
   getProfile,
+  updateVehicleExperience,
   getTraining,
   updateTrainingProgress,
   uploadLiveVerification,
@@ -22,7 +23,6 @@ import {
   markDriverNotificationRead,
   markAllDriverNotificationsRead,
 } from '../controllers/notification.controller.js';
-import { uploadVideo as uploadVideoMiddleware } from '../middlewares/multer.js';
 import {
   googleSignInDriver,
   linkGoogleDriverPhone,
@@ -62,6 +62,16 @@ import {
   driverDismissBookingExtension,
   rateCustomerByDriver,
 } from '../controllers/booking.controller.js';
+import {
+  getDriverWithdrawalLimits,
+  createDriverWithdrawal,
+  listDriverWithdrawals,
+} from '../controllers/withdrawal.controller.js';
+import {
+  getMyDriverAccountDeletionRequest,
+  requestDriverAccountDeletion,
+} from '../controllers/accountDeletion.controller.js';
+import { uploadVideo as uploadVideoMiddleware, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
 
@@ -86,6 +96,7 @@ router.put('/training/progress', protectDriver, updateTrainingProgress);
 router.post('/onboarding/submit', protectDriver, submitApplication);
 router.post('/application/reopen', protectDriver, reopenRejectedApplication);
 router.get('/profile', protectDriver, getProfile);
+router.put('/profile/vehicle-experience', protectDriver, updateVehicleExperience);
 router.post('/fcm-token', protectDriver, registerDriverFcmToken);
 router.delete('/fcm-token', protectDriver, unregisterDriverFcmToken);
 
@@ -142,5 +153,22 @@ router.post(
 // Post-trip rating — driver rates the customer they just drove.
 // Once-only; a duplicate submit hits 409 from the service.
 router.post('/bookings/:id/rate-customer', protectDriver, rateCustomerByDriver);
+
+router.get('/withdrawals/limits', protectDriver, getDriverWithdrawalLimits);
+router.get('/withdrawals', protectDriver, listDriverWithdrawals);
+router.post(
+  '/withdrawals',
+  protectDriver,
+  upload.single('qrImage'),
+  createDriverWithdrawal,
+);
+
+router.get('/account/deletion-request', protectDriver, getMyDriverAccountDeletionRequest);
+router.post(
+  '/account/deletion-request',
+  protectDriver,
+  upload.single('qrImage'),
+  requestDriverAccountDeletion,
+);
 
 export default router;

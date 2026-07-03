@@ -43,6 +43,7 @@ import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
+import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
 
 /**
  * Driver-side counterpart of `DriverAssignedPage` — one screen that adapts
@@ -763,6 +764,16 @@ const DriverActiveTripPage = () => {
             once the trip is completed.
           </p>
         </Card>
+
+        {booking?._id ? (
+          <div className="flex justify-center">
+            <SosEmergencyButton
+              tripId={booking._id}
+              bookingStatus={booking.status}
+              className="w-full h-12 text-sm"
+            />
+          </div>
+        ) : null}
 
         {/* Paid extensions only. We deliberately skip pending_otp /
             pending_payment / declined / expired rows: those are the

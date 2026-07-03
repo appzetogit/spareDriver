@@ -55,6 +55,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   WITHDRAWAL_PROCESSED: 'withdrawal_processed',
   WALLET_ADJUSTMENT: 'wallet_adjustment',
   SUBSCRIPTION_REMINDER: 'subscription_reminder',
+  SUBSCRIPTION_ASSIGNED: 'subscription_assigned',
   ADMIN_ANNOUNCEMENT: 'admin_announcement',
   SUPPORT_REPLY: 'support_reply',
   EMERGENCY_ALERT: 'emergency_alert',

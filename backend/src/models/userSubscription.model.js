@@ -148,6 +148,7 @@ const userSubscriptionSchema = new mongoose.Schema(
     termsAcceptedAt: { type: Date, default: null },
     termsVersionSnapshot: { type: Number, default: 0, min: 0 },
     termsTitleSnapshot: { type: String, default: '' },
+    termsContentSnapshot: { type: String, default: '' },
   },
   { timestamps: true },
 );

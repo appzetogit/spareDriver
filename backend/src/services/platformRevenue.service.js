@@ -53,6 +53,8 @@ export async function recordPlatformRevenue({
     if (!userSubscriptionId) {
       throw new ApiError(400, 'userSubscriptionId is required for subscription revenue');
     }
+  } else if (source === PLATFORM_REVENUE_SOURCE.ADMIN_REFUND) {
+    // Admin refunds are not tied to a booking.
   } else if (!bookingId) {
     throw new ApiError(400, 'bookingId is required');
   }
@@ -64,6 +66,34 @@ export async function recordPlatformRevenue({
     userSubscriptionId: userSubscriptionId || null,
     bookingNumber: bookingNumber ? String(bookingNumber).slice(0, 80) : '',
     serviceType: serviceType ? String(serviceType).slice(0, 40) : '',
+    userId: userId || null,
+    driverId: driverId || null,
+    meta: meta && typeof meta === 'object' ? meta : {},
+    occurredAt: occurredAt || new Date(),
+  });
+}
+
+/**
+ * Record a platform-revenue debit (admin refund paid from company funds).
+ * Stored as a negative `amountRupees` row so revenue totals net correctly.
+ */
+export async function recordPlatformRevenueDebit({
+  amountRupees,
+  userId = null,
+  driverId = null,
+  meta = {},
+  occurredAt = null,
+}) {
+  const amt = round2(Number(amountRupees) || 0);
+  if (amt <= 0) throw new ApiError(400, 'Debit amount must be positive');
+
+  return PlatformRevenue.create({
+    source: PLATFORM_REVENUE_SOURCE.ADMIN_REFUND,
+    amountRupees: -amt,
+    bookingId: null,
+    userSubscriptionId: null,
+    bookingNumber: '',
+    serviceType: '',
     userId: userId || null,
     driverId: driverId || null,
     meta: meta && typeof meta === 'object' ? meta : {},

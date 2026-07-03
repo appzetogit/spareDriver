@@ -485,7 +485,8 @@ export async function getBookingByIdService(bookingId, { userId, driverId } = {}
   if (driverId) filter.driverId = driverId;
   const query = Booking.findOne(filter)
     .populate('driverId', DRIVER_USER_FIELDS_WITH_LOC)
-    .populate('userId', CUSTOMER_DRIVER_FIELDS);
+    .populate('userId', CUSTOMER_DRIVER_FIELDS)
+    .populate('zoneIds', 'name code city');
   // Both the driver-side and the customer-side detail views need the
   // vehicle (image + brand + model + plate + transmission + fuel) so
   // each side can identify the car. The shared `CAR_DRIVER_POPULATE`

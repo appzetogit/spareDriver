@@ -9,6 +9,7 @@ import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverL
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
+import SosEmergencyButton from '../components/SosEmergencyButton';
 
 /**
  * Live "trip in progress" screen — shows the driver gliding along the
@@ -148,6 +149,16 @@ const TripInProgressPage = () => {
         <Button fullWidth variant="danger" onClick={() => navigate('/user/tracking/completed')}>
           View Trip Summary
         </Button>
+
+        {booking?._id ? (
+          <div className="flex justify-center pt-2">
+            <SosEmergencyButton
+              tripId={booking._id}
+              bookingStatus={booking.status || BOOKING_STATUS.STARTED}
+              className="w-full max-w-xs h-12 text-sm"
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

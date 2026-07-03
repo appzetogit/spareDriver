@@ -1,5 +1,6 @@
 import Zone from '../models/zone.model.js';
 import User from '../models/user.model.js';
+import LegalDocument, { LEGAL_DOCUMENT_TYPES } from '../models/legalDocument.model.js';
 import { sendEmail } from './email.service.js';
 import { isPlaceholderUserEmail } from '../utils/email.util.js';
 
@@ -25,6 +26,36 @@ function buildCarLabel(car) {
   const type = car.carTypeId?.name || '';
   const number = car.vehicleNumber || '';
   return [type, number].filter(Boolean).join(' · ') || '—';
+}
+
+async function resolveSubscriptionTerms(subscription, termsFromCaller) {
+  if (termsFromCaller?.content) return termsFromCaller;
+
+  if (subscription.termsContentSnapshot) {
+    return {
+      title: subscription.termsTitleSnapshot || 'Subscription terms',
+      content: subscription.termsContentSnapshot,
+      version: subscription.termsVersionSnapshot,
+    };
+  }
+
+  if (subscription.termsVersionSnapshot) {
+    const byVersion = await LegalDocument.findOne({
+      type: LEGAL_DOCUMENT_TYPES.SUBSCRIPTION,
+      version: subscription.termsVersionSnapshot,
+    })
+      .select('title content version')
+      .lean();
+    if (byVersion?.content) return byVersion;
+  }
+
+  return LegalDocument.findOne({
+    type: LEGAL_DOCUMENT_TYPES.SUBSCRIPTION,
+    isActive: true,
+  })
+    .sort({ version: -1, updatedAt: -1 })
+    .select('title content version')
+    .lean();
 }
 
 function buildHtml({
@@ -128,7 +159,7 @@ function buildText(payload) {
 }
 
 /**
- * Send subscription driver-assignment email to the customer. No-ops when no real email.
+ * Send subscription driver-assignment email to the customer's registered email.
  */
 export async function sendSubscriptionDriverAssignmentEmail({
   subscription,
@@ -136,14 +167,18 @@ export async function sendSubscriptionDriverAssignmentEmail({
   terms,
 }) {
   const user = await User.findById(subscription.userId)
-    .select('name email isEmailVerified')
+    .select('name email')
     .lean();
-  if (!user?.email || isPlaceholderUserEmail(user.email)) {
+
+  const recipient = user?.email?.trim();
+  if (!recipient || isPlaceholderUserEmail(recipient)) {
     console.warn(
-      `[email] Skipping subscription assignment email — user ${subscription.userId} has no verified email`,
+      `[email] Skipping subscription assignment email — user ${subscription.userId} has no registered email`,
     );
     return { sent: false, reason: 'no_email' };
   }
+
+  const resolvedTerms = await resolveSubscriptionTerms(subscription, terms);
 
   const zone = subscription.zoneId?.name
     ? subscription.zoneId
@@ -179,16 +214,20 @@ export async function sendSubscriptionDriverAssignmentEmail({
     driverRating: driver.rating,
     workingStart: formatDate(subscription.assignedAt),
     workingEnd,
-    termsTitle: terms?.title || subscription.termsTitleSnapshot || '',
-    termsContent: terms?.content || '',
+    termsTitle: resolvedTerms?.title || subscription.termsTitleSnapshot || 'Subscription terms',
+    termsContent: resolvedTerms?.content || '',
   };
 
-  await sendEmail({
-    to: user.email,
+  const result = await sendEmail({
+    to: recipient,
     subject: `Dedicated driver assigned — ${planName}`,
     html: buildHtml(payload),
     text: buildText(payload),
   });
 
-  return { sent: true, to: user.email };
+  console.info(
+    `[email] Subscription assignment email sent to ${recipient} via ${result.provider || 'unknown'}`,
+  );
+
+  return { sent: true, to: recipient, provider: result.provider };
 }

@@ -17,6 +17,8 @@ const routeTitles = {
   '/admin/account/revenue': 'Revenue',
   '/admin/account/subscription-revenue': 'Subscription Revenue',
   '/admin/account/refunds': 'Refunds',
+  '/admin/account/withdrawals': 'Withdrawals',
+  '/admin/account/deletions': 'Account Deletions',
   '/admin/profile': 'My Profile',
 };
 

@@ -10,6 +10,7 @@ import {
   Wallet,
   IndianRupee,
   CalendarRange,
+  TrendingUp,
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import Button from '../../../components/Button';
@@ -32,7 +33,8 @@ function formatDate(d) {
 function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState(false);
+  const [amounts, setAmounts] = useState({});
+  const [payingKey, setPayingKey] = useState(null);
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
@@ -51,26 +53,57 @@ function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
     fetchDetail();
   }, [fetchDetail]);
 
-  const handlePay = async () => {
-    setPaying(true);
+  const remaining = detail?.remainingDriverShare ?? 0;
+  const canPayMore = (detail?.canPayMore ?? remaining > 0) && remaining > 0;
+
+  const handlePayDriver = async (group) => {
+    if (!canPayMore) {
+      toast.error('No remaining driver share in this subscription');
+      return;
+    }
+
+    const raw = amounts[group.driverId];
+    const amountRupees = Number(raw);
+    if (!Number.isFinite(amountRupees) || amountRupees <= 0) {
+      toast.error('Enter a valid payout amount');
+      return;
+    }
+    if (amountRupees > remaining) {
+      toast.error(`Amount cannot exceed remaining pool (${formatCurrency(remaining)})`);
+      return;
+    }
+
+    setPayingKey(group.driverId);
     try {
-      const res = await api.post(`/admin/subscriptions/${subscription._id}/pay-drivers`);
+      const res = await api.post(`/admin/subscriptions/${subscription._id}/pay-drivers`, {
+        payouts: [{
+          driverId: group.driverId,
+          amountRupees,
+        }],
+      });
       setDetail(res?.data?.data || null);
-      toast.success('Driver wallet credited successfully');
+      setAmounts((prev) => {
+        const next = { ...prev };
+        delete next[group.driverId];
+        return next;
+      });
+      toast.success('Amount credited to driver wallet');
       onPaid?.();
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to pay drivers');
+      toast.error(err?.response?.data?.message || 'Failed to pay driver');
     } finally {
-      setPaying(false);
+      setPayingKey(null);
     }
   };
 
+  const driverGroups = detail?.driverGroups?.length
+    ? detail.driverGroups
+    : [];
+
   const sub = detail?.subscription || subscription;
-  const unpaidAmount = detail?.unpaidAmount ?? 0;
-  const canPay = unpaidAmount > 0 && !loading;
 
   const drawerHeader = (
-    <div>
+    <div className="px-5 py-4">
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pay drivers</p>
       <h2 className="text-lg font-extrabold text-slate-900 mt-0.5">
         {sub.planNameSnapshot || 'Subscription'}
@@ -82,132 +115,216 @@ function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
   );
 
   const drawerFooter = (
-    <div className="flex items-center justify-between gap-3 w-full">
+    <div className="px-5 py-4 flex items-center justify-between gap-3 w-full">
       <div className="text-sm text-slate-600">
-        <span className="font-semibold text-slate-900">{formatCurrency(unpaidAmount)}</span>
+        <span className="font-semibold text-amber-700">{formatCurrency(remaining)}</span>
         {' '}
-        unpaid
+        remaining to pay drivers
       </div>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onClose} disabled={paying}>
-          Close
-        </Button>
-        <Button onClick={handlePay} disabled={!canPay || paying}>
-          {paying ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Paying…
-            </>
-          ) : (
-            <>
-              <IndianRupee className="w-4 h-4" />
-              Pay drivers
-            </>
-          )}
-        </Button>
-      </div>
+      <Button variant="outline" onClick={onClose} disabled={!!payingKey}>
+        Close
+      </Button>
     </div>
   );
 
   return (
     <Drawer isOpen onClose={onClose} header={drawerHeader} footer={drawerFooter} width="max-w-xl">
       {loading ? (
-        <div className="flex items-center justify-center py-16">
+        <div className="flex items-center justify-center py-16 px-5">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="px-5 pb-6 space-y-6">
           <div className="grid grid-cols-2 gap-3">
-            <Card padding="p-3">
-              <p className="text-xs text-slate-500">Driver pool</p>
-              <p className="text-lg font-bold text-slate-900 mt-0.5">
+            <Card padding="p-4">
+              <p className="text-xs text-slate-500">Platform earned</p>
+              <p className="text-lg font-bold text-slate-900 mt-1">
+                {formatCurrency(detail?.platformEarned ?? sub.platformShareRupees)}
+              </p>
+            </Card>
+            <Card padding="p-4">
+              <p className="text-xs text-slate-500">Driver share pool</p>
+              <p className="text-lg font-bold text-slate-900 mt-1">
                 {formatCurrency(detail?.driverSharePool)}
               </p>
             </Card>
-            <Card padding="p-3">
-              <p className="text-xs text-slate-500">Daily rate</p>
-              <p className="text-lg font-bold text-slate-900 mt-0.5">
-                {formatCurrency(detail?.dailyRate)}
-              </p>
-            </Card>
-            <Card padding="p-3">
+            <Card padding="p-4">
               <p className="text-xs text-slate-500">Paid to drivers</p>
-              <p className="text-lg font-bold text-emerald-700 mt-0.5">
+              <p className="text-lg font-bold text-emerald-700 mt-1">
                 {formatCurrency(detail?.paidToDriver)}
               </p>
             </Card>
-            <Card padding="p-3">
+            <Card padding="p-4">
               <p className="text-xs text-slate-500">Remaining</p>
-              <p className="text-lg font-bold text-amber-700 mt-0.5">
+              <p className="text-lg font-bold text-amber-700 mt-1">
                 {formatCurrency(detail?.remainingDriverShare)}
               </p>
             </Card>
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-slate-800 mb-2 flex items-center gap-2">
+            <p className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
               <CalendarRange className="w-4 h-4" />
               Driver working periods
               <span className="text-slate-400 font-normal">
-                ({detail?.totalSubscriptionDays ?? 0} subscription days)
+                ({detail?.totalSubscriptionDays ?? 0} subscription days max)
               </span>
             </p>
 
-            {!detail?.stints?.length ? (
-              <p className="text-sm text-slate-500 py-6 text-center border rounded-xl">
-                No drivers assigned yet for this subscription.
+            {!driverGroups.length ? (
+              <p className="text-sm text-slate-500 py-8 text-center border rounded-xl bg-slate-50/50">
+                No drivers assigned yet. Assign a driver from Subscription Requests first.
               </p>
             ) : (
-              <div className="space-y-3">
-                {detail.stints.map((stint) => (
-                  <div
-                    key={stint.key}
-                    className="border border-slate-200 rounded-xl p-4 bg-slate-50/50"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          {stint.driver?.name || 'Driver'}
-                        </p>
-                        <p className="text-xs text-slate-500">{stint.driver?.phone || '—'}</p>
+              <div className="space-y-4">
+                {driverGroups.map((group) => {
+                  const isPaying = payingKey === group.driverId;
+                  const paidSoFar = group.paidSoFar ?? 0;
+                  const hasPayments = paidSoFar > 0;
+
+                  return (
+                    <div
+                      key={group.driverId}
+                      className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {group.driver?.name || 'Driver'}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">{group.driver?.phone || '—'}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {group.periods?.length || 0} working period
+                            {(group.periods?.length || 0) === 1 ? '' : 's'}
+                            {' · '}
+                            {group.totalWorkingDays ?? 0} total days
+                          </p>
+                        </div>
+                        {hasPayments ? (
+                          <Badge variant="success">Paid {formatCurrency(paidSoFar)}</Badge>
+                        ) : (
+                          <Badge variant="warning">Unpaid</Badge>
+                        )}
                       </div>
-                      {stint.isPaid ? (
-                        <Badge variant="success">Paid</Badge>
-                      ) : (
-                        <Badge variant="warning">Unpaid</Badge>
+
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                          Working periods
+                        </p>
+                        {(group.periods || []).map((period) => {
+                          const periodStart = period.stintStart || period.assignedAt;
+                          const lastDay =
+                            period.lastWorkingDay || period.stintEnd || period.plannedStintEnd;
+                          return (
+                            <div
+                              key={period.key}
+                              className="rounded-lg border border-slate-200 bg-white p-3 text-sm"
+                            >
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <p className="text-[10px] text-slate-500 mb-0.5">Start</p>
+                                  <p className="font-medium text-slate-800">{formatDate(periodStart)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-500 mb-0.5">Last day</p>
+                                  <p className="font-medium text-slate-800">
+                                    {formatDate(lastDay)}
+                                    {period.isCurrent && (
+                                      <span className="text-amber-600 font-normal"> (ongoing)</span>
+                                    )}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-500 mb-0.5">Working days</p>
+                                  <p className="font-semibold text-slate-900">
+                                    {period.workingDays}
+                                    <span className="text-slate-400 font-normal text-xs">
+                                      {' '}/ {detail?.totalSubscriptionDays ?? '—'} max
+                                    </span>
+                                  </p>
+                                </div>
+                                {(period.paidSoFar ?? 0) > 0 && (
+                                  <div>
+                                    <p className="text-[10px] text-slate-500 mb-0.5">Paid for period</p>
+                                    <p className="font-semibold text-emerald-700">
+                                      {formatCurrency(period.paidSoFar)}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {group.payments?.length > 0 && (
+                        <div className="pt-3 border-t border-slate-200/80">
+                          <p className="text-xs font-medium text-slate-500 mb-2">Payment history</p>
+                          <ul className="space-y-1.5">
+                            {group.payments.map((p) => (
+                              <li
+                                key={p._id || `${p.paidAt}-${p.amountRupees}`}
+                                className="flex items-center justify-between text-xs text-slate-600"
+                              >
+                                <span className="font-semibold text-emerald-700">
+                                  {formatCurrency(p.amountRupees)}
+                                </span>
+                                <span>{p.paidAt ? formatDateTime12(p.paidAt) : '—'}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {canPayMore && (
+                        <div className="pt-3 border-t border-slate-200/80">
+                          <label className="block text-xs font-medium text-slate-600 mb-2">
+                            Payout amount (₹)
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                              <IndianRupee className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="number"
+                                min="0"
+                                max={remaining}
+                                step="0.01"
+                                placeholder="Enter amount"
+                                value={amounts[group.driverId] ?? ''}
+                                onChange={(e) => setAmounts((prev) => ({
+                                  ...prev,
+                                  [group.driverId]: e.target.value,
+                                }))}
+                                disabled={isPaying}
+                                className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              />
+                            </div>
+                            <Button
+                              onClick={() => handlePayDriver(group)}
+                              disabled={isPaying || !amounts[group.driverId]}
+                              className="shrink-0"
+                            >
+                              {isPaying ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Paying…
+                                </>
+                              ) : (
+                                <>
+                                  <Wallet className="w-4 h-4" />
+                                  Pay
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-2">
+                            Credits this driver&apos;s wallet from the subscription pool.
+                          </p>
+                        </div>
                       )}
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <p className="text-xs text-slate-500">From</p>
-                        <p className="font-medium">{formatDate(stint.stintStart || stint.assignedAt)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500">To</p>
-                        <p className="font-medium">
-                          {stint.isCurrent
-                            ? `${formatDate(stint.stintStart || stint.assignedAt)} – ${formatDate(stint.plannedStintEnd || stint.stintEnd)} (ongoing)`
-                            : formatDate(stint.stintEnd || stint.releasedAt)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500">Working days</p>
-                        <p className="font-medium">{stint.workingDays}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500">Amount</p>
-                        <p className="font-semibold text-slate-900">
-                          {formatCurrency(stint.amountRupees)}
-                        </p>
-                      </div>
-                    </div>
-                    {stint.paidAt && (
-                      <p className="text-xs text-slate-500 mt-2">
-                        Paid on {formatDateTime12(stint.paidAt)}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -287,6 +404,15 @@ const ManageSubscriptionRevenue = () => {
         ),
       },
       {
+        key: 'platformEarned',
+        label: 'Platform earned',
+        render: (_, row) => (
+          <span className="font-semibold text-slate-800">
+            {formatCurrency(row.platformEarned ?? row.platformShareRupees)}
+          </span>
+        ),
+      },
+      {
         key: 'driverPool',
         label: 'Driver pool',
         render: (_, row) => (
@@ -328,7 +454,7 @@ const ManageSubscriptionRevenue = () => {
             type="button"
             data-row-action
             onClick={() => setPayTarget(row)}
-            disabled={(row.unpaidAmount ?? row.remainingDriverShare ?? 0) <= 0}
+            disabled={!row.canPayMore}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-dark text-xs font-bold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Wallet className="w-3.5 h-3.5" />
@@ -341,10 +467,11 @@ const ManageSubscriptionRevenue = () => {
   );
 
   const summary = [
-    { label: 'Driver pool', value: formatCurrency(totals?.totalDriverPool), icon: Banknote },
-    { label: 'Paid to drivers', value: formatCurrency(totals?.totalPaidToDriver), icon: Users },
-    { label: 'Remaining', value: formatCurrency(totals?.totalRemaining), icon: Wallet },
-    { label: 'Subscriptions', value: totals?.count ?? 0, icon: Sparkles },
+    { label: 'Total revenue', value: formatCurrency(totals?.totalRevenue), icon: Banknote },
+    { label: 'Platform earned', value: formatCurrency(totals?.totalPlatformEarned), icon: TrendingUp },
+    { label: 'Driver pool', value: formatCurrency(totals?.totalDriverPool), icon: Users },
+    { label: 'Paid to drivers', value: formatCurrency(totals?.totalPaidToDriver), icon: Wallet },
+    { label: 'Remaining', value: formatCurrency(totals?.totalRemaining), icon: Sparkles },
   ];
 
   return (
@@ -356,7 +483,7 @@ const ManageSubscriptionRevenue = () => {
             Subscription Revenue
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manual driver payouts by working days. Subscription amounts are not shown in platform revenue.
+            Track platform earnings and manual driver payouts. Paid amounts credit the driver wallet.
           </p>
         </div>
         <button
@@ -369,7 +496,7 @@ const ManageSubscriptionRevenue = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {summary.map((s) => (
           <Card key={s.label} padding="p-4">
             <p className="text-xs text-slate-500">{s.label}</p>

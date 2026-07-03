@@ -1,6 +1,8 @@
 import Booking from '../models/booking.model.js';
+import mongoose from 'mongoose';
 import {Driver} from '../models/driverModels/driver.model.js';
 import Payment from '../models/payment.model.js';
+import UserSubscription from '../models/userSubscription.model.js';
 import PlatformRevenue, {
   PLATFORM_REVENUE_SOURCE,
 } from '../models/platformRevenue.model.js';
@@ -30,6 +32,9 @@ import {
  *   - Cancellation share is read from `Booking.cancellation.driverShare`
  *     because the credit path does a direct `$inc` on the driver doc
  *     (no Payment row is written).
+ *   - Subscription driver payouts are read from
+ *     `UserSubscription.driverPayouts` (admin credits the wallet on pay;
+ *     no Payment row is written).
  *   - Penalty deductions are read from `PlatformRevenue` (source =
  *     `driver_penalty`) which is also the source-of-truth across the
  *     re-dispatch flow.
@@ -112,6 +117,53 @@ const TRIP_PAYMENT_PURPOSES = [
   PAYMENT_PURPOSE.TRIP_WAITING,
 ];
 
+/** Subscription stint payouts credited by admin from the driver-share pool. */
+async function aggregateSubscriptionPayouts(driverId, gte, lte) {
+  const driverOid = new mongoose.Types.ObjectId(String(driverId));
+  const rows = await UserSubscription.aggregate([
+    { $unwind: '$driverPayouts' },
+    {
+      $match: {
+        'driverPayouts.driverId': driverOid,
+        'driverPayouts.paidAt': { $gte: gte, $lte: lte },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        earnings: { $sum: '$driverPayouts.amountRupees' },
+        payouts: { $sum: 1 },
+      },
+    },
+  ]);
+  const agg = rows?.[0] || { earnings: 0, payouts: 0 };
+  return {
+    earnings: round2(agg.earnings || 0),
+    payouts: agg.payouts || 0,
+  };
+}
+
+async function listSubscriptionPayoutRows(driverId) {
+  const driverOid = new mongoose.Types.ObjectId(String(driverId));
+  const rows = await UserSubscription.aggregate([
+    { $unwind: '$driverPayouts' },
+    { $match: { 'driverPayouts.driverId': driverOid } },
+    {
+      $project: {
+        payoutId: '$driverPayouts._id',
+        subscriptionId: '$_id',
+        planName: '$planNameSnapshot',
+        amountRupees: '$driverPayouts.amountRupees',
+        paidAt: '$driverPayouts.paidAt',
+        workingDays: '$driverPayouts.workingDays',
+        assignedAt: '$driverPayouts.assignedAt',
+        releasedAt: '$driverPayouts.releasedAt',
+      },
+    },
+  ]);
+  return rows;
+}
+
 /**
  * Sum the driver's net earnings in a window. Combines:
  *
@@ -134,7 +186,7 @@ const TRIP_PAYMENT_PURPOSES = [
  * settle (rare) still shows up in the right window.
  */
 async function aggregateEarnings(driverId, gte, lte) {
-  const [trips, cancels] = await Promise.all([
+  const [trips, cancels, subscription] = await Promise.all([
     Payment.aggregate([
       {
         $match: {
@@ -169,12 +221,18 @@ async function aggregateEarnings(driverId, gte, lte) {
         },
       },
     ]),
+    aggregateSubscriptionPayouts(driverId, gte, lte),
   ]);
   const tripsAgg = trips?.[0] || { earnings: 0, bookings: [] };
   const cancelsAgg = cancels?.[0] || { earnings: 0 };
   return {
-    earnings: round2((tripsAgg.earnings || 0) + (cancelsAgg.earnings || 0)),
+    earnings: round2(
+      (tripsAgg.earnings || 0)
+      + (cancelsAgg.earnings || 0)
+      + (subscription.earnings || 0),
+    ),
     trips: tripsAgg.bookings?.length || 0,
+    subscriptionPayouts: subscription.payouts || 0,
   };
 }
 
@@ -341,7 +399,7 @@ async function buildDailyBuckets(driverId, fromDate, days = 7) {
   const start = startOfDay(fromDate);
   const end = endOfDay(addDays(start, days - 1));
 
-  const [paymentRows, cancelBookings] = await Promise.all([
+  const [paymentRows, cancelBookings, subscriptionPayouts] = await Promise.all([
     Payment.find({
       driverId,
       purpose: { $in: TRIP_PAYMENT_PURPOSES },
@@ -359,6 +417,21 @@ async function buildDailyBuckets(driverId, fromDate, days = 7) {
     })
       .select('cancellation.driverShare timeline.cancelledAt')
       .lean(),
+    UserSubscription.aggregate([
+      { $unwind: '$driverPayouts' },
+      {
+        $match: {
+          'driverPayouts.driverId': new mongoose.Types.ObjectId(String(driverId)),
+          'driverPayouts.paidAt': { $gte: start, $lte: end },
+        },
+      },
+      {
+        $project: {
+          amount: '$driverPayouts.amountRupees',
+          paidAt: '$driverPayouts.paidAt',
+        },
+      },
+    ]),
   ]);
 
   const byDate = new Map();
@@ -380,6 +453,12 @@ async function buildDailyBuckets(driverId, fromDate, days = 7) {
     const key = localDateKey(b.timeline?.cancelledAt);
     const cur = byDate.get(key) || { earnings: 0 };
     cur.earnings += Number(b.cancellation?.driverShare) || 0;
+    byDate.set(key, cur);
+  }
+  for (const p of subscriptionPayouts) {
+    const key = localDateKey(p.paidAt);
+    const cur = byDate.get(key) || { earnings: 0 };
+    cur.earnings += Number(p.amount) || 0;
     byDate.set(key, cur);
   }
 
@@ -477,6 +556,7 @@ export async function getDriverEarningsService(driverId) {
 const LEDGER_KIND = Object.freeze({
   TRIP: 'trip',
   CANCELLATION_SHARE: 'cancellation_share',
+  SUBSCRIPTION_PAYOUT: 'subscription_payout',
   PENALTY: 'penalty',
 });
 
@@ -562,7 +642,8 @@ export async function listDriverEarningsLedgerService(
   // the original Booking — so we run a single $lookup on the grouped
   // payments. Only `accepted` extensions are surfaced (paid intents);
   // open OTP rows aren't earnings.
-  const [paymentTripRows, cancellationRows, penaltyRows] = await Promise.all([
+  const [paymentTripRows, cancellationRows, penaltyRows, subscriptionPayoutRows] =
+    await Promise.all([
     Payment.aggregate([
       {
         $match: {
@@ -678,6 +759,7 @@ export async function listDriverEarningsLedgerService(
     })
       .select('_id bookingId bookingNumber serviceType amountRupees occurredAt meta')
       .lean(),
+    listSubscriptionPayoutRows(driverId),
   ]);
 
   // Normalise the three sources into a single ledger-row shape, then
@@ -737,6 +819,29 @@ export async function listDriverEarningsLedgerService(
     });
   }
 
+  for (const p of subscriptionPayoutRows) {
+    const amount = round2(Number(p.amountRupees) || 0);
+    if (!(amount > 0)) continue;
+    normalisedBookings.push({
+      _id: p.payoutId || `${p.subscriptionId}-${p.paidAt}`,
+      kind: LEDGER_KIND.SUBSCRIPTION_PAYOUT,
+      direction: 'credit',
+      bookingNumber: null,
+      bookingId: null,
+      serviceType: null,
+      amountRupees: amount,
+      occurredAt: p.paidAt,
+      status: null,
+      meta: {
+        subscriptionId: p.subscriptionId,
+        planName: p.planName || 'Subscription',
+        workingDays: p.workingDays || 0,
+        assignedAt: p.assignedAt || null,
+        releasedAt: p.releasedAt || null,
+      },
+    });
+  }
+
   const normalisedPenalties = penaltyRows.map((r) => ({
     _id: r._id,
     kind: LEDGER_KIND.PENALTY,
@@ -765,9 +870,11 @@ export async function listDriverEarningsLedgerService(
   // of which page the driver is on.
   let tripEarnings = 0;
   let cancellationEarnings = 0;
+  let subscriptionEarnings = 0;
   let penaltyDeductions = 0;
   let tripCount = 0;
   let cancellationCount = 0;
+  let subscriptionCount = 0;
   let penaltyCount = 0;
   for (const row of merged) {
     if (row.kind === LEDGER_KIND.TRIP) {
@@ -776,13 +883,16 @@ export async function listDriverEarningsLedgerService(
     } else if (row.kind === LEDGER_KIND.CANCELLATION_SHARE) {
       cancellationEarnings += row.amountRupees;
       cancellationCount += 1;
+    } else if (row.kind === LEDGER_KIND.SUBSCRIPTION_PAYOUT) {
+      subscriptionEarnings += row.amountRupees;
+      subscriptionCount += 1;
     } else if (row.kind === LEDGER_KIND.PENALTY) {
       penaltyDeductions += row.amountRupees;
       penaltyCount += 1;
     }
   }
 
-  const totalCredits = tripEarnings + cancellationEarnings;
+  const totalCredits = tripEarnings + cancellationEarnings + subscriptionEarnings;
 
   return {
     rows,
@@ -793,9 +903,11 @@ export async function listDriverEarningsLedgerService(
     totals: {
       tripEarnings: round2(tripEarnings),
       cancellationEarnings: round2(cancellationEarnings),
+      subscriptionEarnings: round2(subscriptionEarnings),
       penaltyDeductions: round2(penaltyDeductions),
       tripCount,
       cancellationCount,
+      subscriptionCount,
       penaltyCount,
       // Total CREDITS (kept under `total` for back-compat with the FE
       // card that read this field directly).

@@ -50,6 +50,12 @@ const SOURCE_META = {
     icon: AlertOctagon,
     tone: 'text-rose-700',
   },
+  admin_refund: {
+    label: 'Admin refund',
+    variant: 'danger',
+    icon: Banknote,
+    tone: 'text-rose-700',
+  },
 };
 
 function formatCurrency(n) {

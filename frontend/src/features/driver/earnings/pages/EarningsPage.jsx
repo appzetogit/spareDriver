@@ -14,6 +14,7 @@ import {
   Clock4,
   TimerReset,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
@@ -23,6 +24,7 @@ import {
 } from '../../../../store/driver/useDriverTripsStore';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
 import { formatCurrency } from '../../../../utils/formatters';
+import { MIN_DRIVER_WALLET_BALANCE } from '../../../../constants/withdrawal';
 import DriverScreenShell from '../../components/DriverScreenShell';
 
 const EMPTY = { earnings: 0, trips: 0 };
@@ -117,9 +119,9 @@ const EarningsPage = () => {
               </div>
               <button
                 type="button"
-                onClick={() => navigate('/driver/payments')}
+                onClick={() => navigate('/driver/withdraw')}
                 className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-dark text-xs font-semibold hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={walletBalance <= 0}
+                disabled={walletBalance <= MIN_DRIVER_WALLET_BALANCE}
               >
                 <Wallet className="w-3.5 h-3.5" />
                 Withdraw
@@ -251,9 +253,11 @@ const EarningsPage = () => {
 function EarningsBreakdown({ totals }) {
   const trip = Number(totals?.tripEarnings) || 0;
   const cancellation = Number(totals?.cancellationEarnings) || 0;
+  const subscription = Number(totals?.subscriptionEarnings) || 0;
   const penalty = Number(totals?.penaltyDeductions) || 0;
-  const netEarnings = Number(totals?.netEarnings) || trip + cancellation - penalty;
-  const lifetimeCredit = trip + cancellation;
+  const netEarnings =
+    Number(totals?.netEarnings) || trip + cancellation + subscription - penalty;
+  const lifetimeCredit = trip + cancellation + subscription;
   if (lifetimeCredit <= 0 && penalty <= 0) return null;
   return (
     <Card padding="p-0">
@@ -290,6 +294,18 @@ function EarningsBreakdown({ totals }) {
           amount={cancellation}
           direction="credit"
         />
+        {subscription > 0 && (
+          <BreakdownRow
+            icon={Sparkles}
+            tone="text-violet-700 bg-violet-100"
+            label="Subscription payouts"
+            subLabel={`${Number(totals?.subscriptionCount) || 0} payout${
+              (totals?.subscriptionCount || 0) === 1 ? '' : 's'
+            }`}
+            amount={subscription}
+            direction="credit"
+          />
+        )}
         {penalty > 0 && (
           <BreakdownRow
             icon={AlertOctagon}
@@ -406,19 +422,31 @@ function AllEarningsFeed({ rows, loading, fetched, hasMore, onLoadMore, onSelect
 function EarningsLedgerRow({ row, onSelect }) {
   const isPenalty = row.kind === 'penalty';
   const isCancellation = row.kind === 'cancellation_share';
-  const Icon = isPenalty ? AlertOctagon : isCancellation ? XCircle : Car;
+  const isSubscription = row.kind === 'subscription_payout';
+  const Icon = isPenalty
+    ? AlertOctagon
+    : isCancellation
+      ? XCircle
+      : isSubscription
+        ? Sparkles
+        : Car;
   const tone = isPenalty
     ? 'text-rose-700 bg-rose-100'
     : isCancellation
       ? 'text-amber-600 bg-amber-100'
-      : 'text-success bg-success/10';
+      : isSubscription
+        ? 'text-violet-700 bg-violet-100'
+        : 'text-success bg-success/10';
   const title = isPenalty
     ? 'Cancellation penalty'
     : isCancellation
       ? 'Cancellation share'
-      : 'Trip earning';
+      : isSubscription
+        ? 'Subscription payout'
+        : 'Trip earning';
   const subline = [
     row.bookingNumber ? `#${row.bookingNumber}` : null,
+    isSubscription ? row.meta?.planName || 'Dedicated subscription' : null,
     row.serviceType ? labelForService(row.serviceType) : null,
     formatLedgerDate(row.occurredAt),
   ]
@@ -489,25 +517,39 @@ function formatLedgerDate(iso) {
 function EarningsBarChart({ buckets, peak }) {
   const safePeak = peak > 0 ? peak : 1;
   return (
-    <div className="flex items-end justify-between gap-2 h-32 mb-2">
+    <div className="flex items-stretch justify-between gap-2.5 h-36 mt-2">
       {buckets.map((bucket) => {
-        const heightPct = Math.max(4, Math.round((bucket.earnings / safePeak) * 100));
-        const isPeak = bucket.earnings > 0 && bucket.earnings === peak;
+        const hasEarnings = bucket.earnings > 0;
+        const heightPct = hasEarnings ? Math.max(6, Math.round((bucket.earnings / safePeak) * 100)) : 0;
+        const isPeak = hasEarnings && bucket.earnings === peak;
         return (
           <div
             key={bucket.date}
-            className="flex-1 flex flex-col items-center gap-1 min-w-0"
+            className="flex-1 flex flex-col items-center min-w-0 h-full justify-between"
           >
-            <span className="text-[10px] font-semibold text-text-muted h-3 leading-3">
-              {bucket.earnings > 0 ? `₹${Math.round(bucket.earnings)}` : ''}
+            {/* Value Label */}
+            <span className="text-[9px] font-bold text-slate-500 h-4 flex items-center shrink-0">
+              {hasEarnings ? `₹${Math.round(bucket.earnings)}` : '—'}
             </span>
-            <div
-              className={`w-full rounded-t-md transition-all ${
-                isPeak ? 'bg-primary' : 'bg-primary/30'
-              }`}
-              style={{ height: `${heightPct}%` }}
-            />
-            <span className="text-[10px] text-text-muted">{bucket.label}</span>
+            
+            {/* Bar Track & Fill */}
+            <div className="flex-1 w-3 bg-slate-100 rounded-full relative flex items-end overflow-hidden border border-slate-100/30">
+              {hasEarnings && (
+                <div
+                  className={`w-full rounded-full transition-all duration-500 ease-out ${
+                    isPeak 
+                      ? 'bg-primary shadow-sm shadow-primary/20' 
+                      : 'bg-slate-300'
+                  }`}
+                  style={{ height: `${heightPct}%` }}
+                />
+              )}
+            </div>
+            
+            {/* Date Label */}
+            <span className="text-[10px] font-semibold text-slate-400 mt-2 shrink-0 capitalize">
+              {bucket.label}
+            </span>
           </div>
         );
       })}
@@ -545,6 +587,10 @@ function LedgerBreakdownSheet({ row, onClose }) {
     title = 'Cancellation share';
     Icon = XCircle;
     tone = 'text-amber-600 bg-amber-100';
+  } else if (row?.kind === 'subscription_payout') {
+    title = 'Subscription payout';
+    Icon = Sparkles;
+    tone = 'text-violet-700 bg-violet-100';
   } else if (row?.kind === 'trip') {
     title = 'Trip earning';
   }
@@ -570,7 +616,9 @@ function LedgerBreakdownSheet({ row, onClose }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-text truncate">
-                {row.bookingNumber ? `#${row.bookingNumber}` : title}
+                {row.bookingNumber
+                  ? `#${row.bookingNumber}`
+                  : row.meta?.planName || title}
               </p>
               <p className="text-[11px] text-text-muted truncate">
                 {[
@@ -590,6 +638,9 @@ function LedgerBreakdownSheet({ row, onClose }) {
           {row.kind === 'trip' && <TripBreakdownBlock meta={meta} row={row} />}
           {row.kind === 'cancellation_share' && (
             <CancellationShareBlock meta={meta} row={row} />
+          )}
+          {row.kind === 'subscription_payout' && (
+            <SubscriptionPayoutBlock meta={meta} row={row} />
           )}
           {row.kind === 'penalty' && <PenaltyBlock meta={meta} row={row} />}
         </div>
@@ -686,6 +737,29 @@ function CancellationShareBlock({ meta, row }) {
               <span className="text-text-secondary">Reason:</span> {reason}
             </p>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubscriptionPayoutBlock({ meta, row }) {
+  const workingDays = Number(meta.workingDays) || 0;
+  return (
+    <div className="bg-gray-50 rounded-2xl divide-y divide-border-light">
+      <BreakdownLine
+        icon={Sparkles}
+        tone="text-violet-700 bg-violet-100"
+        label="Subscription driver share"
+        sublabel={meta.planName || 'Dedicated subscription'}
+        amount={row.amountRupees}
+      />
+      {workingDays > 0 && (
+        <div className="px-4 py-3 text-xs text-text-muted">
+          <p>
+            <span className="text-text-secondary">Working days covered:</span>{' '}
+            {workingDays}
+          </p>
         </div>
       )}
     </div>

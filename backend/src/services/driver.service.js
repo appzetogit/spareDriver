@@ -578,6 +578,41 @@ export const updateOutstationAvailabilityService = async (
   return driver.toObject();
 };
 
+/** Post-onboarding update: vehicle experience only (max 5). */
+export const updateVehicleExperienceService = async (driverId, vehicleExperience) => {
+  const {
+    normalizeDriverVehicleExperience,
+    syncCarTypeExperienceFromVehicles,
+  } = await import('../utils/driverVehicleExperience.util.js');
+
+  const vehicles = await normalizeDriverVehicleExperience(vehicleExperience);
+
+  const driver = await Driver.findByIdAndUpdate(
+    driverId,
+    {
+      $set: {
+        vehicleExperience: vehicles,
+        carTypeExperience: syncCarTypeExperienceFromVehicles(vehicles),
+      },
+    },
+    { new: true, runValidators: true },
+  ).populate(vehicleExperiencePopulate);
+
+  if (!driver) {
+    throw new ApiError(404, 'Driver not found');
+  }
+
+  driver.documents = dedupeDocumentsByType(driver.documents);
+  const doc = driver.toObject();
+  const eligibility = await syncDriverKitEligibility(driverId);
+  doc.kitEligibility = {
+    canGoOnline: eligibility.allowed,
+    reasons: eligibility.reasons,
+    code: eligibility.code,
+  };
+  return doc;
+};
+
 // ─── Forgot / Reset Password (phone OTP only) ───────────────────────────────
 
 export const sendDriverForgotPasswordOtpService = async (phone) => {
