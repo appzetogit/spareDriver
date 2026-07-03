@@ -1,9 +1,13 @@
 import { Bell, Menu, Search } from 'lucide-react';
 import AdminUserMenu from './AdminUserMenu';
+import { NotificationBell } from '../../../components/notifications/NotificationCenter';
+import { useAdminNotificationStore } from '../../../store/useNotificationStore';
+import { AdminNotificationBridge } from '../../../components/notifications/NotificationBridge';
 
 const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 lg:px-6">
+      <AdminNotificationBridge />
       <div className="flex items-center justify-between h-16">
         {/* Left: Hamburger + Title */}
         <div className="flex items-center gap-3">
@@ -30,11 +34,7 @@ const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
             />
           </div>
 
-          {/* Notifications */}
-          <button className="relative p-2.5 rounded-xl hover:bg-gray-100 text-text-secondary transition-colors">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-white" />
-          </button>
+          <NotificationBell store={useAdminNotificationStore} audience="admin" panelTitle="Admin alerts" />
 
           <AdminUserMenu />
         </div>

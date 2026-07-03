@@ -1,5 +1,10 @@
+import { useState } from 'react';
+import toast from 'react-hot-toast';
 import AdminDetailModal from '../AdminDetailModal';
 import Badge from '../../../../components/Badge';
+import Button from '../../../../components/Button';
+import api from '../../../../utils/api';
+import { BOOKING_STATUS_LIST } from '../../../../constants/bookingStatus';
 import {
   CalendarClock,
   Car,
@@ -70,10 +75,16 @@ const BookingDetailsModal = ({
   vehicle = null,
   bufferMinutes = null,
   loadingExtra = false,
+  canEditStatus = false,
+  onStatusUpdated,
 }) => {
+  const [statusDraft, setStatusDraft] = useState('');
+  const [statusReason, setStatusReason] = useState('');
+  const [statusSaving, setStatusSaving] = useState(false);
+
   if (!booking) return null;
 
-  const statusVariant = STATUS_VARIANTS[booking.status] || 'default';
+  const currentStatus = statusDraft || booking.status;
   const isScheduled = booking.bookingType === 'scheduled';
   const isOutstation = booking.serviceType === 'outstation';
   const outstation = booking.outstation || {};
@@ -88,6 +99,31 @@ const BookingDetailsModal = ({
   const fareSnapshot = booking.fareSnapshot || {};
   const timeline = booking.timeline || {};
   const scheduled = booking.scheduled || {};
+
+  const statusVariant = STATUS_VARIANTS[booking.status] || 'default';
+
+  const saveStatus = async () => {
+    if (!currentStatus || currentStatus === booking.status) {
+      toast.error('Pick a different status');
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      const res = await api.patch(`/admin/bookings/${booking._id}/status`, {
+        status: currentStatus,
+        reason: statusReason.trim() || undefined,
+      });
+      const updated = res?.data?.data?.booking;
+      toast.success('Booking status updated');
+      setStatusDraft('');
+      setStatusReason('');
+      onStatusUpdated?.(updated || { ...booking, status: currentStatus });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not update status');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   const vehicleLabel = vehicle
     ? `${vehicle.brandId?.name || ''} ${vehicle.modelId?.name || ''}`.trim() ||
@@ -129,6 +165,41 @@ const BookingDetailsModal = ({
       }
     >
       <div className="space-y-4">
+        {canEditStatus && (
+          <Section title="Admin status override" icon={AlertCircle}>
+            <p className="text-xs text-slate-500 mb-3">
+              Change trip status to cancel stuck bookings or unblock account deletions.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                value={currentStatus}
+                onChange={(e) => setStatusDraft(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+              >
+                {BOOKING_STATUS_LIST.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={statusReason}
+                onChange={(e) => setStatusReason(e.target.value)}
+                placeholder="Reason (optional)"
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+              <Button
+                type="button"
+                onClick={saveStatus}
+                disabled={statusSaving || currentStatus === booking.status}
+                className="shrink-0"
+              >
+                {statusSaving ? 'Saving…' : 'Update status'}
+              </Button>
+            </div>
+          </Section>
+        )}
+
         <Section title="Service & schedule" icon={CalendarClock}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field

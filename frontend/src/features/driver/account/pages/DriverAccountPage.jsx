@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -6,21 +6,13 @@ import {
   Building2,
   Car,
   HelpCircle,
-  Settings,
   LogOut,
   ChevronRight,
   Package,
   ShoppingBag,
   History,
-  Phone,
-  Mail,
-  Star,
-  Wallet,
-  IdCard,
-  ShieldCheck,
   Circle,
-  Calendar,
-  Briefcase,
+  Trash2,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Avatar from '../../../../components/Avatar';
@@ -30,12 +22,10 @@ import { useDriverProfileStore } from '../../../../store/driver/useDriverProfile
 import { useDriverHomeSummaryStore } from '../../../../store/driver/useDriverTripsStore';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
-import { formatCurrency, formatPhone, formatDate } from '../../../../utils/formatters';
+import { formatCurrency, formatPhone } from '../../../../utils/formatters';
 import DriverScreenShell from '../../components/DriverScreenShell';
-
-/* ------------------------------------------------------------------ */
-/* Menu config                                                         */
-/* ------------------------------------------------------------------ */
+import DeleteAccountSheet from '../../../../components/DeleteAccountSheet';
+import useDriverAccountDeletionStore from '../../../../store/driver/useDriverAccountDeletionStore';
 
 const APPROVAL_BADGE = {
   approved: { variant: 'success', label: 'Approved' },
@@ -51,30 +41,25 @@ const MENU_GROUPS = [
     items: [
       { icon: Package, label: 'Driver Kit', path: '/driver/kit' },
       { icon: ShoppingBag, label: 'My Orders', path: '/driver/orders' },
-      { icon: History, label: 'Payment History', path: '/driver/payments' },
-      { icon: Car, label: 'Vehicle Preferences' },
+      { icon: Car, label: 'Vehicle Preferences', path: '/driver/vehicle-preferences' },
     ],
   },
   {
     title: 'Account',
     items: [
-      { icon: User, label: 'My Profile' },
-      { icon: FileText, label: 'Documents' },
-      { icon: Building2, label: 'Bank Details' },
+      { icon: User, label: 'My Profile', path: '/driver/account/profile' },
+      { icon: FileText, label: 'Profile & Documents', path: '/driver/account/documents' },
+      { icon: Building2, label: 'Bank Details', path: '/driver/account/bank' },
+      { icon: History, label: 'Payment History', path: '/driver/payments' },
     ],
   },
   {
     title: 'Help',
     items: [
       { icon: HelpCircle, label: 'Help & Support' },
-      { icon: Settings, label: 'Settings' },
     ],
   },
 ];
-
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
 
 const DriverAccountPage = () => {
   const navigate = useNavigate();
@@ -83,12 +68,19 @@ const DriverAccountPage = () => {
   const logout = useDriverAuthStore((s) => s.logout);
 
   const profileKey = buildCacheKey('driver-profile', {});
-  const summaryKey = buildCacheKey('driver-home-summary', {});
   const { data: profile } = useCachedQuery(useDriverProfileStore, profileKey, {});
-  const { data: summary } = useCachedQuery(useDriverHomeSummaryStore, summaryKey, {});
 
-  // Hydrate the persisted auth-store copy so other surfaces (BottomNav badge,
-  // kit eligibility prompts, etc) read the freshest fields too.
+  const deletionRequest = useDriverAccountDeletionStore((s) => s.request);
+  const deletionLoading = useDriverAccountDeletionStore((s) => s.loading);
+  const deletionSubmitting = useDriverAccountDeletionStore((s) => s.submitting);
+  const fetchDeletionRequest = useDriverAccountDeletionStore((s) => s.fetchRequest);
+  const submitDeletionRequest = useDriverAccountDeletionStore((s) => s.submitRequest);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    fetchDeletionRequest().catch(() => {});
+  }, [fetchDeletionRequest]);
+
   useEffect(() => {
     if (!profile) return;
     updateDriver({
@@ -102,77 +94,16 @@ const DriverAccountPage = () => {
     });
   }, [profile, updateDriver]);
 
-  // Memoise the resolved driver doc so downstream `useMemo`s have a stable
-  // reference — `profile || cachedDriver || {}` would otherwise produce a new
-  // empty object on every render, defeating memoisation.
   const driver = useMemo(
     () => profile || cachedDriver || {},
     [profile, cachedDriver],
   );
   const displayName = driver?.name || 'Driver';
   const phone = formatPhone(driver?.phone || '');
-  const email = driver?.email || '';
-  const ratingValue = Number(summary?.rating?.value ?? driver?.rating ?? 0);
-  const ratingCount = Number(summary?.rating?.count ?? driver?.ratingCount ?? 0);
-  const today = summary?.today || { earnings: 0, trips: 0 };
-  const wallet = driver?.wallet || {};
   const approval = APPROVAL_BADGE[driver?.approvalStatus] || {
     variant: 'default',
     label: '—',
   };
-
-  const personalRows = useMemo(
-    () =>
-      [
-        { icon: Phone, label: 'Phone', value: phone || '—' },
-        { icon: Mail, label: 'Email', value: email || 'Not added' },
-        driver?.gender && {
-          icon: User,
-          label: 'Gender',
-          value: capitalise(driver.gender),
-        },
-        driver?.dateOfBirth && {
-          icon: Calendar,
-          label: 'Date of birth',
-          value: formatDate(driver.dateOfBirth),
-        },
-      ].filter(Boolean),
-    [driver, phone, email],
-  );
-
-  const drivingRows = useMemo(() => {
-    const license = driver?.drivingLicense || {};
-    return [
-      license.number && {
-        icon: IdCard,
-        label: 'Driving license',
-        value: license.number,
-        sub: license.expiryDate
-          ? `Expires ${formatDate(license.expiryDate)}`
-          : null,
-      },
-      typeof driver?.experienceYears === 'number' && {
-        icon: Briefcase,
-        label: 'Experience',
-        value: `${driver.experienceYears} year${
-          driver.experienceYears === 1 ? '' : 's'
-        }`,
-      },
-      driver?.availability && {
-        icon: Calendar,
-        label: 'Availability',
-        value: availabilityLabel(driver.availability),
-      },
-      Array.isArray(driver?.vehicleExperience) &&
-        driver.vehicleExperience.length > 0 && {
-          icon: Car,
-          label: 'Registered vehicles',
-          value: `${driver.vehicleExperience.length} vehicle${
-            driver.vehicleExperience.length === 1 ? '' : 's'
-          }`,
-        },
-    ].filter(Boolean);
-  }, [driver]);
 
   const handleLogout = () => {
     logout();
@@ -203,13 +134,6 @@ const DriverAccountPage = () => {
               )}
               <div className="flex items-center gap-3 mt-1.5">
                 <span className="inline-flex items-center gap-1 text-[11px] text-white/80">
-                  <Star className="w-3 h-3 fill-primary text-primary" />
-                  {ratingValue ? ratingValue.toFixed(1) : 'New'}
-                  {ratingCount > 0 && (
-                    <span className="text-white/50">({ratingCount})</span>
-                  )}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] text-white/80">
                   <Circle
                     className={`w-2 h-2 fill-current ${
                       driver?.isOnline ? 'text-success' : 'text-white/40'
@@ -222,32 +146,8 @@ const DriverAccountPage = () => {
           </div>
         </header>
       }
-      bodyClassName="p-4 -mt-3 pb-8 space-y-4"
+      bodyClassName="p-4 pb-8 space-y-4"
     >
-      <StatsRow today={today} wallet={wallet} />
-
-      {personalRows.length > 0 && (
-        <InfoCard title="Personal details" rows={personalRows} />
-      )}
-
-      {drivingRows.length > 0 && (
-        <InfoCard title="Driving credentials" rows={drivingRows} />
-      )}
-
-      {driver?.bankDetails?.accountNumber && (
-        <InfoCard
-          title="Bank account"
-          rows={[
-            {
-              icon: Building2,
-              label: driver.bankDetails.bankName || 'Bank',
-              value: maskAccount(driver.bankDetails.accountNumber),
-              sub: driver.bankDetails.ifsc || null,
-            },
-          ]}
-        />
-      )}
-
       {MENU_GROUPS.map((group) => (
         <div key={group.title}>
           <p className="px-1 mb-2 text-[11px] uppercase tracking-wide font-semibold text-text-muted">
@@ -280,6 +180,17 @@ const DriverAccountPage = () => {
         </div>
       ))}
 
+      {/*
+      <button
+        type="button"
+        onClick={() => setDeleteOpen(true)}
+        className="w-full flex items-center justify-center gap-2 py-3.5 bg-white rounded-2xl shadow-card text-danger font-medium text-sm hover:bg-danger-light transition-colors"
+      >
+        <Trash2 className="w-4 h-4" />
+        Delete account
+      </button>
+      */}
+
       <button
         type="button"
         onClick={handleLogout}
@@ -292,123 +203,23 @@ const DriverAccountPage = () => {
       <p className="text-center text-[11px] text-text-muted pt-1">
         Driver ID {driver?._id ? short(driver._id) : '—'}
       </p>
+
+      <DeleteAccountSheet
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        audience="driver"
+        walletBalance={Number(profile?.wallet?.balance) || 0}
+        existingRequest={deletionRequest}
+        loading={deletionLoading}
+        submitting={deletionSubmitting}
+        onSubmit={submitDeletionRequest}
+      />
     </DriverScreenShell>
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* Sub-components                                                      */
-/* ------------------------------------------------------------------ */
 
-/**
- * Three-up stat tiles for the hero region: today, today's trips, wallet.
- * Kept inline because none of the rendering is reused outside this page.
- */
-function StatsRow({ today, wallet }) {
-  const tiles = [
-    {
-      label: 'Today',
-      value: formatCurrency(today.earnings || 0),
-      icon: Star,
-      iconClass: 'text-primary',
-    },
-    {
-      label: 'Trips',
-      value: String(today.trips || 0),
-      icon: Car,
-      iconClass: 'text-text-secondary',
-    },
-    {
-      label: 'Wallet',
-      value: formatCurrency(wallet.balance || 0),
-      icon: Wallet,
-      iconClass: 'text-emerald-600',
-    },
-  ];
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {tiles.map((tile) => (
-        <Card
-          key={tile.label}
-          padding="p-3"
-          className="flex flex-col items-start gap-1"
-        >
-          <tile.icon className={`w-4 h-4 ${tile.iconClass}`} />
-          <p className="text-sm font-bold text-text leading-tight truncate w-full">
-            {tile.value}
-          </p>
-          <p className="text-[10px] text-text-muted uppercase tracking-wide">
-            {tile.label}
-          </p>
-        </Card>
-      ))}
-    </div>
-  );
-}
 
-function InfoCard({ title, rows }) {
-  return (
-    <div>
-      <p className="px-1 mb-2 text-[11px] uppercase tracking-wide font-semibold text-text-muted">
-        {title}
-      </p>
-      <Card padding="p-0">
-        <ul className="divide-y divide-border-light">
-          {rows.map((row) => (
-            <li
-              key={row.label}
-              className="flex items-start gap-3 px-4 py-3"
-            >
-              <div className="w-8 h-8 rounded-lg bg-bg flex items-center justify-center shrink-0 mt-0.5">
-                <row.icon className="w-4 h-4 text-text-secondary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-text-muted">{row.label}</p>
-                <p className="text-sm font-semibold text-text break-words">
-                  {row.value}
-                </p>
-                {row.sub && (
-                  <p className="text-[11px] text-text-muted mt-0.5">{row.sub}</p>
-                )}
-              </div>
-              {row.verified && (
-                <ShieldCheck className="w-4 h-4 text-success shrink-0 mt-1" />
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
-
-function capitalise(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-function availabilityLabel(value) {
-  switch (value) {
-    case 'full-time':
-      return 'Full time';
-    case 'part-time':
-      return 'Part time';
-    case 'weekends-only':
-      return 'Weekends only';
-    default:
-      return capitalise(value);
-  }
-}
-
-function maskAccount(num) {
-  const s = String(num);
-  if (s.length <= 4) return s;
-  return `•••• ${s.slice(-4)}`;
-}
 
 function short(id) {
   const s = String(id);

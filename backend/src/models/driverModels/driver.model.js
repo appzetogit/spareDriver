@@ -227,6 +227,16 @@ const driverSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    fcmTokenWeb: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    fcmTokenMobile: {
+      type: String,
+      default: '',
+      trim: true,
+    },
 
     // ── Ratings ───────────────────────────────────────────────────────────────
     rating: {
@@ -388,6 +398,23 @@ const driverSchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
       default: [],
       index: true,
+    },
+    /** Driver confirmed they are OK with all-India / multi-state outstation trips. */
+    outstationAllIndiaOk: {
+      type: Boolean,
+      default: false,
+    },
+    /** Self-declared max driving hours per day on outstation trips. */
+    outstationMaxDrivingHoursPerDay: {
+      type: Number,
+      default: null,
+      min: 4,
+      max: 16,
+    },
+    /** Set when the driver completes the first-time outstation preference form. */
+    outstationPreferencesCompletedAt: {
+      type: Date,
+      default: null,
     },
 
     // ── Driver kit (mandatory before going online) ───────────────────────────

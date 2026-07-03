@@ -17,6 +17,7 @@ import {
   emitToBooking,
   emitToAdmins,
 } from '../utils/socketEmitters.js';
+import { notifyDriverOrderAssigned } from '../utils/notificationDispatch.js';
 import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
 import {
   estimateBookingWindow,
@@ -25,6 +26,7 @@ import {
 } from './driverConflict.service.js';
 import { getVehicleConflicts } from './vehicleConflict.service.js';
 import { loadScheduledDispatchConfig } from './bookingScheduled.service.js';
+import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
 
 /**
  * Outstation manual-assignment pipeline.
@@ -318,7 +320,18 @@ export async function getOutstationAssignmentDetailService(bookingId, staff) {
  */
 export async function listAvailableDriversForOutstationService(
   bookingId,
-  { search, page = 1, limit = 50, staff } = {},
+  {
+    search,
+    page = 1,
+    limit = 50,
+    staff,
+    carTypeMatch = 'true',
+    minRating,
+    onlineOnly,
+    allIndiaOnly,
+    minDrivingHoursPerDay,
+    zoneId,
+  } = {},
 ) {
   const detail = await getOutstationAssignmentDetailService(bookingId, staff);
   if (!detail) {
@@ -337,7 +350,7 @@ export async function listAvailableDriversForOutstationService(
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 300);
   const skip = (pageNum - 1) * limitNum;
 
-  const carTypeId = car?.carTypeId?._id || car?.carTypeId || null;
+  const carTypeId = await resolveCarTypeObjectId(car?.carTypeId?._id || car?.carTypeId);
 
   // Resolve the booking's zone IDs so we can filter to drivers who opted
   // into those zones. `zoneIds` on the booking is already populated with
@@ -354,16 +367,39 @@ export async function listAvailableDriversForOutstationService(
   };
 
   // Zone filter — only show drivers who opted into at least one of the
-  // booking's pickup zones. This is the key new behaviour: admins only
-  // see zone-relevant drivers in the picker.
-  if (bookingZoneIds.length) {
-    match.preferredOutstationZones = { $in: bookingZoneIds };
+  // booking's pickup zones. Optional `zoneId` narrows to a single zone.
+  let zoneFilterIds = bookingZoneIds;
+  if (zoneId) {
+    const selected = String(zoneId);
+    const allowed = bookingZoneIds.map((id) => String(id));
+    if (allowed.includes(selected)) {
+      try {
+        zoneFilterIds = [new mongoose.Types.ObjectId(selected)];
+      } catch { /* ignore bad id */ }
+    }
+  }
+  if (zoneFilterIds.length) {
+    match.preferredOutstationZones = { $in: zoneFilterIds };
   }
 
-  if (carTypeId) {
-    try {
-      match.carTypeExperience = new mongoose.Types.ObjectId(String(carTypeId));
-    } catch { /* ignore bad id */ }
+  if (carTypeId && carTypeMatch !== 'false') {
+    match.carTypeExperience = carTypeId;
+  }
+  if (minRating != null && minRating !== '') {
+    const rating = Number(minRating);
+    if (Number.isFinite(rating) && rating > 0) match.rating = { $gte: rating };
+  }
+  if (onlineOnly === 'true' || onlineOnly === true) {
+    match.isOnline = true;
+  }
+  if (allIndiaOnly === 'true' || allIndiaOnly === true) {
+    match.outstationAllIndiaOk = true;
+  }
+  if (minDrivingHoursPerDay != null && minDrivingHoursPerDay !== '') {
+    const hours = Number(minDrivingHoursPerDay);
+    if (Number.isFinite(hours) && hours > 0) {
+      match.outstationMaxDrivingHoursPerDay = { $gte: hours };
+    }
   }
   if (search) {
     const q = String(search).trim();
@@ -378,8 +414,10 @@ export async function listAvailableDriversForOutstationService(
   const [drivers, total] = await Promise.all([
     Driver.find(match)
       .select(
-        'name phone email rating experienceYears isOnline isOnTrip location lastLocationAt carTypeExperience availableForOutstation preferredOutstationZones outstationAvailabilityUpdatedAt cancellationStats',
+        'name phone email rating experienceYears isOnline isOnTrip location lastLocationAt carTypeExperience availableForOutstation preferredOutstationZones outstationAvailabilityUpdatedAt outstationAllIndiaOk outstationMaxDrivingHoursPerDay cancellationStats',
       )
+      .populate('carTypeExperience', 'name')
+      .populate('preferredOutstationZones', 'name city')
       .sort({
         'cancellationStats.priorityPenaltyPoints': 1,
         isOnline: -1,
@@ -626,27 +664,7 @@ export async function adminAssignDriverToOutstationService(
   emitToDriver(driver._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, userPayload);
 
-  emitToDriver(driver._id, S2C_EVENTS.NOTIFICATION, {
-    title: 'New outstation assignment',
-    body: `Admin assigned booking ${updatedBooking.bookingNumber} to you.`,
-    severity: 'info',
-    data: {
-      bookingId: String(updatedBooking._id),
-      // Forward both naming conventions so the driver app can switch
-      // over to pickupAt/expectedReturnAt at its own pace.
-      pickupAt:
-        updatedBooking.outstation?.pickupAt ||
-        updatedBooking.outstation?.startDate ||
-        null,
-      expectedReturnAt:
-        updatedBooking.outstation?.expectedReturnAt ||
-        updatedBooking.outstation?.endDate ||
-        null,
-      startDate: updatedBooking.outstation?.startDate || null,
-      endDate: updatedBooking.outstation?.endDate || null,
-      destinationAddress: updatedBooking.outstation?.destinationAddress || '',
-    },
-  });
+  notifyDriverOrderAssigned(driver._id, updatedBooking).catch(() => null);
 
   return {
     booking: await Booking.findById(updatedBooking._id)

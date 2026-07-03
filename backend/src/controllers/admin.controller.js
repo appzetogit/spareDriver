@@ -2,6 +2,10 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { setAuthCookies } from '../utils/cookie.util.js';
 import * as adminService from '../services/admin.service.js';
+import {
+  listAdminUserTripsService,
+  listAdminUserSubscriptionsService,
+} from '../services/adminUserActivity.service.js';
 
 export const loginAdmin = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -23,6 +27,16 @@ export const getStaffMe = asyncHandler(async (req, res) => {
 export const getCustomers = asyncHandler(async (req, res) => {
   const result = await adminService.getCustomersService(req.query);
   return res.status(200).json(new ApiResponse(200, result, 'Users fetched successfully'));
+});
+
+export const getAdminUserTrips = asyncHandler(async (req, res) => {
+  const result = await listAdminUserTripsService(req.params.userId, req.query);
+  return res.status(200).json(new ApiResponse(200, result, 'User trips fetched'));
+});
+
+export const getAdminUserSubscriptions = asyncHandler(async (req, res) => {
+  const result = await listAdminUserSubscriptionsService(req.params.userId, req.query);
+  return res.status(200).json(new ApiResponse(200, result, 'User subscriptions fetched'));
 });
 
 export const getDrivers = asyncHandler(async (req, res) => {

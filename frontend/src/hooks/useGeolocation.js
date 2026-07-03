@@ -54,7 +54,7 @@ export function useGeolocation({ enabled = true, options } = {}) {
         else setError(err?.message || 'Could not get your location');
       },
       {
-        enableHighAccuracy: true,
+        enableHighAccuracy: false,
         timeout: 8_000,
         maximumAge: 30_000,
         ...(options || {}),

@@ -73,27 +73,42 @@ export const adminListSubscriptionAvailableDrivers = asyncHandler(async (req, re
       page: Number(req.query.page) || 1,
       limit: Number(req.query.limit) || 50,
       staff: req.staff,
+      carTypeMatch: req.query.carTypeMatch,
+      minRating: req.query.minRating,
+      onlineOnly: req.query.onlineOnly,
+      allIndiaOnly: req.query.allIndiaOnly,
+      minDrivingHoursPerDay: req.query.minDrivingHoursPerDay,
+      zoneMatch: req.query.zoneMatch,
     },
   );
   return res.status(200).json(new ApiResponse(200, result, 'Available drivers fetched'));
 });
 
 export const adminAssignDriverToSubscription = asyncHandler(async (req, res) => {
-  const { driverId } = req.body || {};
+  const {
+    driverId,
+    workingStartDate,
+    workingEndDate,
+    previousDriverLastWorkingDate,
+  } = req.body || {};
   if (!driverId) throw new ApiError(400, 'driverId is required');
+  if (!workingStartDate) throw new ApiError(400, 'workingStartDate is required');
   const updated = await pricingService.assignDriverToSubscriptionService(
     req.params.id,
     driverId,
     req.staff?._id,
+    { workingStartDate, workingEndDate, previousDriverLastWorkingDate },
   );
   return res.status(200).json(new ApiResponse(200, updated, 'Driver assigned'));
 });
 
 export const adminReleaseSubscriptionDriver = asyncHandler(async (req, res) => {
-  const updated = await pricingService.releaseSubscriptionDriverService(
-    req.params.id,
-    req.body?.reason || '',
-  );
+  const { reason, lastWorkingDate } = req.body || {};
+  if (!lastWorkingDate) throw new ApiError(400, 'lastWorkingDate is required');
+  const updated = await pricingService.releaseSubscriptionDriverService(req.params.id, {
+    reason: reason || '',
+    lastWorkingDate,
+  });
   return res.status(200).json(new ApiResponse(200, updated, 'Driver released'));
 });
 
@@ -110,11 +125,17 @@ export const getActiveSubscriptionPlans = asyncHandler(async (_req, res) => {
 });
 
 export const purchaseSubscription = asyncHandler(async (req, res) => {
-  const { planId, zoneId } = req.body || {};
+  const { planId, zoneId, carId, termsAccepted, dailyPickup, dailyDropoff } = req.body || {};
   const checkout = await pricingService.createSubscriptionPurchaseOrderService(
     req.user._id,
     planId,
     zoneId,
+    carId,
+    {
+      termsAccepted: termsAccepted === true || termsAccepted === 'true',
+      dailyPickup,
+      dailyDropoff,
+    },
   );
   return res.status(200).json(new ApiResponse(200, checkout, 'Subscription checkout created'));
 });
@@ -139,16 +160,9 @@ export const verifySubscriptionPayment = asyncHandler(async (req, res) => {
 });
 
 export const getMySubscription = asyncHandler(async (req, res) => {
-  const subscription = await pricingService.getActiveUserSubscriptionService(req.user._id);
-  if (!subscription) {
-    return res.status(200).json(new ApiResponse(200, null, 'Active subscription fetched'));
-  }
+  const subscriptions = await pricingService.listActiveUserSubscriptionsService(req.user._id);
   return res.status(200).json(
-    new ApiResponse(
-      200,
-      pricingService.serializeSubscriptionForUser(subscription),
-      'Active subscription fetched',
-    ),
+    new ApiResponse(200, subscriptions, 'Active subscriptions fetched'),
   );
 });
 
@@ -162,6 +176,32 @@ export const adminListSubscriptionRevenue = asyncHandler(async (req, res) => {
     to: req.query.to || '',
   });
   return res.status(200).json(new ApiResponse(200, result, 'Subscription revenue fetched'));
+});
+
+export const adminGetSubscriptionDriverPayouts = asyncHandler(async (req, res) => {
+  const result = await pricingService.getSubscriptionDriverPayoutDetailService(req.params.id);
+  return res.status(200).json(new ApiResponse(200, result, 'Driver payout detail fetched'));
+});
+
+export const adminPaySubscriptionDrivers = asyncHandler(async (req, res) => {
+  const result = await pricingService.paySubscriptionDriverSharesService(
+    req.params.id,
+    req.staff?._id,
+    req.body,
+  );
+  return res.status(200).json(new ApiResponse(200, result, 'Driver shares paid'));
+});
+
+export const adminUpdateUserSubscriptionStatus = asyncHandler(async (req, res) => {
+  const { adminUpdateUserSubscriptionStatusService } = await import(
+    '../services/adminSubscriptionOps.service.js'
+  );
+  const { status, reason } = req.body || {};
+  const result = await adminUpdateUserSubscriptionStatusService(req.params.id, {
+    status,
+    reason,
+  });
+  return res.status(200).json(new ApiResponse(200, result, 'Subscription status updated'));
 });
 
 /**
@@ -182,6 +222,7 @@ export const estimateFare = asyncHandler(async (req, res) => {
     tollParking = 0,
     days = null,
     actualKm = 0,
+    carId = null,
   } = req.body || {};
 
   const result = await pricingService.estimateFareService({
@@ -196,6 +237,7 @@ export const estimateFare = asyncHandler(async (req, res) => {
     days,
     actualKm,
     userId,
+    carId,
   });
 
   return res.status(200).json(new ApiResponse(200, result, 'Fare estimated'));

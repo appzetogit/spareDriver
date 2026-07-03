@@ -131,6 +131,49 @@ export const protectStaff = async (req, res, next) => {
 };
 
 /**
+ * User or driver routes (e.g. SOS during an active trip).
+ */
+export const protectUserOrDriver = async (req, res, next) => {
+  const token = readAccessToken(req);
+  if (!token) {
+    return res.status(401).json({ status: 401, message: 'Not authorized, no token' });
+  }
+
+  try {
+    const decoded = verifyAccessToken(token);
+    const accountType = inferAccountType(decoded);
+
+    if (accountType === ACCOUNT_DRIVER) {
+      const driver = await Driver.findById(decoded.id);
+      if (!driver || driver.isDeleted) {
+        return res.status(401).json({ status: 401, message: 'Driver account not found or deactivated' });
+      }
+      req.driver = driver;
+      req.principalType = 'driver';
+      return next();
+    }
+
+    if (accountType === ACCOUNT_USER) {
+      const user = await User.findById(decoded.id);
+      if (!user || user.isDeleted) {
+        return res.status(401).json({ status: 401, message: 'Account not found or deactivated' });
+      }
+      if (STAFF_ROLES.includes(user.role)) {
+        return res.status(403).json({ status: 403, message: 'Use the admin panel to manage SOS alerts' });
+      }
+      req.user = user;
+      req.principalType = 'user';
+      return next();
+    }
+
+    return res.status(403).json({ status: 403, message: 'Access denied' });
+  } catch (error) {
+    const status = error.statusCode || 401;
+    return res.status(status).json({ status, message: error.message || 'Not authorized' });
+  }
+};
+
+/**
  * 4. Role Restriction Middleware
  * Use this after one of the protect middlewares
  */

@@ -82,12 +82,14 @@ const DocumentUploadField = ({
             <>
               <img src={doc.url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
               <CheckCircle className="w-8 h-8 text-primary z-0 bg-white rounded-full" />
-              <span className="text-sm text-primary font-medium z-0 bg-white px-2 rounded">Uploaded</span>
+              <span className="text-sm text-primary font-medium z-0 bg-white px-2 rounded">
+                {doc.isLocal || doc.pendingFile ? 'Selected' : 'Uploaded'}
+              </span>
             </>
           ) : (
             <>
               <Upload className="w-8 h-8 text-text-muted" />
-              <span className="text-sm text-text-secondary">Tap to upload</span>
+              <span className="text-sm text-text-secondary">Tap to select</span>
               {hint && <span className="text-xs text-text-muted">{hint}</span>}
               {(!accept || accept.includes('image')) && (
                 <span className="text-xs text-text-muted">Max {MAX_IMAGE_LABEL}</span>

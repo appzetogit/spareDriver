@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Car, CalendarCheck, DollarSign, Settings,
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
-  LifeBuoy, ClipboardList, Timer, Megaphone, Compass,
+  LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert,
 } from 'lucide-react';
 import { APP_NAME } from '../../../utils/constants';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
@@ -22,6 +22,7 @@ const navItems = [
   { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
   { path: '/admin/drivers', label: 'Drivers', icon: Car },
   { path: '/admin/drivers/live', label: 'Live Map', icon: Navigation },
+  { path: '/admin/sos', label: 'SOS Alerts', icon: ShieldAlert, roles: ['admin', 'sub_admin', 'team_member'] },
   { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
   // Ads management — admin + sub_admin can publish promotional images
   // and short videos that surface on the user home screen.
@@ -93,6 +94,19 @@ const navItems = [
         icon: Banknote,
         roles: ['admin'],
       },
+      {
+        path: '/admin/account/withdrawals',
+        label: 'Withdrawals',
+        icon: Banknote,
+        roles: ['admin'],
+      },
+      // Account deletions — disabled for now; uncomment to re-enable admin review flow
+      // {
+      //   path: '/admin/account/deletions',
+      //   label: 'Account Deletions',
+      //   icon: Users,
+      //   roles: ['admin'],
+      // },
     ],
   },
   {

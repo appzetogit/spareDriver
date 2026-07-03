@@ -1,14 +1,22 @@
 import { useState, useMemo, useEffect } from 'react';
+import { User as UserIcon } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminBookingsStore } from '../../../store/admin/useAdminBookingsStore';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import BookingDetailsModal from '../components/ManageBookings/BookingDetailsModal';
+import AssignBookingDriverDrawer from '../components/ManageBookings/AssignBookingDriverDrawer';
 import BookingFilters from '../components/ManageBookings/BookingFilters';
 import BookingStats from '../components/ManageBookings/BookingStats';
+import { canAdminAssignBooking } from '../utils/bookingAssignment';
+
+const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
 
 const ManageBookings = () => {
+  const admin = useAdminAuthStore((s) => s.admin);
+  const canAssign = OPERATIONS_ROLES.has(admin?.role);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState('');
@@ -20,6 +28,7 @@ const ManageBookings = () => {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [assignBooking, setAssignBooking] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -204,8 +213,35 @@ const ManageBookings = () => {
           </div>
         ),
       },
+      ...(canAssign
+        ? [
+            {
+              key: 'actions',
+              label: 'Action',
+              sortable: false,
+              unclamp: true,
+              width: '9%',
+              render: (_, row) =>
+                canAdminAssignBooking(row) ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAssignBooking(row);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-dark text-xs font-bold hover:bg-primary-dark transition-all duration-150 shadow-sm hover:shadow"
+                  >
+                    <UserIcon className="w-3.5 h-3.5" />
+                    Assign
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-300">—</span>
+                ),
+            },
+          ]
+        : []),
     ],
-    [],
+    [canAssign],
   );
 
   const stats = data?.stats ?? {
@@ -284,7 +320,23 @@ const ManageBookings = () => {
         isOpen={!!selectedBooking}
         onClose={() => setSelectedBooking(null)}
         booking={selectedBooking}
+        canEditStatus={canAssign}
+        onStatusUpdated={(updated) => {
+          setSelectedBooking((prev) => (prev ? { ...prev, ...updated } : prev));
+          refetch();
+        }}
       />
+
+      {assignBooking && (
+        <AssignBookingDriverDrawer
+          booking={assignBooking}
+          onClose={() => setAssignBooking(null)}
+          onAssigned={() => {
+            setAssignBooking(null);
+            refetch();
+          }}
+        />
+      )}
     </div>
   );
 };

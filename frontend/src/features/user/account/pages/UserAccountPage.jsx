@@ -1,7 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Card from '../../../../components/Card';
-import Avatar from '../../../../components/Avatar';
 import {
   User,
   Car,
@@ -13,13 +11,18 @@ import {
   LogOut,
   ChevronRight,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
+import Card from '../../../../components/Card';
+import Avatar from '../../../../components/Avatar';
+import DeleteAccountSheet from '../../../../components/DeleteAccountSheet';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
+import useUserAccountDeletionStore from '../../../../store/user/useUserAccountDeletionStore';
 import { useUserSubscriptionStore } from '../../../../store/user/useUserPricingStore';
 
 const menuItems = [
-  { id: 'profile', icon: User, label: 'My Profile', path: '#' },
+  { id: 'profile', icon: User, label: 'My Profile', path: '/user/profile' },
   { id: 'cars', icon: Car, label: 'My Cars', path: '/user/my-cars' },
   { id: 'subscription', icon: Sparkles, label: 'My Subscription', path: '/user/account/subscription', dynamic: 'subscription' },
   { id: 'payments', icon: CreditCard, label: 'Payment Methods', path: '#' },
@@ -35,18 +38,30 @@ const UserAccountPage = () => {
   const logout = useUserAuthStore((s) => s.logout);
   const wallet = useUserWalletStore((s) => s.wallet);
   const fetchWallet = useUserWalletStore((s) => s.fetchWallet);
-  const mySubscription = useUserSubscriptionStore((s) => s.mySubscription);
+  const mySubscriptions = useUserSubscriptionStore((s) => s.mySubscriptions);
   const fetchMySubscription = useUserSubscriptionStore((s) => s.fetchMySubscription);
+
+  const deletionRequest = useUserAccountDeletionStore((s) => s.request);
+  const deletionLoading = useUserAccountDeletionStore((s) => s.loading);
+  const deletionSubmitting = useUserAccountDeletionStore((s) => s.submitting);
+  const fetchDeletionRequest = useUserAccountDeletionStore((s) => s.fetchRequest);
+  const submitDeletionRequest = useUserAccountDeletionStore((s) => s.submitRequest);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     fetchWallet().catch(() => {});
     fetchMySubscription().catch(() => {});
-  }, [fetchWallet, fetchMySubscription]);
+    fetchDeletionRequest().catch(() => {});
+  }, [fetchWallet, fetchMySubscription, fetchDeletionRequest]);
 
   const subscriptionLabel = useMemo(() => {
-    if (!mySubscription?._id) return 'No active plan';
-    return mySubscription.planNameSnapshot || mySubscription.planId?.name || 'Active';
-  }, [mySubscription]);
+    const list = mySubscriptions || [];
+    if (!list.length) return 'No active plan';
+    if (list.length === 1) {
+      return list[0].planNameSnapshot || list[0].planId?.name || 'Active';
+    }
+    return `${list.length} active subscriptions`;
+  }, [mySubscriptions]);
 
   const walletLabel = useMemo(
     () =>
@@ -101,7 +116,16 @@ const UserAccountPage = () => {
           })}
         </Card>
 
-        {/* Logout */}
+        {/* 
+        <button
+          onClick={() => setDeleteOpen(true)}
+          className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 bg-white rounded-2xl shadow-card text-danger font-medium text-sm hover:bg-danger-light transition-colors"
+        >
+          <Trash2 className="w-5 h-5" />
+          Delete account
+        </button>
+        */}
+
         <button
           onClick={logout}
           className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 bg-white rounded-2xl shadow-card text-danger font-medium text-sm hover:bg-danger-light transition-colors"
@@ -110,6 +134,17 @@ const UserAccountPage = () => {
           Logout
         </button>
       </div>
+
+      <DeleteAccountSheet
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        audience="user"
+        walletBalance={Number(wallet.balance) || 0}
+        existingRequest={deletionRequest}
+        loading={deletionLoading}
+        submitting={deletionSubmitting}
+        onSubmit={submitDeletionRequest}
+      />
     </div>
   );
 };

@@ -9,9 +9,6 @@ import { getRealtimeDb, isFirebaseConfigured } from '../config/firebase';
  * readiness flag. When Firebase isn't configured (Phase 2 dev mode), this
  * hook silently returns an empty list and `disabled: true` so the consumer
  * can render a "live map disabled" hint instead of an empty page.
- *
- * Shape returned:
- *   [{ driverId, lat, lng, accuracy, heading, speed, updatedAt, isOnline, isOnTrip }, …]
  */
 export function useFirebaseDriverLocations({ enabled = true } = {}) {
   const [drivers, setDrivers] = useState({});
@@ -42,6 +39,7 @@ export function useFirebaseDriverLocations({ enabled = true } = {}) {
           updatedAt: loc.updatedAt || null,
           isOnline: status?.isOnline ?? true,
           isOnTrip: status?.isOnTrip ?? false,
+          activeTrip: status?.activeTrip ?? null,
         };
       }
       setDrivers(next);

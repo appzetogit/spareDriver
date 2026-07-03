@@ -4,15 +4,11 @@ import useUserAuthStore from '../store/useUserAuthStore';
 import api from '../utils/api';
 import { Loader2 } from 'lucide-react';
 import { MAX_USER_CARS } from '../utils/constants';
-import { userNeedsPhone } from '../features/auth/utils/authNavigation';
+import { userNeedsPhone, userNeedsEmail } from '../features/auth/utils/authNavigation';
 
-// `/user/checklist` is the only page that's strictly part of the
-// one-time onboarding funnel — once the user has finished it, we
-// bounce them back to home if they revisit. The garage pages
-// (`/user/add-car`, `/user/my-cars`) double as everyday "manage my
-// vehicles" surfaces, so they must remain reachable post-onboarding
-// (e.g. when the customer hits "Add car" from the booking flow).
-const GARAGE_PATHS = ['/user/my-cars', '/user/add-car'];
+// Paths that are always reachable regardless of onboarding completion status
+// (garage pages, account pages, profile page).
+const GARAGE_PATHS = ['/user/my-cars', '/user/add-car', '/user/account', '/user/profile', '/user/wallet'];
 
 const UserOnboardingGuard = () => {
   const { isAuthenticated, user, setAuth, onboarding, setOnboarding } = useUserAuthStore();
@@ -21,9 +17,6 @@ const UserOnboardingGuard = () => {
   const [loading, setLoading] = useState(true);
   const pathWhenFetchedRef = useRef(null);
 
-  // Status is only valid for the route it was fetched on. After navigation we must
-  // wait for a fresh fetch — otherwise the first paint still has carCount: 0 and
-  // incorrectly redirects to /user/add-car (useLayoutEffect runs too late).
   const statusIsStale =
     isAuthenticated && pathWhenFetchedRef.current !== location.pathname;
 
@@ -82,44 +75,54 @@ const UserOnboardingGuard = () => {
   if (userNeedsPhone(user) && path !== '/link-phone') {
     return <Navigate to="/link-phone" replace />;
   }
+
+  if (userNeedsEmail(user) && path !== '/user/verify-email') {
+    return <Navigate to="/user/verify-email" replace />;
+  }
+
   const resolved = hasOptimisticCars ? { ...status, ...onboarding } : status;
   const carCount = resolved?.carCount ?? 0;
   const hasChecklist = Boolean(resolved?.hasChecklist);
   const onPath = (paths) => paths.some((p) => path.startsWith(p));
 
   if (hasChecklist) {
-    // Completed user trying to revisit the checklist — send them home.
-    // Garage paths and the dashboard remain accessible.
-    if (path.startsWith('/user/checklist')) {
-      return <Navigate to="/user/home" replace />;
-    }
-    // Already at the car cap — send them to the garage instead of an
-    // add-car form that the API would reject anyway.
     if (
       carCount >= MAX_USER_CARS &&
       path.startsWith('/user/add-car')
     ) {
       return <Navigate to="/user/my-cars" replace />;
     }
-    return <Outlet />;
+    return (
+      <>
+        <Outlet />
+      </>
+    );
   }
 
   if (carCount === 0) {
     if (!path.includes('/user/add-car')) {
       return <Navigate to="/user/add-car" replace />;
     }
-    return <Outlet />;
+    return (
+      <>
+        <Outlet />
+      </>
+    );
   }
 
-  if (!onPath([...GARAGE_PATHS, '/user/checklist'])) {
-    return <Navigate to="/user/checklist" replace />;
+  if (!onPath(GARAGE_PATHS)) {
+    return <Navigate to="/user/my-cars" replace />;
   }
 
   if (carCount >= MAX_USER_CARS && path.includes('/user/add-car')) {
-    return <Navigate to="/user/checklist" replace />;
+    return <Navigate to="/user/my-cars" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+    </>
+  );
 };
 
 export default UserOnboardingGuard;

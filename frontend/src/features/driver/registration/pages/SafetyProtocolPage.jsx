@@ -7,20 +7,25 @@ import { ArrowLeft } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { useDocumentsManager } from '../../../../hooks/useDocumentsManager';
+import { useFormDraft } from '../../../../hooks/useFormDraft';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 const SAFETY_DOC_TYPES = ['aadhaar_front', 'aadhaar_back', 'police_verification'];
+const SAFETY_DRAFT_KEY = 'driver-onboarding:step4';
 
 const SafetyProtocolPage = () => {
   const navigate = useNavigate();
   const updateDriver = useDriverAuthStore((state) => state.updateDriver);
-  const [agreed, setAgreed] = useState(false);
+  const [draft, setDraft, clearDraft, replaceDraft] = useFormDraft(SAFETY_DRAFT_KEY, { agreed: false });
+  const agreed = draft.agreed;
+  const setAgreed = (value) => setDraft((prev) => ({ ...prev, agreed: value }));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     documents,
     loadFromApiDocuments,
     uploadDocument,
+    uploadAllPending,
     isAnyUploading,
     allRequiredUploaded,
     toPayloadArray,
@@ -31,14 +36,16 @@ const SafetyProtocolPage = () => {
       try {
         const res = await api.get('/driver/profile');
         const data = res.data.data;
-        if (data?.safetyDeclaration?.agreed) setAgreed(true);
+        if (data?.safetyDeclaration?.agreed) {
+          replaceDraft({ agreed: true });
+        }
         if (data?.documents) loadFromApiDocuments(data.documents);
       } catch (error) {
         console.error('Failed to fetch profile', error);
       }
     };
     fetchProfile();
-  }, [loadFromApiDocuments]);
+  }, [loadFromApiDocuments, replaceDraft]);
 
   const handleSubmit = async () => {
     if (!allRequiredUploaded(SAFETY_DOC_TYPES)) {
@@ -48,15 +55,23 @@ const SafetyProtocolPage = () => {
 
     try {
       setIsSubmitting(true);
+      const uploadedDocs = await uploadAllPending();
+
+      const documentsPayload = toPayloadArray(uploadedDocs);
+      if (documentsPayload.length < SAFETY_DOC_TYPES.length) {
+        alert('Please select all required documents');
+        return;
+      }
 
       await api.put('/driver/onboarding/step', {
         stepNumber: 4,
         stepData: {
           safetyDeclaration: { agreed: true },
-          documents: toPayloadArray(),
+          documents: documentsPayload,
         },
       });
 
+      clearDraft();
       updateDriver({ onboardingStep: 4 });
       navigate('/driver/register/verification', { replace: true });
     } catch (error) {
@@ -126,7 +141,7 @@ const SafetyProtocolPage = () => {
             onClick={handleSubmit}
             className="rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20"
           >
-            {isAnyUploading ? 'UPLOADING...' : 'CONTINUE TO TRAINING'}
+            {isSubmitting || isAnyUploading ? 'UPLOADING...' : 'CONTINUE TO TRAINING'}
           </Button>
         </div>
       </div>

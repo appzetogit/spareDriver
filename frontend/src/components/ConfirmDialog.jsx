@@ -104,7 +104,7 @@ const ConfirmDialog = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
       onClick={(e) => {
         if (e.target === e.currentTarget && !loading) onClose?.();
       }}

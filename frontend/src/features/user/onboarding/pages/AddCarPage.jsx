@@ -1,14 +1,18 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { MAX_USER_CARS } from '../../../../utils/constants';
 import AddCarForm from '../components/AddCarForm';
 
 const AddCarPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const editCar = location.state?.editCar;
 
   const handleSuccess = ({ carCount }) => {
-    if (carCount >= MAX_USER_CARS) {
-      navigate('/user/checklist', { replace: true });
+    if (editCar) {
+      navigate('/user/my-cars', { replace: true });
+    } else if (carCount >= MAX_USER_CARS) {
+      navigate('/user/home', { replace: true });
     } else {
       navigate('/user/my-cars', { replace: true });
     }
@@ -25,15 +29,22 @@ const AddCarPage = () => {
           <ArrowLeft className="w-5 h-5 text-text" />
         </button>
         <div>
-          <h1 className="text-lg font-bold text-text">Add Your Car</h1>
+          <h1 className="text-lg font-bold text-text">
+            {editCar ? 'Edit Your Car' : 'Add Your Car'}
+          </h1>
           <p className="text-xs text-text-muted">
-            Register your vehicle to find matching drivers
+            {editCar ? 'Update your vehicle details' : 'Register your vehicle to find matching drivers'}
           </p>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col px-6 pt-4 pb-8 animate-fade-in-up">
-        <AddCarForm onSuccess={handleSuccess} />
+        <AddCarForm
+          onSuccess={handleSuccess}
+          onCancel={() => navigate(-1)}
+          editCar={editCar}
+          submitLabel={editCar ? 'Save Changes' : 'Save & Continue'}
+        />
       </div>
     </div>
   );

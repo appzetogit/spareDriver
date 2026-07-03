@@ -34,6 +34,8 @@ export const PLATFORM_REVENUE_SOURCE = Object.freeze({
   DRIVER_PENALTY: 'driver_penalty',
   /** Platform share of a subscription purchase. */
   SUBSCRIPTION: 'subscription',
+  /** Admin-initiated refund debited from platform revenue. */
+  ADMIN_REFUND: 'admin_refund',
 });
 
 const platformRevenueSchema = new mongoose.Schema(
@@ -45,8 +47,8 @@ const platformRevenueSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    /** ₹ kept by the platform (always positive). */
-    amountRupees: { type: Number, required: true, min: 0 },
+    /** ₹ kept by the platform (negative for admin refund debits). */
+    amountRupees: { type: Number, required: true },
     currency: { type: String, default: 'INR', trim: true },
 
     /** Originating booking — absent for subscription revenue rows. */

@@ -31,6 +31,21 @@ export const loginDriver = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, { driver: result.driver }, 'Login successful'));
 });
 
+export const sendDriverForgotPasswordOtp = asyncHandler(async (req, res) => {
+  const result = await driverService.sendDriverForgotPasswordOtpService(req.body.phone);
+  return res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const verifyDriverForgotPasswordOtp = asyncHandler(async (req, res) => {
+  const result = await driverService.verifyDriverForgotPasswordOtpService(req.body);
+  return res.status(200).json(new ApiResponse(200, result, 'OTP verified'));
+});
+
+export const resetDriverPasswordWithOtp = asyncHandler(async (req, res) => {
+  const result = await driverService.resetDriverPasswordWithOtpService(req.body);
+  return res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
 export const updateOnboardingStep = asyncHandler(async (req, res) => {
   const result = await driverService.updateOnboardingStepService(req.driver._id, req.body);
   return res.status(200).json(new ApiResponse(200, result, `Step ${req.body.stepNumber} completed successfully`));
@@ -44,6 +59,14 @@ export const submitApplication = asyncHandler(async (req, res) => {
 export const getProfile = asyncHandler(async (req, res) => {
   const result = await driverService.getProfileService(req.driver._id);
   return res.status(200).json(new ApiResponse(200, result, "Driver profile retrieved"));
+});
+
+export const updateVehicleExperience = asyncHandler(async (req, res) => {
+  const result = await driverService.updateVehicleExperienceService(
+    req.driver._id,
+    req.body.vehicleExperience,
+  );
+  return res.status(200).json(new ApiResponse(200, result, 'Vehicle experience updated'));
 });
 
 export const getTraining = asyncHandler(async (req, res) => {
@@ -77,12 +100,14 @@ export const uploadLiveVerification = asyncHandler(async (req, res) => {
  * flag set will appear in the picker. Body: `{ available: boolean }`.
  */
 export const updateOutstationAvailability = asyncHandler(async (req, res) => {
-  const { available, zoneIds } = req.body || {};
+  const { available, zoneIds, allIndiaOk, maxDrivingHoursPerDay } = req.body || {};
   const result = await driverService.updateOutstationAvailabilityService(
     req.driver._id,
     {
       available: !!available,
       zoneIds: Array.isArray(zoneIds) ? zoneIds : undefined,
+      allIndiaOk,
+      maxDrivingHoursPerDay,
     },
   );
   const message = result.availableForOutstation

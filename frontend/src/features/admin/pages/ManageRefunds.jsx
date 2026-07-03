@@ -9,31 +9,27 @@ import {
   RefreshCw,
   Search,
   ExternalLink,
+  Wallet,
+  Plus,
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import RowActionsMenu from '../components/RowActionsMenu';
+import CreateAdminRefundModal from '../components/CreateAdminRefundModal';
 import useAdminRefundsStore from '../../../store/admin/useAdminRefundsStore';
-
-/**
- * Admin → Account → Refunds.
- *
- * Renders the Refund ledger produced by the cancellation pipeline.
- * Refunds are NEVER moved automatically — the admin processes each one
- * manually on the Razorpay dashboard, then comes back here to mark it
- * `processed` (with the gateway refund id) or `failed` (with a note).
- *
- *   • Server-side pagination + filters live in `useAdminRefundsStore`.
- *   • The two action buttons render only for `pending` rows; once a
- *     refund is processed or failed, the row becomes read-only.
- *   • Summary cards re-fetch on every status flip so the totals stay
- *     in sync with the rows.
- */
+import {
+  REFUND_KIND_LABELS,
+  REFUND_PAYOUT_METHOD_LABELS,
+  REFUND_SUBJECT_TYPE_LABELS,
+} from '../../../constants/refund';
 
 const STATUS_META = {
   pending: { label: 'Pending', variant: 'warning', icon: Clock },
   processed: { label: 'Processed', variant: 'success', icon: CheckCircle2 },
   failed: { label: 'Failed', variant: 'danger', icon: XCircle },
 };
+
+const KIND_LABELS = REFUND_KIND_LABELS;
 
 function formatCurrency(amount) {
   const n = Number(amount) || 0;
@@ -51,6 +47,11 @@ function formatDateTime(d) {
   });
 }
 
+function txnDisplay(refund) {
+  const td = refund.transactionDetails || {};
+  return td.transactionId || td.utr || refund.razorpayRefundId || '—';
+}
+
 const ManageRefunds = () => {
   const refunds = useAdminRefundsStore((s) => s.refunds);
   const totals = useAdminRefundsStore((s) => s.totals);
@@ -66,11 +67,9 @@ const ManageRefunds = () => {
   const setPage = useAdminRefundsStore((s) => s.setPage);
   const updateRefundStatus = useAdminRefundsStore((s) => s.updateRefundStatus);
 
-  // Modal state for the two manual actions. `target.action` is either
-  // 'processed' (admin moved money on Razorpay) or 'failed' (couldn't
-  // process). `note` doubles as the razorpayRefundId / error blurb.
   const [actionTarget, setActionTarget] = useState(null);
   const [note, setNote] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     fetchRefunds().catch(() => {});
@@ -129,16 +128,12 @@ const ManageRefunds = () => {
           : { status: 'failed', error: note.trim() || 'Refund failed' };
       await updateRefundStatus(refund._id, payload);
       toast.success(
-        action === 'processed'
-          ? 'Refund marked as processed'
-          : 'Refund marked as failed',
+        action === 'processed' ? 'Refund marked as processed' : 'Refund marked as failed',
       );
       setActionTarget(null);
       setNote('');
     } catch (err) {
-      toast.error(
-        err?.response?.data?.message || err?.message || 'Could not update refund',
-      );
+      toast.error(err?.response?.data?.message || err?.message || 'Could not update refund');
     }
   };
 
@@ -146,48 +141,52 @@ const ManageRefunds = () => {
     <div className="space-y-5 animate-fade-in-up">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-text">Refunds</h2>
+          <h2 className="text-xl font-bold text-text">Refunds & settlements</h2>
           <p className="text-xs text-text-muted mt-1 max-w-xl">
-            Refunds are processed manually on the{' '}
+            Booking cancellation refunds and account-deletion wallet settlements appear here.
+            Process booking refunds on{' '}
             <a
               href="https://dashboard.razorpay.com/app/refunds"
               target="_blank"
               rel="noreferrer"
               className="text-primary inline-flex items-center gap-0.5 hover:underline"
             >
-              Razorpay dashboard
+              Razorpay
               <ExternalLink className="w-3 h-3" />
             </a>
-            . Use this page to mark each request as <strong>processed</strong>{' '}
-            (capture the gateway refund id) or <strong>failed</strong> (with a
-            short note).
+            , then mark processed with the gateway id.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => fetchRefunds()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-dark text-sm font-semibold hover:opacity-90"
+          >
+            <Plus className="w-4 h-4" />
+            Create refund
+          </button>
+          <button
+            type="button"
+            onClick={() => fetchRefunds()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div
-              key={card.label}
-              className="bg-white border border-border-light rounded-2xl p-4"
-            >
+            <div key={card.label} className="bg-white border border-border-light rounded-2xl p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-text-muted">{card.label}</p>
                 <Icon className={`w-4 h-4 ${card.accent}`} />
               </div>
-              <p className={`mt-2 text-lg font-bold ${card.accent}`}>
-                {card.value}
-              </p>
+              <p className={`mt-2 text-lg font-bold ${card.accent}`}>{card.value}</p>
             </div>
           );
         })}
@@ -199,7 +198,7 @@ const ManageRefunds = () => {
           <input
             value={filters.search}
             onChange={(e) => setFilter('search', e.target.value)}
-            placeholder="Search by booking number"
+            placeholder="Search booking, txn id, UTR…"
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-border-light text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
@@ -220,31 +219,30 @@ const ManageRefunds = () => {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-text-muted">
               <tr>
-                <Th>Booking</Th>
+                <Th>Type</Th>
+                <Th>Reference</Th>
                 <Th>Customer</Th>
-                <Th>Refund</Th>
-                <Th>Cancellation fee</Th>
+                <Th>Amount</Th>
                 <Th>Status</Th>
-                <Th>Razorpay refund id</Th>
+                <Th>Transaction</Th>
                 <Th>Requested</Th>
-                <Th>Reason</Th>
-                <Th>Actions</Th>
+                <Th className="text-right">Actions</Th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={9} className="py-12">
+                  <td colSpan={8} className="py-12">
                     <div className="flex items-center justify-center text-text-muted">
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                      Loading refunds…
+                      Loading…
                     </div>
                   </td>
                 </tr>
               )}
               {!loading && refunds.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-text-muted">
+                  <td colSpan={8} className="py-12 text-center text-text-muted">
                     No refunds to display.
                   </td>
                 </tr>
@@ -266,8 +264,7 @@ const ManageRefunds = () => {
         {!loading && refunds.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border-light">
             <p className="text-xs text-text-muted">
-              Showing {(page - 1) * limit + 1}–
-              {Math.min(page * limit, total)} of {total}
+              Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -294,11 +291,7 @@ const ManageRefunds = () => {
         )}
       </div>
 
-      {error && (
-        <p className="text-xs text-danger">
-          Could not load refunds: {error}
-        </p>
-      )}
+      {error && <p className="text-xs text-danger">Could not load refunds: {error}</p>}
 
       <ConfirmDialog
         open={!!actionTarget}
@@ -311,43 +304,44 @@ const ManageRefunds = () => {
         }
         description={
           actionTarget?.action === 'processed'
-            ? `Confirms you've already refunded ${formatCurrency(
-                actionTarget?.refund?.amountRupees,
-              )} on Razorpay. The booking's payment status will flip to "refunded".`
-            : `Marks this refund as failed. The booking's payment status stays "paid" so you can record a new attempt later.`
+            ? `Confirms you've refunded ${formatCurrency(actionTarget?.refund?.amountRupees)}.`
+            : 'Marks this refund as failed so you can retry later.'
         }
-        confirmLabel={
-          actionTarget?.action === 'processed' ? 'Mark processed' : 'Mark failed'
-        }
-        cancelLabel="Cancel"
+        confirmLabel={actionTarget?.action === 'processed' ? 'Mark processed' : 'Mark failed'}
         variant={actionTarget?.action === 'processed' ? 'success' : 'danger'}
         loading={!!updatingId}
       >
-        <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-1.5 mt-1">
           <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide">
             {actionTarget?.action === 'processed'
               ? 'Razorpay refund id (optional)'
-              : 'Failure note (visible to admins)'}
+              : 'Failure note'}
           </span>
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder={
-              actionTarget?.action === 'processed'
-                ? 'rfnd_XXXXXXXXXXXX'
-                : 'e.g. customer closed account'
+              actionTarget?.action === 'processed' ? 'rfnd_XXXXXXXXXXXX' : 'Reason for failure'
             }
             className="px-3 py-2 rounded-xl border border-border-light text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </label>
       </ConfirmDialog>
+
+      <CreateAdminRefundModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => fetchRefunds().catch(() => {})}
+      />
     </div>
   );
 };
 
-function Th({ children }) {
+function Th({ children, className = '' }) {
   return (
-    <th className="text-left text-[11px] font-semibold uppercase tracking-wide px-4 py-3">
+    <th
+      className={`text-left text-[11px] font-semibold uppercase tracking-wide px-4 py-3 ${className}`}
+    >
       {children}
     </th>
   );
@@ -357,31 +351,63 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
   const status = refund.status || 'pending';
   const meta = STATUS_META[status] || STATUS_META.pending;
   const Icon = meta.icon;
+  const isWalletSettlement = refund.kind === 'wallet_settlement';
+  const isAdminManual = refund.kind === 'admin_manual';
   const customer =
-    refund.userId?.name || refund.userId?.phone || 'Customer';
+    refund.userId?.name ||
+    refund.userId?.phone ||
+    refund.userId?.phone_no ||
+    refund.driverId?.name ||
+    refund.driverId?.phone_no ||
+    'Customer';
+
+  const menuItems =
+    status === 'pending' && !isWalletSettlement && !isAdminManual
+      ? [
+          { label: 'Mark processed', icon: CheckCircle2, onClick: onMarkProcessed },
+          { label: 'Mark failed', icon: XCircle, variant: 'danger', onClick: onMarkFailed },
+        ]
+      : [];
+
   return (
     <tr className="border-t border-border-light hover:bg-gray-50/60 align-top">
       <td className="px-4 py-3">
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary">
+          {isWalletSettlement || isAdminManual ? <Wallet className="w-3.5 h-3.5" /> : null}
+          {KIND_LABELS[refund.kind] || 'Refund'}
+        </span>
+        {isAdminManual && refund.payoutMethod ? (
+          <p className="text-[10px] text-text-muted mt-0.5">
+            {REFUND_PAYOUT_METHOD_LABELS[refund.payoutMethod] || refund.payoutMethod}
+            {refund.subjectType ? ` · ${REFUND_SUBJECT_TYPE_LABELS[refund.subjectType] || refund.subjectType}` : ''}
+          </p>
+        ) : null}
+      </td>
+      <td className="px-4 py-3">
         <p className="font-mono text-xs font-medium text-text">
-          {refund.bookingNumber || '—'}
+          {isWalletSettlement
+            ? 'Wallet settlement'
+            : isAdminManual
+              ? 'Admin refund'
+              : refund.bookingNumber || '—'}
         </p>
-        <p className="text-[10px] text-text-muted mt-0.5 font-mono">
-          {String(refund.bookingId).slice(-8)}
-        </p>
+        {!isWalletSettlement && !isAdminManual && refund.bookingId && (
+          <p className="text-[10px] text-text-muted mt-0.5 font-mono">
+            {String(refund.bookingId).slice(-8)}
+          </p>
+        )}
+        {isAdminManual && refund.reason ? (
+          <p className="text-[10px] text-text-muted mt-0.5 line-clamp-2">{refund.reason}</p>
+        ) : null}
       </td>
       <td className="px-4 py-3 text-text">{customer}</td>
       <td className="px-4 py-3">
-        <p className="font-semibold text-success">
-          {formatCurrency(refund.amountRupees)}
-        </p>
-        <p className="text-[10px] text-text-muted mt-0.5">
-          Paid: {formatCurrency(refund.grossPaidRupees)}
-        </p>
-      </td>
-      <td className="px-4 py-3 text-xs text-text-muted">
-        {Number(refund.cancellationFeeRupees) > 0
-          ? formatCurrency(refund.cancellationFeeRupees)
-          : '—'}
+        <p className="font-semibold text-success">{formatCurrency(refund.amountRupees)}</p>
+        {!isWalletSettlement && !isAdminManual && Number(refund.grossPaidRupees) > 0 && (
+          <p className="text-[10px] text-text-muted mt-0.5">
+            Paid: {formatCurrency(refund.grossPaidRupees)}
+          </p>
+        )}
       </td>
       <td className="px-4 py-3">
         <Badge variant={meta.variant}>
@@ -390,53 +416,16 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
             {meta.label}
           </span>
         </Badge>
-        {refund.error && (
-          <p className="text-[10px] text-danger mt-1 max-w-[12rem] truncate">
-            {refund.error}
-          </p>
-        )}
       </td>
-      <td className="px-4 py-3 text-xs text-text-muted font-mono">
-        {refund.razorpayRefundId || '—'}
-      </td>
-      <td className="px-4 py-3 text-xs text-text-muted">
-        {formatDateTime(refund.createdAt)}
-      </td>
-      <td className="px-4 py-3 text-xs text-text-secondary capitalize">
-        {(refund.reason || '').replaceAll('_', ' ') || '—'}
-        <p className="text-[10px] text-text-muted mt-0.5">
-          by {refund.initiatedBy}
-        </p>
-      </td>
+      <td className="px-4 py-3 text-xs text-text-muted font-mono">{txnDisplay(refund)}</td>
+      <td className="px-4 py-3 text-xs text-text-muted">{formatDateTime(refund.createdAt)}</td>
       <td className="px-4 py-3">
-        {status === 'pending' ? (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onMarkProcessed}
-              disabled={updating}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50"
-            >
-              {updating ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-3 h-3" />
-              )}
-              Mark processed
-            </button>
-            <button
-              type="button"
-              onClick={onMarkFailed}
-              disabled={updating}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold disabled:opacity-50"
-            >
-              <XCircle className="w-3 h-3" />
-              Mark failed
-            </button>
-          </div>
+        {menuItems.length > 0 ? (
+          <RowActionsMenu items={menuItems} />
         ) : (
           <span className="text-xs text-text-muted">—</span>
         )}
+        {updating && <Loader2 className="w-4 h-4 animate-spin text-text-muted ml-auto" />}
       </td>
     </tr>
   );

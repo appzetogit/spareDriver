@@ -492,6 +492,12 @@ export const getOutstationAssignmentDrivers = asyncHandler(async (req, res) => {
     page: req.query?.page,
     limit: req.query?.limit,
     staff: req.staff,
+    carTypeMatch: req.query?.carTypeMatch,
+    minRating: req.query?.minRating,
+    onlineOnly: req.query?.onlineOnly,
+    allIndiaOnly: req.query?.allIndiaOnly,
+    minDrivingHoursPerDay: req.query?.minDrivingHoursPerDay,
+    zoneId: req.query?.zoneId,
   });
   return res
     .status(200)
@@ -572,4 +578,15 @@ export const getScheduledJobs = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { ...snapshot, jobs }, 'Scheduled jobs fetched'));
+});
+
+export const adminUpdateBookingStatus = asyncHandler(async (req, res) => {
+  const { adminUpdateBookingStatusService } = await import('../services/adminBookingOps.service.js');
+  const { status, reason } = req.body || {};
+  const result = await adminUpdateBookingStatusService(
+    req.params.id,
+    { status, reason },
+    req.staff,
+  );
+  return res.status(200).json(new ApiResponse(200, result, 'Booking status updated'));
 });

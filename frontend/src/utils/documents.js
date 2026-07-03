@@ -11,6 +11,10 @@ export const EMPTY_DOCUMENT = Object.freeze({
   url: null,
   publicId: null,
   loading: false,
+  /** Set when user picked a file but Cloudinary upload is deferred until submit */
+  pendingFile: null,
+  /** True when url is a local blob preview (not yet on Cloudinary) */
+  isLocal: false,
 });
 
 /**
@@ -44,6 +48,8 @@ export function documentsArrayToMap(documents, allowedTypes = null) {
       url: doc.fileUrl,
       publicId: doc.cloudinaryPublicId || publicIdFromCloudinaryUrl(doc.fileUrl),
       loading: false,
+      pendingFile: null,
+      isLocal: false,
     };
   }
 
@@ -55,7 +61,13 @@ export function documentsArrayToMap(documents, allowedTypes = null) {
  */
 export function documentsMapToArray(documentsMap) {
   return Object.entries(documentsMap)
-    .filter(([, state]) => state?.url && !state.loading)
+    .filter(
+      ([, state]) =>
+        state?.url &&
+        !state.loading &&
+        !state.pendingFile &&
+        !state.isLocal,
+    )
     .map(([type, state]) => ({
       type,
       fileUrl: state.url,

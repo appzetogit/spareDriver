@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Button from '../../../../components/Button';
 import DocumentUploadField from '../../../../components/DocumentUploadField';
 import VehicleDetailsForm, {
@@ -7,18 +7,22 @@ import VehicleDetailsForm, {
 import api from '../../../../utils/api';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { useDocumentsManager } from '../../../../hooks/useDocumentsManager';
+import { useVehicleCatalog } from '../../../../hooks/useVehicleCatalog';
+import { useFormDraft } from '../../../../hooks/useFormDraft';
+import {
+  buildConditionPayload,
+  isChecklistFormComplete,
+  countChecklistProgress,
+} from '../../../../utils/safetyChecklist';
+import SafetyChecklistQuestion from './SafetyChecklistQuestion';
+
+const ADD_CAR_DRAFT_KEY = 'user-onboarding:add-car';
+const CAR_IMAGE_DOC_TYPES = ['car_image'];
 
 /**
- * Self-contained "Add a car" form. Handles validation, image upload and the
- * `POST /auth/cars` call. Used by both the standalone `AddCarPage` and the
- * in-flow `AddCarModal` from the booking screens.
- *
- *   props:
- *     - onSuccess   ({ car, carCount }) => void
- *     - onCancel    optional secondary button handler
- *     - cancelLabel label for the cancel button (default "Cancel")
- *     - submitLabel label for the submit button (default "Save & Continue")
- *     - compact     when true uses tighter vertical padding (modal usage)
+ * Self-contained "Add a car" form. Handles validation, image upload, per-car
+ * safety checklist, and the `POST /auth/cars` call. Used by both the standalone
+ * `AddCarPage` and the in-flow `AddCarModal` from the booking screens.
  */
 const AddCarForm = ({
   onSuccess,
@@ -26,13 +30,99 @@ const AddCarForm = ({
   cancelLabel = 'Cancel',
   submitLabel = 'Save & Continue',
   compact = false,
+  editCar,
 }) => {
   const setOnboarding = useUserAuthStore((s) => s.setOnboarding);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState(emptyVehicleFormValues);
-  const [errors, setErrors] = useState({});
 
-  const { documents, uploadDocument, isAnyUploading } = useDocumentsManager(['car_image']);
+  const [draftData, setDraftData, clearDraft] = useFormDraft(ADD_CAR_DRAFT_KEY, emptyVehicleFormValues);
+
+  // In edit mode we keep a local copy of the car fields so the draft
+  // (sessionStorage) for the "add" flow is never corrupted.
+  const [localData, setLocalData] = useState(() => {
+    if (!editCar) return null;
+    return {
+      carTypeId:    editCar.carTypeId?._id    || String(editCar.carTypeId    || ''),
+      brandId:      editCar.brandId?._id      || String(editCar.brandId      || ''),
+      modelId:      editCar.modelId?._id      || String(editCar.modelId      || ''),
+      fuelTypeId:   editCar.fuelTypeId?._id   || String(editCar.fuelTypeId   || ''),
+      vehicleNumber: editCar.vehicleNumber || '',
+      transmission:  editCar.transmission  || '',
+    };
+  });
+
+  // Name strings from the populated API response — used as instant display
+  // labels in the selects while the catalog options are still fetching.
+  const editLabels = editCar ? {
+    carType:    editCar.carTypeId?.name  || '',
+    brand:      editCar.brandId?.name    || '',
+    model:      editCar.modelId?.name    || '',
+    fuelType:   editCar.fuelTypeId?.name || '',
+  } : null;
+
+  const formData = editCar ? (localData || emptyVehicleFormValues) : draftData;
+  const setFormData = editCar
+    ? (next) => {
+        const val = typeof next === 'function' ? next(localData || emptyVehicleFormValues) : next;
+        setLocalData(val);
+      }
+    : setDraftData;
+
+  const { conditions, loading: catalogLoading } = useVehicleCatalog({
+    brandId: formData.brandId,
+    carTypeId: formData.carTypeId,
+  });
+
+  const [errors, setErrors] = useState({});
+  const [answers, setAnswers] = useState({});
+
+  const {
+    documents,
+    loadFromApiDocuments,
+    uploadDocument,
+    uploadAllPending,
+    isAnyUploading,
+    allRequiredUploaded,
+    toPayloadArray,
+  } = useDocumentsManager(CAR_IMAGE_DOC_TYPES);
+
+  useEffect(() => {
+    if (editCar?.image) {
+      loadFromApiDocuments([{ type: 'car_image', fileUrl: editCar.image }]);
+    }
+  }, [editCar?._id, editCar?.image, loadFromApiDocuments]);
+
+  useEffect(() => {
+    if (!conditions.length) return;
+    const initialAnswers = {};
+    conditions.forEach((c) => {
+      const existing = editCar?.conditions?.find(
+        (ec) => String(ec.conditionId?._id || ec.conditionId) === String(c._id),
+      );
+      initialAnswers[c._id] = existing ? existing.value : null;
+    });
+    setAnswers(initialAnswers);
+  }, [conditions, editCar?._id, editCar?.conditions]);
+
+  const checklistProgress = useMemo(
+    () => countChecklistProgress(conditions, answers),
+    [conditions, answers],
+  );
+
+  const checklistComplete = useMemo(
+    () => isChecklistFormComplete(conditions, answers),
+    [conditions, answers],
+  );
+
+  const setAnswer = (id, value) => {
+    setAnswers((prev) => ({ ...prev, [id]: value }));
+    setErrors((prev) => {
+      if (!prev.checklist) return prev;
+      const next = { ...prev };
+      delete next.checklist;
+      return next;
+    });
+  };
 
   const validate = () => {
     const next = {};
@@ -42,7 +132,17 @@ const AddCarForm = ({
     if (!formData.vehicleNumber?.trim()) next.vehicleNumber = 'Enter vehicle number';
     if (!formData.fuelTypeId) next.fuelTypeId = 'Select fuel type';
     if (!formData.transmission) next.transmission = 'Select transmission';
-    if (!documents.car_image?.url) next.image = 'Car image is required';
+    if (!allRequiredUploaded(['car_image'])) next.image = 'Car image is required';
+    if (!checklistComplete && conditions.length) {
+      const { answered, total, requiredYes, requiredTotal } = checklistProgress;
+      if (answered < total) {
+        next.checklist = `Answer all ${total} safety questions (${answered}/${total} done)`;
+      } else if (requiredTotal > 0 && requiredYes < requiredTotal) {
+        next.checklist = `Required items must be answered Yes (${requiredYes}/${requiredTotal})`;
+      } else {
+        next.checklist = 'Complete the safety checklist to continue';
+      }
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -52,32 +152,55 @@ const AddCarForm = ({
     if (!validate()) return;
     setLoading(true);
     try {
-      const res = await api.post('/auth/cars', {
+      const uploadedDocs = await uploadAllPending();
+      const imagePayload = toPayloadArray(uploadedDocs).find((d) => d.type === 'car_image');
+      if (!imagePayload?.fileUrl) {
+        setErrors((prev) => ({ ...prev, image: 'Car image is required' }));
+        return;
+      }
+
+      const payload = {
         carTypeId: formData.carTypeId,
         brandId: formData.brandId,
         modelId: formData.modelId,
         fuelTypeId: formData.fuelTypeId,
         vehicleNumber: formData.vehicleNumber.trim(),
         transmission: formData.transmission,
-        image: documents.car_image.url,
-      });
+        image: imagePayload.fileUrl,
+        conditions: buildConditionPayload(conditions, answers),
+      };
+
+      let res;
+      if (editCar) {
+        res = await api.put(`/auth/cars/${editCar._id}`, payload);
+      } else {
+        res = await api.post('/auth/cars', payload);
+      }
 
       const data = res.data?.data ?? {};
       const carCount = data.carCount ?? 1;
+      clearDraft();
       setOnboarding({
         carCount,
         hasCar: carCount > 0,
-        hasChecklist: false,
+        hasChecklist: Boolean(data.hasChecklist),
       });
-      onSuccess?.({ car: data.car, carCount });
+      onSuccess?.({ car: data.car, carCount, hasChecklist: data.hasChecklist });
     } catch (err) {
-      console.error('Failed to add car', err);
-      const message = err?.response?.data?.message || 'Failed to add car';
+      console.error(editCar ? 'Failed to update car' : 'Failed to add car', err);
+      const message = err?.response?.data?.message || err?.message || (editCar ? 'Failed to update car' : 'Failed to add car');
       setErrors((prev) => ({ ...prev, submit: message }));
     } finally {
       setLoading(false);
     }
   };
+
+  // Fields are only locked during the actual submit/upload — NOT during
+  // conditions loading so the user can see & change the prefilled values
+  // immediately when the modal opens.
+  const fieldsDisabled = loading || isAnyUploading;
+  // Submit is additionally blocked until the checklist has loaded.
+  const submitDisabled = fieldsDisabled || catalogLoading;
 
   return (
     <form
@@ -89,7 +212,7 @@ const AddCarForm = ({
         doc={documents.car_image}
         onUpload={(file) => uploadDocument('car_image', file)}
         hint="Clear photo of the car"
-        disabled={isAnyUploading}
+        disabled={fieldsDisabled}
       />
       {errors.image && <p className="text-danger text-xs -mt-3">{errors.image}</p>}
 
@@ -97,8 +220,49 @@ const AddCarForm = ({
         values={formData}
         onChange={setFormData}
         errors={errors}
-        disabled={loading || isAnyUploading}
+        disabled={fieldsDisabled}
+        editLabels={editLabels}
       />
+
+      <div className="space-y-3 pt-1">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-text">Safety checklist</h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              Answer for this vehicle so we can match the right driver.
+            </p>
+          </div>
+          {conditions.length > 0 && (
+            <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full shrink-0">
+              {checklistProgress.answered}/{checklistProgress.total}
+            </span>
+          )}
+        </div>
+
+        {catalogLoading ? (
+          <p className="text-sm text-text-muted py-4 text-center">Loading checklist...</p>
+        ) : conditions.length === 0 ? (
+          <p className="text-sm text-text-muted">No checklist questions configured.</p>
+        ) : (
+          <div className="space-y-3">
+            {conditions.map((item, idx) => (
+              <SafetyChecklistQuestion
+                key={item._id}
+                index={idx + 1}
+                question={item.question}
+                description={item.description}
+                isRequired={item.isRequired}
+                value={answers[item._id] ?? null}
+                onChange={(val) => setAnswer(item._id, val)}
+                disabled={fieldsDisabled}
+              />
+            ))}
+          </div>
+        )}
+        {errors.checklist && (
+          <p className="text-sm text-danger bg-danger/10 rounded-xl px-3 py-2">{errors.checklist}</p>
+        )}
+      </div>
 
       {errors.submit && (
         <p className="text-sm text-danger bg-danger/10 rounded-xl px-3 py-2">
@@ -110,18 +274,18 @@ const AddCarForm = ({
         <Button
           type="submit"
           fullWidth
-          loading={loading}
-          disabled={isAnyUploading || loading}
+          loading={loading || isAnyUploading}
+          disabled={submitDisabled}
           className="rounded-full py-3.5 text-base font-bold"
         >
-          {isAnyUploading ? 'Uploading image...' : submitLabel}
+          {loading || isAnyUploading ? 'Uploading...' : submitLabel}
         </Button>
         {onCancel && (
           <Button
             type="button"
             variant="outline"
             fullWidth
-            disabled={loading || isAnyUploading}
+            disabled={fieldsDisabled}
             onClick={onCancel}
             className="rounded-full py-3.5 text-base font-semibold"
           >

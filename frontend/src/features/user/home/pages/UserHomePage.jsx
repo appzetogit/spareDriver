@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search,
   MapPin,
   Bell,
   ChevronUp,
   X,
   Loader2,
   RefreshCw,
+  Wallet,
+  ChevronRight,
 } from 'lucide-react';
+import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import Badge from '../../../../components/Badge';
 import BookDriverSection from '../components/BookDriverSection';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
@@ -18,6 +20,8 @@ import { reverseGeocode } from '../../../../utils/geocoding';
 import NearbyDriversMap from '../../../../components/maps/NearbyDriversMap';
 import NearbyDriversList from '../../../../components/maps/NearbyDriversList';
 import AdsCarousel from '../../../../components/AdsCarousel';
+import { useNotificationPanel } from '../../../../components/notifications/NotificationCenter';
+import { useUserNotificationStore } from '../../../../store/useNotificationStore';
 
 const NEARBY_RADIUS_METERS = 2000;
 const NEARBY_LIMIT = 8;
@@ -25,9 +29,17 @@ const NEARBY_REFRESH_MS = 30_000;
 
 const UserHomePage = () => {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { setOpen: openNotifications, unreadCount, panel: notificationPanel } = useNotificationPanel(
+    useUserNotificationStore,
+    { audience: 'user', title: 'Notifications' },
+  );
+  const { wallet, fetchWallet } = useUserWalletStore();
   const [showDriverSheet, setShowDriverSheet] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
+
+  useEffect(() => {
+    fetchWallet().catch((err) => console.error('Failed to fetch wallet', err));
+  }, [fetchWallet]);
 
   const mapRef = useRef(null);
   const scrollRef = useRef(null);
@@ -123,21 +135,30 @@ const UserHomePage = () => {
             className="relative p-2.5 rounded-xl bg-white/10 hover:bg-white/15 transition-colors"
             type="button"
             aria-label="Notifications"
+            onClick={() => openNotifications(true)}
           >
             <Bell className="w-5 h-5 text-white" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full" />
+            {unreadCount > 0 ? (
+              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            ) : null}
           </button>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Where would you like to go?"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-11 bg-white rounded-2xl pl-12 pr-4 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 shadow-md"
-          />
+        <div className="flex items-center justify-between mt-1.5 pt-3 border-t border-white/5">
+          <span className="text-white/50 text-[11px] font-bold tracking-wider uppercase">Wallet</span>
+          <button
+            type="button"
+            onClick={() => navigate('/user/wallet')}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-white/5 hover:bg-white/10 active:scale-[0.97] rounded-xl border border-white/10 transition-all cursor-pointer"
+          >
+            <Wallet className="w-4 h-4 text-primary" />
+            <span className="text-white text-sm font-bold">
+              ₹{wallet?.balance?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+            </span>
+            <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+          </button>
         </div>
       </div>
 
@@ -268,6 +289,7 @@ const UserHomePage = () => {
           </div>
         </div>
       )}
+      {notificationPanel}
     </div>
   );
 };

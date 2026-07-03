@@ -4,15 +4,25 @@ import {
   loginUser,
   sendUserOtp,
   verifyUserOtpAndRegister,
+  verifyRegistrationPhoneOtp,
+  sendRegistrationEmailOtp,
+  verifyRegistrationEmailOtp,
+  completeRegistration,
   updateUserOnboardingStep,
   getUserProfile,
   getRegistrationStatus,
+  sendUserEmailVerificationOtp,
+  verifyUserEmailOtp,
   addCar,
   getUserCars,
   deleteUserCar,
+  updateCar,
   listSavedLocations,
   addSavedLocation,
   deleteSavedLocation,
+  sendForgotPasswordOtp,
+  verifyForgotPasswordOtp,
+  resetPasswordWithOtp,
 } from '../controllers/user.controller.js';
 import {
   googleSignInUser,
@@ -27,6 +37,14 @@ import {
   verifySubscriptionPayment,
   getMySubscription,
 } from '../controllers/pricing.controller.js';
+import { getSubscriptionTerms } from '../controllers/legalDocument.controller.js';
+import { registerUserFcmToken, unregisterUserFcmToken } from '../controllers/fcmToken.controller.js';
+import {
+  getUserNotifications,
+  getUserUnreadNotifications,
+  markUserNotificationRead,
+  markAllUserNotificationsRead,
+} from '../controllers/notification.controller.js';
 import { getNearbyDriversForUser } from '../controllers/driverLocation.controller.js';
 import {
   createBooking,
@@ -50,12 +68,26 @@ import {
   createWalletTopupOrder,
   verifyWalletTopupPayment,
 } from '../controllers/wallet.controller.js';
+import {
+  listEmergencyContacts,
+  createEmergencyContact,
+  updateEmergencyContact,
+  deleteEmergencyContact,
+} from '../controllers/sos.controller.js';
+import {
+  getMyUserAccountDeletionRequest,
+  requestUserAccountDeletion,
+} from '../controllers/accountDeletion.controller.js';
 import { protectUser, protectProfileViewer } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
 // Auth Public
 router.post('/send-otp', sendUserOtp);
+router.post('/register/verify-phone', verifyRegistrationPhoneOtp);
+router.post('/register/email/send-otp', sendRegistrationEmailOtp);
+router.post('/register/email/verify', verifyRegistrationEmailOtp);
+router.post('/register/complete', completeRegistration);
 router.post('/verify-otp', verifyUserOtpAndRegister);
 router.post('/login', loginUser);
 router.post('/google', googleSignInUser);
@@ -63,9 +95,15 @@ router.post('/google/link-phone/otp', sendGoogleLinkPhoneOtp);
 router.post('/refresh-token', refreshAccessToken);
 router.post('/logout', logout);
 
+// Forgot / reset password (public — no auth required)
+router.post('/forgot-password/send-otp', sendForgotPasswordOtp);
+router.post('/forgot-password/verify-otp', verifyForgotPasswordOtp);
+router.post('/forgot-password/reset', resetPasswordWithOtp);
+
 // Public pricing reads (used by the booking flow before checkout)
 router.get('/pricing/services', getActiveServicePricings);
 router.get('/pricing/subscriptions', getActiveSubscriptionPlans);
+router.get('/legal/subscription-terms', getSubscriptionTerms);
 
 // Profile — customer (own id) or staff (any customer id)
 router.get('/users/:userId/profile', protectProfileViewer, getUserProfile);
@@ -80,6 +118,14 @@ router.post('/bookings/estimate', estimateFare);
 router.get('/subscriptions/me', getMySubscription);
 router.post('/subscriptions/purchase', purchaseSubscription);
 router.post('/subscriptions/verify-payment', verifySubscriptionPayment);
+
+router.post('/fcm-token', registerUserFcmToken);
+router.delete('/fcm-token', unregisterUserFcmToken);
+
+router.get('/notifications', getUserNotifications);
+router.get('/notifications/unread', getUserUnreadNotifications);
+router.patch('/notifications/read-all', markAllUserNotificationsRead);
+router.patch('/notifications/:id/read', markUserNotificationRead);
 
 // Booking lifecycle (Phase 4)
 router.post('/bookings', createBooking);
@@ -111,11 +157,14 @@ router.post('/wallet/topup/verify', verifyWalletTopupPayment);
 
 router.post('/google/link-phone', linkGoogleUserPhone);
 router.get('/onboarding/status', getRegistrationStatus);
+router.post('/onboarding/email/send-otp', sendUserEmailVerificationOtp);
+router.post('/onboarding/email/verify', verifyUserEmailOtp);
 router.put('/onboarding/step', updateUserOnboardingStep);
 
 // Cars management
 router.post('/cars', addCar);
 router.get('/cars', getUserCars);
+router.put('/cars/:id', updateCar);
 router.delete('/cars/:id', deleteUserCar);
 
 // Favourite / saved locations
@@ -125,5 +174,14 @@ router.delete('/saved-locations/:id', deleteSavedLocation);
 
 // Nearby drivers (home screen widget + future surfaces)
 router.get('/drivers/nearby', getNearbyDriversForUser);
+
+// Emergency contacts for SOS
+router.get('/emergency-contacts', listEmergencyContacts);
+router.post('/emergency-contacts', createEmergencyContact);
+router.patch('/emergency-contacts/:id', updateEmergencyContact);
+router.delete('/emergency-contacts/:id', deleteEmergencyContact);
+
+router.get('/account/deletion-request', getMyUserAccountDeletionRequest);
+router.post('/account/deletion-request', requestUserAccountDeletion);
 
 export default router;

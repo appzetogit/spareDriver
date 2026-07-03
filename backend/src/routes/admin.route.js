@@ -3,6 +3,8 @@ import {
   loginAdmin,
   getStaffMe,
   getCustomers,
+  getAdminUserTrips,
+  getAdminUserSubscriptions,
   getDrivers,
   getDriverById,
   updateDriverStatus,
@@ -29,6 +31,11 @@ import {
   updateTrainingVideo,
   deleteTrainingVideo,
 } from '../controllers/platform.controller.js';
+import {
+  adminListLegalDocuments,
+  adminUpsertSubscriptionTerms,
+  adminUpdateLegalDocument,
+} from '../controllers/legalDocument.controller.js';
 import {
   getAdminFuelTypes,
   createFuelType,
@@ -80,6 +87,9 @@ import {
   adminAssignDriverToSubscription,
   adminReleaseSubscriptionDriver,
   adminListSubscriptionRevenue,
+  adminGetSubscriptionDriverPayouts,
+  adminPaySubscriptionDrivers,
+  adminUpdateUserSubscriptionStatus,
 } from '../controllers/pricing.controller.js';
 import {
   getTaskAssignees,
@@ -95,11 +105,41 @@ import {
 import {
   listRefunds,
   updateRefundStatus,
+  getRefundSubjectWallet,
+  createAdminManualRefund,
 } from '../controllers/refund.controller.js';
+import {
+  listWithdrawalsAdmin,
+  rejectWithdrawalAdmin,
+  processWithdrawalAdmin,
+} from '../controllers/withdrawal.controller.js';
+import {
+  listAccountDeletionsAdmin,
+  rejectAccountDeletionAdmin,
+  completeAccountDeletionAdmin,
+  markAccountDeletionInProgressAdmin,
+  getAccountDeletionBlockersAdmin,
+  settleUserWalletForDeletionAdmin,
+} from '../controllers/accountDeletion.controller.js';
+import {
+  getAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead,
+} from '../controllers/notification.controller.js';
+import {
+  listFailedJobs,
+  retryFailedJob,
+  resolveFailedJob,
+} from '../controllers/failedJob.controller.js';
+import {
+  listAdminSos,
+  getAdminSosDetail,
+} from '../controllers/sos.controller.js';
 import { listPlatformRevenue } from '../controllers/revenue.controller.js';
 import {
   getAdminBookings,
   getAdminBookingById,
+  adminUpdateBookingStatus,
   getEmergencyPoolBookings,
   getEmergencyPoolAvailableDrivers,
   assignDriverToEmergencyPoolBooking,
@@ -118,7 +158,7 @@ import {
   adminUploadAdMedia,
 } from '../controllers/ad.controller.js';
 import { downloadDriverProfilePdf } from '../controllers/driverPdf.controller.js';
-import { uploadAdMedia } from '../middlewares/multer.js';
+import { uploadAdMedia, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
 const { ALL_STAFF, OPERATIONS, SUPER_ADMIN } = ROUTE_ROLES;
@@ -127,6 +167,13 @@ router.post('/auth/login', loginAdmin);
 router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
 
 router.get('/users', protectStaff, restrictTo(...ALL_STAFF), getCustomers);
+router.get('/users/:userId/trips', protectStaff, restrictTo(...ALL_STAFF), getAdminUserTrips);
+router.get(
+  '/users/:userId/subscriptions',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminUserSubscriptions,
+);
 
 router.get('/tasks/assignees', protectStaff, restrictTo(...OPERATIONS), getTaskAssignees);
 router.get('/tasks/activity', protectStaff, restrictTo(...SUPER_ADMIN), listTaskActivity);
@@ -150,6 +197,12 @@ router.get(
   getScheduledJobs,
 );
 router.get('/bookings/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminBookingById);
+router.patch(
+  '/bookings/:id/status',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  adminUpdateBookingStatus,
+);
 
 /* ---- Emergency Pool (scheduled-ride manual assignment) ---------------- */
 // `ALL_STAFF` is used here because team_members must be able to view
@@ -281,6 +334,10 @@ router.post('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS)
 router.put('/settings/training-videos/:id', protectStaff, restrictTo(...OPERATIONS), updateTrainingVideo);
 router.delete('/settings/training-videos/:id', protectStaff, restrictTo(...OPERATIONS), deleteTrainingVideo);
 
+router.get('/settings/legal-documents', protectStaff, restrictTo(...OPERATIONS), adminListLegalDocuments);
+router.post('/settings/subscription-terms', protectStaff, restrictTo(...OPERATIONS), adminUpsertSubscriptionTerms);
+router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateLegalDocument);
+
 router.post('/kits', protectStaff, restrictTo(...OPERATIONS), createKit);
 router.get('/kits', protectStaff, restrictTo(...ALL_STAFF), getKits);
 router.get('/kits/:id', protectStaff, restrictTo(...ALL_STAFF), getKitById);
@@ -311,6 +368,18 @@ router.get(
   adminListSubscriptionRevenue,
 );
 router.get(
+  '/subscriptions/:id/driver-payouts',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  adminGetSubscriptionDriverPayouts,
+);
+router.post(
+  '/subscriptions/:id/pay-drivers',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  adminPaySubscriptionDrivers,
+);
+router.get(
   '/subscriptions/users/:id/available-drivers',
   protectStaff,
   restrictTo(...ALL_STAFF),
@@ -332,7 +401,71 @@ router.patch('/kit-orders/:id/deliver', protectStaff, restrictTo(...ALL_STAFF), 
 // dashboard. There is no automated retry — the gateway call is human-
 // driven and the PATCH is the authoritative state-transition.
 router.get('/refunds', protectStaff, restrictTo(...SUPER_ADMIN), listRefunds);
+router.get(
+  '/refunds/subject-wallet/:subjectType/:subjectId',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  getRefundSubjectWallet,
+);
+router.post('/refunds/manual', protectStaff, restrictTo(...SUPER_ADMIN), createAdminManualRefund);
 router.patch('/refunds/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateRefundStatus);
+
+router.get('/withdrawals', protectStaff, restrictTo(...SUPER_ADMIN), listWithdrawalsAdmin);
+router.patch('/withdrawals/:id/reject', protectStaff, restrictTo(...SUPER_ADMIN), rejectWithdrawalAdmin);
+router.post(
+  '/withdrawals/:id/process',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  upload.single('paymentProof'),
+  processWithdrawalAdmin,
+);
+
+router.get('/account-deletions', protectStaff, restrictTo(...SUPER_ADMIN), listAccountDeletionsAdmin);
+router.get(
+  '/account-deletions/:id/blockers',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  getAccountDeletionBlockersAdmin,
+);
+router.post(
+  '/account-deletions/:id/settle-wallet',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  settleUserWalletForDeletionAdmin,
+);
+router.patch(
+  '/account-deletions/:id/in-progress',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  markAccountDeletionInProgressAdmin,
+);
+router.patch(
+  '/account-deletions/:id/reject',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  rejectAccountDeletionAdmin,
+);
+router.post(
+  '/account-deletions/:id/complete',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  completeAccountDeletionAdmin,
+);
+
+router.patch(
+  '/subscriptions/users/:id/status',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  adminUpdateUserSubscriptionStatus,
+);
+
+router.get('/notifications', protectStaff, restrictTo(...ALL_STAFF), getAdminNotifications);
+router.patch('/notifications/read-all', protectStaff, restrictTo(...ALL_STAFF), markAllAdminNotificationsRead);
+router.patch('/notifications/:id/read', protectStaff, restrictTo(...ALL_STAFF), markAdminNotificationRead);
+
+router.get('/failed-jobs', protectStaff, restrictTo(...SUPER_ADMIN), listFailedJobs);
+router.post('/failed-jobs/:id/retry', protectStaff, restrictTo(...SUPER_ADMIN), retryFailedJob);
+router.post('/failed-jobs/:id/resolve', protectStaff, restrictTo(...SUPER_ADMIN), resolveFailedJob);
 
 /* ---- Account → Revenue ----------------------------------------------- */
 // Read-only paginated view over the `PlatformRevenue` ledger. Each row
@@ -340,5 +473,8 @@ router.patch('/refunds/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateRef
 // commission, company share of a cancellation fee, etc.) — writes are
 // done by the booking pipelines, not here.
 router.get('/revenue', protectStaff, restrictTo(...SUPER_ADMIN), listPlatformRevenue);
+
+router.get('/sos', protectStaff, restrictTo(...ALL_STAFF), listAdminSos);
+router.get('/sos/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminSosDetail);
 
 export default router;

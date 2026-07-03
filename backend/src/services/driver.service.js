@@ -40,7 +40,11 @@ export const sendOtpService = async (phone) => {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-  await OTP.findOneAndUpdate({ phone }, { otp, expiresAt }, { upsert: true, new: true });
+  await OTP.findOneAndUpdate(
+    { phone, purpose: 'registration' },
+    { otp, expiresAt, purpose: 'registration' },
+    { upsert: true, new: true },
+  );
 
   await sendSmsOtp(phone, otp);
   return { message: 'OTP sent successfully' };
@@ -53,7 +57,7 @@ export const verifyOtpAndRegisterService = async (data) => {
     throw new ApiError(400, 'Missing required fields');
   }
 
-  const otpRecord = await OTP.findOne({ phone, otp });
+  const otpRecord = await OTP.findOne({ phone, otp, purpose: 'registration' });
   if (!otpRecord) {
     throw new ApiError(400, 'Invalid or expired OTP');
   }
@@ -144,6 +148,14 @@ export const updateOnboardingStepService = async (driverId, data) => {
   }
 
   if (stepNumber === 2) {
+    const licenseNumber = stepData.drivingLicense?.number || '';
+    if (licenseNumber.includes('-')) {
+      throw new ApiError(400, "License number must not contain hyphens ('-')");
+    }
+    if (licenseNumber.length !== 15) {
+      throw new ApiError(400, 'License number must be exactly 15 characters');
+    }
+
     const {
       normalizeDriverVehicleExperience,
       syncCarTypeExperienceFromVehicles,
@@ -166,7 +178,47 @@ export const updateOnboardingStepService = async (driverId, data) => {
     if (stepData.documents) mergeDocumentsByType(driver.documents, stepData.documents);
     if (driver.onboardingStep < 2) driver.onboardingStep = 2;
   } else if (stepNumber === 3) {
-    driver.bankDetails = stepData.bankDetails;
+    const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = stepData.bankDetails || {};
+
+    if (!accountHolderName || !accountHolderName.trim()) {
+      throw new ApiError(400, 'Account holder name is required');
+    }
+    if (accountHolderName.trim().length < 3 || !/^[a-zA-Z\s.]+$/.test(accountHolderName)) {
+      throw new ApiError(400, 'Account holder name must be at least 3 characters and contain only letters, spaces, and dots');
+    }
+
+    if (!accountNumber || !accountNumber.trim()) {
+      throw new ApiError(400, 'Account number is required');
+    }
+    if (!/^\d+$/.test(accountNumber.trim()) || accountNumber.trim().length < 9 || accountNumber.trim().length > 18) {
+      throw new ApiError(400, 'Account number must be between 9 and 18 digits');
+    }
+
+    if (!ifscCode || !ifscCode.trim()) {
+      throw new ApiError(400, 'IFSC code is required');
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(ifscCode.trim())) {
+      throw new ApiError(400, 'Invalid IFSC code format (e.g., SBIN0001234)');
+    }
+
+    if (!bankName || !bankName.trim()) {
+      throw new ApiError(400, 'Bank name is required');
+    }
+    if (bankName.trim().length < 3 || !/^[a-zA-Z\s.\-()]+$/.test(bankName)) {
+      throw new ApiError(400, 'Bank name must be at least 3 characters and contain only letters, spaces, dots, hyphens, or parentheses');
+    }
+
+    if (upiId && upiId.trim() && !/^[\w.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/.test(upiId.trim())) {
+      throw new ApiError(400, 'Invalid UPI ID format (e.g., user@upi)');
+    }
+
+    driver.bankDetails = {
+      accountHolderName: accountHolderName.trim(),
+      accountNumber: accountNumber.trim(),
+      ifscCode: ifscCode.trim().toUpperCase(),
+      bankName: bankName.trim(),
+      upiId: upiId ? upiId.trim() : '',
+    };
     if (driver.onboardingStep < 3) driver.onboardingStep = 3;
   } else if (stepNumber === 4) {
     if (stepData.safetyDeclaration) {
@@ -373,6 +425,9 @@ export const submitApplicationService = async (driverId) => {
   const { upsertDriverReviewTask } = await import('./adminTask.service.js');
   await upsertDriverReviewTask(driver);
 
+  const { notifyAdminNewDriverRegistration } = await import('../utils/notificationDispatch.js');
+  notifyAdminNewDriverRegistration(driver).catch(() => null);
+
   return driver;
 };
 
@@ -426,18 +481,46 @@ export const getProfileService = async (driverId) => {
  */
 export const updateOutstationAvailabilityService = async (
   driverId,
-  { available, zoneIds },
+  { available, zoneIds, allIndiaOk, maxDrivingHoursPerDay },
 ) => {
   const next = !!available;
+  const existing = await Driver.findById(driverId)
+    .select('preferredOutstationZones outstationPreferencesCompletedAt')
+    .lean();
+  if (!existing) throw new ApiError(404, 'Driver not found');
+
   const update = {
     availableForOutstation: next,
     outstationAvailabilityUpdatedAt: new Date(),
   };
 
-  // Resolve the zone list we should persist. Caller-supplied wins;
-  // otherwise fall back to whatever is already on the driver. We
-  // only validate / persist zones when turning availability ON.
   if (next) {
+    const needsPreferences = !existing.outstationPreferencesCompletedAt;
+    if (needsPreferences) {
+      if (allIndiaOk == null) {
+        throw new ApiError(
+          400,
+          'Confirm whether you are OK with all-India multi-state outstation trips.',
+        );
+      }
+      const hours = Number(maxDrivingHoursPerDay);
+      if (!Number.isFinite(hours) || hours < 4 || hours > 16) {
+        throw new ApiError(400, 'Set your per-day driving capacity between 4 and 16 hours.');
+      }
+      update.outstationAllIndiaOk = !!allIndiaOk;
+      update.outstationMaxDrivingHoursPerDay = hours;
+      update.outstationPreferencesCompletedAt = new Date();
+    } else if (allIndiaOk != null || maxDrivingHoursPerDay != null) {
+      if (allIndiaOk != null) update.outstationAllIndiaOk = !!allIndiaOk;
+      if (maxDrivingHoursPerDay != null) {
+        const hours = Number(maxDrivingHoursPerDay);
+        if (!Number.isFinite(hours) || hours < 4 || hours > 16) {
+          throw new ApiError(400, 'Per-day driving capacity must be between 4 and 16 hours.');
+        }
+        update.outstationMaxDrivingHoursPerDay = hours;
+      }
+    }
+
     let resolvedZoneIds = null;
     if (Array.isArray(zoneIds)) {
       const seen = new Set();
@@ -453,10 +536,6 @@ export const updateOutstationAvailabilityService = async (
     }
 
     if (resolvedZoneIds === null) {
-      // Caller didn't pass zones — reuse what's already saved.
-      const existing = await Driver.findById(driverId)
-        .select('preferredOutstationZones')
-        .lean();
       resolvedZoneIds = (existing?.preferredOutstationZones || []).map(
         (id) => new mongoose.Types.ObjectId(String(id)),
       );
@@ -497,4 +576,105 @@ export const updateOutstationAvailabilityService = async (
   }
   driver.documents = dedupeDocumentsByType(driver.documents);
   return driver.toObject();
+};
+
+/** Post-onboarding update: vehicle experience only (max 5). */
+export const updateVehicleExperienceService = async (driverId, vehicleExperience) => {
+  const {
+    normalizeDriverVehicleExperience,
+    syncCarTypeExperienceFromVehicles,
+  } = await import('../utils/driverVehicleExperience.util.js');
+
+  const vehicles = await normalizeDriverVehicleExperience(vehicleExperience);
+
+  const driver = await Driver.findByIdAndUpdate(
+    driverId,
+    {
+      $set: {
+        vehicleExperience: vehicles,
+        carTypeExperience: syncCarTypeExperienceFromVehicles(vehicles),
+      },
+    },
+    { new: true, runValidators: true },
+  ).populate(vehicleExperiencePopulate);
+
+  if (!driver) {
+    throw new ApiError(404, 'Driver not found');
+  }
+
+  driver.documents = dedupeDocumentsByType(driver.documents);
+  const doc = driver.toObject();
+  const eligibility = await syncDriverKitEligibility(driverId);
+  doc.kitEligibility = {
+    canGoOnline: eligibility.allowed,
+    reasons: eligibility.reasons,
+    code: eligibility.code,
+  };
+  return doc;
+};
+
+// ─── Forgot / Reset Password (phone OTP only) ───────────────────────────────
+
+export const sendDriverForgotPasswordOtpService = async (phone) => {
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+
+  const driver = await Driver.findOne({ phone, isDeleted: false });
+  if (!driver) {
+    return { message: 'If this number is registered, an OTP will be sent', via: 'phone' };
+  }
+  if (driver.authProvider === 'google') {
+    throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await OTP.findOneAndUpdate(
+    { phone, purpose: 'forgot-password' },
+    { otp, expiresAt, purpose: 'forgot-password' },
+    { upsert: true, new: true },
+  );
+
+  await sendSmsOtp(phone, otp);
+  return { message: 'OTP sent to your registered mobile number', via: 'phone' };
+};
+
+export const verifyDriverForgotPasswordOtpService = async ({ phone, otp } = {}) => {
+  if (!otp) throw new ApiError(400, 'OTP is required');
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+
+  const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+  if (!record || record.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+  return { valid: true };
+};
+
+export const resetDriverPasswordWithOtpService = async ({ phone, otp, newPassword } = {}) => {
+  if (!otp) throw new ApiError(400, 'OTP is required');
+  if (!phone || phone.length !== 10) {
+    throw new ApiError(400, 'Valid 10-digit phone number required');
+  }
+  if (!newPassword || newPassword.length < 6) {
+    throw new ApiError(400, 'Password must be at least 6 characters');
+  }
+
+  const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+  if (!record || record.expiresAt < new Date()) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+
+  const driver = await Driver.findOne({ phone, isDeleted: false }).select('+password');
+  if (!driver) throw new ApiError(404, 'Driver not found');
+
+  const salt = await bcrypt.genSalt(10);
+  driver.password = await bcrypt.hash(newPassword, salt);
+  await driver.save();
+  await OTP.deleteOne({ _id: record._id });
+
+  return { message: 'Password changed successfully' };
 };

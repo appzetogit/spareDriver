@@ -12,6 +12,8 @@ const Select = ({
   searchable = false,
   openDirection = 'bottom',
   icon: Icon,
+  prefilledLabel,
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,9 +24,12 @@ const Select = ({
     return String(optVal) === String(value);
   });
 
-  const displayLabel = selectedOption 
+  // If catalog options haven't loaded yet but we have a prefilled label from
+  // the parent (e.g. populated API data), show that immediately so the user
+  // sees the field is populated rather than blank.
+  const displayLabel = selectedOption
     ? (typeof selectedOption === 'string' ? selectedOption : selectedOption.label)
-    : placeholder;
+    : (value && prefilledLabel) ? prefilledLabel : placeholder;
 
   const filteredOptions = options.filter(opt => {
     const label = typeof opt === 'string' ? opt : opt.label;
@@ -54,13 +59,15 @@ const Select = ({
       <div className="relative">
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          disabled={disabled}
           className={`
             w-full h-10 bg-white border rounded-xl pr-10 text-sm text-left
             transition-all duration-200 flex items-center
+            ${disabled ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}
             ${isOpen ? 'border-primary ring-2 ring-primary/20' : 'border-border'}
             ${error ? 'border-danger' : ''}
-            ${!selectedOption ? 'text-text-muted' : 'text-text'}
+            ${(!selectedOption && !(value && prefilledLabel)) ? 'text-text-muted' : 'text-text'}
             ${Icon ? 'pl-9' : 'pl-4'}
           `}
         >

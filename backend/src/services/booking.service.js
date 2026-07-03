@@ -24,6 +24,15 @@ import {
   REFUND_INITIATED_BY,
 } from './refund.service.js';
 import {
+  notifyUserBookingCreated,
+  notifyUserDriverSearching,
+  notifyUserBookingCancelled,
+  notifyUserPaymentSuccessful,
+  notifyUserWalletDebited,
+  notifyDriverBookingCancelled,
+  notifyDriverCustomerCancelled,
+} from '../utils/notificationDispatch.js';
+import {
   releaseBookingBufferHold,
   clearPendingExtensionsOnTerminate,
 } from './bookingExtension.service.js';
@@ -476,7 +485,8 @@ export async function getBookingByIdService(bookingId, { userId, driverId } = {}
   if (driverId) filter.driverId = driverId;
   const query = Booking.findOne(filter)
     .populate('driverId', DRIVER_USER_FIELDS_WITH_LOC)
-    .populate('userId', CUSTOMER_DRIVER_FIELDS);
+    .populate('userId', CUSTOMER_DRIVER_FIELDS)
+    .populate('zoneIds', 'name code city');
   // Both the driver-side and the customer-side detail views need the
   // vehicle (image + brand + model + plate + transmission + fuel) so
   // each side can identify the car. The shared `CAR_DRIVER_POPULATE`
@@ -865,6 +875,7 @@ export async function createBookingService(userId, body) {
   const estimate = await estimateFareService({
     serviceType,
     userId,
+    carId: body.carId,
     slabId: hourly?.slabId || undefined,
     bookedHours: hourly?.durationHours,
     scheduledAt: hourly?.scheduledStartAt || outstationPickupAt,
@@ -1108,6 +1119,11 @@ export async function createBookingService(userId, body) {
       // user isn't stuck with a booking that never searches.
       shouldDispatchNow = true;
     }
+  }
+
+  notifyUserBookingCreated(booking.userId, booking).catch(() => null);
+  if (shouldDispatchNow !== false && booking.status === BOOKING_STATUS.SEARCHING) {
+    notifyUserDriverSearching(booking.userId, booking).catch(() => null);
   }
 
   return {

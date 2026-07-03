@@ -2,6 +2,7 @@ import ServicePricing from '../models/servicePricing.model.js';
 import SubscriptionPlan from '../models/subscriptionPlan.model.js';
 import UserSubscription from '../models/userSubscription.model.js';
 import User from '../models/user.model.js';
+import Car from '../models/user/car.model.js';
 import Zone from '../models/zone.model.js';
 import Payment from '../models/payment.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
@@ -28,12 +29,14 @@ import {
   applyBuffer,
   getDriverConflictMap,
 } from './driverConflict.service.js';
-import {
-  recordPlatformRevenue,
-  PLATFORM_REVENUE_SOURCE,
-} from './platformRevenue.service.js';
 import { normaliseOutstationPolicy } from './bookingOutstationCancellation.service.js';
 import { normaliseHourlyPolicy } from './bookingCancellation.service.js';
+import { getActiveLegalDocumentService } from './legalDocument.service.js';
+import { sendPushNotification } from './pushNotification.service.js';
+import { notifyDriverSubscriptionAssigned } from '../utils/notificationDispatch.js';
+import { LEGAL_DOCUMENT_TYPES } from '../models/legalDocument.model.js';
+import mongoose from 'mongoose';
+import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -364,23 +367,75 @@ export const deleteSubscriptionPlanService = async (id) => {
 
 // ─── Active subscription helpers ──────────────────────────────────────────────
 
-export const getActiveUserSubscriptionService = async (userId) => {
+export const getActiveUserSubscriptionService = async (userId, { carId } = {}) => {
   if (!userId) return null;
   const now = new Date();
-  return UserSubscription.findOne({
+  const filter = {
+    userId,
+    status: SUBSCRIPTION_STATUS.ACTIVE,
+    expiryDate: { $gt: now },
+  };
+  if (carId) filter.carId = carId;
+  return UserSubscription.findOne(filter)
+    .populate('planId', 'name includedHoursPerDay bookingDiscountType bookingDiscountValue durationMonths price')
+    .populate('assignedDriverId', 'name phone profilePicture rating')
+    .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    });
+};
+
+export const listActiveUserSubscriptionsService = async (userId) => {
+  if (!userId) return [];
+  const now = new Date();
+  const subs = await UserSubscription.find({
     userId,
     status: SUBSCRIPTION_STATUS.ACTIVE,
     expiryDate: { $gt: now },
   })
+    .sort({ createdAt: -1 })
     .populate('planId', 'name includedHoursPerDay bookingDiscountType bookingDiscountValue durationMonths price')
     .populate('assignedDriverId', 'name phone profilePicture rating')
-    .populate('zoneId', 'name city');
+    .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId image',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    });
+  return subs.map((s) => serializeSubscriptionForUser(s));
 };
 
 function addMonths(date, months) {
   const next = new Date(date);
   next.setMonth(next.getMonth() + Math.max(1, Number(months) || 1));
   return next;
+}
+
+function normalizeSubscriptionPlace(place, label) {
+  if (!place?.address?.trim()) {
+    throw new ApiError(400, `${label} address is required`);
+  }
+  const lat = Number(place.lat);
+  const lng = Number(place.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new ApiError(400, `${label} location coordinates are required`);
+  }
+  return {
+    address: String(place.address).trim(),
+    city: String(place.city || '').trim(),
+    lat,
+    lng,
+  };
 }
 
 function buildSubscriptionSnapshot(plan) {
@@ -425,36 +480,58 @@ async function syncSubscriptionPaymentRecord(subscription, razorpayOrderId) {
   );
 }
 
-export const createSubscriptionPurchaseOrderService = async (userId, planId, zoneId) => {
-  if (!planId || !zoneId) {
-    throw new ApiError(400, 'planId and zoneId are required');
+export const createSubscriptionPurchaseOrderService = async (
+  userId,
+  planId,
+  zoneId,
+  carId,
+  { termsAccepted, dailyPickup, dailyDropoff } = {},
+) => {
+  if (!planId || !zoneId || !carId) {
+    throw new ApiError(400, 'planId, zoneId and carId are required');
+  }
+  if (!termsAccepted) {
+    throw new ApiError(400, 'You must accept the subscription terms and conditions');
   }
 
-  const [user, plan, zone] = await Promise.all([
+  const pickup = normalizeSubscriptionPlace(dailyPickup, 'Daily pickup');
+  const dropoff = normalizeSubscriptionPlace(dailyDropoff, 'Daily drop-off');
+
+  const terms = await getActiveLegalDocumentService(LEGAL_DOCUMENT_TYPES.SUBSCRIPTION);
+  if (!terms) {
+    throw new ApiError(503, 'Subscription terms are not configured yet. Please try again later.');
+  }
+
+  const [user, plan, zone, car] = await Promise.all([
     User.findById(userId).select('name email phone_no').lean(),
     SubscriptionPlan.findOne({ _id: planId, isActive: true }),
     Zone.findOne({ _id: zoneId, isActive: true }).select('_id name city').lean(),
+    Car.findOne({ _id: carId, userId, isActive: { $ne: false } }).select('_id carTypeId vehicleNumber').lean(),
   ]);
 
   if (!user) throw new ApiError(404, 'User not found');
   if (!plan) throw new ApiError(404, 'Subscription plan not found or inactive');
   if (!zone) throw new ApiError(400, 'Invalid or inactive service zone');
+  if (!car) throw new ApiError(400, 'Invalid car selection');
 
   const existingActive = await UserSubscription.findOne({
     userId,
+    carId,
     status: SUBSCRIPTION_STATUS.ACTIVE,
     expiryDate: { $gt: new Date() },
   });
   if (existingActive) {
-    throw new ApiError(409, 'You already have an active subscription');
+    throw new ApiError(409, 'This car already has an active subscription');
   }
 
   const now = new Date();
+  const termsAcceptedAt = now;
   const snapshot = buildSubscriptionSnapshot(plan);
   const totalPayable = round2(snapshot.basePrice + snapshot.serviceCharge + snapshot.gstAmount);
   let subscription = await UserSubscription.findOne({
     userId,
     planId,
+    carId,
     status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
   });
 
@@ -463,18 +540,32 @@ export const createSubscriptionPurchaseOrderService = async (userId, planId, zon
       userId,
       planId,
       zoneId,
+      carId,
       status: SUBSCRIPTION_STATUS.PENDING_PAYMENT,
       startDate: now,
       expiryDate: addMonths(now, plan.durationMonths),
       amount: totalPayable,
       assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING,
+      termsAcceptedAt,
+      termsVersionSnapshot: terms.version,
+      termsTitleSnapshot: terms.title,
+      termsContentSnapshot: terms.content,
+      dailyPickup: pickup,
+      dailyDropoff: dropoff,
       ...snapshot,
     });
   } else {
     subscription.zoneId = zoneId;
+    subscription.carId = carId;
     subscription.amount = totalPayable;
     subscription.startDate = now;
     subscription.expiryDate = addMonths(now, plan.durationMonths);
+    subscription.termsAcceptedAt = termsAcceptedAt;
+    subscription.termsVersionSnapshot = terms.version;
+    subscription.termsTitleSnapshot = terms.title;
+    subscription.termsContentSnapshot = terms.content;
+    subscription.dailyPickup = pickup;
+    subscription.dailyDropoff = dropoff;
     Object.assign(subscription, snapshot);
     await subscription.save();
   }
@@ -562,24 +653,6 @@ export const verifySubscriptionPaymentService = async (
   subscription.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING;
   await subscription.save();
 
-  if (subscription.platformShareRupees > 0) {
-    await recordPlatformRevenue({
-      source: PLATFORM_REVENUE_SOURCE.SUBSCRIPTION,
-      amountRupees: subscription.platformShareRupees,
-      userSubscriptionId: subscription._id,
-      userId: subscription.userId,
-      meta: {
-        planName: subscription.planNameSnapshot,
-        basePrice: subscription.basePrice,
-        totalPaid: subscription.amount,
-        driverShareRupees: subscription.driverShareRupees,
-        serviceCharge: subscription.serviceCharge,
-        gstAmount: subscription.gstAmount,
-      },
-      occurredAt: now,
-    }).catch(() => {});
-  }
-
   await Payment.findOneAndUpdate(
     { referenceId: subscription._id, referenceModel: 'UserSubscription' },
     {
@@ -595,7 +668,29 @@ export const verifySubscriptionPaymentService = async (
     { path: 'planId', select: 'name durationMonths includedHoursPerDay bookingDiscountType bookingDiscountValue' },
     { path: 'zoneId', select: 'name city' },
     { path: 'assignedDriverId', select: 'name phone rating profilePicture' },
+    {
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId image',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    },
   ]);
+
+  await sendPushNotification(
+    { userId: subscription.userId },
+    {
+      title: 'Subscription successful',
+      body: 'You are subscribed successfully. We will assign the best driver for your car soon.',
+      severity: 'success',
+      data: {
+        kind: 'subscription_purchased',
+        subscriptionId: String(subscription._id),
+      },
+    },
+  );
 
   return { subscription: serializeSubscriptionForUser(subscription), alreadyPaid: false };
 };
@@ -1050,13 +1145,16 @@ export const estimateFareService = async ({
   tollParking = 0,
   foodProvided = true,
   userId = null,
+  carId = null,
 }) => {
   const pricing = await getServicePricingByTypeService(serviceType);
   if (!pricing || !pricing.isActive) {
     throw new ApiError(404, 'Pricing for this service type is not available');
   }
 
-  const subscription = userId ? await getActiveUserSubscriptionService(userId) : null;
+  const subscription = userId
+    ? await getActiveUserSubscriptionService(userId, { carId: carId || undefined })
+    : null;
   // Outstation only checks the start; hourly checks the whole booked
   // window so a 6-hour ride that starts at 18:00 still triggers night.
   const isNight =
@@ -1262,6 +1360,9 @@ export function serializeSubscriptionForUser(subscription) {
     planNameSnapshot: doc.planNameSnapshot,
     planId: doc.planId,
     zoneId: doc.zoneId,
+    carId: doc.carId,
+    dailyPickup: doc.dailyPickup || null,
+    dailyDropoff: doc.dailyDropoff || null,
     durationMonths: doc.durationMonths,
     includedHoursPerDay: doc.includedHoursPerDay,
     bookingDiscountType: doc.bookingDiscountType,
@@ -1290,31 +1391,344 @@ export function serializeSubscriptionForUser(subscription) {
       }
       : null,
     driverSharePaidAt: doc.driverSharePaidAt,
+    termsAcceptedAt: doc.termsAcceptedAt,
+    termsVersionSnapshot: doc.termsVersionSnapshot,
+    termsTitleSnapshot: doc.termsTitleSnapshot,
   };
 }
 
-async function creditDriverSubscriptionShare(subscription, driverId) {
-  const share = round2(Number(subscription.driverShareRupees) || 0);
-  if (share <= 0 || subscription.driverSharePaidAt) return;
-
-  const updated = await Driver.findOneAndUpdate(
-    {
-      _id: driverId,
-      isDeleted: { $ne: true },
-    },
-    {
-      $inc: {
-        'wallet.balance': share,
-        'wallet.totalEarnings': share,
-      },
-    },
-    { new: true },
-  );
-  if (!updated) return;
-
-  subscription.driverSharePaidAt = new Date();
-  subscription.driverSharePaidTo = driverId;
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
 }
+
+function inclusiveCalendarDays(start, end) {
+  const s = startOfDay(start);
+  const e = startOfDay(end);
+  if (e < s) return 0;
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  return Math.floor((e - s) / MS_PER_DAY) + 1;
+}
+
+function endOfDay(d) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function parseWorkingDateInput(value, label) {
+  if (!value) throw new ApiError(400, `${label} is required`);
+  const d = startOfDay(new Date(value));
+  if (Number.isNaN(d.getTime())) throw new ApiError(400, `Invalid ${label}`);
+  return d;
+}
+
+function parseOptionalWorkingDate(value) {
+  if (!value) return null;
+  const d = startOfDay(new Date(value));
+  if (Number.isNaN(d.getTime())) throw new ApiError(400, 'Invalid working end date');
+  return d;
+}
+
+function assertDateWithinSubscription(date, subscription, label) {
+  const d = startOfDay(date);
+  const subStart = startOfDay(subscription.startDate);
+  const subEnd = startOfDay(subscription.expiryDate);
+  if (d < subStart || d > subEnd) {
+    throw new ApiError(400, `${label} must be within the subscription period`);
+  }
+  return d;
+}
+
+function subscriptionStintKey(driverId, assignedAt) {
+  return `${String(driverId)}_${new Date(assignedAt).getTime()}`;
+}
+
+function capWorkingDays(days, totalSubscriptionDays) {
+  const n = Math.max(0, Number(days) || 0);
+  if (!totalSubscriptionDays) return n;
+  return Math.min(n, totalSubscriptionDays);
+}
+
+function buildSubscriptionDriverStints(doc) {
+  const subStart = doc.startDate ? new Date(doc.startDate) : null;
+  const subEnd = doc.expiryDate ? new Date(doc.expiryDate) : null;
+  if (!subStart || !subEnd) {
+    return { stints: [], totalSubscriptionDays: 0 };
+  }
+
+  const totalSubscriptionDays = inclusiveCalendarDays(subStart, subEnd);
+  const stints = [];
+  const now = new Date();
+
+  for (const prev of doc.previousAssignments || []) {
+    const driverId = prev.driverId?._id || prev.driverId;
+    if (!driverId || !prev.assignedAt) continue;
+    const stintStart = new Date(
+      Math.max(startOfDay(prev.assignedAt).getTime(), subStart.getTime()),
+    );
+    const endRaw = prev.releasedAt ? endOfDay(prev.releasedAt) : subEnd;
+    const stintEnd = new Date(Math.min(endRaw.getTime(), subEnd.getTime()));
+    if (stintEnd < stintStart) continue;
+    stints.push({
+      driverId,
+      driver:
+        typeof prev.driverId === 'object' && prev.driverId?.name
+          ? {
+            _id: driverId,
+            name: prev.driverId.name,
+            phone: prev.driverId.phone || prev.driverId.phone_no || '',
+          }
+          : null,
+      assignedAt: prev.assignedAt,
+      releasedAt: prev.releasedAt || null,
+      workingDays: capWorkingDays(inclusiveCalendarDays(stintStart, stintEnd), totalSubscriptionDays),
+      lastWorkingDay: stintEnd,
+      stintStart,
+      stintEnd,
+      isCurrent: false,
+    });
+  }
+
+  const assignedId = doc.assignedDriverId?._id || doc.assignedDriverId;
+  if (assignedId && doc.assignedAt) {
+    const stintStart = new Date(
+      Math.max(startOfDay(doc.assignedAt).getTime(), subStart.getTime()),
+    );
+    const plannedEndRaw = doc.assignedWorkingEndDate
+      ? endOfDay(doc.assignedWorkingEndDate)
+      : subEnd;
+    const stintEnd = new Date(Math.min(plannedEndRaw.getTime(), subEnd.getTime()));
+    const effectiveEnd = new Date(Math.min(stintEnd.getTime(), now.getTime()));
+    if (effectiveEnd >= stintStart) {
+      stints.push({
+        driverId: assignedId,
+        driver:
+          typeof doc.assignedDriverId === 'object' && doc.assignedDriverId?.name
+            ? {
+              _id: assignedId,
+              name: doc.assignedDriverId.name,
+              phone: doc.assignedDriverId.phone || doc.assignedDriverId.phone_no || '',
+            }
+            : null,
+        assignedAt: doc.assignedAt,
+        releasedAt: null,
+        assignedWorkingEndDate: doc.assignedWorkingEndDate || null,
+        workingDays: capWorkingDays(
+          inclusiveCalendarDays(stintStart, effectiveEnd),
+          totalSubscriptionDays,
+        ),
+        lastWorkingDay: stintEnd,
+        stintStart,
+        stintEnd,
+        plannedStintEnd: stintEnd,
+        isCurrent: true,
+      });
+    }
+  }
+
+  return { stints, totalSubscriptionDays };
+}
+
+function summarizeSubscriptionPayouts(doc) {
+  const { stints, totalSubscriptionDays } = buildSubscriptionDriverStints(doc);
+  const driverSharePool = round2(Number(doc.driverShareRupees) || 0);
+  const platformEarned = round2(Number(doc.platformShareRupees) || 0);
+  const totalRevenue = round2(Number(doc.amount) || 0);
+  const payouts = Array.isArray(doc.driverPayouts) ? doc.driverPayouts : [];
+
+  const paidByStint = new Map();
+  for (const p of payouts) {
+    const key = subscriptionStintKey(p.driverId, p.assignedAt);
+    const entry = paidByStint.get(key) || { total: 0, payments: [] };
+    entry.total += Number(p.amountRupees) || 0;
+    entry.payments.push(p);
+    paidByStint.set(key, entry);
+  }
+
+  let paidToDriver = round2(
+    payouts.reduce((sum, p) => sum + (Number(p.amountRupees) || 0), 0),
+  );
+  const legacyFullyPaid = !payouts.length && !!doc.driverSharePaidAt;
+  if (legacyFullyPaid) {
+    paidToDriver = driverSharePool;
+  }
+
+  const enrichedStints = stints.map((stint) => {
+    const key = subscriptionStintKey(stint.driverId, stint.assignedAt);
+    const paidInfo = paidByStint.get(key);
+    const paidSoFar = round2(paidInfo?.total || 0);
+    const payments = (paidInfo?.payments || []).map((p) => ({
+      _id: p._id,
+      amountRupees: round2(Number(p.amountRupees) || 0),
+      paidAt: p.paidAt,
+    }));
+    return {
+      ...stint,
+      key,
+      paidSoFar,
+      payments,
+    };
+  });
+
+  const driverGroupsMap = new Map();
+  for (const stint of enrichedStints) {
+    const id = String(stint.driverId);
+    const existing = driverGroupsMap.get(id);
+    if (!existing) {
+      driverGroupsMap.set(id, {
+        driverId: id,
+        driver: stint.driver,
+        periods: [stint],
+        paidSoFar: stint.paidSoFar || 0,
+        payments: [...(stint.payments || [])],
+        totalWorkingDays: stint.workingDays || 0,
+      });
+    } else {
+      existing.periods.push(stint);
+      existing.paidSoFar = round2((existing.paidSoFar || 0) + (stint.paidSoFar || 0));
+      existing.payments.push(...(stint.payments || []));
+      existing.totalWorkingDays += stint.workingDays || 0;
+    }
+  }
+  const driverGroups = Array.from(driverGroupsMap.values()).map((g) => ({
+    ...g,
+    paidSoFar: round2(g.paidSoFar),
+    key: g.driverId,
+  }));
+
+  const remainingDriverShare = round2(Math.max(0, driverSharePool - paidToDriver));
+  const canPayMore = remainingDriverShare > 0 && enrichedStints.length > 0;
+
+  return {
+    totalRevenue,
+    platformEarned,
+    driverSharePool,
+    paidToDriver,
+    remainingDriverShare,
+    canPayMore,
+    totalSubscriptionDays,
+    stints: enrichedStints,
+    driverGroups,
+  };
+}
+
+export const getSubscriptionDriverPayoutDetailService = async (subscriptionId) => {
+  const sub = await UserSubscription.findById(subscriptionId)
+    .populate('userId', 'name phone_no email')
+    .populate('zoneId', 'name city')
+    .populate('assignedDriverId', 'name phone')
+    .populate('previousAssignments.driverId', 'name phone')
+    .lean();
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+  if (!sub.paidAt) throw new ApiError(400, 'Subscription has not been paid yet');
+
+  const payoutSummary = summarizeSubscriptionPayouts(sub);
+  return {
+    subscription: {
+      _id: sub._id,
+      planNameSnapshot: sub.planNameSnapshot,
+      startDate: sub.startDate,
+      expiryDate: sub.expiryDate,
+      paidAt: sub.paidAt,
+      amount: sub.amount,
+      platformShareRupees: sub.platformShareRupees,
+      driverShareRupees: sub.driverShareRupees,
+      userId: sub.userId,
+      zoneId: sub.zoneId,
+    },
+    ...payoutSummary,
+  };
+};
+
+export const paySubscriptionDriverSharesService = async (subscriptionId, staffId, body = {}) => {
+  const { payouts } = body;
+  if (!Array.isArray(payouts) || !payouts.length) {
+    throw new ApiError(400, 'payouts array is required');
+  }
+
+  const sub = await UserSubscription.findById(subscriptionId)
+    .populate('assignedDriverId', 'name phone')
+    .populate('previousAssignments.driverId', 'name phone');
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+  if (!sub.paidAt) throw new ApiError(400, 'Subscription has not been paid yet');
+
+  const summary = summarizeSubscriptionPayouts(sub.toObject());
+  const stintMap = new Map(summary.stints.map((s) => [s.key, s]));
+  const driverSharePool = summary.driverSharePool;
+  let newPayoutTotal = 0;
+
+  for (const item of payouts) {
+    const driverId = item?.driverId;
+    let assignedAt = item?.assignedAt;
+    const amountRupees = round2(Number(item?.amountRupees));
+
+    if (!driverId) {
+      throw new ApiError(400, 'Each payout requires driverId');
+    }
+    if (!Number.isFinite(amountRupees) || amountRupees <= 0) {
+      throw new ApiError(400, 'Each payout amount must be greater than zero');
+    }
+
+    let stint;
+    if (assignedAt) {
+      const key = subscriptionStintKey(driverId, assignedAt);
+      stint = stintMap.get(key);
+    } else {
+      const driverStints = summary.stints.filter(
+        (s) => String(s.driverId) === String(driverId),
+      );
+      if (!driverStints.length) {
+        throw new ApiError(400, 'Driver has no working period on this subscription');
+      }
+      stint = driverStints[driverStints.length - 1];
+      assignedAt = stint.assignedAt;
+    }
+
+    if (!stint) {
+      throw new ApiError(400, 'Driver stint not found for this subscription');
+    }
+
+    newPayoutTotal = round2(newPayoutTotal + amountRupees);
+    if (summary.paidToDriver + newPayoutTotal > driverSharePool) {
+      throw new ApiError(
+        400,
+        `Total driver payouts cannot exceed the driver pool (${driverSharePool})`,
+      );
+    }
+
+    const credited = await Driver.findOneAndUpdate(
+      {
+        _id: stint.driverId,
+        isDeleted: { $ne: true },
+      },
+      {
+        $inc: {
+          'wallet.balance': amountRupees,
+          'wallet.totalEarnings': amountRupees,
+        },
+      },
+      { new: true },
+    );
+    if (!credited) {
+      throw new ApiError(404, `Driver ${stint.driverId} not found`);
+    }
+
+    sub.driverPayouts.push({
+      driverId: stint.driverId,
+      assignedAt: stint.assignedAt,
+      releasedAt: stint.releasedAt,
+      workingDays: stint.workingDays,
+      amountRupees,
+      paidAt: new Date(),
+      paidBy: staffId || null,
+    });
+  }
+
+  await sub.save();
+  return getSubscriptionDriverPayoutDetailService(subscriptionId);
+};
 
 // ─── Admin: assign / release a dedicated driver to a subscription ─────────────
 
@@ -1371,56 +1785,184 @@ async function assertDriverAvailableForSubscription(subscription, driverId, { ex
   }
 }
 
-export const assignDriverToSubscriptionService = async (subscriptionId, driverId, staffId) => {
-  const sub = await UserSubscription.findById(subscriptionId);
+export const assignDriverToSubscriptionService = async (
+  subscriptionId,
+  driverId,
+  staffId,
+  {
+    workingStartDate,
+    workingEndDate,
+    previousDriverLastWorkingDate,
+  } = {},
+) => {
+  const sub = await UserSubscription.findById(subscriptionId).populate({
+    path: 'carId',
+    select: 'carTypeId vehicleNumber brandId modelId',
+    populate: { path: 'carTypeId', select: 'name' },
+  });
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (sub.status !== SUBSCRIPTION_STATUS.ACTIVE) {
     throw new ApiError(400, 'Cannot assign a driver to an inactive subscription');
+  }
+
+  const workStart = assertDateWithinSubscription(
+    parseWorkingDateInput(workingStartDate, 'Working start date'),
+    sub,
+    'Working start date',
+  );
+  const workEnd = workingEndDate
+    ? assertDateWithinSubscription(
+      parseWorkingDateInput(workingEndDate, 'Working end date'),
+      sub,
+      'Working end date',
+    )
+    : null;
+  if (workEnd && workEnd < workStart) {
+    throw new ApiError(400, 'Working end date cannot be before start date');
   }
 
   const driver = await Driver.findOne({
     _id: driverId,
     isDeleted: { $ne: true },
     approvalStatus: 'approved',
-  }).select('_id name');
+  })
+    .select('_id name phone rating profilePicture carTypeExperience')
+    .populate('carTypeExperience', 'name')
+    .lean();
   if (!driver) throw new ApiError(404, 'Driver not found or not approved');
+
+  if (
+    sub.assignedDriverId
+    && String(sub.assignedDriverId) === String(driverId)
+  ) {
+    throw new ApiError(
+      409,
+      'This driver is already assigned to this subscription. Release them first before reassigning.',
+    );
+  }
+
+  const carTypeId = await resolveCarTypeObjectId(
+    sub.carId?.carTypeId?._id || sub.carId?.carTypeId,
+  );
+  if (carTypeId) {
+    const hasExperience = (driver.carTypeExperience || []).some((ct) => {
+      const id = ct?._id || ct;
+      return String(id) === String(carTypeId);
+    });
+    if (!hasExperience) {
+      throw new ApiError(409, 'Driver does not have experience with this car type');
+    }
+  }
 
   await assertDriverAvailableForSubscription(sub, driverId);
 
   if (sub.assignedDriverId) {
+    const prevLastDay = assertDateWithinSubscription(
+      parseWorkingDateInput(
+        previousDriverLastWorkingDate,
+        'Previous driver last working date',
+      ),
+      sub,
+      'Previous driver last working date',
+    );
+    if (sub.assignedAt && prevLastDay < startOfDay(sub.assignedAt)) {
+      throw new ApiError(
+        400,
+        'Previous driver last working date cannot be before their start date',
+      );
+    }
     sub.previousAssignments.push({
       driverId: sub.assignedDriverId,
       assignedAt: sub.assignedAt,
-      releasedAt: new Date(),
+      releasedAt: endOfDay(prevLastDay),
       releaseReason: 'reassigned by admin',
     });
   }
 
   sub.assignedDriverId = driverId;
-  sub.assignedAt = new Date();
+  sub.assignedAt = workStart;
+  sub.assignedWorkingEndDate = workEnd ? endOfDay(workEnd) : null;
   sub.assignedBy = staffId || null;
   sub.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED;
   sub.releasedAt = null;
   sub.releaseReason = '';
-  await creditDriverSubscriptionShare(sub, driverId);
   await sub.save();
-  return sub;
+
+  await sub.populate('zoneId', 'name city');
+
+  const terms = await getActiveLegalDocumentService(LEGAL_DOCUMENT_TYPES.SUBSCRIPTION);
+  const carLabel = sub.carId?.vehicleNumber || 'your car';
+
+  let emailResult = { sent: false, reason: 'not_attempted' };
+  try {
+    const { sendSubscriptionDriverAssignmentEmail } = await import(
+      './subscriptionAssignmentEmail.service.js'
+    );
+    emailResult = await sendSubscriptionDriverAssignmentEmail({
+      subscription: sub.toObject ? sub.toObject() : sub,
+      driver,
+      terms,
+    });
+  } catch (err) {
+    console.error('[email] subscription assignment email failed:', err?.message || err);
+    emailResult = { sent: false, reason: err?.message || 'send_failed' };
+  }
+
+  await sendPushNotification(
+    { userId: sub.userId },
+    {
+      title: 'Dedicated driver assigned',
+      body: `${driver.name} has been assigned for ${carLabel}. Check your email for terms and driver details.`,
+      severity: 'success',
+      data: {
+        kind: 'subscription_driver_assigned',
+        subscriptionId: String(sub._id),
+        driverId: String(driverId),
+        driverName: driver.name || '',
+        driverPhone: driver.phone || '',
+        termsVersion: terms?.version ? String(terms.version) : '',
+      },
+    },
+  );
+
+  notifyDriverSubscriptionAssigned(driverId, {
+    subscriptionId: sub._id,
+    carLabel,
+  }).catch(() => null);
+
+  const result = sub.toObject ? sub.toObject() : sub;
+  result.assignmentEmail = emailResult;
+  return result;
 };
 
-export const releaseSubscriptionDriverService = async (subscriptionId, reason = '') => {
+export const releaseSubscriptionDriverService = async (
+  subscriptionId,
+  { reason = '', lastWorkingDate } = {},
+) => {
   const sub = await UserSubscription.findById(subscriptionId);
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (!sub.assignedDriverId) {
     throw new ApiError(400, 'No driver is currently assigned to this subscription');
   }
+
+  const lastDay = assertDateWithinSubscription(
+    parseWorkingDateInput(lastWorkingDate, 'Last working date'),
+    sub,
+    'Last working date',
+  );
+  if (sub.assignedAt && lastDay < startOfDay(sub.assignedAt)) {
+    throw new ApiError(400, 'Last working date cannot be before the driver start date');
+  }
+
   sub.previousAssignments.push({
     driverId: sub.assignedDriverId,
     assignedAt: sub.assignedAt,
-    releasedAt: new Date(),
+    releasedAt: endOfDay(lastDay),
     releaseReason: reason || 'released by admin',
   });
   sub.assignedDriverId = null;
   sub.assignedAt = null;
+  sub.assignedWorkingEndDate = null;
   sub.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.RELEASED;
   sub.releasedAt = new Date();
   sub.releaseReason = reason || '';
@@ -1430,10 +1972,30 @@ export const releaseSubscriptionDriverService = async (subscriptionId, reason = 
 
 export const listSubscriptionAvailableDriversService = async (
   subscriptionId,
-  { search, page = 1, limit = 50, staff } = {},
+  {
+    search,
+    page = 1,
+    limit = 50,
+    staff,
+    carTypeMatch = 'true',
+    minRating,
+    onlineOnly,
+    allIndiaOnly,
+    minDrivingHoursPerDay,
+    zoneMatch,
+  } = {},
 ) => {
   const sub = await UserSubscription.findById(subscriptionId)
     .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'carTypeId vehicleNumber brandId modelId',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    })
     .lean();
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (sub.status !== SUBSCRIPTION_STATUS.ACTIVE) {
@@ -1456,6 +2018,41 @@ export const listSubscriptionAvailableDriversService = async (
     approvalStatus: 'approved',
     isDeleted: { $ne: true },
   };
+
+  const subscriptionCarTypeId = await resolveCarTypeObjectId(
+    sub.carId?.carTypeId?._id || sub.carId?.carTypeId,
+  );
+  const subscriptionZoneId = sub.zoneId?._id || sub.zoneId || null;
+
+  if (carTypeMatch !== 'false' && subscriptionCarTypeId) {
+    match.carTypeExperience = subscriptionCarTypeId;
+  }
+
+  if (zoneMatch === 'true' || zoneMatch === true) {
+    if (subscriptionZoneId) {
+      try {
+        match.preferredOutstationZones = new mongoose.Types.ObjectId(String(subscriptionZoneId));
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (minRating != null && minRating !== '') {
+    const rating = Number(minRating);
+    if (Number.isFinite(rating) && rating > 0) match.rating = { $gte: rating };
+  }
+  if (onlineOnly === 'true' || onlineOnly === true) {
+    match.isOnline = true;
+  }
+  if (allIndiaOnly === 'true' || allIndiaOnly === true) {
+    match.outstationAllIndiaOk = true;
+  }
+  if (minDrivingHoursPerDay != null && minDrivingHoursPerDay !== '') {
+    const hours = Number(minDrivingHoursPerDay);
+    if (Number.isFinite(hours) && hours > 0) {
+      match.outstationMaxDrivingHoursPerDay = { $gte: hours };
+    }
+  }
+
   if (search) {
     const q = String(search).trim();
     if (q) {
@@ -1469,8 +2066,12 @@ export const listSubscriptionAvailableDriversService = async (
   const [total, drivers] = await Promise.all([
     Driver.countDocuments(match),
     Driver.find(match)
-      .select('name phone rating profilePicture isOnline carTypeExperience')
-      .sort({ isOnline: -1, rating: -1, createdAt: -1 })
+      .select(
+        'name phone rating profilePicture isOnline experienceYears carTypeExperience outstationAllIndiaOk outstationMaxDrivingHoursPerDay preferredOutstationZones',
+      )
+      .populate('carTypeExperience', 'name')
+      .populate('preferredOutstationZones', 'name city')
+      .sort({ isOnline: -1, rating: -1, experienceYears: -1, createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean(),
@@ -1506,11 +2107,16 @@ export const listSubscriptionAvailableDriversService = async (
     const id = String(driver._id);
     const bookingConflicts = conflictMap[id] || [];
     const hasSubscriptionConflict = busySubscriptionDrivers.has(id);
+    const zoneIds = (driver.preferredOutstationZones || []).map((z) => String(z?._id || z));
+    const inSubscriptionZone = subscriptionZoneId
+      ? zoneIds.includes(String(subscriptionZoneId))
+      : false;
     return {
       ...driver,
       conflicts: bookingConflicts,
       hasConflict: bookingConflicts.length > 0 || hasSubscriptionConflict,
       hasSubscriptionConflict,
+      inSubscriptionZone,
     };
   });
 
@@ -1520,6 +2126,15 @@ export const listSubscriptionAvailableDriversService = async (
     page: pageNum,
     limit: limitNum,
     subscriptionZone: sub.zoneId || null,
+    subscriptionCarTypeId: subscriptionCarTypeId ? String(subscriptionCarTypeId) : null,
+    subscriptionCar: sub.carId || null,
+    subscription: {
+      dailyPickup: sub.dailyPickup || null,
+      dailyDropoff: sub.dailyDropoff || null,
+      includedHoursPerDay: sub.includedHoursPerDay,
+      durationMonths: sub.durationMonths,
+      planNameSnapshot: sub.planNameSnapshot,
+    },
   };
 };
 
@@ -1531,7 +2146,7 @@ export const listUserSubscriptionsService = async ({
   page = 1,
   limit = 25,
 } = {}) => {
-  const filter = {};
+  const filter = { paidAt: { $ne: null } };
   if (status) filter.status = status;
   else filter.status = SUBSCRIPTION_STATUS.ACTIVE;
   if (assignmentStatus) filter.assignmentStatus = assignmentStatus;
@@ -1562,7 +2177,16 @@ export const listUserSubscriptionsService = async ({
       .populate('userId', 'name phone_no email')
       .populate('planId', 'name durationMonths price includedHoursPerDay')
       .populate('zoneId', 'name city')
-      .populate('assignedDriverId', 'name phone rating profilePicture'),
+      .populate('assignedDriverId', 'name phone rating profilePicture')
+      .populate({
+        path: 'carId',
+        select: 'vehicleNumber carTypeId brandId modelId',
+        populate: [
+          { path: 'carTypeId', select: 'name' },
+          { path: 'brandId', select: 'name' },
+          { path: 'modelId', select: 'name' },
+        ],
+      }),
     UserSubscription.countDocuments(filter),
   ]);
   return { items, total, page: Math.max(1, page), limit };
@@ -1597,7 +2221,7 @@ export const listSubscriptionRevenueService = async ({
   const safePage = Math.max(1, Number(page) || 1);
   const skip = (safePage - 1) * safeLimit;
 
-  const [items, total, aggregates] = await Promise.all([
+  const [items, total, allForTotals] = await Promise.all([
     UserSubscription.find(filter)
       .sort({ paidAt: -1 })
       .skip(skip)
@@ -1605,43 +2229,58 @@ export const listSubscriptionRevenueService = async ({
       .populate('userId', 'name phone_no email')
       .populate('zoneId', 'name city')
       .populate('assignedDriverId', 'name phone')
-      .populate('driverSharePaidTo', 'name phone')
+      .populate('previousAssignments.driverId', 'name phone')
       .lean(),
     UserSubscription.countDocuments(filter),
-    UserSubscription.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: null,
-          totalCollected: { $sum: '$amount' },
-          totalPlatform: { $sum: '$platformShareRupees' },
-          totalDriver: { $sum: '$driverShareRupees' },
-          totalBase: { $sum: '$basePrice' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
+    UserSubscription.find(filter)
+      .select(
+        'amount platformShareRupees driverShareRupees driverSharePaidAt driverPayouts startDate expiryDate assignedDriverId assignedAt previousAssignments',
+      )
+      .populate('assignedDriverId', 'name phone')
+      .populate('previousAssignments.driverId', 'name phone')
+      .lean(),
   ]);
 
-  const totals = aggregates[0] || {
-    totalCollected: 0,
-    totalPlatform: 0,
-    totalDriver: 0,
-    totalBase: 0,
-    count: 0,
-  };
+  const enrichedItems = items.map((item) => {
+    const payout = summarizeSubscriptionPayouts(item);
+    return {
+      ...item,
+      totalRevenue: payout.totalRevenue,
+      platformEarned: payout.platformEarned,
+      paidToDriver: payout.paidToDriver,
+      remainingDriverShare: payout.remainingDriverShare,
+      driverSharePool: payout.driverSharePool,
+      canPayMore: payout.canPayMore,
+      driverStintCount: payout.stints.length,
+    };
+  });
+
+  let totalRevenue = 0;
+  let totalPlatformEarned = 0;
+  let totalDriverPool = 0;
+  let totalPaidToDriver = 0;
+  let totalRemaining = 0;
+  for (const doc of allForTotals) {
+    const payout = summarizeSubscriptionPayouts(doc);
+    totalRevenue += payout.totalRevenue || 0;
+    totalPlatformEarned += payout.platformEarned || 0;
+    totalDriverPool += payout.driverSharePool || 0;
+    totalPaidToDriver += payout.paidToDriver || 0;
+    totalRemaining += payout.remainingDriverShare || 0;
+  }
 
   return {
-    items,
+    items: enrichedItems,
     total,
     page: safePage,
     limit: safeLimit,
     totals: {
-      count: totals.count || 0,
-      totalCollected: round2(totals.totalCollected || 0),
-      totalPlatform: round2(totals.totalPlatform || 0),
-      totalDriver: round2(totals.totalDriver || 0),
-      totalBase: round2(totals.totalBase || 0),
+      count: total,
+      totalRevenue: round2(totalRevenue),
+      totalPlatformEarned: round2(totalPlatformEarned),
+      totalDriverPool: round2(totalDriverPool),
+      totalPaidToDriver: round2(totalPaidToDriver),
+      totalRemaining: round2(totalRemaining),
     },
   };
 };

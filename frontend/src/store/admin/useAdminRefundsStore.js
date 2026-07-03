@@ -20,6 +20,7 @@ const initialState = {
   totals: { totalAmount: 0, totalCount: 0, byStatus: {} },
   loading: false,
   updatingId: null,
+  creatingRefund: false,
   error: null,
   // Pagination + filters
   page: 1,
@@ -105,6 +106,23 @@ const useAdminRefundsStore = create((set, get) => ({
       return updated;
     } finally {
       set({ updatingId: null });
+    }
+  },
+
+  async fetchSubjectWallet(subjectType, subjectId) {
+    const res = await api.get(`/admin/refunds/subject-wallet/${subjectType}/${subjectId}`);
+    return res?.data?.data;
+  },
+
+  async createManualRefund(payload) {
+    set({ creatingRefund: true });
+    try {
+      const res = await api.post('/admin/refunds/manual', payload);
+      const data = res?.data?.data;
+      await get().fetchRefunds();
+      return data;
+    } finally {
+      set({ creatingRefund: false });
     }
   },
 }));

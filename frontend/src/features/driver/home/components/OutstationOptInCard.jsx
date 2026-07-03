@@ -1,31 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ChevronRight, Compass, MapPin, Pencil } from 'lucide-react';
+import { Compass, Gauge, MapPin, Pencil } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Toggle from '../../../../components/Toggle';
 import api from '../../../../utils/api';
-import OutstationZonesSheet from './OutstationZonesSheet';
+import OutstationSettingsSheet from './OutstationSettingsSheet';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 
-/**
- * Driver-side opt-in tile rendered on the home screen. Two responsibilities:
- *
- * 1. Toggle availability for outstation (multi-day round trips). Backend
- *    requires at least one preferred zone whenever availability is on,
- *    so flipping the toggle ON without saved zones opens the picker
- *    sheet and defers the actual API call until the driver confirms.
- * 2. Show + edit the saved zones at a glance (chips + "Edit"). Helps
- *    drivers quickly verify they're listed for the right cities before
- *    expecting offers.
- *
- * Why the toggle lives on home (and not Account):
- *   This is something a driver flips on / off frequently —
- *   "I'm free this weekend, take me off outstation" — so it
- *   needs to be one tap from the home screen, not buried under
- *   Account.
- */
-const OutstationOptInCard = ({ initial, initialZones = [] }) => {
+const OutstationOptInCard = ({
+  initial,
+  initialZones = [],
+  preferencesCompleted = false,
+  initialAllIndiaOk = false,
+  initialMaxHours = 10,
+}) => {
   const refetchProfile = useDriverProfileStore((s) => s.fetch);
   const profileKey = buildCacheKey('driver-profile', {});
 
@@ -38,50 +27,39 @@ const OutstationOptInCard = ({ initial, initialZones = [] }) => {
   );
 
   const [available, setAvailable] = useState(!!initial);
-  const [zones, setZones] = useState(
-    Array.isArray(initialZones) ? initialZones : [],
-  );
+  const [zones, setZones] = useState(Array.isArray(initialZones) ? initialZones : []);
+  const [allIndiaOk, setAllIndiaOk] = useState(!!initialAllIndiaOk);
+  const [maxHours, setMaxHours] = useState(initialMaxHours || 10);
+  const [prefsDone, setPrefsDone] = useState(!!preferencesCompleted);
   const [saving, setSaving] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingEnable, setPendingEnable] = useState(false);
 
-  // Mirror server-fetched values when the profile re-fetches.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirroring server-fetched value
-    setAvailable(!!initial);
-  }, [initial]);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirroring server-fetched value
-    setZones(Array.isArray(initialZones) ? initialZones : []);
-  }, [initialZones]);
+  useEffect(() => { setAvailable(!!initial); }, [initial]);
+  useEffect(() => { setZones(Array.isArray(initialZones) ? initialZones : []); }, [initialZones]);
+  useEffect(() => { setAllIndiaOk(!!initialAllIndiaOk); }, [initialAllIndiaOk]);
+  useEffect(() => { setMaxHours(initialMaxHours || 10); }, [initialMaxHours]);
+  useEffect(() => { setPrefsDone(!!preferencesCompleted); }, [preferencesCompleted]);
 
-  const persist = async ({ nextAvailable, zoneIds }) => {
+  const persist = async ({ nextAvailable, zoneIds, allIndiaOk: india, maxDrivingHoursPerDay }) => {
     setSaving(true);
     try {
       const payload = { available: nextAvailable };
       if (Array.isArray(zoneIds)) payload.zoneIds = zoneIds;
-      const res = await api.put(
-        '/driver/preferences/outstation-availability',
-        payload,
-      );
+      if (india != null) payload.allIndiaOk = india;
+      if (maxDrivingHoursPerDay != null) payload.maxDrivingHoursPerDay = maxDrivingHoursPerDay;
+      const res = await api.put('/driver/preferences/outstation-availability', payload);
       const updated = res?.data?.data || null;
       setAvailable(!!updated?.availableForOutstation);
-      setZones(
-        Array.isArray(updated?.preferredOutstationZones)
-          ? updated.preferredOutstationZones
-          : [],
-      );
+      setZones(updated?.preferredOutstationZones || []);
+      setAllIndiaOk(!!updated?.outstationAllIndiaOk);
+      setMaxHours(updated?.outstationMaxDrivingHoursPerDay || maxHours);
+      setPrefsDone(!!updated?.outstationPreferencesCompletedAt);
       refetchProfile?.(profileKey, {}, { force: true });
-      toast.success(
-        nextAvailable
-          ? "You're now visible for outstation trips"
-          : "You've opted out of outstation trips",
-      );
+      toast.success(nextAvailable ? "You're visible for outstation trips" : "Opted out of outstation");
       return true;
     } catch (err) {
-      toast.error(
-        err?.response?.data?.message ||
-          "Couldn't update your outstation preference",
-      );
+      toast.error(err?.response?.data?.message || "Couldn't update outstation preference");
       return false;
     } finally {
       setSaving(false);
@@ -91,145 +69,123 @@ const OutstationOptInCard = ({ initial, initialZones = [] }) => {
   const handleToggle = async (next) => {
     if (saving) return;
     if (!next) {
-      // Optimistic flip-off; rollback on failure.
       setAvailable(false);
       const ok = await persist({ nextAvailable: false });
       if (!ok) setAvailable(true);
       return;
     }
-    // Turning ON. Force the picker if no saved zones — the
-    // server will 400 anyway, so we collect zones up-front.
-    if (!initialZoneIds.length) {
-      setSheetOpen(true);
+    if (!initialZoneIds.length || !prefsDone) {
+      setPendingEnable(true);
+      setSettingsOpen(true);
       return;
     }
     setAvailable(true);
-    const ok = await persist({ nextAvailable: true });
+    const ok = await persist({
+      nextAvailable: true,
+      zoneIds: initialZoneIds,
+      allIndiaOk,
+      maxDrivingHoursPerDay: maxHours,
+    });
     if (!ok) setAvailable(false);
   };
 
-  const handleSheetConfirm = async (zoneIds) => {
+  const handleSettingsConfirm = async ({ zoneIds, allIndiaOk: india, maxDrivingHoursPerDay }) => {
+    const enabling = pendingEnable || !available;
     const ok = await persist({
-      nextAvailable: true,
+      nextAvailable: enabling ? true : available,
       zoneIds,
+      allIndiaOk: india,
+      maxDrivingHoursPerDay,
     });
-    if (ok) setSheetOpen(false);
-  };
-
-  const handleEditZones = () => {
-    if (saving) return;
-    setSheetOpen(true);
+    if (ok) {
+      if (enabling) setAvailable(true);
+      setSettingsOpen(false);
+      setPendingEnable(false);
+    }
   };
 
   const zoneChips = useMemo(
     () =>
       zones
-        .map((z) => ({
-          id: String(z?._id || z),
-          name: z?.name || 'Zone',
-          city: z?.city || '',
-        }))
+        .map((z) => ({ id: String(z?._id || z), name: z?.name || 'Zone', city: z?.city || '' }))
         .filter((z) => z.id && z.id !== 'undefined'),
     [zones],
   );
 
-  const showZonesEmptyNudge = available && zoneChips.length === 0;
-
   return (
     <>
-      <Card className="animate-fade-in-up">
-        <div className="flex items-start gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              available ? 'bg-primary/15' : 'bg-bg'
-            }`}
-          >
-            <Compass
-              className={`w-5 h-5 ${
-                available ? 'text-primary' : 'text-text-secondary'
-              }`}
-            />
+      <Card className="animate-fade-in-up !p-3 sm:!p-4">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${available ? 'bg-primary/15' : 'bg-bg'}`}>
+            <Compass className={`w-4 h-4 ${available ? 'text-primary' : 'text-text-secondary'}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-text">
-                  Available for outstation
-                </p>
-                <p className="text-[11px] text-text-muted mt-0.5 leading-snug">
-                  Multi-day round trips assigned by the admin. Switch
-                  off anytime.
+            <p className="text-sm font-semibold text-text leading-tight">Outstation trips</p>
+            <p className="text-[10px] text-text-muted">Admin-assigned multi-day trips</p>
+          </div>
+          <Toggle checked={available} onChange={handleToggle} disabled={saving} />
+        </div>
+
+        {available && (
+          <div className="mt-3 pt-3 border-t border-border-light space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase text-text-muted mb-1">Zones & capacity</p>
+                {zoneChips.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {zoneChips.slice(0, 4).map((z) => (
+                      <span key={z.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-primary/10 text-[10px] font-semibold text-slate-700">
+                        <MapPin className="w-2.5 h-2.5 text-primary" />
+                        {z.name}
+                      </span>
+                    ))}
+                    {zoneChips.length > 4 && (
+                      <span className="text-[10px] text-text-muted">+{zoneChips.length - 4}</span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-amber-700">No zones selected</p>
+                )}
+                <p className="text-[10px] text-text-muted mt-1 inline-flex items-center gap-1 flex-wrap">
+                  <Gauge className="w-3 h-3" />
+                  {allIndiaOk ? 'All-India OK' : 'Zone trips only'}
+                  <span className="text-text-muted/50">·</span>
+                  {maxHours}h/day
                 </p>
               </div>
-              <Toggle
-                checked={available}
-                onChange={handleToggle}
-                disabled={saving}
-              />
-            </div>
-
-            {available && zoneChips.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-border-light">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted font-semibold">
-                    Pickup zones
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleEditZones}
-                    disabled={saving}
-                    className="text-[11px] font-semibold text-primary inline-flex items-center gap-0.5 disabled:opacity-50"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    Edit
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {zoneChips.map((z) => (
-                    <span
-                      key={z.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-[11px] font-semibold text-slate-700"
-                    >
-                      <MapPin className="w-3 h-3 text-primary" />
-                      {z.name}
-                      {z.city && (
-                        <span className="text-text-muted font-normal">
-                          {`\u00b7 ${z.city}`}
-                        </span>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {showZonesEmptyNudge && (
               <button
                 type="button"
-                onClick={handleEditZones}
+                onClick={() => { setPendingEnable(false); setSettingsOpen(true); }}
                 disabled={saving}
-                className="mt-3 w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[12px] font-semibold hover:bg-amber-100 disabled:opacity-50"
+                className="shrink-0 text-[10px] font-bold text-primary inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-primary/10"
               >
-                <MapPin className="w-3.5 h-3.5" />
-                <span className="flex-1 text-left">
-                  Pick the zones you want outstation pickups from
-                </span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <Pencil className="w-3 h-3" />
+                Edit
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {!available && zoneChips.length === 0 && (
+          <button
+            type="button"
+            onClick={() => { setPendingEnable(true); setSettingsOpen(true); }}
+            className="mt-2 w-full text-[11px] font-semibold text-primary py-1.5 rounded-lg bg-primary/5"
+          >
+            Set up outstation preferences
+          </button>
+        )}
       </Card>
 
-      <OutstationZonesSheet
-        isOpen={sheetOpen}
-        onClose={() => {
-          if (saving) return;
-          setSheetOpen(false);
-        }}
-        onConfirm={handleSheetConfirm}
-        initial={zoneChips.map((z) => z.id)}
+      <OutstationSettingsSheet
+        isOpen={settingsOpen}
+        onClose={() => { if (!saving) { setSettingsOpen(false); setPendingEnable(false); } }}
+        onConfirm={handleSettingsConfirm}
+        initialZoneIds={zoneChips.map((z) => z.id)}
+        initialAllIndiaOk={allIndiaOk}
+        initialHours={maxHours}
         submitting={saving}
+        requirePreferences={pendingEnable && !prefsDone}
       />
     </>
   );

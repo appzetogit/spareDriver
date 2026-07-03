@@ -35,7 +35,7 @@ const MapSimulatorPage = lazy(() => import('./features/dev/pages/MapSimulatorPag
 // User Onboarding
 const AddCarPage = lazy(() => import('./features/user/onboarding/pages/AddCarPage'));
 const MyCarsPage = lazy(() => import('./features/user/onboarding/pages/MyCarsPage'));
-const RegistrationChecklistPage = lazy(() => import('./features/user/onboarding/pages/RegistrationChecklistPage'));
+const VerifyEmailPage = lazy(() => import('./features/user/onboarding/pages/VerifyEmailPage'));
 
 // User Home
 const UserHomePage = lazy(() => import('./features/user/home/pages/UserHomePage'));
@@ -82,11 +82,16 @@ const TripDetailsPage = lazy(
   () => import('./features/user/activity/pages/TripDetailsPage'),
 );
 const UserAccountPage = lazy(() => import('./features/user/account/pages/UserAccountPage'));
+const MyProfilePage = lazy(() => import('./features/user/account/pages/UserProfilePage'));
 const SubscriptionsPage = lazy(() => import('./features/user/subscriptions/pages/SubscriptionsPage'));
+const SubscribeCheckoutPage = lazy(
+  () => import('./features/user/subscriptions/pages/SubscribeCheckoutPage'),
+);
 const MySubscriptionPage = lazy(() => import('./features/user/account/pages/MySubscriptionPage'));
 
 // Driver Registration
 const DriverLoginPage = lazy(() => import('./features/driver/auth/pages/DriverLoginPage'));
+const DriverForgotPasswordPage = lazy(() => import('./features/driver/auth/pages/DriverForgotPasswordPage'));
 const DriverSignUpPage = lazy(() => import('./features/driver/registration/pages/DriverSignUpPage'));
 const IdentityDetailsPage = lazy(() => import('./features/driver/registration/pages/IdentityDetailsPage'));
 const DrivingCredentialsPage = lazy(() => import('./features/driver/registration/pages/DrivingCredentialsPage'));
@@ -114,6 +119,11 @@ const DriverAccountPage = lazy(() => import('./features/driver/account/pages/Dri
 const DriverOrdersPage = lazy(() => import('./features/driver/account/pages/DriverOrdersPage'));
 const DriverOrderDetailPage = lazy(() => import('./features/driver/account/pages/DriverOrderDetailPage'));
 const DriverPaymentHistoryPage = lazy(() => import('./features/driver/account/pages/DriverPaymentHistoryPage'));
+const DriverMyProfilePage = lazy(() => import('./features/driver/account/pages/DriverMyProfilePage'));
+const DriverDocumentsPage = lazy(() => import('./features/driver/account/pages/DriverDocumentsPage'));
+const DriverBankDetailsPage = lazy(() => import('./features/driver/account/pages/DriverBankDetailsPage'));
+const DriverVehiclePreferencesPage = lazy(() => import('./features/driver/account/pages/DriverVehiclePreferencesPage'));
+const DriverWithdrawPage = lazy(() => import('./features/driver/account/pages/DriverWithdrawPage'));
 
 // Driver Kit
 const DriverKitPage = lazy(() => import('./features/driver/kit/pages/DriverKitPage'));
@@ -127,6 +137,7 @@ const ManageDrivers = lazy(() => import('./features/admin/pages/ManageDrivers'))
 const DriverProfilePage = lazy(() => import('./features/admin/pages/DriverProfilePage'));
 const ManageUsers = lazy(() => import('./features/admin/pages/ManageUsers'));
 const UserProfilePage = lazy(() => import('./features/admin/pages/UserProfilePage'));
+const UserHistoryPage = lazy(() => import('./features/admin/pages/UserHistoryPage'));
 const ManageBookings = lazy(() => import('./features/admin/pages/ManageBookings'));
 const ManageEmergencyPool = lazy(() => import('./features/admin/pages/ManageEmergencyPool'));
 const ManageOutstationAssignments = lazy(() => import('./features/admin/pages/ManageOutstationAssignments'));
@@ -138,6 +149,9 @@ const ManageKits = lazy(() => import('./features/admin/pages/ManageKits'));
 const ManageZones = lazy(() => import('./features/admin/pages/ManageZones'));
 const ManagePricing = lazy(() => import('./features/admin/pages/ManagePricing'));
 const ManageRefunds = lazy(() => import('./features/admin/pages/ManageRefunds'));
+const ManageWithdrawals = lazy(() => import('./features/admin/pages/ManageWithdrawals'));
+// Account deletions — disabled for now; uncomment to re-enable admin review page
+// const ManageAccountDeletions = lazy(() => import('./features/admin/pages/ManageAccountDeletions'));
 const ManageRevenue = lazy(() => import('./features/admin/pages/ManageRevenue'));
 const ManageSubscriptions = lazy(() => import('./features/admin/pages/ManageSubscriptions'));
 const ManageSubscriptionRevenue = lazy(() => import('./features/admin/pages/ManageSubscriptionRevenue'));
@@ -148,6 +162,7 @@ const ManageTasks = lazy(() => import('./features/admin/pages/ManageTasks'));
 const TaskActivityLogPage = lazy(() => import('./features/admin/pages/TaskActivityLogPage'));
 const StaffProfilePage = lazy(() => import('./features/admin/pages/StaffProfilePage'));
 const ManageAds = lazy(() => import('./features/admin/pages/ManageAds'));
+const ManageSosAlerts = lazy(() => import('./features/admin/pages/ManageSosAlerts'));
 
 function PageLoader() {
   return (
@@ -175,9 +190,9 @@ function App() {
 
           {/* ========== User Onboarding ========== */}
           <Route element={<UserOnboardingGuard />}>
+            <Route path="/user/verify-email" element={<VerifyEmailPage />} />
             <Route path="/user/add-car" element={<AddCarPage />} />
             <Route path="/user/my-cars" element={<MyCarsPage />} />
-            <Route path="/user/checklist" element={<RegistrationChecklistPage />} />
 
             {/* ========== User Dashboard (with bottom nav) ========== */}
             <Route element={<UserDashboardLayout />}>
@@ -187,6 +202,7 @@ function App() {
               <Route path="/user/activity" element={<ActivityPage />} />
               <Route path="/user/trips/:id" element={<TripDetailsPage />} />
               <Route path="/user/account" element={<UserAccountPage />} />
+              <Route path="/user/profile" element={<MyProfilePage />} />
               <Route path="/user/account/subscription" element={<MySubscriptionPage />} />
               <Route path="/user/subscriptions" element={<SubscriptionsPage />} />
               <Route path="/user/wallet" element={<WalletPage />} />
@@ -195,6 +211,9 @@ function App() {
               <Route path="/user/book/scheduled" element={<ScheduledConfirmedPage />} />
             </Route>
           </Route>
+
+          {/* ========== User Subscription Checkout ========== */}
+          <Route path="/user/subscriptions/checkout/:planId" element={<SubscribeCheckoutPage />} />
 
           {/* ========== User Booking Flow ========== */}
           {/* Legacy / outstation flow */}
@@ -238,6 +257,7 @@ function App() {
 
           {/* ========== Driver Registration ========== */}
           <Route path="/driver/login" element={<DriverLoginPage />} />
+          <Route path="/driver/forgot-password" element={<DriverForgotPasswordPage />} />
           <Route path="/driver/signup" element={<DriverSignUpPage />} />
           <Route path="/driver/register/identity" element={<IdentityDetailsPage />} />
 
@@ -265,6 +285,11 @@ function App() {
             <Route path="/driver/orders" element={<DriverOrdersPage />} />
             <Route path="/driver/orders/:orderId" element={<DriverOrderDetailPage />} />
             <Route path="/driver/payments" element={<DriverPaymentHistoryPage />} />
+            <Route path="/driver/withdraw" element={<DriverWithdrawPage />} />
+            <Route path="/driver/account/profile" element={<DriverMyProfilePage />} />
+            <Route path="/driver/account/documents" element={<DriverDocumentsPage />} />
+            <Route path="/driver/account/bank" element={<DriverBankDetailsPage />} />
+            <Route path="/driver/vehicle-preferences" element={<DriverVehiclePreferencesPage />} />
 
             {/* ========== Driver Trip Flow ========== */}
             {/* Live status-driven page (the one BookingOfferModal navigates to) */}
@@ -299,6 +324,7 @@ function App() {
             <Route path="/admin" element={<AdminHomeRedirect />} />
             <Route path="/admin/users" element={<ManageUsers />} />
             <Route path="/admin/users/:userId/profile" element={<UserProfilePage />} />
+            <Route path="/admin/users/:userId/history" element={<UserHistoryPage />} />
             <Route path="/admin/profile" element={<StaffProfilePage />} />
             <Route path="/admin/tasks" element={<ManageTasks />} />
             <Route element={<SuperAdminOnlyGuard />}>
@@ -307,6 +333,7 @@ function App() {
             </Route>
             <Route path="/admin/drivers" element={<ManageDrivers />} />
             <Route path="/admin/drivers/live" element={<LiveDriverMap />} />
+            <Route path="/admin/sos" element={<ManageSosAlerts />} />
             <Route path="/admin/drivers/:driverId/profile" element={<DriverProfilePage />} />
             <Route path="/admin/kits" element={<Navigate to="/admin/settings/kits" replace />} />
             <Route path="/admin/kit-orders" element={<ManageKitOrders />} />
@@ -346,6 +373,9 @@ function App() {
             {/* Account section */}
             <Route path="/admin/account" element={<Navigate to="/admin/account/revenue" replace />} />
             <Route path="/admin/account/refunds" element={<ManageRefunds />} />
+            <Route path="/admin/account/withdrawals" element={<ManageWithdrawals />} />
+            {/* Account deletions — disabled for now; uncomment route + lazy import to re-enable */}
+            {/* <Route path="/admin/account/deletions" element={<ManageAccountDeletions />} /> */}
             <Route path="/admin/account/revenue" element={<ManageRevenue />} />
             <Route path="/admin/account/subscription-revenue" element={<ManageSubscriptionRevenue />} />
           </Route>

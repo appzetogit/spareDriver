@@ -56,3 +56,10 @@ export const S2C_EVENTS = Object.freeze({
   NOTIFICATION: 'notification:new',
   ADMIN_ALERT: 'admin:alert',
 });
+
+/** SOS realtime events (keep in sync with backend/src/constants/sos.js) */
+export const SOS_SOCKET_EVENTS = Object.freeze({
+  NEW_SOS: 'new-sos',
+  SOS_LOCATION: 'sos-location',
+  SOS_RESOLVED: 'sos-resolved',
+});

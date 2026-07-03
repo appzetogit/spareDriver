@@ -1,79 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import {
   ArrowLeft,
   Check,
   Loader2,
-  MapPin,
   Sparkles,
   Star,
-  UserCheck,
-  Calendar,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
-import Drawer from '../../../../components/Drawer';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
-import {
-  useUserSubscriptionPlansStore,
-  useUserSubscriptionStore,
-} from '../../../../store/user/useUserPricingStore';
+import { useUserSubscriptionPlansStore } from '../../../../store/user/useUserPricingStore';
 import { SUBSCRIPTION_BANNER } from '../../home/constants/serviceCatalog';
-import { SUBSCRIPTION_ASSIGNMENT_STATUS } from '../../../../constants/serviceTypes';
-import useUserAuthStore from '../../../../store/useUserAuthStore';
-import { useRazorpayCheckout } from '../../../../hooks/useRazorpayCheckout';
-import api from '../../../../utils/api';
 import { calculateSubscriptionCheckout, formatCurrency } from '../../../../utils/fareCalculator';
 
 const SubscriptionsPage = () => {
   const navigate = useNavigate();
-  const user = useUserAuthStore((s) => s.user);
 
   const { data, loading } = useCachedQuery(
     useUserSubscriptionPlansStore,
     buildCacheKey('user-subscriptions-active'),
   );
-
-  const mySubscription = useUserSubscriptionStore((s) => s.mySubscription);
-  const fetchMySubscription = useUserSubscriptionStore((s) => s.fetchMySubscription);
-  const createPurchaseOrder = useUserSubscriptionStore((s) => s.createPurchaseOrder);
-  const verifyPurchase = useUserSubscriptionStore((s) => s.verifyPurchase);
-  const purchaseLoading = useUserSubscriptionStore((s) => s.purchaseLoading);
-  const subscriptionLoading = useUserSubscriptionStore((s) => s.loading);
-
-  const { openCheckout, loading: checkoutLoading } = useRazorpayCheckout();
-
-  const [zones, setZones] = useState([]);
-  const [zonesLoading, setZonesLoading] = useState(true);
-  const [zonePickerPlan, setZonePickerPlan] = useState(null);
-  const [selectedZoneId, setSelectedZoneId] = useState('');
-  const [subscribing, setSubscribing] = useState(false);
-
-  useEffect(() => {
-    fetchMySubscription().catch(() => {});
-  }, [fetchMySubscription]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setZonesLoading(true);
-    api
-      .get('/common/zones')
-      .then((res) => {
-        if (!cancelled) {
-          const list = res?.data?.data || [];
-          setZones(Array.isArray(list) ? list : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setZones([]);
-      })
-      .finally(() => {
-        if (!cancelled) setZonesLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
 
   const plans = useMemo(() => {
     const list = Array.isArray(data) ? data : [];
@@ -83,76 +31,9 @@ const SubscriptionsPage = () => {
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }, [data]);
 
-  const hasActiveSubscription = Boolean(mySubscription?._id);
-
   const handleSubscribeClick = (plan) => {
-    if (hasActiveSubscription) {
-      toast.error('You already have an active subscription');
-      return;
-    }
-    if (!zones.length) {
-      toast.error('No service zones available yet. Please try again later.');
-      return;
-    }
-    setSelectedZoneId(zones[0]?._id || '');
-    setZonePickerPlan(plan);
+    navigate(`/user/subscriptions/checkout/${plan._id}`);
   };
-
-  const handleConfirmPurchase = useCallback(async () => {
-    if (!zonePickerPlan || !selectedZoneId || subscribing || purchaseLoading || checkoutLoading) {
-      return;
-    }
-    setSubscribing(true);
-    try {
-      const order = await createPurchaseOrder(zonePickerPlan._id, selectedZoneId);
-      if (!order?.orderId) {
-        toast.error('Payments are not configured. Please try again later.');
-        return;
-      }
-
-      await openCheckout({
-        razorpay: {
-          keyId: order.keyId,
-          orderId: order.orderId,
-          amount: order.amount,
-          currency: order.currency,
-          name: order.name,
-          description: order.description,
-        },
-        driver: {
-          name: order.prefill?.name || user?.name,
-          email: order.prefill?.email || user?.email,
-          phone: order.prefill?.contact || user?.phone_no,
-        },
-        onSuccess: async (response) => {
-          await verifyPurchase({
-            orderId: response.razorpay_order_id,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-          });
-        },
-      });
-
-      toast.success('Subscription activated! We will assign your dedicated driver soon.');
-      setZonePickerPlan(null);
-    } catch (err) {
-      if (err?.message !== 'Payment cancelled') {
-        toast.error(err?.response?.data?.message || err?.message || 'Could not complete subscription');
-      }
-    } finally {
-      setSubscribing(false);
-    }
-  }, [
-    zonePickerPlan,
-    selectedZoneId,
-    subscribing,
-    purchaseLoading,
-    checkoutLoading,
-    createPurchaseOrder,
-    openCheckout,
-    verifyPurchase,
-    user,
-  ]);
 
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
@@ -171,14 +52,6 @@ const SubscriptionsPage = () => {
       <div className="flex-1 p-4 space-y-4">
         <HeroCard />
 
-        {(subscriptionLoading || mySubscription) && (
-          <ActiveSubscriptionCard
-            subscription={mySubscription}
-            loading={subscriptionLoading}
-            onOpen={() => navigate('/user/account/subscription')}
-          />
-        )}
-
         {loading && !plans.length ? (
           <div className="flex items-center justify-center py-16 text-text-muted">
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -192,88 +65,12 @@ const SubscriptionsPage = () => {
                 key={plan._id}
                 plan={plan}
                 index={idx}
-                disabled={hasActiveSubscription}
                 onSubscribe={() => handleSubscribeClick(plan)}
               />
             ))}
           </div>
         )}
       </div>
-
-      <Drawer
-        isOpen={Boolean(zonePickerPlan)}
-        onClose={() => !subscribing && setZonePickerPlan(null)}
-        header={(
-          <div className="px-5 py-4">
-            <h2 className="text-lg font-bold text-text">Choose your city</h2>
-            <p className="text-xs text-text-muted mt-0.5">
-              We assign a dedicated driver based on your service zone.
-            </p>
-          </div>
-        )}
-      >
-        <div className="p-5 space-y-4">
-          {zonesLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {zones.map((zone) => {
-                const active = String(selectedZoneId) === String(zone._id);
-                return (
-                  <button
-                    key={zone._id}
-                    type="button"
-                    onClick={() => setSelectedZoneId(zone._id)}
-                    className={`w-full flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
-                      active
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-gray-200 bg-white hover:border-primary/30'
-                    }`}
-                  >
-                    <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      active ? 'bg-primary/15 text-primary' : 'bg-gray-100 text-text-muted'
-                    }`}
-                    >
-                      <MapPin className="w-4 h-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-text">{zone.name}</span>
-                      {zone.city && (
-                        <span className="block text-xs text-text-muted mt-0.5">{zone.city}</span>
-                      )}
-                    </span>
-                    {active && <Check className="w-4 h-4 text-primary shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {zonePickerPlan && (
-            <div className="rounded-2xl bg-gray-50 p-4 text-sm space-y-1.5">
-              <p className="font-bold text-text">{zonePickerPlan.name}</p>
-              <CheckoutLines plan={zonePickerPlan} />
-            </div>
-          )}
-
-          <Button
-            fullWidth
-            disabled={!selectedZoneId || subscribing || purchaseLoading || checkoutLoading || zonesLoading}
-            onClick={handleConfirmPurchase}
-          >
-            {subscribing || purchaseLoading || checkoutLoading ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Processing…
-              </span>
-            ) : (
-              `Pay ${formatCurrency(calculateSubscriptionCheckout(zonePickerPlan || {}).totalPayable)} & subscribe`
-            )}
-          </Button>
-        </div>
-      </Drawer>
     </div>
   );
 };
@@ -312,60 +109,7 @@ function HeroCard() {
   );
 }
 
-function ActiveSubscriptionCard({ subscription, loading, onOpen }) {
-  if (loading && !subscription) {
-    return (
-      <Card className="flex items-center justify-center py-6">
-        <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
-      </Card>
-    );
-  }
-  if (!subscription) return null;
-
-  const planName = subscription.planNameSnapshot || subscription.planId?.name || 'Subscription';
-  const zoneName = subscription.zoneId?.name || 'Your zone';
-  const assigned = subscription.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED;
-  const expiry = subscription.expiryDate
-    ? new Date(subscription.expiryDate).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    })
-    : '—';
-
-  return (
-    <button type="button" onClick={onOpen} className="w-full text-left">
-    <Card className="border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors">
-      <div className="flex items-start gap-3">
-        <span className="w-10 h-10 rounded-2xl bg-primary/15 flex items-center justify-center shrink-0">
-          <UserCheck className="w-5 h-5 text-primary" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold uppercase tracking-wide text-primary">My subscription</p>
-          <h3 className="text-base font-extrabold text-text mt-1">{planName}</h3>
-          <p className="text-xs text-text-muted mt-1">{zoneName}</p>
-          <div className="flex flex-wrap gap-3 mt-3 text-xs text-text-secondary">
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              Valid till {expiry}
-            </span>
-            <span className={`inline-flex items-center gap-1 font-semibold ${
-              assigned ? 'text-success' : 'text-amber-600'
-            }`}
-            >
-              {assigned
-                ? `Driver: ${subscription.assignedDriverId?.name || 'Assigned'}`
-                : 'Driver assignment pending'}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Card>
-    </button>
-  );
-}
-
-function PlanCard({ plan, index, disabled, onSubscribe }) {
+function PlanCard({ plan, index, onSubscribe }) {
   const isPercentage = plan.bookingDiscountType === 'percentage';
   const isFullTime = plan.includedHoursPerDay === 0;
   const checkout = calculateSubscriptionCheckout(plan);
@@ -426,8 +170,8 @@ function PlanCard({ plan, index, disabled, onSubscribe }) {
           ))}
         </ul>
 
-        <Button fullWidth className="mt-5" disabled={disabled} onClick={onSubscribe}>
-          {disabled ? 'Already subscribed' : 'Subscribe now'}
+        <Button fullWidth className="mt-5" onClick={onSubscribe}>
+          Subscribe now
         </Button>
       </div>
     </Card>
@@ -442,34 +186,6 @@ function PerkRow({ label }) {
       </span>
       <span>{label}</span>
     </li>
-  );
-}
-
-function CheckoutLines({ plan }) {
-  const c = calculateSubscriptionCheckout(plan);
-  return (
-    <>
-      <div className="flex justify-between text-text-secondary">
-        <span>Base</span>
-        <span>{formatCurrency(c.basePrice)}</span>
-      </div>
-      {c.serviceCharge > 0 && (
-        <div className="flex justify-between text-text-secondary">
-          <span>Service charge ({c.serviceChargePercent}%)</span>
-          <span>{formatCurrency(c.serviceCharge)}</span>
-        </div>
-      )}
-      {c.gstAmount > 0 && (
-        <div className="flex justify-between text-text-secondary">
-          <span>GST ({c.gstPercent}%)</span>
-          <span>{formatCurrency(c.gstAmount)}</span>
-        </div>
-      )}
-      <div className="flex justify-between font-bold text-text pt-1 border-t border-border-light">
-        <span>Total</span>
-        <span>{formatCurrency(c.totalPayable)}</span>
-      </div>
-    </>
   );
 }
 
