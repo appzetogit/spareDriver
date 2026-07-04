@@ -141,6 +141,15 @@ import {
   listAdminSos,
   getAdminSosDetail,
 } from '../controllers/sos.controller.js';
+import {
+  adminListSupportTickets,
+  adminGetSupportTicket,
+  adminUpdateSupportTicket,
+} from '../controllers/support.controller.js';
+import {
+  getAdminSupportConfig,
+  updateAdminSupportConfig,
+} from '../controllers/appSettings.controller.js';
 import { listPlatformRevenue } from '../controllers/revenue.controller.js';
 import {
   getAdminBookings,
@@ -344,6 +353,9 @@ router.get('/settings/legal-documents', protectStaff, restrictTo(...OPERATIONS),
 router.post('/settings/subscription-terms', protectStaff, restrictTo(...OPERATIONS), adminUpsertSubscriptionTerms);
 router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateLegalDocument);
 
+router.get('/settings/support', protectStaff, restrictTo(...OPERATIONS), getAdminSupportConfig);
+router.put('/settings/support', protectStaff, restrictTo(...OPERATIONS), updateAdminSupportConfig);
+
 router.post('/kits', protectStaff, restrictTo(...OPERATIONS), createKit);
 router.get('/kits', protectStaff, restrictTo(...ALL_STAFF), getKits);
 router.get('/kits/:id', protectStaff, restrictTo(...ALL_STAFF), getKitById);
@@ -487,5 +499,9 @@ router.get('/revenue', protectStaff, restrictTo(...SUPER_ADMIN), listPlatformRev
 
 router.get('/sos', protectStaff, restrictTo(...ALL_STAFF), listAdminSos);
 router.get('/sos/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminSosDetail);
+
+router.get('/support', protectStaff, restrictTo(...ALL_STAFF), adminListSupportTickets);
+router.get('/support/:id', protectStaff, restrictTo(...ALL_STAFF), adminGetSupportTicket);
+router.put('/support/:id', protectStaff, restrictTo(...ALL_STAFF), adminUpdateSupportTicket);
 
 export default router;

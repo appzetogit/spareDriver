@@ -7,6 +7,7 @@ import {
   Trash2,
   Loader2,
   Video,
+  Headphones,
 } from 'lucide-react';
 import TrainingVideosTab from '../components/PlatformSettings/TrainingVideosTab';
 import VehicleCatalogSettings from '../components/PlatformSettings/VehicleCatalogSettings';
@@ -42,18 +43,26 @@ const PlatformSettings = () => {
   // Form States
   const [carForm, setCarForm] = useState({ name: '', description: '', image: '', isActive: true });
   const [conditionForm, setConditionForm] = useState({ question: '', key: '', isRequired: false, isActive: true });
+  const [supportForm, setSupportForm] = useState({
+    supportPhone: '',
+    supportWhatsapp: '',
+    supportEmail: '',
+  });
+  const [supportSaving, setSupportSaving] = useState(false);
 
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const [carsRes, condRes, trainingRes] = await Promise.all([
+      const [carsRes, condRes, trainingRes, supportRes] = await Promise.all([
         api.get('/admin/settings/car-types'),
         api.get('/admin/settings/conditions'),
         api.get('/admin/settings/training-videos'),
+        api.get('/admin/settings/support'),
       ]);
       setCarTypes(carsRes.data.data);
       setConditions(condRes.data.data);
       setTrainingVideos(trainingRes.data.data);
+      setSupportForm(supportRes.data.data || {});
     } catch (err) {
       console.error('Failed to fetch platform data', err);
       if (!silent) {
@@ -130,6 +139,19 @@ const PlatformSettings = () => {
     }
   };
 
+  const handleSupportSave = async (e) => {
+    e.preventDefault();
+    setSupportSaving(true);
+    try {
+      await api.put('/admin/settings/support', supportForm);
+      alert('Support contact settings saved');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to save support settings');
+    } finally {
+      setSupportSaving(false);
+    }
+  };
+
   if (!canManagePlatformSettings(admin?.role)) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -155,6 +177,7 @@ const PlatformSettings = () => {
             { id: 'vehicles', label: 'Vehicle Catalog', icon: Car },
             { id: 'conditions', label: 'Registration Checklist', icon: CheckSquare },
             { id: 'training', label: 'Driver Training', icon: Video },
+            { id: 'support', label: 'Support Contact', icon: Headphones },
           ].map(tab => (
             <button
               key={tab.id}
@@ -216,6 +239,42 @@ const PlatformSettings = () => {
                 await fetchData({ silent: true });
               }}
             />
+          )}
+
+          {activeTab === 'support' && (
+            <Card className="max-w-xl space-y-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Support Contact</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Shown on the Help & Support page for customers and drivers.
+                </p>
+              </div>
+              <form onSubmit={handleSupportSave} className="space-y-4">
+                <Input
+                  label="Support Phone"
+                  value={supportForm.supportPhone}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, supportPhone: e.target.value }))}
+                  placeholder="+919876543210"
+                  required
+                />
+                <Input
+                  label="Support WhatsApp"
+                  value={supportForm.supportWhatsapp}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, supportWhatsapp: e.target.value }))}
+                  placeholder="+919876543210"
+                  required
+                />
+                <Input
+                  label="Support Email"
+                  type="email"
+                  value={supportForm.supportEmail}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, supportEmail: e.target.value }))}
+                  placeholder="support@sparedriver.com"
+                  required
+                />
+                <Button type="submit" loading={supportSaving}>Save Contact Settings</Button>
+              </form>
+            </Card>
           )}
 
           {/* Checklist Tab */}

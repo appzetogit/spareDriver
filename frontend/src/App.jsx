@@ -169,6 +169,8 @@ const TaskActivityLogPage = lazy(() => import('./features/admin/pages/TaskActivi
 const StaffProfilePage = lazy(() => import('./features/admin/pages/StaffProfilePage'));
 const ManageAds = lazy(() => import('./features/admin/pages/ManageAds'));
 const ManageSosAlerts = lazy(() => import('./features/admin/pages/ManageSosAlerts'));
+const HelpSupportPage = lazy(() => import('./features/user/support/pages/HelpSupportPage'));
+const ManageSupport = lazy(() => import('./features/admin/pages/ManageSupport'));
 
 function PageLoader() {
   return (
@@ -217,6 +219,7 @@ function App() {
               <Route path="/user/account/subscription" element={<MySubscriptionPage />} />
               <Route path="/user/subscriptions" element={<SubscriptionsPage />} />
               <Route path="/user/wallet" element={<WalletPage />} />
+              <Route path="/user/help-support" element={<HelpSupportPage audience="user" />} />
               {/* Scheduled-ride parking lot: PENDING_ASSIGNMENT (worker hasn't
                   fired yet) and IN_EMERGENCY_POOL (admin is in the loop). */}
               <Route path="/user/book/scheduled" element={<ScheduledConfirmedPage />} />
@@ -301,6 +304,7 @@ function App() {
             <Route path="/driver/account/documents" element={<DriverDocumentsPage />} />
             <Route path="/driver/account/bank" element={<DriverBankDetailsPage />} />
             <Route path="/driver/vehicle-preferences" element={<DriverVehiclePreferencesPage />} />
+            <Route path="/driver/help-support" element={<HelpSupportPage audience="driver" />} />
 
             {/* ========== Driver Trip Flow ========== */}
             {/* Live status-driven page (the one BookingOfferModal navigates to) */}
@@ -345,6 +349,7 @@ function App() {
             <Route path="/admin/drivers" element={<ManageDrivers />} />
             <Route path="/admin/drivers/live" element={<LiveDriverMap />} />
             <Route path="/admin/sos" element={<ManageSosAlerts />} />
+            <Route path="/admin/support" element={<ManageSupport />} />
             <Route path="/admin/drivers/:driverId/profile" element={<DriverProfilePage />} />
             <Route path="/admin/kits" element={<Navigate to="/admin/settings/kits" replace />} />
             <Route path="/admin/kit-orders" element={<ManageKitOrders />} />

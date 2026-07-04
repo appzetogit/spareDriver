@@ -5,9 +5,7 @@ import {
   Car,
   CreditCard,
   Wallet,
-  Users,
   HelpCircle,
-  Settings,
   LogOut,
   ChevronRight,
   Sparkles,
@@ -25,11 +23,9 @@ const menuItems = [
   { id: 'profile', icon: User, label: 'My Profile', path: '/user/profile' },
   { id: 'cars', icon: Car, label: 'My Cars', path: '/user/my-cars' },
   { id: 'subscription', icon: Sparkles, label: 'My Subscription', path: '/user/account/subscription', dynamic: 'subscription' },
-  { id: 'payments', icon: CreditCard, label: 'Payment Methods', path: '#' },
+  // { id: 'payments', icon: CreditCard, label: 'Payment Methods', path: '#' },
   { id: 'wallet', icon: Wallet, label: 'My Wallet', path: '/user/wallet', dynamic: 'wallet' },
-  { id: 'refer', icon: Users, label: 'Refer & Earn', path: '#' },
-  { id: 'help', icon: HelpCircle, label: 'Help & Support', path: '#' },
-  { id: 'settings', icon: Settings, label: 'Settings', path: '#' },
+  { id: 'help', icon: HelpCircle, label: 'Help & Support', path: '/user/help-support' },
 ];
 
 const UserAccountPage = () => {
@@ -49,9 +45,9 @@ const UserAccountPage = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
-    fetchWallet().catch(() => {});
-    fetchMySubscription().catch(() => {});
-    fetchDeletionRequest().catch(() => {});
+    fetchWallet().catch(() => { });
+    fetchMySubscription().catch(() => { });
+    fetchDeletionRequest().catch(() => { });
   }, [fetchWallet, fetchMySubscription, fetchDeletionRequest]);
 
   const subscriptionLabel = useMemo(() => {

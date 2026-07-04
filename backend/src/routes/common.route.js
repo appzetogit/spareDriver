@@ -9,6 +9,7 @@ import {
 } from '../controllers/vehicleCatalog.controller.js';
 import { listActiveZones, checkZoneForPoint } from '../controllers/zone.controller.js';
 import { listActiveAds } from '../controllers/ad.controller.js';
+import { getSupportConfig } from '../controllers/support.controller.js';
 import { upload, uploadVideo as uploadVideoMiddleware } from '../middlewares/multer.js';
 
 const router = express.Router();
@@ -29,5 +30,6 @@ router.get('/zones/check', checkZoneForPoint);
 
 // Promotional ads shown on the user home (active only, sort-ordered).
 router.get('/ads', listActiveAds);
+router.get('/support-config', getSupportConfig);
 
 export default router;

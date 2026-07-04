@@ -75,6 +75,7 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   ACCOUNTING_MISMATCH: 'accounting_mismatch',
   EMERGENCY_POOL_ENTERED: 'emergency_pool_entered',
   SCHEDULED_DISPATCH_RETRY: 'scheduled_dispatch_retry',
+  SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
 });
 
 export const NOTIFICATION_AUDIENCE = Object.freeze({

@@ -56,7 +56,7 @@ const MENU_GROUPS = [
   {
     title: 'Help',
     items: [
-      { icon: HelpCircle, label: 'Help & Support' },
+      { icon: HelpCircle, label: 'Help & Support', path: '/driver/help-support' },
     ],
   },
 ];

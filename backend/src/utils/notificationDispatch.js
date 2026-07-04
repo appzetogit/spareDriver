@@ -513,3 +513,43 @@ export function notifyAdminPaymentMismatch(data) {
     data,
   });
 }
+
+function supportTicketRef(ticket) {
+  return {
+    ticketId: String(ticket._id),
+    ticketNumber: ticket.ticketNumber || '',
+  };
+}
+
+export function notifyAdminSupportTicketReceived(ticket) {
+  return sendAdminNotification({
+    title: 'New support ticket',
+    body: 'New support ticket received.',
+    type: ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
+    data: supportTicketRef(ticket),
+  });
+}
+
+export function notifyUserSupportReply(userId, ticket) {
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'Support update',
+      body: 'Support has responded to your ticket.',
+      type: USER_NOTIFICATION.SUPPORT_REPLY,
+      data: supportTicketRef(ticket),
+    },
+  );
+}
+
+export function notifyDriverSupportReply(driverId, ticket) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Support update',
+      body: 'Support has responded to your ticket.',
+      type: DRIVER_NOTIFICATION.SUPPORT_REPLY,
+      data: supportTicketRef(ticket),
+    },
+  );
+}
