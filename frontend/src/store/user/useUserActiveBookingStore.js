@@ -352,6 +352,26 @@ const useUserActiveBookingStore = create((set, get) => ({
     if (data.booking) set({ booking: data.booking });
     return data;
   },
+
+  async downloadInvoicePdf() {
+    const booking = get().booking;
+    const id = booking?._id;
+    if (!id) throw new Error('No active booking');
+    const res = await api.get(`/auth/bookings/${id}/invoice/pdf`, {
+      responseType: 'blob',
+    });
+    const invoiceRef = booking.invoiceNumber || booking.bookingNumber || id;
+    const filenameSafe = String(invoiceRef).replace(/[^a-zA-Z0-9-_]/g, '-');
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invoice-${filenameSafe}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5_000);
+  },
 }));
 
 export default useUserActiveBookingStore;

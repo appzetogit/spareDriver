@@ -63,6 +63,7 @@ import {
   respondToNoShowPrompt,
   rateDriverByCustomer,
 } from '../controllers/booking.controller.js';
+import { downloadBookingInvoicePdf } from '../controllers/bookingInvoicePdf.controller.js';
 import {
   getMyWallet,
   getMyWalletTransactions,
@@ -135,6 +136,7 @@ router.get('/bookings', getMyBookings);
 router.get('/bookings/active', getMyActiveBooking);
 router.get('/bookings/active-list', getMyActiveBookings);
 router.get('/bookings/:id', getBookingById);
+router.get('/bookings/:id/invoice/pdf', downloadBookingInvoicePdf);
 router.post('/bookings/:id/cancel', cancelBooking);
 router.post('/bookings/:id/pay', createBookingPayment);
 router.post('/bookings/:id/verify-payment', verifyBookingPayment);

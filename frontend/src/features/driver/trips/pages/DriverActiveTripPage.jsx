@@ -250,12 +250,9 @@ const DriverActiveTripPage = () => {
     if (!status) return;
     if (status === BOOKING_STATUS.COMPLETED) {
       toast.success('Trip completed');
-      // Route to the post-trip rating screen rather than the dashboard
-      // so the driver is nudged to rate the customer. We intentionally
-      // DO NOT `clear()` the active trip here — the rating page reads
-      // the booking from the store and clears it after submit / skip.
       clearOfferStoreActive();
-      navigate('/driver/trip/rate', { replace: true });
+      clear();
+      navigate('/driver/home', { replace: true });
     } else if (
       status === BOOKING_STATUS.CANCELLED ||
       status === BOOKING_STATUS.NO_DRIVERS_FOUND ||

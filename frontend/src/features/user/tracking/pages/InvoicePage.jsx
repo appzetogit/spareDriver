@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { ArrowLeft, Download, FileText } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
@@ -11,13 +12,14 @@ import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
  * Trip invoice — backed by the booking object stored in
  * `useUserActiveBookingStore`. Every figure (number, service, distance,
  * duration, total) is computed from real data so the invoice the user
- * sees here matches what's persisted server-side. The download button is
- * left as a hook for the future PDF endpoint.
+ * sees here matches what's persisted server-side.
  */
 const InvoicePage = () => {
   const navigate = useNavigate();
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchActive = useUserActiveBookingStore((s) => s.fetchActive);
+  const downloadInvoicePdf = useUserActiveBookingStore((s) => s.downloadInvoicePdf);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!booking) fetchActive().catch(() => {});
@@ -78,6 +80,19 @@ const InvoicePage = () => {
     return { id, date, service, distance, duration, total };
   }, [booking]);
 
+  const handleDownloadInvoice = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadInvoicePdf();
+      toast.success('Invoice downloaded');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Could not download invoice');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
       <div className="bg-white px-4 pt-4 pb-4 shadow-sm">
@@ -119,7 +134,14 @@ const InvoicePage = () => {
             </div>
           </div>
 
-          <Button fullWidth variant="secondary" icon={Download} disabled>
+          <Button
+            fullWidth
+            variant="secondary"
+            icon={Download}
+            loading={downloading}
+            disabled={downloading || !booking?._id}
+            onClick={handleDownloadInvoice}
+          >
             Download Invoice
           </Button>
         </Card>

@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, Clock, MapPin } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { CheckCircle, Clock, Download, MapPin } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
@@ -16,6 +17,8 @@ const TripCompletedPage = () => {
   const navigate = useNavigate();
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchActive = useUserActiveBookingStore((s) => s.fetchActive);
+  const downloadInvoicePdf = useUserActiveBookingStore((s) => s.downloadInvoicePdf);
+  const [downloading, setDownloading] = useState(false);
 
   // We may have lost the booking from the store on a hard refresh — try to
   // re-hydrate once, but don't block if it 404s (server clears completed
@@ -50,6 +53,19 @@ const TripCompletedPage = () => {
     booking?.fareSnapshot?.distanceMeters ??
     booking?.tripSummary?.distanceMeters ??
     null;
+
+  const handleDownloadInvoice = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadInvoicePdf();
+      toast.success('Invoice downloaded');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Could not download invoice');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh px-6">
@@ -93,8 +109,18 @@ const TripCompletedPage = () => {
         </div>
       </Card>
 
-      <div className="w-full mt-6 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-        <Button fullWidth onClick={() => navigate('/user/tracking/rate')}>Rate & Pay</Button>
+      <div className="w-full mt-6 animate-fade-in-up space-y-2" style={{ animationDelay: '0.3s' }}>
+        <Button fullWidth onClick={() => navigate('/user/tracking/rate')}>Rate</Button>
+        <Button
+          fullWidth
+          variant="secondary"
+          icon={Download}
+          loading={downloading}
+          disabled={downloading || !booking?._id}
+          onClick={handleDownloadInvoice}
+        >
+          Download Invoice
+        </Button>
       </div>
     </div>
   );
