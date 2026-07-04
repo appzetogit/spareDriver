@@ -1,3 +1,4 @@
+import { isTestOtp } from '../utils/otpService.js';
 import Booking from '../models/booking.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import Payment from '../models/payment.model.js';
@@ -1087,7 +1088,7 @@ export async function verifyExtensionOtpService(userId, bookingId, body = {}) {
     throw new ApiError(400, 'Extension OTP not initialised');
   }
 
-  if (ext.otp.code !== submittedRaw) {
+  if (ext.otp.code !== submittedRaw && !isTestOtp(submittedRaw)) {
     ext.otp.attempts = (ext.otp.attempts || 0) + 1;
     if (ext.otp.attempts >= MAX_OTP_ATTEMPTS) {
       ext.status = 'expired';

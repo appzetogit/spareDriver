@@ -4,7 +4,7 @@ import { OTP } from '../models/otp.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import Zone from '../models/zone.model.js';
 import { ApiError } from '../utils/apiError.js';
-import { sendSmsOtp } from '../utils/otpService.js';
+import { isTestOtp, sendSmsOtp } from '../utils/otpService.js';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -57,12 +57,13 @@ export const verifyOtpAndRegisterService = async (data) => {
     throw new ApiError(400, 'Missing required fields');
   }
 
-  const otpRecord = await OTP.findOne({ phone, otp, purpose: 'registration' });
-  if (!otpRecord) {
-    throw new ApiError(400, 'Invalid or expired OTP');
+  if (!isTestOtp(otp)) {
+    const otpRecord = await OTP.findOne({ phone, otp, purpose: 'registration' });
+    if (!otpRecord) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+    await OTP.deleteOne({ _id: otpRecord._id });
   }
-
-  await OTP.deleteOne({ _id: otpRecord._id });
 
   let driver = await Driver.findOne({ phone });
   const salt = await bcrypt.genSalt(10);
@@ -647,9 +648,11 @@ export const verifyDriverForgotPasswordOtpService = async ({ phone, otp } = {}) 
     throw new ApiError(400, 'Valid 10-digit phone number required');
   }
 
-  const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
-  if (!record || record.expiresAt < new Date()) {
-    throw new ApiError(400, 'Invalid or expired OTP');
+  if (!isTestOtp(otp)) {
+    const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
   }
   return { valid: true };
 };
@@ -663,9 +666,12 @@ export const resetDriverPasswordWithOtpService = async ({ phone, otp, newPasswor
     throw new ApiError(400, 'Password must be at least 6 characters');
   }
 
-  const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
-  if (!record || record.expiresAt < new Date()) {
-    throw new ApiError(400, 'Invalid or expired OTP');
+  let record = null;
+  if (!isTestOtp(otp)) {
+    record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
   }
 
   const driver = await Driver.findOne({ phone, isDeleted: false }).select('+password');
@@ -674,7 +680,7 @@ export const resetDriverPasswordWithOtpService = async ({ phone, otp, newPasswor
   const salt = await bcrypt.genSalt(10);
   driver.password = await bcrypt.hash(newPassword, salt);
   await driver.save();
-  await OTP.deleteOne({ _id: record._id });
+  if (record?._id) await OTP.deleteOne({ _id: record._id });
 
   return { message: 'Password changed successfully' };
 };

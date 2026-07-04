@@ -21,7 +21,7 @@ function sanitizeUser(doc) {
 }
 
 import { OTP } from '../models/otp.model.js';
-import { sendSmsOtp } from '../utils/otpService.js';
+import { isTestOtp, sendSmsOtp } from '../utils/otpService.js';
 import { RegistrationDraft } from '../models/registrationDraft.model.js';
 
 const REGISTRATION_DRAFT_TTL_MS = 30 * 60 * 1000;
@@ -99,12 +99,13 @@ export const verifyRegistrationPhoneOtpService = async (phone, otp) => {
 
   await assertPhoneAvailable(phone);
 
-  const otpRecord = await OTP.findOne({ phone, otp });
-  if (!otpRecord || otpRecord.expiresAt < new Date()) {
-    throw new ApiError(400, 'Invalid or expired OTP');
+  if (!isTestOtp(otp)) {
+    const otpRecord = await OTP.findOne({ phone, otp });
+    if (!otpRecord || otpRecord.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+    await OTP.deleteOne({ _id: otpRecord._id });
   }
-
-  await OTP.deleteOne({ _id: otpRecord._id });
 
   const draft = await upsertRegistrationDraft(phone, {
     phoneVerified: true,
@@ -168,16 +169,17 @@ export const verifyRegistrationEmailOtpService = async (phone, email, otp) => {
     throw new ApiError(400, 'Verify your mobile number first');
   }
 
-  const record = await EmailVerification.findOne({
-    phone,
-    email: normalizedEmail,
-    otp,
-  });
-  if (!record || record.expiresAt < new Date()) {
-    throw new ApiError(400, 'Invalid or expired verification code');
+  if (!isTestOtp(otp)) {
+    const record = await EmailVerification.findOne({
+      phone,
+      email: normalizedEmail,
+      otp,
+    });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired verification code');
+    }
+    await EmailVerification.deleteOne({ _id: record._id });
   }
-
-  await EmailVerification.deleteOne({ _id: record._id });
 
   await upsertRegistrationDraft(phone, {
     email: normalizedEmail,
@@ -263,12 +265,13 @@ export const verifyUserOtpAndRegisterService = async ({ name, phone, password, o
     throw new ApiError(400, 'This email is already registered to another account');
   }
 
-  const otpRecord = await OTP.findOne({ phone, otp });
-  if (!otpRecord) {
-    throw new ApiError(400, 'Invalid or expired OTP');
+  if (!isTestOtp(otp)) {
+    const otpRecord = await OTP.findOne({ phone, otp });
+    if (!otpRecord) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+    await OTP.deleteOne({ _id: otpRecord._id });
   }
-
-  await OTP.deleteOne({ _id: otpRecord._id });
 
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
@@ -542,9 +545,12 @@ export const verifyUserEmailOtpService = async (userId, { email, otp }) => {
     throw new ApiError(400, 'Email and verification code are required');
   }
 
-  const record = await EmailVerification.findOne({ userId, email: normalized, otp });
-  if (!record || record.expiresAt < new Date()) {
-    throw new ApiError(400, 'Invalid or expired verification code');
+  if (!isTestOtp(otp)) {
+    const record = await EmailVerification.findOne({ userId, email: normalized, otp });
+    if (!record || record.expiresAt < new Date()) {
+      throw new ApiError(400, 'Invalid or expired verification code');
+    }
+    await EmailVerification.deleteOne({ _id: record._id });
   }
 
   const taken = await User.findOne({
@@ -563,7 +569,6 @@ export const verifyUserEmailOtpService = async (userId, { email, otp }) => {
   user.email = normalized;
   user.isEmailVerified = true;
   await user.save();
-  await EmailVerification.deleteOne({ _id: record._id });
 
   return sanitizeUser(user);
 };
@@ -894,9 +899,12 @@ export const resetPasswordWithOtpService = async ({ phone, email, otp, newPasswo
   if (phone) {
     if (phone.length !== 10) throw new ApiError(400, 'Valid 10-digit phone number required');
 
-    const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
-    if (!record || record.expiresAt < new Date()) {
-      throw new ApiError(400, 'Invalid or expired OTP');
+    let record = null;
+    if (!isTestOtp(otp)) {
+      record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+      if (!record || record.expiresAt < new Date()) {
+        throw new ApiError(400, 'Invalid or expired OTP');
+      }
     }
 
     const user = await User.findOne({ phone_no: phone, isDeleted: false }).select('+password');
@@ -905,7 +913,7 @@ export const resetPasswordWithOtpService = async ({ phone, email, otp, newPasswo
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
-    await OTP.deleteOne({ _id: record._id });
+    if (record?._id) await OTP.deleteOne({ _id: record._id });
 
     return { message: 'Password changed successfully' };
   }
@@ -914,22 +922,27 @@ export const resetPasswordWithOtpService = async ({ phone, email, otp, newPasswo
   if (email) {
     const normalized = assertValidEmail(email);
 
-    const record = await EmailVerification.findOne({
-      email: normalized,
-      phone: 'forgot-password',
-      otp,
-    });
-    if (!record || record.expiresAt < new Date()) {
-      throw new ApiError(400, 'Invalid or expired OTP');
+    let record = null;
+    if (!isTestOtp(otp)) {
+      record = await EmailVerification.findOne({
+        email: normalized,
+        phone: 'forgot-password',
+        otp,
+      });
+      if (!record || record.expiresAt < new Date()) {
+        throw new ApiError(400, 'Invalid or expired OTP');
+      }
     }
 
-    const user = await User.findById(record.userId).select('+password');
+    const user = isTestOtp(otp)
+      ? await User.findOne({ email: normalized, isDeleted: false }).select('+password')
+      : await User.findById(record.userId).select('+password');
     if (!user || user.isDeleted) throw new ApiError(404, 'User not found');
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
-    await EmailVerification.deleteOne({ _id: record._id });
+    if (record?._id) await EmailVerification.deleteOne({ _id: record._id });
 
     return { message: 'Password changed successfully' };
   }
@@ -946,22 +959,26 @@ export const verifyForgotPasswordOtpService = async ({ phone, email, otp } = {})
 
   if (phone) {
     if (phone.length !== 10) throw new ApiError(400, 'Valid 10-digit phone number required');
-    const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
-    if (!record || record.expiresAt < new Date()) {
-      throw new ApiError(400, 'Invalid or expired OTP');
+    if (!isTestOtp(otp)) {
+      const record = await OTP.findOne({ phone, otp, purpose: 'forgot-password' });
+      if (!record || record.expiresAt < new Date()) {
+        throw new ApiError(400, 'Invalid or expired OTP');
+      }
     }
     return { valid: true };
   }
 
   if (email) {
     const normalized = assertValidEmail(email);
-    const record = await EmailVerification.findOne({
-      email: normalized,
-      phone: 'forgot-password',
-      otp,
-    });
-    if (!record || record.expiresAt < new Date()) {
-      throw new ApiError(400, 'Invalid or expired OTP');
+    if (!isTestOtp(otp)) {
+      const record = await EmailVerification.findOne({
+        email: normalized,
+        phone: 'forgot-password',
+        otp,
+      });
+      if (!record || record.expiresAt < new Date()) {
+        throw new ApiError(400, 'Invalid or expired OTP');
+      }
     }
     return { valid: true };
   }

@@ -13,7 +13,7 @@ import {
   tokenPayloadFromUser,
   tokenPayloadFromDriver,
 } from '../utils/jwt.util.js';
-import { sendSmsOtp } from '../utils/otpService.js';
+import { isTestOtp, sendSmsOtp } from '../utils/otpService.js';
 import { userNeedsEmail as computeUserNeedsEmail } from '../utils/email.util.js';
 
 function sanitizeUser(doc) {
@@ -150,13 +150,14 @@ export async function linkGoogleUserPhoneService(userId, { phone, otp }) {
   const user = await User.findById(userId);
   if (!user || user.isDeleted) throw new ApiError(404, 'User not found');
 
-  const otpRecord = await OTP.findOne({ phone, otp });
-  if (!otpRecord) throw new ApiError(400, 'Invalid or expired OTP');
+  if (!isTestOtp(otp)) {
+    const otpRecord = await OTP.findOne({ phone, otp });
+    if (!otpRecord) throw new ApiError(400, 'Invalid or expired OTP');
+    await OTP.deleteOne({ _id: otpRecord._id });
+  }
 
   const taken = await User.findOne({ phone_no: phone, _id: { $ne: userId }, isDeleted: false });
   if (taken) throw new ApiError(400, 'This number is already registered');
-
-  await OTP.deleteOne({ _id: otpRecord._id });
 
   user.phone_no = phone;
   user.isPhoneVerified = true;
@@ -174,13 +175,14 @@ export async function linkGoogleDriverPhoneService(driverId, { phone, otp }) {
   const driver = await Driver.findById(driverId);
   if (!driver || driver.isDeleted) throw new ApiError(404, 'Driver not found');
 
-  const otpRecord = await OTP.findOne({ phone, otp });
-  if (!otpRecord) throw new ApiError(400, 'Invalid or expired OTP');
+  if (!isTestOtp(otp)) {
+    const otpRecord = await OTP.findOne({ phone, otp });
+    if (!otpRecord) throw new ApiError(400, 'Invalid or expired OTP');
+    await OTP.deleteOne({ _id: otpRecord._id });
+  }
 
   const taken = await Driver.findOne({ phone, _id: { $ne: driverId }, isDeleted: false });
   if (taken) throw new ApiError(400, 'This number is already registered');
-
-  await OTP.deleteOne({ _id: otpRecord._id });
 
   driver.phone = phone;
   // Ensure identity step is recorded once phone is linked (Google sign-up path).

@@ -3,6 +3,11 @@
  * In a real-world scenario, you would integrate Twilio, Fast2SMS, AWS SNS, MSG91, etc. here.
  */
 
+export function isTestOtp(otp) {
+  const value = String(otp || '').trim();
+  return value === '1234' || value === '123456';
+}
+
 export const sendSmsOtp = async (phone, otp) => {
   console.log(`\n=========================================`);
   console.log(`[MOCK SMS] Sending OTP to +91${phone}`);

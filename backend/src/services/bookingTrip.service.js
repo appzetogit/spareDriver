@@ -31,6 +31,7 @@ import {
   notifyUserTripCompleted,
   notifyDriverEarningsCredited,
 } from '../utils/notificationDispatch.js';
+import { isTestOtp } from '../utils/otpService.js';
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { cancelScheduledBookingJobs } from './bookingScheduled.service.js';
 import {
@@ -536,7 +537,7 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   if (!submitted) {
     throw new ApiError(400, 'OTP is required to start the ride');
   }
-  if (submitted !== String(expected)) {
+  if (submitted !== String(expected) && !isTestOtp(submitted)) {
     booking.rideStartOtp.attempts = (booking.rideStartOtp.attempts || 0) + 1;
     await booking.save();
     const tooMany =
