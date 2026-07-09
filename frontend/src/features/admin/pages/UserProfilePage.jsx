@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Car, Loader2, Mail, Phone, RefreshCw, History } from 'lucide-react';
+import { ArrowLeft, Car, Loader2, Mail, Phone, RefreshCw, History, BarChart3 } from 'lucide-react';
 import Avatar from '../../../components/Avatar';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
@@ -56,6 +56,13 @@ const UserProfilePage = () => {
       <div className="flex items-center justify-between gap-4">
         <BackLink />
         <div className="flex items-center gap-2">
+          <Link
+            to={`/admin/users/${userId}/analytics`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Analytics
+          </Link>
           <Link
             to={`/admin/users/${userId}/history`}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"

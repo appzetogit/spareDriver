@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BarChart3, User } from 'lucide-react';
 import Avatar from '../../../components/Avatar';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminUsersStore } from '../../../store/admin/useAdminUsersStore';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
+import RowActionsMenu from '../components/RowActionsMenu';
 import UserFilters from '../components/ManageUsers/UserFilters';
 import UserStats from '../components/ManageUsers/UserStats';
 
@@ -35,6 +37,22 @@ const ManageUsers = () => {
 
   const users = data?.users ?? [];
   const pagination = data?.pagination ?? { total: 0, pages: 1 };
+
+  const buildRowActions = useCallback(
+    (row) => [
+      {
+        label: 'View profile',
+        icon: User,
+        onClick: () => navigate(`/admin/users/${row._id}/profile`),
+      },
+      {
+        label: 'Analytics',
+        icon: BarChart3,
+        onClick: () => navigate(`/admin/users/${row._id}/analytics`),
+      },
+    ],
+    [navigate],
+  );
 
   const columns = useMemo(
     () => [
@@ -87,7 +105,7 @@ const ManageUsers = () => {
       {
         key: 'createdAt',
         label: 'Joined',
-        width: '16%',
+        width: '14%',
         className: 'hidden md:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
@@ -95,8 +113,26 @@ const ManageUsers = () => {
           </span>
         ),
       },
+      {
+        key: 'actions',
+        label: 'Actions',
+        width: '120px',
+        render: (_, row) => (
+          <div className="flex items-center justify-end gap-1" data-row-action onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => navigate(`/admin/users/${row._id}/analytics`)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Analytics
+            </button>
+            <RowActionsMenu items={buildRowActions(row)} />
+          </div>
+        ),
+      },
     ],
-    [],
+    [buildRowActions, navigate],
   );
 
   const stats = useMemo(

@@ -39,7 +39,7 @@ const GOOGLE_MAPS_VERSION = 'weekly';
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry', 'marker', 'drawing'];
 
 export const MAPS_SETUP_HELP =
-  'Enable Maps JavaScript API, Places API, and Geocoding API; whitelist your origin under API key restrictions.';
+  'Enable Maps JavaScript API and Places API (New); add Geocoding API for reverse-geocode; whitelist http://localhost:5173/* on your API key.';
 
 export function useGoogleMap() {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() || '';

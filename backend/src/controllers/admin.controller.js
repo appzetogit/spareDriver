@@ -2,6 +2,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { setAuthCookies } from '../utils/cookie.util.js';
 import * as adminService from '../services/admin.service.js';
+import { getAdminDashboardService } from '../services/adminDashboard.service.js';
 import {
   listAdminUserTripsService,
   listAdminUserSubscriptionsService,
@@ -22,6 +23,11 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 export const getStaffMe = asyncHandler(async (req, res) => {
   const admin = await adminService.getStaffProfileService(req.staff._id);
   return res.status(200).json(new ApiResponse(200, { admin }, 'Profile fetched successfully'));
+});
+
+export const getAdminDashboard = asyncHandler(async (_req, res) => {
+  const result = await getAdminDashboardService();
+  return res.status(200).json(new ApiResponse(200, result, 'Dashboard fetched'));
 });
 
 export const getCustomers = asyncHandler(async (req, res) => {

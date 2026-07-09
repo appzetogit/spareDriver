@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BarChart3 } from 'lucide-react';
 import Avatar from '../../../components/Avatar';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
@@ -140,11 +141,21 @@ const ManageDrivers = () => {
         label: 'Actions',
         width: '14%',
         render: (_val, row) => (
-          <DriverSuspendActions driver={row} onSuccess={refetch} compact />
+          <div className="flex items-center gap-1" data-row-action onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => navigate(`/admin/drivers/${row._id}/analytics`)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Analytics
+            </button>
+            <DriverSuspendActions driver={row} onSuccess={refetch} compact />
+          </div>
         ),
       },
     ],
-    [refetch],
+    [refetch, navigate],
   );
 
   const stats = useMemo(

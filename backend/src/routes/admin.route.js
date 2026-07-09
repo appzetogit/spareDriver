@@ -2,6 +2,7 @@ import express from 'express';
 import {
   loginAdmin,
   getStaffMe,
+  getAdminDashboard,
   getCustomers,
   getAdminUserTrips,
   getAdminUserSubscriptions,
@@ -173,6 +174,18 @@ import {
   adminUploadAdMedia,
 } from '../controllers/ad.controller.js';
 import { downloadDriverProfilePdf } from '../controllers/driverPdf.controller.js';
+import {
+  getAdminUserAnalytics,
+  getAdminUserWalletTransactions,
+  downloadUserAnalyticsPdf,
+} from '../controllers/userAnalytics.controller.js';
+import {
+  getAdminDriverAnalytics,
+  getAdminDriverTrips,
+  getAdminDriverWithdrawals,
+  getAdminDriverEarnings,
+  downloadDriverAnalyticsPdf,
+} from '../controllers/driverAnalytics.controller.js';
 import { uploadAdMedia, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
@@ -180,6 +193,7 @@ const { ALL_STAFF, OPERATIONS, SUPER_ADMIN } = ROUTE_ROLES;
 
 router.post('/auth/login', loginAdmin);
 router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
+router.get('/dashboard', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDashboard);
 
 router.get('/users', protectStaff, restrictTo(...ALL_STAFF), getCustomers);
 router.get('/users/:userId/trips', protectStaff, restrictTo(...ALL_STAFF), getAdminUserTrips);
@@ -188,6 +202,24 @@ router.get(
   protectStaff,
   restrictTo(...ALL_STAFF),
   getAdminUserSubscriptions,
+);
+router.get(
+  '/users/:userId/analytics',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminUserAnalytics,
+);
+router.get(
+  '/users/:userId/analytics/pdf',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  downloadUserAnalyticsPdf,
+);
+router.get(
+  '/users/:userId/wallet-transactions',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminUserWalletTransactions,
 );
 
 router.get('/tasks/assignees', protectStaff, restrictTo(...OPERATIONS), getTaskAssignees);
@@ -282,6 +314,36 @@ router.post(
 
 router.get('/drivers', protectStaff, restrictTo(...ALL_STAFF), getDrivers);
 router.get('/drivers/live', protectStaff, restrictTo(...ALL_STAFF), getLiveDriversSnapshot);
+router.get(
+  '/drivers/:driverId/analytics',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminDriverAnalytics,
+);
+router.get(
+  '/drivers/:driverId/trips',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminDriverTrips,
+);
+router.get(
+  '/drivers/:driverId/withdrawals',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminDriverWithdrawals,
+);
+router.get(
+  '/drivers/:driverId/earnings',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getAdminDriverEarnings,
+);
+router.get(
+  '/drivers/:driverId/analytics/pdf',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  downloadDriverAnalyticsPdf,
+);
 router.get('/drivers/:id', protectStaff, restrictTo(...ALL_STAFF), getDriverById);
 /* ---- Driver profile PDF export -------------------------------------- */
 // Streams a one-click PDF dossier of the driver (identity, licence,

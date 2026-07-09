@@ -28,7 +28,11 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const pageTitle =
-    location.pathname.includes('/admin/users/') && location.pathname.endsWith('/history')
+    location.pathname.includes('/admin/users/') && location.pathname.endsWith('/analytics')
+      ? 'User Analytics'
+      : location.pathname.includes('/admin/drivers/') && location.pathname.endsWith('/analytics')
+      ? 'Driver Analytics'
+      : location.pathname.includes('/admin/users/') && location.pathname.endsWith('/history')
       ? 'User History'
       : location.pathname.includes('/admin/users/') && location.pathname.endsWith('/profile')
       ? 'User Profile'

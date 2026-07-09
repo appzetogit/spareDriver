@@ -1,140 +1,321 @@
-import { Users, Car, CalendarCheck, DollarSign } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  Users,
+  Car,
+  CalendarCheck,
+  DollarSign,
+  RefreshCw,
+  Loader2,
+  ArrowRight,
+} from 'lucide-react';
 import StatsCard from '../components/StatsCard';
+import BookingStats from '../components/ManageBookings/BookingStats';
+import DriverStats from '../components/ManageDrivers/DriverStats';
+import DashboardActionItems from '../components/Dashboard/DashboardActionItems';
+import DashboardTrendBars from '../components/Dashboard/DashboardTrendBars';
 import DataTable from '../components/DataTable';
 import Badge from '../../../components/Badge';
 import Avatar from '../../../components/Avatar';
-import { ADMIN_MOCK_DRIVERS, ADMIN_MOCK_BOOKINGS } from '../../../utils/constants';
-import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import StatusBadge from '../components/StatusBadge';
+import { useCachedQuery } from '../../../hooks/useCachedQuery';
+import { useAdminDashboardStore } from '../../../store/admin/useAdminDashboardStore';
+import { formatCurrency, formatDate } from '../../../utils/formatters';
+
+const CACHE_KEY = 'admin-dashboard';
+
+const BOOKING_STATUS_VARIANTS = {
+  pending_assignment: 'info',
+  searching: 'warning',
+  driver_assigned: 'info',
+  awaiting_payment: 'warning',
+  en_route: 'info',
+  arrived: 'info',
+  started: 'success',
+  in_emergency_pool: 'danger',
+  completed: 'success',
+  cancelled: 'danger',
+  no_drivers_found: 'danger',
+};
+
+function formatCompactCurrency(amount) {
+  const n = Number(amount) || 0;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return formatCurrency(n);
+}
+
+function formatCount(n) {
+  return Number(n || 0).toLocaleString('en-IN');
+}
+
+const SectionHeader = ({ title, subtitle, href, linkLabel = 'View all' }) => (
+  <div className="flex items-center justify-between gap-3">
+    <div>
+      <h2 className="text-lg font-bold text-text">{title}</h2>
+      {subtitle && <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>}
+    </div>
+    {href && (
+      <Link
+        to={href}
+        className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary-dark transition-colors shrink-0"
+      >
+        {linkLabel}
+        <ArrowRight className="w-4 h-4" />
+      </Link>
+    )}
+  </div>
+);
 
 const AdminDashboard = () => {
-  const { admin } = useAdminAuthStore();
+  const navigate = useNavigate();
+  const { data, loading, error, refetch } = useCachedQuery(
+    useAdminDashboardStore,
+    CACHE_KEY,
+    {},
+  );
 
-  // Role Protection: Team members go straight to Drivers page
-  if (admin?.role !== 'admin') {
-    return <Navigate to="/admin/drivers" replace />;
-  }
+  const overview = data?.overview;
+  const bookings = data?.bookings;
+  const drivers = data?.drivers;
+  const actionItems = data?.actionItems;
+  const trends = data?.trends;
+  const recent = data?.recent;
 
-  const recentDrivers = ADMIN_MOCK_DRIVERS.slice(0, 4);
-  const recentBookings = ADMIN_MOCK_BOOKINGS.slice(0, 4);
-
-  const driverColumns = [
-    {
-      key: 'name',
-      label: 'Driver',
-      render: (val, row) => (
-        <div className="flex items-center gap-3">
-          <Avatar name={val} size="sm" />
-          <div>
-            <p className="font-semibold">{val}</p>
-            <p className="text-[10px] text-text-muted">{row.phone}</p>
+  const driverColumns = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Driver',
+        render: (val, row) => (
+          <div className="flex items-center gap-3">
+            <Avatar name={val} size="sm" />
+            <div>
+              <p className="font-semibold">{val}</p>
+              <p className="text-[10px] text-text-muted">{row.phone}</p>
+            </div>
           </div>
-        </div>
-      ),
-    },
-    {
-      key: 'approvalStatus',
-      label: 'Status',
-      render: (val) => {
-        const variants = {
-          approved: 'success',
-          pending: 'warning',
-          rejected: 'danger',
-          under_review: 'info',
-        };
-        return <Badge variant={variants[val]} text={val.replace('_', ' ')} />;
+        ),
       },
-    },
-    {
-      key: 'createdAt',
-      label: 'Joined',
-      render: (val) => new Date(val).toLocaleDateString(),
-    },
-  ];
+      {
+        key: 'approvalStatus',
+        label: 'Status',
+        render: (val) => <StatusBadge status={val} />,
+      },
+      {
+        key: 'createdAt',
+        label: 'Joined',
+        render: (val) => formatDate(val),
+      },
+    ],
+    [],
+  );
+
+  const bookingColumns = useMemo(
+    () => [
+      {
+        key: 'bookingNumber',
+        label: 'Booking',
+        render: (val) => <span className="font-mono text-xs">{val || '—'}</span>,
+      },
+      {
+        key: 'serviceType',
+        label: 'Service',
+        render: (val) => <span className="capitalize">{val?.replace(/_/g, ' ') || '—'}</span>,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        render: (val) => (
+          <Badge
+            variant={BOOKING_STATUS_VARIANTS[val] || 'default'}
+            text={val?.replace(/_/g, ' ') || '—'}
+          />
+        ),
+      },
+      {
+        key: 'fare',
+        label: 'Fare',
+        render: (val) => <span className="text-sm font-medium">{formatCurrency(val)}</span>,
+      },
+    ],
+    [],
+  );
+
+  const userColumns = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'User',
+        render: (val, row) => (
+          <div className="flex items-center gap-3">
+            <Avatar name={val} size="sm" />
+            <div>
+              <p className="font-semibold">{val}</p>
+              <p className="text-[10px] text-text-muted">{row.phone_no || row.email}</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: 'createdAt',
+        label: 'Joined',
+        render: (val) => formatDate(val),
+      },
+    ],
+    [],
+  );
+
+  if (loading && !data) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh] text-slate-500 gap-2">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        <span className="text-sm font-medium">Loading dashboard…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* Overview Cards */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm text-text-muted">
+            Platform snapshot — one API call, live counts from MongoDB
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           icon={Users}
           label="Total Users"
-          value="1,245"
-          trend={12}
-          trendLabel="vs last month"
+          value={formatCount(overview?.users?.total)}
+          trend={overview?.users?.trend}
+          trendLabel="new signups vs last month"
           color="#3498DB"
         />
         <StatsCard
           icon={Car}
           label="Total Drivers"
-          value="342"
-          trend={8}
-          trendLabel="vs last month"
+          value={formatCount(overview?.drivers?.total)}
+          trend={overview?.drivers?.trend}
+          trendLabel={`${overview?.drivers?.online ?? 0} online now`}
           color="#2ECC71"
         />
         <StatsCard
           icon={CalendarCheck}
           label="Bookings Today"
-          value="89"
-          trend={-3}
+          value={formatCount(overview?.bookingsToday?.count)}
+          trend={overview?.bookingsToday?.trend}
           trendLabel="vs yesterday"
           color="#F39C12"
         />
         <StatsCard
           icon={DollarSign}
-          label="Revenue (Month)"
-          value="₹1.2L"
-          trend={15}
+          label="Trip Revenue (Month)"
+          value={formatCompactCurrency(overview?.revenue?.monthTotal)}
+          trend={overview?.revenue?.trend}
           trendLabel="vs last month"
           color="#9B59B6"
         />
       </div>
 
+      <DashboardActionItems items={actionItems} />
+
+      <div className="space-y-3">
+        <SectionHeader title="Booking Pipeline" href="/admin/bookings" />
+        <BookingStats
+          total={bookings?.total}
+          searching={bookings?.searching}
+          active={bookings?.active}
+          completed={bookings?.completed}
+          cancelled={bookings?.cancelled}
+        />
+      </div>
+
+      <div className="space-y-3">
+        <SectionHeader title="Driver Onboarding" href="/admin/drivers" />
+        <DriverStats
+          total={drivers?.total}
+          pending={(drivers?.pending ?? 0) + (drivers?.underReview ?? 0)}
+          approved={drivers?.approved}
+          rejected={drivers?.rejected}
+          suspended={drivers?.suspended}
+        />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Drivers */}
+        <DashboardTrendBars
+          title="Bookings — last 7 days"
+          subtitle="New bookings created per day"
+          points={trends?.bookingsLast7Days ?? []}
+          valueKey="count"
+          formatValue={(v) => String(v)}
+        />
+        <DashboardTrendBars
+          title="Trip revenue — last 7 days"
+          subtitle="Commission, cancellation fees & penalties"
+          points={trends?.revenueLast7Days ?? []}
+          valueKey="amount"
+          formatValue={formatCompactCurrency}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-text">Recent Drivers</h2>
-            <button className="text-sm font-semibold text-primary hover:text-primary-dark transition-colors">
-              View All
-            </button>
-          </div>
+          <SectionHeader
+            title="Live Bookings"
+            subtitle="Active rides across the platform"
+            href="/admin/bookings"
+          />
           <DataTable
-            columns={driverColumns}
-            data={recentDrivers}
-            searchPlaceholder="Search drivers..."
+            columns={bookingColumns}
+            data={recent?.bookings ?? []}
             pageSize={5}
+            showSearch={false}
+            embedded
+            onRowClick={(row) => navigate('/admin/bookings')}
           />
         </div>
 
-        {/* Recent Bookings */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-text">Live Bookings</h2>
-            <button className="text-sm font-semibold text-primary hover:text-primary-dark transition-colors">
-              View All
-            </button>
-          </div>
+          <SectionHeader title="Recent Drivers" href="/admin/drivers" />
           <DataTable
-            columns={[
-              { key: 'id', label: 'ID', render: (val) => <span className="font-mono text-xs">{val}</span> },
-              { key: 'serviceType', label: 'Service' },
-              {
-                key: 'status',
-                label: 'Status',
-                render: (val) => (
-                  <Badge
-                    variant={val === 'completed' ? 'success' : val === 'pending' ? 'warning' : 'info'}
-                    text={val.replace('_', ' ')}
-                  />
-                ),
-              },
-            ]}
-            data={recentBookings}
-            searchPlaceholder="Search bookings..."
+            columns={driverColumns}
+            data={recent?.drivers ?? []}
             pageSize={5}
+            showSearch={false}
+            embedded
+            onRowClick={(row) => navigate(`/admin/drivers/${row._id}/profile`)}
           />
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <SectionHeader title="Recent Users" href="/admin/users" />
+        <DataTable
+          columns={userColumns}
+          data={recent?.users ?? []}
+          pageSize={5}
+          showSearch={false}
+          embedded
+          onRowClick={(row) => navigate(`/admin/users/${row._id}/profile`)}
+        />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
+  BarChart3,
   CheckCircle2,
   Circle,
   Download,
@@ -120,6 +121,13 @@ const DriverProfilePage = () => {
       <div className="flex items-center justify-between gap-4">
         <BackLink />
         <div className="flex items-center gap-2">
+          <Link
+            to={`/admin/drivers/${driverId}/analytics`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Analytics
+          </Link>
           <button
             type="button"
             onClick={handleDownloadPdf}
