@@ -8,6 +8,7 @@ import { ArrowLeft, User, Phone, Lock } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { driverNeedsPhone, navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
+import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 
@@ -53,14 +54,13 @@ const IdentityDetailsPage = () => {
       setLoading(true);
       setError('');
       // This endpoint verifies OTP and registers the user
-      const res = await api.post('/driver/auth/verify-otp', {
+      const res = await api.post('/driver/auth/verify-otp', await withFcmAuthPayload({
         phone: form.phone,
         otp,
         name: form.name,
         password: form.password,
-      });
+      }));
 
-      // Save driver to store (token is in cookies)
       setAuth(res.data.data.driver);
       
       setIsPhoneVerified(true);

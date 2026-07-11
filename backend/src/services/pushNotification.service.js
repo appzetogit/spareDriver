@@ -7,6 +7,7 @@ import { createNotificationRecord } from './notification.service.js';
 import {
   NOTIFICATION_AUDIENCE,
   NOTIFICATION_SEVERITY,
+  ADMIN_PERSISTED_NOTIFICATION_TYPES,
 } from '../constants/notificationTypes.js';
 
 const INVALID_FCM_CODES = new Set([
@@ -143,7 +144,7 @@ export async function sendPushNotification(
 }
 
 /**
- * Admin inbox notification: Socket.IO + DB only (no FCM).
+ * Admin inbox notification: Socket.IO always; DB only for actionable types.
  * Powers the admin panel bell icon.
  */
 export async function sendAdminNotification({
@@ -152,6 +153,7 @@ export async function sendAdminNotification({
   type,
   severity = 'info',
   data = {},
+  persist,
 }) {
   const payload = {
     title,
@@ -167,6 +169,13 @@ export async function sendAdminNotification({
     data: payload.data,
   });
   emitNotification({ admin: true }, payload);
+
+  const shouldPersist =
+    typeof persist === 'boolean'
+      ? persist
+      : ADMIN_PERSISTED_NOTIFICATION_TYPES.has(type);
+
+  if (!shouldPersist) return;
 
   try {
     await createNotificationRecord({

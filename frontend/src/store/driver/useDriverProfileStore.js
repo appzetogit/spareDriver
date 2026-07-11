@@ -4,7 +4,7 @@ import { createQueryStore } from '../lib/createQueryStore';
 /**
  * Live driver profile fetched from `GET /driver/profile`.
  *
- * The auth store persists the driver snapshot from login into sessionStorage,
+ * The auth store persists the driver snapshot from login into localStorage,
  * but that copy is frozen the moment the driver signed in and drifts the
  * second any backend write happens (kit approved, training completed, new
  * vehicle added, etc).

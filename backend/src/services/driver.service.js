@@ -26,6 +26,7 @@ import {
   isApplicationSubmitted,
 } from '../utils/driverOnboarding.util.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinary.js';
+import { resolveAuthFcm } from './fcmToken.service.js';
 
 export const sendOtpService = async (phone) => {
   if (!phone || phone.length !== 10) {
@@ -51,7 +52,7 @@ export const sendOtpService = async (phone) => {
 };
 
 export const verifyOtpAndRegisterService = async (data) => {
-  const { phone, otp, name, password } = data;
+  const { phone, otp, name, password, fcmToken, token, platform } = data;
 
   if (!phone || !otp || !name || !password) {
     throw new ApiError(400, 'Missing required fields');
@@ -88,6 +89,7 @@ export const verifyOtpAndRegisterService = async (data) => {
   }
 
   const payload = tokenPayloadFromDriver(driver);
+  const fcm = await resolveAuthFcm('driver', driver._id, driver, { fcmToken, token, platform });
 
   return {
     accessToken: generateAccessToken(payload),
@@ -100,10 +102,11 @@ export const verifyOtpAndRegisterService = async (data) => {
       onboardingStep: driver.onboardingStep,
       approvalStatus: driver.approvalStatus,
     },
+    fcm,
   };
 };
 
-export const loginDriverService = async (phone, password) => {
+export const loginDriverService = async ({ phone, password, fcmToken, token, platform } = {}) => {
   if (!phone || !password) {
     throw new ApiError(400, 'Phone and password required');
   }
@@ -124,6 +127,7 @@ export const loginDriverService = async (phone, password) => {
 
   driver.password = undefined;
   const payload = tokenPayloadFromDriver(driver);
+  const fcm = await resolveAuthFcm('driver', driver._id, driver, { fcmToken, token, platform });
 
   return {
     accessToken: generateAccessToken(payload),
@@ -137,6 +141,7 @@ export const loginDriverService = async (phone, password) => {
       approvalStatus: driver.approvalStatus,
       approvalNote: driver.approvalNote || '',
     },
+    fcm,
   };
 };
 

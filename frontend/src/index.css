@@ -249,3 +249,19 @@
   font-size: 0.75rem;
   color: #64748b;
 }
+
+.place-search-hint,
+.place-search-error {
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.place-search-hint {
+  color: #64748b;
+}
+
+.place-search-error {
+  color: #b91c1c;
+  background: #fef2f2;
+}

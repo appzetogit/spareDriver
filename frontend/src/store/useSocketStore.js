@@ -5,13 +5,13 @@ import { CONNECTION_EVENTS, S2C_EVENTS } from '../constants/socketEvents';
 import useDriverAuthStore from './useDriverAuthStore';
 import useUserAuthStore from './useUserAuthStore';
 import useAdminAuthStore from './useAdminAuthStore';
+import { getAccessToken, getRefreshToken } from '../utils/authTokens';
 
 /**
  * Singleton Socket.IO connection.
  *
  * One browser tab = one socket. The backend infers the principal (driver,
- * user, or admin) from the JWT cookie, so the frontend doesn't need to
- * pass a role.
+ * user, or admin) from the JWT (handshake.auth.token or cookie).
  *
  * Lifecycle:
  *   1. `connect()` is called by `useSocket` once any auth store is populated.
@@ -71,6 +71,7 @@ const useSocketStore = create((set, get) => ({
     }
 
     set({ isConnecting: true, connectError: null });
+    socket.auth = { token: getAccessToken() };
     socket.connect();
     return socket;
   },
@@ -114,7 +115,9 @@ const useSocketStore = create((set, get) => ({
       if (isAuthError && !get()._refreshAttempted) {
         set({ _refreshAttempted: true });
         try {
-          await api.post('/auth/refresh-token', {});
+          const refreshToken = getRefreshToken();
+          await api.post('/auth/refresh-token', refreshToken ? { refreshToken } : {});
+          socket.auth = { token: getAccessToken() };
           socket.connect();
         } catch {
           /* refresh failed → leave disconnected, user is effectively logged out */
@@ -160,7 +163,7 @@ useDriverAuthStore.subscribe(applyAuthState);
 useUserAuthStore.subscribe(applyAuthState);
 useAdminAuthStore.subscribe(applyAuthState);
 
-// First load: if a session is already restored from sessionStorage, kick off.
+// First load: if a session is already restored from localStorage, kick off.
 if (typeof window !== 'undefined') {
   // Defer one tick so all auth stores can hydrate from storage.
   queueMicrotask(applyAuthState);

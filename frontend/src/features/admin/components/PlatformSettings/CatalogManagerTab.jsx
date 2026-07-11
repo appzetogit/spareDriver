@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
 import Toggle from '../../../../components/Toggle';
@@ -97,7 +98,7 @@ const CatalogManagerTab = ({
     e.preventDefault();
     if (!form.name.trim()) return;
     if (formType === 'model' && !form.brandId) {
-      alert('Please select a brand');
+      toast.error('Please select a brand');
       return;
     }
 
@@ -121,8 +122,9 @@ const CatalogManagerTab = ({
       setShowModal(false);
       await fetchItems();
       onMutate?.();
+      toast.success(editing ? `${itemLabel} updated` : `${itemLabel} created`);
     } catch (err) {
-      alert(err.response?.data?.message || 'Save failed');
+      toast.error(err.response?.data?.message || 'Save failed');
     } finally {
       setSubmitting(false);
     }
@@ -134,8 +136,9 @@ const CatalogManagerTab = ({
       await api.delete(`${basePath}/${id}`);
       await fetchItems();
       onMutate?.();
+      toast.success(`${itemLabel} deleted`);
     } catch (err) {
-      alert(err.response?.data?.message || 'Delete failed');
+      toast.error(err.response?.data?.message || 'Delete failed');
     }
   };
 

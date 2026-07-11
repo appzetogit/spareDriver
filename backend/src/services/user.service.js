@@ -11,6 +11,7 @@ import { USER_ROLES } from '../constants/roles.js';
 import { isPlaceholderUserEmail, userNeedsEmail as computeUserNeedsEmail } from '../utils/email.util.js';
 import { EmailVerification } from '../models/emailVerification.model.js';
 import { sendEmail } from './email.service.js';
+import { resolveAuthFcm } from './fcmToken.service.js';
 
 function sanitizeUser(doc) {
   const o = doc.toObject();
@@ -189,7 +190,7 @@ export const verifyRegistrationEmailOtpService = async (phone, email, otp) => {
   return { phoneVerified: true, emailVerified: true };
 };
 
-export const completeRegistrationService = async ({ name, phone, email, password }) => {
+export const completeRegistrationService = async ({ name, phone, email, password, fcmToken, token, platform }) => {
   if (!name?.trim() || !phone || !password) {
     throw new ApiError(400, 'All fields are required');
   }
@@ -231,14 +232,16 @@ export const completeRegistrationService = async ({ name, phone, email, password
   const payload = tokenPayloadFromUser(user);
   const { notifyAdminNewUserRegistration } = await import('../utils/notificationDispatch.js');
   notifyAdminNewUserRegistration(user).catch(() => null);
+  const fcm = await resolveAuthFcm('user', user._id, user, { fcmToken, token, platform });
   return {
     user: sanitizeUser(user),
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
+    fcm,
   };
 };
 
-export const verifyUserOtpAndRegisterService = async ({ name, phone, password, otp, email }) => {
+export const verifyUserOtpAndRegisterService = async ({ name, phone, password, otp, email, fcmToken, token, platform }) => {
   if (!name || !phone || !password || !otp) {
     throw new ApiError(400, 'All fields are required');
   }
@@ -290,14 +293,16 @@ export const verifyUserOtpAndRegisterService = async ({ name, phone, password, o
   const payload = tokenPayloadFromUser(user);
   const { notifyAdminNewUserRegistration } = await import('../utils/notificationDispatch.js');
   notifyAdminNewUserRegistration(user).catch(() => null);
+  const fcm = await resolveAuthFcm('user', user._id, user, { fcmToken, token, platform });
   return {
     user: sanitizeUser(user),
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
+    fcm,
   };
 };
 
-export const loginUserService = async ({ phone, email, password } = {}) => {
+export const loginUserService = async ({ phone, email, password, fcmToken, token, platform } = {}) => {
   if (!password) {
     throw new ApiError(400, 'Password is required');
   }
@@ -339,10 +344,12 @@ export const loginUserService = async ({ phone, email, password } = {}) => {
 
   const safeUser = await User.findById(user._id).select('-password');
   const payload = tokenPayloadFromUser(safeUser);
+  const fcm = await resolveAuthFcm('user', safeUser._id, safeUser, { fcmToken, token, platform });
   return {
     user: sanitizeUser(safeUser),
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
+    fcm,
   };
 };
 

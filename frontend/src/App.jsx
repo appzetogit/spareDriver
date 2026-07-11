@@ -30,6 +30,9 @@ const LinkPhonePage = lazy(() => import('./features/auth/pages/LinkPhonePage'));
 const LandingPage = lazy(() => import('./features/landing/pages/LandingPage'));
 const PrivacyPolicyPage = lazy(() => import('./features/landing/pages/PrivacyPolicyPage'));
 const TermsAndConditionsPage = lazy(() => import('./features/landing/pages/TermsAndConditionsPage'));
+const RefundCancellationPolicyPage = lazy(() => import('./features/landing/pages/RefundCancellationPolicyPage'));
+const PricingShippingPolicyPage = lazy(() => import('./features/landing/pages/PricingShippingPolicyPage'));
+const ContactUsPage = lazy(() => import('./features/landing/pages/ContactUsPage'));
 
 // Developer-only sandbox screens. Bundled in every build (so a tester can
 // reach `/dev/map-simulator` against the deployed dev/staging frontend),
@@ -170,9 +173,16 @@ const ManageTasks = lazy(() => import('./features/admin/pages/ManageTasks'));
 const TaskActivityLogPage = lazy(() => import('./features/admin/pages/TaskActivityLogPage'));
 const StaffProfilePage = lazy(() => import('./features/admin/pages/StaffProfilePage'));
 const ManageAds = lazy(() => import('./features/admin/pages/ManageAds'));
+const ManageBulkPush = lazy(() => import('./features/admin/pages/ManageBulkPush'));
 const ManageSosAlerts = lazy(() => import('./features/admin/pages/ManageSosAlerts'));
 const HelpSupportPage = lazy(() => import('./features/user/support/pages/HelpSupportPage'));
 const ManageSupport = lazy(() => import('./features/admin/pages/ManageSupport'));
+const ReportsOverviewPage = lazy(() => import('./features/admin/pages/reports/ReportsOverviewPage'));
+const UserReportsPage = lazy(() => import('./features/admin/pages/reports/UserReportsPage'));
+const DriverReportsPage = lazy(() => import('./features/admin/pages/reports/DriverReportsPage'));
+const BookingReportsPage = lazy(() => import('./features/admin/pages/reports/BookingReportsPage'));
+const RevenueReportsPage = lazy(() => import('./features/admin/pages/reports/RevenueReportsPage'));
+const GstReportsPage = lazy(() => import('./features/admin/pages/reports/GstReportsPage'));
 
 function PageLoader() {
   return (
@@ -190,6 +200,9 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
+        <Route path="/refund-and-cancellation-policy" element={<RefundCancellationPolicyPage />} />
+        <Route path="/pricing-and-shipping-policy" element={<PricingShippingPolicyPage />} />
+        <Route path="/contact-us" element={<ContactUsPage />} />
 
         <Route element={<MobileLayout />}>
           {/* ========== Auth Routes ========== */}
@@ -348,6 +361,12 @@ function App() {
             <Route element={<SuperAdminOnlyGuard />}>
               <Route path="/admin/tasks/activity" element={<TaskActivityLogPage />} />
               <Route path="/admin/settings/team" element={<ManageTeam />} />
+              <Route path="/admin/reports" element={<ReportsOverviewPage />} />
+              <Route path="/admin/reports/users" element={<UserReportsPage />} />
+              <Route path="/admin/reports/drivers" element={<DriverReportsPage />} />
+              <Route path="/admin/reports/bookings" element={<BookingReportsPage />} />
+              <Route path="/admin/reports/revenue" element={<RevenueReportsPage />} />
+              <Route path="/admin/reports/gst" element={<GstReportsPage />} />
             </Route>
             <Route path="/admin/drivers" element={<ManageDrivers />} />
             <Route path="/admin/drivers/live" element={<LiveDriverMap />} />
@@ -359,6 +378,7 @@ function App() {
             <Route path="/admin/kit-orders" element={<ManageKitOrders />} />
             <Route path="/admin/kit-orders/:orderId" element={<KitOrderDetailPage />} />
             <Route path="/admin/ads" element={<ManageAds />} />
+            <Route path="/admin/push-notifications" element={<ManageBulkPush />} />
             <Route path="/admin/bookings" element={<ManageBookings />} />
             <Route
               path="/admin/bookings/scheduled-jobs"

@@ -7,6 +7,7 @@ import { User, Phone, Lock, Mail, ArrowLeft } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
+import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 
 function VerifiedBadge() {
   return (
@@ -161,12 +162,12 @@ const RegisterPage = () => {
     setSubmitLoading(true);
     setError('');
     try {
-      const res = await api.post('/auth/register/complete', {
+      const res = await api.post('/auth/register/complete', await withFcmAuthPayload({
         name: formData.name.trim(),
         phone: formData.phone,
         email: formData.email.trim(),
         password: formData.password,
-      });
+      }));
       const { user } = res.data.data;
       setAuth(user);
       navigateUserAfterAuth(navigate, user);

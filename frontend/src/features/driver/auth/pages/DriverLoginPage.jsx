@@ -6,6 +6,7 @@ import { Phone, Lock, ArrowLeft } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
+import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
 
 const DriverLoginPage = () => {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ const DriverLoginPage = () => {
     setLoading(true);
     
     try {
-      const res = await api.post('/driver/auth/login', formData);
+      const res = await api.post('/driver/auth/login', await withFcmAuthPayload(formData));
       const { driver } = res.data.data;
       
       setAuth(driver);

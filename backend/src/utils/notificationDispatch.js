@@ -421,6 +421,30 @@ export function notifyDriverEmergencyAlert(driverId, { title, body, data }) {
   );
 }
 
+export function notifyUserPromotional(userId, { title, body }) {
+  return sendPushNotification(
+    { userId },
+    {
+      title,
+      body,
+      type: USER_NOTIFICATION.PROMOTIONAL,
+      data: { kind: USER_NOTIFICATION.PROMOTIONAL },
+    },
+  );
+}
+
+export function notifyDriverPromotional(driverId, { title, body }) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title,
+      body,
+      type: DRIVER_NOTIFICATION.PROMOTIONAL,
+      data: { kind: DRIVER_NOTIFICATION.PROMOTIONAL },
+    },
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Admin notifications (inbox only — no FCM)                           */
 /* ------------------------------------------------------------------ */

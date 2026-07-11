@@ -102,7 +102,7 @@ const DataTable = ({
         }
       >
         <div className="overflow-auto" style={{ maxHeight: bodyMaxHeight }}>
-          <table className="w-full table-fixed">
+          <table className="w-full min-w-[640px] table-fixed">
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-100">
               <tr>
                 {columns.map((col) => (

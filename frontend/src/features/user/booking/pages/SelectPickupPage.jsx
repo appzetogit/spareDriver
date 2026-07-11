@@ -12,6 +12,7 @@ import {
 import Button from '../../../../components/Button';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
 import { useMapPlaceSearch } from '../../../../hooks/useMapPlaceSearch';
+import { debounce } from '../../../../utils/debounce';
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -151,11 +152,34 @@ const SelectPickupPage = () => {
     (point, field) => {
       if (field === 'pickup') {
         setLocalPickup(point);
-        if (pickupMarkerRef.current) pickupMarkerRef.current.position = { lat: point.lat, lng: point.lng };
+        if (pickupMarkerRef.current) {
+          pickupMarkerRef.current.position = { lat: point.lat, lng: point.lng };
+        }
       } else {
         setLocalDrop(point);
-        if (dropMarkerRef.current) dropMarkerRef.current.position = { lat: point.lat, lng: point.lng };
+        if (dropMarkerRef.current) {
+          dropMarkerRef.current.position = { lat: point.lat, lng: point.lng };
+        }
       }
+    },
+    [],
+  );
+
+  const applyLocationRef = useRef(applyLocation);
+  const reverseGeocodeRef = useRef(reverseGeocode);
+  applyLocationRef.current = applyLocation;
+  reverseGeocodeRef.current = reverseGeocode;
+
+  const debouncedMapGeocodeRef = useRef(
+    debounce(async (lat, lng, field) => {
+      const point = await reverseGeocodeRef.current({ lat, lng }, field);
+      if (point) applyLocationRef.current(point, field);
+    }, 500),
+  );
+
+  useEffect(
+    () => () => {
+      debouncedMapGeocodeRef.current.cancel();
     },
     [],
   );
@@ -254,15 +278,14 @@ const SelectPickupPage = () => {
       });
     }
 
-    map.addListener('click', async (event) => {
+    map.addListener('click', (event) => {
       const lat = event.latLng.lat();
       const lng = event.latLng.lng();
       moveMapTo({ lat, lng });
       const field = isOutstation ? activeFieldRef.current : 'pickup';
       const marker = field === 'pickup' ? pickupMarkerRef.current : dropMarkerRef.current;
       if (marker) marker.position = { lat, lng };
-      const point = await reverseGeocode({ lat, lng }, field);
-      if (point) applyLocation(point, field);
+      debouncedMapGeocodeRef.current(lat, lng, field);
     });
 
     if (!pickup && navigator.geolocation) {

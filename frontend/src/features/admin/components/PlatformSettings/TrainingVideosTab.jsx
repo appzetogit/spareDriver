@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Edit2, Trash2, Video, Upload } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
 import Toggle from '../../../../components/Toggle';
@@ -62,7 +63,7 @@ const TrainingVideosTab = ({ videos, onRefresh, onCreate, onUpdate, onDelete }) 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.videoUrl || !form.cloudinaryPublicId) {
-      alert('Please upload a training video');
+      toast.error('Please upload a training video');
       return;
     }
     setSubmitting(true);
@@ -74,8 +75,9 @@ const TrainingVideosTab = ({ videos, onRefresh, onCreate, onUpdate, onDelete }) 
       }
       setShowModal(false);
       onRefresh();
+      toast.success(editing ? 'Training video updated' : 'Training video created');
     } catch (err) {
-      alert(err.response?.data?.message || 'Save failed');
+      toast.error(err.response?.data?.message || 'Save failed');
     } finally {
       setSubmitting(false);
     }
