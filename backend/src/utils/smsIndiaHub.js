@@ -50,6 +50,28 @@ function appendAuthParams(params, cfg) {
   params.set('password', cfg.password);
 }
 
+/** DLT fields required for Indian transactional SMS delivery. */
+function appendDltParams(params, cfg) {
+  if (cfg.dltTemplateId) {
+    // SMS India Hub / SMS Gateway Hub accept both spellings across API versions.
+    params.set('dlttemplateid', cfg.dltTemplateId);
+    params.set('templateid', cfg.dltTemplateId);
+  }
+  if (cfg.peId) {
+    params.set('PEId', cfg.peId);
+    params.set('peid', cfg.peId);
+    params.set('EntityId', cfg.peId);
+  }
+  if (cfg.tmId) {
+    params.set('telemarketerid', cfg.tmId);
+  }
+}
+
+function isSuccessErrorCode(code) {
+  const normalized = String(code ?? '').trim();
+  return normalized === '0' || normalized === '00' || normalized === '000';
+}
+
 function parseLegacyResponse(body) {
   const text = String(body || '').trim();
   if (/^success/i.test(text)) {
@@ -62,12 +84,20 @@ function parseLegacyResponse(body) {
 function parseJsonResponse(body) {
   try {
     const data = JSON.parse(body);
-    if (String(data.ErrorCode) === '0' || data.JobId) {
-      return { success: true, raw: body };
+    if (isSuccessErrorCode(data.ErrorCode) || data.JobId) {
+      const messageId = data?.MessageData?.[0]?.MessageId || null;
+      return {
+        success: true,
+        raw: body,
+        data,
+        jobId: data.JobId || null,
+        messageId,
+      };
     }
     return {
       success: false,
       message: data.ErrorMessage || data.Message || 'SMS send failed',
+      data,
     };
   } catch {
     return parseLegacyResponse(body);
@@ -95,14 +125,66 @@ function formatSmsError(parsed) {
   return parsed.message || 'SMS send failed';
 }
 
+function redactUrl(url) {
+  return String(url || '')
+    .replace(/([?&](?:password|APIKey|apikey)=)[^&]*/gi, '$1***')
+    .replace(/([?&](?:user)=)[^&]*/gi, '$1***');
+}
+
 async function callSmsApi(url) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[sms] request ${redactUrl(url)}`);
+  }
+
   const response = await fetch(url, { method: 'GET' });
   const body = await response.text();
   const parsed = parseProviderResponse(body);
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[sms] response status=${response.status} body=${String(body).slice(0, 500)}`);
+  }
+
   if (!response.ok || !parsed.success) {
     throw new Error(formatSmsError(parsed));
   }
-  return { success: true, providerResponse: parsed.raw || body };
+  return {
+    success: true,
+    providerResponse: parsed.raw || body,
+    jobId: parsed.jobId || null,
+    messageId: parsed.messageId || null,
+  };
+}
+
+async function checkDeliveryStatus(cfg, messageId) {
+  if (!messageId) return null;
+
+  const params = new URLSearchParams({ messageid: messageId });
+  appendAuthParams(params, cfg);
+
+  const url = `https://cloud.smsindiahub.in/vendorsms/checkdelivery.aspx?${params.toString()}`;
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    const body = (await response.text()).trim();
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[sms] delivery check messageId=${messageId} body=${body.slice(0, 300)}`);
+    }
+    return body;
+  } catch (err) {
+    console.warn('[sms] delivery check failed:', err.message);
+    return null;
+  }
+}
+
+function assertDeliveryOk(deliveryBody) {
+  if (!deliveryBody) return;
+  const text = String(deliveryBody);
+  if (/#Rejected|REJECTD|UNDELIV|FAILED|TL-|Invalid Login/i.test(text)) {
+    throw new Error(
+      `SMS submitted but not delivered (${text.slice(0, 180)}). ` +
+        'Usually missing/incorrect SMS_INDIA_HUB_PE_ID, or sender SMSHUB is not mapped to your DLT Principal Entity + template. ' +
+        'Set PE ID from your DLT/SMS India Hub portal and confirm sender header mapping.',
+    );
+  }
 }
 
 async function sendViaSendSms(cfg, msisdn, message) {
@@ -116,26 +198,30 @@ async function sendViaSendSms(cfg, msisdn, message) {
   });
 
   appendAuthParams(params, cfg);
+  appendDltParams(params, cfg);
 
+  // `route` is the SMS route/product code — NOT the DLT template id.
   if (cfg.route) params.set('route', cfg.route);
-  else if (cfg.dltTemplateId) params.set('route', cfg.dltTemplateId);
-
-  if (cfg.peId) params.set('PEId', cfg.peId);
 
   return callSmsApi(`${cfg.sendSmsUrl}?${params.toString()}`);
 }
 
 async function sendViaPushSms(cfg, msisdn, message) {
+  // Match vendor pushsms.aspx contract: APIKey + msisdn + sid + msg + fl + gwid.
+  // Do not append dlttemplateid/PEId here — approved accounts often map DLT
+  // on the portal side; extra params can cause rejects.
   const params = new URLSearchParams({
     msisdn,
     sid: cfg.senderId,
     msg: message,
     fl: '0',
     gwid: '2',
-    templateid: cfg.dltTemplateId,
   });
 
   appendAuthParams(params, cfg);
+  if (cfg.dltTemplateId || cfg.peId || cfg.tmId) {
+    appendDltParams(params, cfg);
+  }
 
   return callSmsApi(`${cfg.pushSmsUrl}?${params.toString()}`);
 }
@@ -147,13 +233,40 @@ async function sendViaPushSms(cfg, msisdn, message) {
  */
 export async function sendSmsIndiaHubOtp(phone, otp) {
   const cfg = getSmsIndiaHubConfig();
+  // pushsms accounts (vendor sample URL) often rely on portal-side DLT mapping
+  // and only need the exact approved message body + registered sender id.
+  if (cfg.apiStyle !== 'pushsms') {
+    if (!cfg.dltTemplateId) {
+      throw new Error('SMS_INDIA_HUB_DLT_TEMPLATE_ID is required for OTP SMS');
+    }
+    if (!cfg.peId) {
+      throw new Error(
+        'SMS_INDIA_HUB_PE_ID is required for send_sms. Without Principal Entity ID, ' +
+          'SMS India Hub may accept the SMS (JobId) but telecom DLT rejects delivery.',
+      );
+    }
+  }
+
   const msisdn = normalizeIndianMobile(phone);
   const message = buildOtpMessage(cfg.otpMessageTemplate, otp, cfg.appName);
 
-  if (cfg.apiStyle === 'pushsms') {
-    return sendViaPushSms(cfg, msisdn, message);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[sms] OTP message preview: ${message}`);
   }
-  return sendViaSendSms(cfg, msisdn, message);
+
+  const result =
+    cfg.apiStyle === 'pushsms'
+      ? await sendViaPushSms(cfg, msisdn, message)
+      : await sendViaSendSms(cfg, msisdn, message);
+
+  // Gateway "Done" only means accepted. Poll delivery to catch DLT rejects.
+  if (result.messageId) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const delivery = await checkDeliveryStatus(cfg, result.messageId);
+    assertDeliveryOk(delivery);
+  }
+
+  return result;
 }
 
 /**
@@ -173,6 +286,8 @@ export async function sendSmsIndiaHubPlain(phone, message) {
   });
 
   appendAuthParams(params, cfg);
+  appendDltParams(params, cfg);
+  if (cfg.route) params.set('route', cfg.route);
 
   return callSmsApi(`${cfg.sendSmsUrl}?${params.toString()}`);
 }

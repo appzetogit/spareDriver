@@ -8,9 +8,12 @@ import {
   Loader2,
   Video,
   Headphones,
+  FileText,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import TrainingVideosTab from '../components/PlatformSettings/TrainingVideosTab';
 import VehicleCatalogSettings from '../components/PlatformSettings/VehicleCatalogSettings';
+import LegalPagesTab from '../components/PlatformSettings/LegalPagesTab';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
@@ -19,6 +22,28 @@ import Modal from '../../../components/Modal';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { canManagePlatformSettings } from '../../../constants/staffRoles';
+
+const EMPTY_SUPPORT_FORM = {
+  supportPhone: '',
+  supportWhatsapp: '',
+  supportEmail: '',
+  contactAddress: '',
+  supportHours: '',
+  androidAppUrl: '',
+  iosAppUrl: '',
+};
+
+function normalizeSupportForm(data = {}) {
+  return {
+    supportPhone: data.supportPhone || '',
+    supportWhatsapp: data.supportWhatsapp || '',
+    supportEmail: data.supportEmail || '',
+    contactAddress: data.contactAddress || '',
+    supportHours: data.supportHours || '',
+    androidAppUrl: data.androidAppUrl || '',
+    iosAppUrl: data.iosAppUrl || '',
+  };
+}
 
 const PlatformSettings = () => {
   const { admin } = useAdminAuthStore();
@@ -43,12 +68,12 @@ const PlatformSettings = () => {
   // Form States
   const [carForm, setCarForm] = useState({ name: '', description: '', image: '', isActive: true });
   const [conditionForm, setConditionForm] = useState({ question: '', key: '', isRequired: false, isActive: true });
-  const [supportForm, setSupportForm] = useState({
-    supportPhone: '',
-    supportWhatsapp: '',
-    supportEmail: '',
-  });
+  const [supportForm, setSupportForm] = useState(EMPTY_SUPPORT_FORM);
+  const [supportBaseline, setSupportBaseline] = useState(EMPTY_SUPPORT_FORM);
   const [supportSaving, setSupportSaving] = useState(false);
+
+  const supportDirty =
+    JSON.stringify(supportForm) !== JSON.stringify(supportBaseline);
 
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -62,11 +87,16 @@ const PlatformSettings = () => {
       setCarTypes(carsRes.data.data);
       setConditions(condRes.data.data);
       setTrainingVideos(trainingRes.data.data);
-      setSupportForm(supportRes.data.data || {});
+      const support = normalizeSupportForm(supportRes.data.data || {});
+      setSupportForm(support);
+      setSupportBaseline(support);
     } catch (err) {
       console.error('Failed to fetch platform data', err);
       if (!silent) {
-        alert(err.response?.data?.message || 'Failed to load platform settings. Please log in again if your role was recently changed.');
+        toast.error(
+          err.response?.data?.message ||
+            'Failed to load platform settings. Please log in again if your role was recently changed.',
+        );
       }
     } finally {
       if (!silent) setLoading(false);
@@ -93,8 +123,9 @@ const PlatformSettings = () => {
       await fetchData({ silent: true });
       setShowCarModal(false);
       setEditingItem(null);
+      toast.success(editingItem ? 'Car category updated' : 'Car category created');
     } catch (err) {
-      alert(err.response?.data?.message || 'Action failed');
+      toast.error(err.response?.data?.message || 'Action failed');
     } finally {
       setSubmitting(false);
     }
@@ -112,8 +143,9 @@ const PlatformSettings = () => {
       await fetchData({ silent: true });
       setShowConditionModal(false);
       setEditingItem(null);
+      toast.success(editingItem ? 'Checklist item updated' : 'Checklist item created');
     } catch (err) {
-      alert(err.response?.data?.message || 'Action failed');
+      toast.error(err.response?.data?.message || 'Action failed');
     } finally {
       setSubmitting(false);
     }
@@ -124,8 +156,9 @@ const PlatformSettings = () => {
     try {
       await api.delete(`/admin/settings/car-types/${id}`);
       await fetchData({ silent: true });
+      toast.success('Car category deleted');
     } catch (err) {
-      alert('Delete failed');
+      toast.error(err.response?.data?.message || 'Delete failed');
     }
   };
 
@@ -134,19 +167,24 @@ const PlatformSettings = () => {
     try {
       await api.delete(`/admin/settings/conditions/${id}`);
       await fetchData({ silent: true });
+      toast.success('Checklist item deleted');
     } catch (err) {
-      alert('Delete failed');
+      toast.error(err.response?.data?.message || 'Delete failed');
     }
   };
 
   const handleSupportSave = async (e) => {
     e.preventDefault();
+    if (!supportDirty || supportSaving || loading) return;
     setSupportSaving(true);
     try {
-      await api.put('/admin/settings/support', supportForm);
-      alert('Support contact settings saved');
+      const res = await api.put('/admin/settings/support', supportForm);
+      const saved = normalizeSupportForm(res.data?.data || supportForm);
+      setSupportForm(saved);
+      setSupportBaseline(saved);
+      toast.success('Website & contact settings saved');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save support settings');
+      toast.error(err.response?.data?.message || 'Failed to save support settings');
     } finally {
       setSupportSaving(false);
     }
@@ -177,7 +215,8 @@ const PlatformSettings = () => {
             { id: 'vehicles', label: 'Vehicle Catalog', icon: Car },
             { id: 'conditions', label: 'Registration Checklist', icon: CheckSquare },
             { id: 'training', label: 'Driver Training', icon: Video },
-            { id: 'support', label: 'Support Contact', icon: Headphones },
+            { id: 'support', label: 'Website & Contact', icon: Headphones },
+            { id: 'legal', label: 'Legal Pages', icon: FileText },
           ].map(tab => (
             <button
               key={tab.id}
@@ -242,11 +281,11 @@ const PlatformSettings = () => {
           )}
 
           {activeTab === 'support' && (
-            <Card className="max-w-xl space-y-4">
+            <Card className="max-w-2xl space-y-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-800">Support Contact</h3>
+                <h3 className="text-xl font-bold text-slate-800">Website & Contact</h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  Shown on the Help & Support page for customers and drivers.
+                  Contact details shown on the landing page / Contact Us, plus Android and iOS download links.
                 </p>
               </div>
               <form onSubmit={handleSupportSave} className="space-y-4">
@@ -272,10 +311,46 @@ const PlatformSettings = () => {
                   placeholder="support@sparedriver.com"
                   required
                 />
-                <Button type="submit" loading={supportSaving}>Save Contact Settings</Button>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">Office Address</label>
+                  <textarea
+                    value={supportForm.contactAddress || ''}
+                    onChange={(e) => setSupportForm((prev) => ({ ...prev, contactAddress: e.target.value }))}
+                    rows={3}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-yellow-400/60"
+                    placeholder="Full office address"
+                  />
+                </div>
+                <Input
+                  label="Support Hours"
+                  value={supportForm.supportHours || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, supportHours: e.target.value }))}
+                  placeholder="Mon–Sat, 9:00 AM to 6:00 PM"
+                />
+                <Input
+                  label="Android App Download URL"
+                  value={supportForm.androidAppUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, androidAppUrl: e.target.value }))}
+                  placeholder="https://play.google.com/store/apps/details?id=..."
+                />
+                <Input
+                  label="iOS App Download URL"
+                  value={supportForm.iosAppUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, iosAppUrl: e.target.value }))}
+                  placeholder="https://apps.apple.com/app/..."
+                />
+                <Button
+                  type="submit"
+                  loading={supportSaving}
+                  disabled={!supportDirty || loading || supportSaving}
+                >
+                  Save Website & Contact Settings
+                </Button>
               </form>
             </Card>
           )}
+
+          {activeTab === 'legal' && <LegalPagesTab />}
 
           {/* Checklist Tab */}
           {activeTab === 'conditions' && (

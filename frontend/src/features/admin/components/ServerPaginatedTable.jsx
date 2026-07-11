@@ -25,7 +25,7 @@ const ServerPaginatedTable = ({
   return (
     <div className="w-full">
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="overflow-hidden">
+        <div className="overflow-x-auto">
           {loading && data.length === 0 ? (
             <TableSkeleton rows={limit} columns={columns.length} />
           ) : (

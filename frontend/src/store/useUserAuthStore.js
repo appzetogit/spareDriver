@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { unregisterFcmToken } from '../hooks/useFcmRegistration';
 import { useUserNotificationStore } from './useNotificationStore';
+import { clearAuthTokens } from '../utils/authTokens';
 
 const useUserAuthStore = create(
   persist(
@@ -13,14 +14,16 @@ const useUserAuthStore = create(
       setAuth: (user) => set({ user, isAuthenticated: !!user }),
       setOnboarding: (onboarding) => set({ onboarding }),
       logout: () => {
-        unregisterFcmToken('user').catch(() => null);
         useUserNotificationStore.getState().reset();
         set({ user: null, isAuthenticated: false, onboarding: null });
+        void unregisterFcmToken('user')
+          .catch(() => null)
+          .finally(() => clearAuthTokens());
       },
     }),
     {
       name: 'user-session',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
     },
   ),
 );

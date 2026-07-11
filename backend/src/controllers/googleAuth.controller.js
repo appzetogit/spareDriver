@@ -9,8 +9,8 @@ import {
 } from '../services/googleAuth.service.js';
 
 export const googleSignInUser = asyncHandler(async (req, res) => {
-  const { credential } = req.body;
-  const result = await googleSignInService(credential, 'user');
+  const { credential, fcmToken, token, platform } = req.body;
+  const result = await googleSignInService(credential, 'user', { fcmToken, token, platform });
 
   setAuthCookies(res, {
     accessToken: result.accessToken,
@@ -18,13 +18,23 @@ export const googleSignInUser = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json(
-    new ApiResponse(200, { user: result.user, needsPhone: result.needsPhone }, 'Google sign-in successful'),
+    new ApiResponse(
+      200,
+      {
+        user: result.user,
+        needsPhone: result.needsPhone,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Google sign-in successful',
+    ),
   );
 });
 
 export const googleSignInDriver = asyncHandler(async (req, res) => {
-  const { credential } = req.body;
-  const result = await googleSignInService(credential, 'driver');
+  const { credential, fcmToken, token, platform } = req.body;
+  const result = await googleSignInService(credential, 'driver', { fcmToken, token, platform });
 
   setAuthCookies(res, {
     accessToken: result.accessToken,
@@ -32,7 +42,17 @@ export const googleSignInDriver = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json(
-    new ApiResponse(200, { driver: result.driver, needsPhone: result.needsPhone }, 'Google sign-in successful'),
+    new ApiResponse(
+      200,
+      {
+        driver: result.driver,
+        needsPhone: result.needsPhone,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Google sign-in successful',
+    ),
   );
 });
 

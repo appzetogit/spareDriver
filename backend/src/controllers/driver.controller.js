@@ -16,19 +16,40 @@ export const verifyOtpAndRegister = asyncHandler(async (req, res) => {
     refreshToken: result.refreshToken,
   });
 
-  return res.status(200).json(new ApiResponse(200, { driver: result.driver }, 'Registration step 1 completed'));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        driver: result.driver,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Registration step 1 completed',
+    ),
+  );
 });
 
 export const loginDriver = asyncHandler(async (req, res) => {
-  const { phone, password } = req.body;
-  const result = await driverService.loginDriverService(phone, password);
+  const result = await driverService.loginDriverService(req.body);
 
   setAuthCookies(res, {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
   });
 
-  return res.status(200).json(new ApiResponse(200, { driver: result.driver }, 'Login successful'));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        driver: result.driver,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Login successful',
+    ),
+  );
 });
 
 export const sendDriverForgotPasswordOtp = asyncHandler(async (req, res) => {

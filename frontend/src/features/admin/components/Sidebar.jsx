@@ -5,6 +5,7 @@ import {
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
   LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag, Headphones,
+  BarChart3, BellRing,
 } from 'lucide-react';
 import { APP_NAME } from '../../../utils/constants';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
@@ -28,6 +29,12 @@ const navItems = [
   // Ads management — admin + sub_admin can publish promotional images
   // and short videos that surface on the user home screen.
   { path: '/admin/ads', label: 'Ads', icon: Megaphone, roles: ['admin', 'sub_admin'] },
+  {
+    path: '/admin/push-notifications',
+    label: 'Push Notifications',
+    icon: BellRing,
+    roles: ['admin', 'sub_admin'],
+  },
   {
     label: 'Bookings',
     icon: CalendarCheck,
@@ -69,6 +76,50 @@ const navItems = [
         label: 'Subscription Requests',
         icon: Sparkles,
         roles: ['admin', 'sub_admin', 'team_member'],
+      },
+    ],
+  },
+  {
+    label: 'Reports & Analytics',
+    icon: BarChart3,
+    roles: ['admin'],
+    children: [
+      {
+        path: '/admin/reports',
+        label: 'Overview',
+        icon: BarChart3,
+        end: true,
+        roles: ['admin'],
+      },
+      {
+        path: '/admin/reports/users',
+        label: 'Users',
+        icon: Users,
+        roles: ['admin'],
+      },
+      {
+        path: '/admin/reports/drivers',
+        label: 'Drivers',
+        icon: Car,
+        roles: ['admin'],
+      },
+      {
+        path: '/admin/reports/bookings',
+        label: 'Bookings',
+        icon: CalendarCheck,
+        roles: ['admin'],
+      },
+      {
+        path: '/admin/reports/revenue',
+        label: 'Revenue',
+        icon: DollarSign,
+        roles: ['admin'],
+      },
+      {
+        path: '/admin/reports/gst',
+        label: 'GST',
+        icon: Receipt,
+        roles: ['admin'],
       },
     ],
   },
@@ -181,6 +232,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     'Settings',
     'Account',
     'Bookings',
+    'Reports & Analytics',
   ]);
 
   const filteredNavItems = filterNavByRole(navItems, admin?.role);
@@ -239,7 +291,9 @@ const Sidebar = ({ isOpen, onClose }) => {
             const isExpanded = expandedItems.includes(item.label);
             const isActive = item.path
               ? pathname === item.path
-              : item.children.some((c) => pathname === c.path);
+              : item.children.some((c) =>
+                  c.end ? pathname === c.path : pathname === c.path || pathname.startsWith(`${c.path}/`),
+                );
 
             return (
               <div key={item.label} className="space-y-1">

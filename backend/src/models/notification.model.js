@@ -42,6 +42,11 @@ const notificationSchema = new mongoose.Schema(
 notificationSchema.index({ audience: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ driverId: 1, isRead: 1, createdAt: -1 });
+// Auto-delete after 7 days (Mongo TTL sweeper runs ~every 60s).
+notificationSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 7 * 24 * 60 * 60 },
+);
 
 const Notification =
   mongoose.models.Notification || mongoose.model('Notification', notificationSchema);

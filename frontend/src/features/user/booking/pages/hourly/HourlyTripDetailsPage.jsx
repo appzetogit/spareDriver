@@ -25,6 +25,7 @@ import {
   RAPIDO_MAP_OPTIONS,
   createImageMarkerContent,
 } from '../../../../../constants/mapTheme';
+import { debounce } from '../../../../../utils/debounce';
 import useBookingDraftStore from '../../../../../store/user/useBookingDraftStore';
 import CarPickerSheet from '../../components/CarPickerSheet';
 import LocationPickerSheet from '../../components/LocationPickerSheet';
@@ -61,6 +62,8 @@ const HourlyTripDetailsPage = () => {
   const markerRef = useRef(null);
   const geocoderRef = useRef(null);
   const autoCenteredRef = useRef(Boolean(draftPickup));
+  const setPickupPointRef = useRef(null);
+  const mapsRef = useRef(maps);
 
   const [pickup, setLocalPickup] = useState(draftPickup);
   const [geocoding, setGeocoding] = useState(false);
@@ -94,6 +97,21 @@ const HourlyTripDetailsPage = () => {
     },
     [],
   );
+
+  setPickupPointRef.current = setPickupPoint;
+  mapsRef.current = maps;
+
+  const debouncedMapGeocodeRef = useRef(null);
+  if (!debouncedMapGeocodeRef.current) {
+    debouncedMapGeocodeRef.current = debounce(async (lat, lng) => {
+      const point = await reverseGeocode(
+        mapsRef.current,
+        { lat, lng },
+        { geocoder: geocoderRef.current },
+      );
+      if (point) setPickupPointRef.current?.(point);
+    }, 500);
+  }
 
   /* ---- Nearby drivers (live) -------------------------------------- */
 
@@ -161,18 +179,22 @@ const HourlyTripDetailsPage = () => {
       await reverseToPickup(lat, lng);
     });
 
-    map.addListener('click', async (event) => {
+    map.addListener('click', (event) => {
       const lat = event.latLng.lat();
       const lng = event.latLng.lng();
       moveMapTo({ lat, lng });
       if (markerRef.current) markerRef.current.position = { lat, lng };
-      await reverseToPickup(lat, lng);
+      debouncedMapGeocodeRef.current(lat, lng);
     });
 
     // Hydrate the address if the draft was just coordinates.
     if (draftPickup && !draftPickup.address) {
       reverseToPickup(draftPickup.lat, draftPickup.lng);
     }
+
+    return () => {
+      debouncedMapGeocodeRef.current.cancel();
+    };
   }, [ready, maps, AdvancedMarkerElement, draftPickup, moveMapTo, setPickupPoint]);
 
   // Once we have the geolocation, snap to it (unless the user already has a

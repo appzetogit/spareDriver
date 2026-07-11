@@ -53,19 +53,22 @@ frontend/src/
   layouts/                # MobileLayout, AuthLayout, DashboardLayout, AdminLayout
   guards/                 # AdminGuard, DriverGuard, OnboardingGuard, *Guard
   features/{audience}/{domain}/{pages|components}/
-    audience  ∈ auth | user | driver | admin | dev
+    audience  ∈ auth | user | driver | admin | landing | dev
     domain    e.g. booking, tracking, wallet, trips, kit, registration
+              landing pages use AppSettings + LegalDocument (privacy/terms/refund/pricing)
   components/             # shared UI primitives (Button, Modal, BottomSheet, maps/, dialogs/, ...)
   store/                  # zustand stores
     useUserAuthStore.js, useDriverAuthStore.js, useAdminAuthStore.js, useSocketStore.js
     user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore
     driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
-    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,Refunds,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile}Store
+    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,Refunds,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush}Store
   hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...
   constants/              # mapTheme.js, etc.
   config/                 # axios, firebase, env
   lib/, utils/            # helpers
 ```
+
+Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
 
 ## Naming Conventions
 

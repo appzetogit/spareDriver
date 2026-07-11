@@ -1,8 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { PLACES_COUNTRY } from '../constants/mapDefaults';
+import { MAPS_SETUP_HELP } from './useGoogleMap';
+import { forwardGeocode } from '../utils/geocoding';
+import { debounce } from '../utils/debounce';
 
 const DROPDOWN_CLASS = 'place-search-dropdown';
-const DEBOUNCE_MS = 280;
+const DEBOUNCE_MS = 450;
+const MIN_QUERY_LENGTH = 3;
+const SCROLL_DEBOUNCE_MS = 80;
 
 function placeFromFields(place) {
   const loc = place?.location;
@@ -12,6 +17,16 @@ function placeFromFields(place) {
     lng: typeof loc.lng === 'function' ? loc.lng() : loc.lng,
     name: place.displayName || '',
     address: place.formattedAddress || '',
+  };
+}
+
+function placeFromGeocode(point) {
+  if (!point) return null;
+  return {
+    lat: point.lat,
+    lng: point.lng,
+    name: point.address,
+    address: point.address,
   };
 }
 
@@ -27,18 +42,34 @@ function hideDropdown(dropdown) {
   dropdown.style.display = 'none';
 }
 
+function isPlacesNewDisabledError(err) {
+  const msg = String(err?.message || err || '').toLowerCase();
+  return (
+    msg.includes('places api (new)') ||
+    msg.includes('places.googleapis.com') ||
+    msg.includes('has not been used') ||
+    msg.includes('is disabled')
+  );
+}
+
+function formatSearchError(err) {
+  if (isPlacesNewDisabledError(err)) {
+    return `Place suggestions need <strong>Places API (New)</strong> enabled in Google Cloud for this API key. ${MAPS_SETUP_HELP}`;
+  }
+  return err?.message || 'Could not load suggestions';
+}
+
 /**
- * Places Autocomplete (New) + text search on Enter (India).
- * Uses AutocompleteSuggestion.fetchAutocompleteSuggestions — required for
- * Google Cloud projects created after March 2025 (legacy Places API off).
+ * Places Autocomplete (New) + Geocoding fallback + text search on Enter.
  */
 export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
   const onSelectRef = useRef(onSelect);
   const sessionTokenRef = useRef(null);
-  const debounceRef = useRef(null);
   const dropdownRef = useRef(null);
   const suggestionsRef = useRef([]);
   const activeIndexRef = useRef(-1);
+  const requestIdRef = useRef(0);
+  const placesUnavailableRef = useRef(false);
 
   onSelectRef.current = onSelect;
 
@@ -74,6 +105,14 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
     };
 
     const searchByText = async (query) => {
+      if (placesUnavailableRef.current) {
+        return placeFromGeocode(
+          await forwardGeocode(maps, query, {
+            componentRestrictions: { country: PLACES_COUNTRY },
+          }),
+        );
+      }
+
       const { Place } = await window.google.maps.importLibrary('places');
       const { places } = await Place.searchByText({
         textQuery: query,
@@ -82,11 +121,23 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
         maxResultCount: 1,
       });
       const place = places?.[0];
-      if (!place) return null;
+      if (!place) {
+        return placeFromGeocode(
+          await forwardGeocode(maps, query, {
+            componentRestrictions: { country: PLACES_COUNTRY },
+          }),
+        );
+      }
       await place.fetchFields({
         fields: ['location', 'displayName', 'formattedAddress'],
       });
       return placeFromFields(place);
+    };
+
+    const showMessage = (html, isError = false) => {
+      positionDropdown(dropdown, input);
+      dropdown.style.display = 'block';
+      dropdown.innerHTML = `<div class="${isError ? 'place-search-error' : 'place-search-hint'}">${html}</div>`;
     };
 
     const renderSuggestions = () => {
@@ -99,6 +150,13 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
       dropdown.style.display = 'block';
       dropdown.innerHTML = items
         .map((prediction, index) => {
+          if (prediction._isGeocodeFallback) {
+            const active = index === activeIndexRef.current ? ' is-active' : '';
+            return `<button type="button" class="place-search-item${active}" data-index="${index}" role="option">
+              <span class="place-search-item-main">${prediction.label}</span>
+              <span class="place-search-item-sub">Geocoding result</span>
+            </button>`;
+          }
           const main = prediction.mainText?.text || prediction.text?.text || '';
           const secondary = prediction.secondaryText?.text || '';
           const active = index === activeIndexRef.current ? ' is-active' : '';
@@ -110,11 +168,43 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
         .join('');
     };
 
+    const fetchGeocodeSuggestions = async (trimmed, requestId) => {
+      const point = await forwardGeocode(maps, trimmed, {
+        componentRestrictions: { country: PLACES_COUNTRY },
+      });
+      if (cancelled || requestId !== requestIdRef.current) return;
+      if (!point) {
+        showMessage('No results found for this search.', true);
+        return;
+      }
+      suggestionsRef.current = [
+        {
+          _isGeocodeFallback: true,
+          label: point.address,
+          point,
+        },
+      ];
+      activeIndexRef.current = -1;
+      renderSuggestions();
+    };
+
     const fetchSuggestions = async (value) => {
       const trimmed = value?.trim();
       if (!trimmed) {
         suggestionsRef.current = [];
         hideDropdown(dropdown);
+        return;
+      }
+
+      if (trimmed.length < MIN_QUERY_LENGTH) {
+        showMessage(`Type at least ${MIN_QUERY_LENGTH} characters to search.`);
+        return;
+      }
+
+      const requestId = ++requestIdRef.current;
+
+      if (placesUnavailableRef.current) {
+        await fetchGeocodeSuggestions(trimmed, requestId);
         return;
       }
 
@@ -131,26 +221,47 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
           includedRegionCodes: [PLACES_COUNTRY],
         });
 
-        if (cancelled) return;
+        if (cancelled || requestId !== requestIdRef.current) return;
 
         suggestionsRef.current = suggestions
           .map((s) => s.placePrediction)
           .filter(Boolean)
           .slice(0, 6);
         activeIndexRef.current = -1;
+
+        if (!suggestionsRef.current.length) {
+          await fetchGeocodeSuggestions(trimmed, requestId);
+          return;
+        }
+
         renderSuggestions();
       } catch (err) {
-        console.error('[Places API (New)]', err);
+        if (cancelled || requestId !== requestIdRef.current) return;
+
+        if (isPlacesNewDisabledError(err)) {
+          placesUnavailableRef.current = true;
+          console.warn('[Places API (New)] disabled — falling back to Geocoding API.', err);
+          try {
+            await fetchGeocodeSuggestions(trimmed, requestId);
+            return;
+          } catch (geoErr) {
+            console.error('[Geocoding API]', geoErr);
+          }
+        } else {
+          console.error('[Places API (New)]', err);
+        }
+
+        showMessage(formatSearchError(err), true);
         suggestionsRef.current = [];
-        hideDropdown(dropdown);
       }
     };
 
+    const debouncedFetch = debounce((value) => {
+      fetchSuggestions(value);
+    }, DEBOUNCE_MS);
+
     const onInput = () => {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        fetchSuggestions(input.value);
-      }, DEBOUNCE_MS);
+      debouncedFetch(input.value);
     };
 
     const onFocus = () => {
@@ -189,19 +300,25 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
 
       if (picked) {
         try {
-          selectPlace(await resolvePrediction(picked));
+          if (picked._isGeocodeFallback) {
+            selectPlace(placeFromGeocode(picked.point));
+          } else {
+            selectPlace(await resolvePrediction(picked));
+          }
         } catch (err) {
           console.error('[Places API (New)]', err);
+          showMessage(formatSearchError(err), true);
         }
         return;
       }
 
       const query = input.value?.trim();
-      if (!query) return;
+      if (!query || query.length < MIN_QUERY_LENGTH) return;
       try {
         selectPlace(await searchByText(query));
       } catch (err) {
-        console.error('[Places API (New)]', err);
+        console.error('[Place search]', err);
+        showMessage(formatSearchError(err), true);
       }
     };
 
@@ -212,15 +329,20 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
       const prediction = suggestionsRef.current[index];
       if (!prediction) return;
       try {
-        selectPlace(await resolvePrediction(prediction));
+        if (prediction._isGeocodeFallback) {
+          selectPlace(placeFromGeocode(prediction.point));
+        } else {
+          selectPlace(await resolvePrediction(prediction));
+        }
       } catch (err) {
         console.error('[Places API (New)]', err);
+        showMessage(formatSearchError(err), true);
       }
     };
 
-    const onScrollOrResize = () => {
+    const repositionDropdown = debounce(() => {
       if (dropdown.style.display === 'block') positionDropdown(dropdown, input);
-    };
+    }, SCROLL_DEBOUNCE_MS);
 
     input.addEventListener('input', onInput);
     input.addEventListener('focus', onFocus);
@@ -228,22 +350,25 @@ export function useMapPlaceSearch(inputRef, { maps, map, enabled, onSelect }) {
     input.addEventListener('keydown', onKeyDown);
     dropdown.addEventListener('mousedown', (e) => e.preventDefault());
     dropdown.addEventListener('click', onDropdownClick);
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', repositionDropdown, true);
+    window.addEventListener('resize', repositionDropdown);
 
     return () => {
       cancelled = true;
-      clearTimeout(debounceRef.current);
+      requestIdRef.current += 1;
+      debouncedFetch.cancel();
+      repositionDropdown.cancel();
       input.removeEventListener('input', onInput);
       input.removeEventListener('focus', onFocus);
       input.removeEventListener('blur', onBlur);
       input.removeEventListener('keydown', onKeyDown);
       dropdown.removeEventListener('click', onDropdownClick);
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', repositionDropdown, true);
+      window.removeEventListener('resize', repositionDropdown);
       hideDropdown(dropdown);
       sessionTokenRef.current = null;
       suggestionsRef.current = [];
+      placesUnavailableRef.current = false;
     };
   }, [maps, map, enabled, inputRef]);
 }

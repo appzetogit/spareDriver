@@ -2,6 +2,11 @@ import axios from 'axios';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import useAdminAuthStore from '../store/useAdminAuthStore';
 import useUserAuthStore from '../store/useUserAuthStore';
+import {
+  getAccessToken,
+  getRefreshToken,
+  persistTokensFromPayload,
+} from './authTokens';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000/api/v1';
 
@@ -30,8 +35,26 @@ function shouldSkipTokenRefresh(config) {
   );
 }
 
+function clearClientSession() {
+  useDriverAuthStore.getState().logout();
+  useAdminAuthStore.getState().logout();
+  useUserAuthStore.getState().logout();
+}
+
+api.interceptors.request.use((config) => {
+  const accessToken = getAccessToken();
+  if (accessToken) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    persistTokensFromPayload(response?.data?.data);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -42,12 +65,16 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        await api.post('/auth/refresh-token', {});
+        const refreshToken = getRefreshToken();
+        await api.post('/auth/refresh-token', refreshToken ? { refreshToken } : {});
+        const accessToken = getAccessToken();
+        if (accessToken) {
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        }
         return api(originalRequest);
       } catch (refreshError) {
-        useDriverAuthStore.getState().logout();
-        useAdminAuthStore.getState().logout();
-        useUserAuthStore.getState().logout();
+        clearClientSession();
         return Promise.reject(refreshError);
       }
     }

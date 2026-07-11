@@ -1,19 +1,8 @@
 import { useEffect } from 'react';
-import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging';
+import { getMessaging, onMessage } from 'firebase/messaging';
 import { getFirebaseApp } from '../config/firebase';
 import api from '../utils/api';
-
-async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return null;
-  try {
-    const existing = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    if (existing) return existing;
-    return navigator.serviceWorker.register('/firebase-messaging-sw.js');
-  } catch (err) {
-    console.warn('[fcm] service worker registration failed:', err?.message || err);
-    return null;
-  }
-}
+import { acquireFcmToken, getFcmPlatform } from '../utils/fcmTokenClient';
 
 async function postToken(path, token, platform) {
   await api.post(path, { token, platform });
@@ -31,43 +20,19 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
     let refreshTimer;
 
     const path = audience === 'driver' ? '/driver/fcm-token' : '/auth/fcm-token';
-    const platform = typeof window !== 'undefined' && window.SpareDriverNative?.platform === 'mobile'
-      ? 'mobile'
-      : 'web';
+    const platform = getFcmPlatform();
 
     (async () => {
       try {
-        const supported = await isSupported();
-        if (!supported) return;
-
-        const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-        if (!vapidKey) {
-          console.warn('[fcm] VITE_FIREBASE_VAPID_KEY is not set');
-          return;
-        }
-
         const app = getFirebaseApp();
         if (!app) return;
 
-        await registerServiceWorker();
-
-        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-          await Notification.requestPermission();
-        }
-        if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
-          return;
-        }
-
-        const messaging = getMessaging(app);
-        const swReg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-        const token = await getToken(messaging, {
-          vapidKey,
-          serviceWorkerRegistration: swReg || undefined,
-        });
+        const token = await acquireFcmToken();
         if (!token || cancelled) return;
 
         await postToken(path, token, platform);
 
+        const messaging = getMessaging(app);
         onMessage(messaging, (payload) => {
           const title = payload?.notification?.title || 'SpareDriver';
           const body = payload?.notification?.body || '';
@@ -78,10 +43,7 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
 
         refreshTimer = setInterval(async () => {
           try {
-            const refreshed = await getToken(messaging, {
-              vapidKey,
-              serviceWorkerRegistration: swReg || undefined,
-            });
+            const refreshed = await acquireFcmToken();
             if (refreshed && !cancelled) {
               await postToken(path, refreshed, platform);
             }

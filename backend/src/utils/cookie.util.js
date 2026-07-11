@@ -32,7 +32,8 @@ export function getBaseCookieOptions() {
 }
 
 /**
- * Sets httpOnly auth cookies. Tokens are never returned in JSON.
+ * Sets httpOnly auth cookies (browser). Tokens are also returned in JSON
+ * for WebView / Flutter clients that store them in localStorage.
  * @param {import('express').Response} res
  * @param {{ accessToken: string; refreshToken: string }} tokens
  */

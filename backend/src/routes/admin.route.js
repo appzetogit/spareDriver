@@ -35,6 +35,7 @@ import {
 import {
   adminListLegalDocuments,
   adminUpsertSubscriptionTerms,
+  adminUpsertSiteLegalDocument,
   adminUpdateLegalDocument,
 } from '../controllers/legalDocument.controller.js';
 import {
@@ -173,6 +174,12 @@ import {
   adminDeleteAd,
   adminUploadAdMedia,
 } from '../controllers/ad.controller.js';
+import {
+  getBulkPushAudienceStats,
+  sendBulkPromotionalPush,
+  listBulkPushHistory,
+  listBulkPushRecipients,
+} from '../controllers/adminBulkPush.controller.js';
 import { downloadDriverProfilePdf } from '../controllers/driverPdf.controller.js';
 import {
   getAdminUserAnalytics,
@@ -186,6 +193,16 @@ import {
   getAdminDriverEarnings,
   downloadDriverAnalyticsPdf,
 } from '../controllers/driverAnalytics.controller.js';
+import {
+  getAdminReportsOverview,
+  getAdminUserReports,
+  getAdminDriverReports,
+  getAdminBookingReports,
+  getAdminRevenueReports,
+  exportAdminRevenueReports,
+  getAdminGstReport,
+  exportAdminGstReport,
+} from '../controllers/reports.controller.js';
 import { uploadAdMedia, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
@@ -194,6 +211,16 @@ const { ALL_STAFF, OPERATIONS, SUPER_ADMIN } = ROUTE_ROLES;
 router.post('/auth/login', loginAdmin);
 router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
 router.get('/dashboard', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDashboard);
+
+/* ---- Reports & Analytics (super-admin only) --------------------------- */
+router.get('/reports/overview', protectStaff, restrictTo(...SUPER_ADMIN), getAdminReportsOverview);
+router.get('/reports/users', protectStaff, restrictTo(...SUPER_ADMIN), getAdminUserReports);
+router.get('/reports/drivers', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDriverReports);
+router.get('/reports/bookings', protectStaff, restrictTo(...SUPER_ADMIN), getAdminBookingReports);
+router.get('/reports/revenue', protectStaff, restrictTo(...SUPER_ADMIN), getAdminRevenueReports);
+router.get('/reports/revenue/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminRevenueReports);
+router.get('/reports/gst', protectStaff, restrictTo(...SUPER_ADMIN), getAdminGstReport);
+router.get('/reports/gst/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminGstReport);
 
 router.get('/users', protectStaff, restrictTo(...ALL_STAFF), getCustomers);
 router.get('/users/:userId/trips', protectStaff, restrictTo(...ALL_STAFF), getAdminUserTrips);
@@ -364,6 +391,31 @@ router.patch('/drivers/:id/unsuspend', protectStaff, restrictTo(...ALL_STAFF), u
 // the existing /common/upload* endpoints, then POST the resulting
 // URL + publicId here. Only OPERATIONS (admin/sub_admin) can mutate;
 // the team_member role isn't trusted with promotional content.
+router.get(
+  '/notifications/bulk-push/stats',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  getBulkPushAudienceStats,
+);
+router.get(
+  '/notifications/bulk-push/recipients',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  listBulkPushRecipients,
+);
+router.get(
+  '/notifications/bulk-push/history',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  listBulkPushHistory,
+);
+router.post(
+  '/notifications/bulk-push',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  sendBulkPromotionalPush,
+);
+
 router.get('/ads', protectStaff, restrictTo(...OPERATIONS), adminListAds);
 router.post(
   '/ads/upload',
@@ -413,6 +465,7 @@ router.delete('/settings/training-videos/:id', protectStaff, restrictTo(...OPERA
 
 router.get('/settings/legal-documents', protectStaff, restrictTo(...OPERATIONS), adminListLegalDocuments);
 router.post('/settings/subscription-terms', protectStaff, restrictTo(...OPERATIONS), adminUpsertSubscriptionTerms);
+router.post('/settings/legal-documents/:type', protectStaff, restrictTo(...OPERATIONS), adminUpsertSiteLegalDocument);
 router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateLegalDocument);
 
 router.get('/settings/support', protectStaff, restrictTo(...OPERATIONS), getAdminSupportConfig);

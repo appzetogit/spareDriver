@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api from '../utils/api';
 import { useFirebaseDriverLocations } from './useFirebaseDriverLocations';
 import { haversineMeters } from '../utils/geo';
+import { useDebouncedValue } from './useDebouncedValue';
+
+/** Don't refetch the Mongo seed until the centre moves at least this far. */
+const MIN_CENTER_MOVE_METERS = 250;
+/** Debounce centre changes from map pan / GPS jitter. */
+const CENTER_DEBOUNCE_MS = 600;
 
 /**
  * Reusable "drivers near a point" hook.
@@ -41,21 +47,37 @@ export function useNearbyDrivers({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const cancelledRef = useRef(false);
+  const lastFetchedCenterRef = useRef(null);
+
+  const debouncedCenter = useDebouncedValue(center, CENTER_DEBOUNCE_MS);
+
+  const fetchCenter = useMemo(() => {
+    if (!debouncedCenter?.lat || !debouncedCenter?.lng) return null;
+    const prev = lastFetchedCenterRef.current;
+    if (
+      prev &&
+      haversineMeters(prev, debouncedCenter) < MIN_CENTER_MOVE_METERS
+    ) {
+      return prev;
+    }
+    return debouncedCenter;
+  }, [debouncedCenter]);
 
   const fetchSeed = useCallback(async () => {
-    if (!enabled || !center?.lat || !center?.lng) return;
+    if (!enabled || !fetchCenter?.lat || !fetchCenter?.lng) return;
     setLoading(true);
     setError(null);
     try {
       const res = await api.get('/auth/drivers/nearby', {
         params: {
-          lat: center.lat,
-          lng: center.lng,
+          lat: fetchCenter.lat,
+          lng: fetchCenter.lng,
           radius: radiusMeters,
           limit,
         },
       });
       if (cancelledRef.current) return;
+      lastFetchedCenterRef.current = fetchCenter;
       const data = res?.data?.data || {};
       setSeed({
         drivers: Array.isArray(data.drivers) ? data.drivers : [],
@@ -69,7 +91,7 @@ export function useNearbyDrivers({
     } finally {
       if (!cancelledRef.current) setLoading(false);
     }
-  }, [enabled, center, radiusMeters, limit]);
+  }, [enabled, fetchCenter, radiusMeters, limit]);
 
   // Mount / refetch when the input changes.
   useEffect(() => {
@@ -84,10 +106,10 @@ export function useNearbyDrivers({
   // Optional polling so the seed doesn't go too stale (e.g. driver coming
   // online but Firebase isn't enabled).
   useEffect(() => {
-    if (!enabled || !refetchMs || !center?.lat || !center?.lng) return undefined;
+    if (!enabled || !refetchMs || !fetchCenter?.lat || !fetchCenter?.lng) return undefined;
     const id = setInterval(() => fetchSeed(), refetchMs);
     return () => clearInterval(id);
-  }, [enabled, refetchMs, fetchSeed, center]);
+  }, [enabled, refetchMs, fetchSeed, fetchCenter]);
 
   // Live overrides via Firebase.
   const { map: firebaseMap } = useFirebaseDriverLocations({ enabled });

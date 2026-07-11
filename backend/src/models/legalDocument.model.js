@@ -2,7 +2,18 @@ import mongoose from 'mongoose';
 
 export const LEGAL_DOCUMENT_TYPES = {
   SUBSCRIPTION: 'subscription',
+  PRIVACY: 'privacy',
+  TERMS: 'terms',
+  REFUND_CANCELLATION: 'refund_cancellation',
+  PRICING_SHIPPING: 'pricing_shipping',
 };
+
+export const SITE_LEGAL_DOCUMENT_TYPES = [
+  LEGAL_DOCUMENT_TYPES.PRIVACY,
+  LEGAL_DOCUMENT_TYPES.TERMS,
+  LEGAL_DOCUMENT_TYPES.REFUND_CANCELLATION,
+  LEGAL_DOCUMENT_TYPES.PRICING_SHIPPING,
+];
 
 const LEGAL_DOCUMENT_TYPE_LIST = Object.values(LEGAL_DOCUMENT_TYPES);
 
