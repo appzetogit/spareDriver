@@ -17,7 +17,17 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     refreshToken: result.refreshToken,
   });
 
-  return res.status(200).json(new ApiResponse(200, { admin: result.admin }, 'Staff login successful'));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        admin: result.admin,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Staff login successful',
+    ),
+  );
 });
 
 export const getStaffMe = asyncHandler(async (req, res) => {

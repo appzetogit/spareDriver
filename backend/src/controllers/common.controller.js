@@ -17,7 +17,16 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken = req.cookies[COOKIE_NAMES.refreshToken] || req.body.refreshToken;
   const tokens = await commonService.refreshSessionTokens(incomingRefreshToken);
   setAuthCookies(res, tokens);
-  return res.status(200).json(new ApiResponse(200, {}, 'Token refreshed successfully'));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      },
+      'Token refreshed successfully',
+    ),
+  );
 });
 
 export const logout = asyncHandler(async (req, res) => {

@@ -15,6 +15,7 @@ import {
 } from '../utils/jwt.util.js';
 import { isTestOtp, sendSmsOtp } from '../utils/otpService.js';
 import { userNeedsEmail as computeUserNeedsEmail } from '../utils/email.util.js';
+import { resolveAuthFcm } from './fcmToken.service.js';
 
 function sanitizeUser(doc) {
   const o = doc.toObject();
@@ -50,16 +51,16 @@ async function randomPasswordHash() {
 /**
  * @param {'user'|'driver'} accountType
  */
-export async function googleSignInService(credential, accountType) {
+export async function googleSignInService(credential, accountType, fcmInput = {}) {
   const profile = await verifyGoogleIdToken(credential);
 
   if (accountType === 'driver') {
-    return googleSignInDriver(profile);
+    return googleSignInDriver(profile, fcmInput);
   }
-  return googleSignInUser(profile);
+  return googleSignInUser(profile, fcmInput);
 }
 
-async function googleSignInUser(profile) {
+async function googleSignInUser(profile, fcmInput) {
   let user =
     (await User.findOne({ googleId: profile.googleId, isDeleted: false })) ||
     (await User.findOne({ email: profile.email, isDeleted: false }));
@@ -96,16 +97,18 @@ async function googleSignInUser(profile) {
 
   const safeUser = await User.findById(user._id).select('-password');
   const payload = tokenPayloadFromUser(safeUser);
+  const fcm = await resolveAuthFcm('user', safeUser._id, safeUser, fcmInput);
 
   return {
     user: sanitizeUser(safeUser),
     needsPhone: userNeedsPhone(safeUser),
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
+    fcm,
   };
 }
 
-async function googleSignInDriver(profile) {
+async function googleSignInDriver(profile, fcmInput) {
   let driver =
     (await Driver.findOne({ googleId: profile.googleId, isDeleted: false })) ||
     (await Driver.findOne({ email: profile.email, isDeleted: false }));
@@ -133,12 +136,14 @@ async function googleSignInDriver(profile) {
   }
 
   const payload = tokenPayloadFromDriver(driver);
+  const fcm = await resolveAuthFcm('driver', driver._id, driver, fcmInput);
 
   return {
     driver: sanitizeDriver(driver),
     needsPhone: !driver.phone,
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
+    fcm,
   };
 }
 

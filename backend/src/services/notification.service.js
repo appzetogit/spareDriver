@@ -1,13 +1,45 @@
 import Notification from '../models/notification.model.js';
 import { ApiError } from '../utils/apiError.js';
-import { NOTIFICATION_AUDIENCE } from '../constants/notificationTypes.js';
+import {
+  NOTIFICATION_AUDIENCE,
+  NOTIFICATION_RETENTION_DAYS,
+} from '../constants/notificationTypes.js';
+
+export function notificationRetentionCutoff(now = new Date()) {
+  return new Date(now.getTime() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+}
 
 function buildFilter({ audience, userId, driverId, isRead }) {
-  const filter = { audience };
+  const filter = {
+    audience,
+    createdAt: { $gte: notificationRetentionCutoff() },
+  };
   if (userId) filter.userId = userId;
   if (driverId) filter.driverId = driverId;
   if (typeof isRead === 'boolean') filter.isRead = isRead;
   return filter;
+}
+
+/** Delete notifications older than the retention window (all audiences). */
+export async function purgeExpiredNotificationsService() {
+  const cutoff = notificationRetentionCutoff();
+  const [expired, noisyAdmin] = await Promise.all([
+    Notification.deleteMany({ createdAt: { $lt: cutoff } }),
+    // Drop historically persisted admin noise we no longer keep.
+    Notification.deleteMany({
+      audience: NOTIFICATION_AUDIENCE.ADMIN,
+      type: {
+        $in: [
+          'new_user_registration',
+          'new_vendor_registration',
+          'scheduled_dispatch_retry',
+        ],
+      },
+    }),
+  ]);
+  return {
+    deletedCount: (expired.deletedCount || 0) + (noisyAdmin.deletedCount || 0),
+  };
 }
 
 export async function createNotificationRecord({

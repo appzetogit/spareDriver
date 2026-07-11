@@ -8,6 +8,7 @@ import {
   navigateUserAfterAuth,
   navigateDriverAfterAuth,
 } from '../utils/authNavigation';
+import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 
 /**
  * @param {'user' | 'driver'} accountType
@@ -30,7 +31,7 @@ export function useGoogleAuth(accountType) {
       try {
         const endpoint =
           accountType === 'driver' ? '/driver/auth/google' : '/auth/google';
-        const res = await api.post(endpoint, { credential });
+        const res = await api.post(endpoint, await withFcmAuthPayload({ credential }));
         const { needsPhone } = res.data.data;
 
         if (accountType === 'driver') {

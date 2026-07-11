@@ -14,7 +14,18 @@ export const verifyUserOtpAndRegister = asyncHandler(async (req, res) => {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
   });
-  return res.status(201).json(new ApiResponse(201, { user: result.user }, 'Registration successful'));
+  return res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        user: result.user,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Registration successful',
+    ),
+  );
 });
 
 export const verifyRegistrationPhoneOtp = asyncHandler(async (req, res) => {
@@ -41,7 +52,18 @@ export const completeRegistration = asyncHandler(async (req, res) => {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
   });
-  return res.status(201).json(new ApiResponse(201, { user: result.user }, 'Registration successful'));
+  return res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        user: result.user,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Registration successful',
+    ),
+  );
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
@@ -50,7 +72,18 @@ export const loginUser = asyncHandler(async (req, res) => {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
   });
-  return res.status(200).json(new ApiResponse(200, { user: result.user }, 'Login successful'));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        user: result.user,
+        fcm: result.fcm,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      'Login successful',
+    ),
+  );
 });
 
 export const updateUserOnboardingStep = asyncHandler(async (req, res) => {

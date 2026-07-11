@@ -17,6 +17,19 @@ async function bootstrap() {
   await initSuperAdmin();
   await initializeFirebase();
 
+  // Drop inbox rows older than 7 days immediately (TTL index also enforces this).
+  try {
+    const { purgeExpiredNotificationsService } = await import(
+      './services/notification.service.js'
+    );
+    const { deletedCount } = await purgeExpiredNotificationsService();
+    if (deletedCount > 0) {
+      console.log(`[notifications] purged ${deletedCount} expired inbox row(s)`);
+    }
+  } catch (err) {
+    console.warn('[notifications] purge failed:', err?.message);
+  }
+
   const httpServer = createServer(app);
   initializeSocket(httpServer);
 

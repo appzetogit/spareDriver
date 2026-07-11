@@ -57,6 +57,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   SUBSCRIPTION_REMINDER: 'subscription_reminder',
   SUBSCRIPTION_ASSIGNED: 'subscription_assigned',
   ADMIN_ANNOUNCEMENT: 'admin_announcement',
+  PROMOTIONAL: 'promotional',
   SUPPORT_REPLY: 'support_reply',
   EMERGENCY_ALERT: 'emergency_alert',
   BOOKING_REMINDER: 'booking_reminder',
@@ -83,3 +84,24 @@ export const NOTIFICATION_AUDIENCE = Object.freeze({
   DRIVER: 'driver',
   ADMIN: 'admin',
 });
+
+/** Inbox retention — older rows are purged and never returned by list APIs. */
+export const NOTIFICATION_RETENTION_DAYS = 7;
+
+/**
+ * Admin types worth keeping in the inbox DB.
+ * Everything else is socket-only (realtime toast) and not persisted.
+ */
+export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
+  new Set([
+    ADMIN_NOTIFICATION.NEW_DRIVER_REGISTRATION,
+    ADMIN_NOTIFICATION.SOS_TRIGGERED,
+    ADMIN_NOTIFICATION.REFUND_REQUEST,
+    ADMIN_NOTIFICATION.WITHDRAWAL_REQUEST,
+    ADMIN_NOTIFICATION.SCHEDULER_JOB_FAILED,
+    ADMIN_NOTIFICATION.PAYMENT_MISMATCH,
+    ADMIN_NOTIFICATION.ACCOUNTING_MISMATCH,
+    ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
+    ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
+  ]),
+);

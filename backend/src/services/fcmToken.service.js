@@ -78,3 +78,49 @@ export async function unregisterDriverFcmTokenService(driverId, { platform = 'al
   if (!updated) throw new ApiError(404, 'Driver not found');
   return updated;
 }
+
+export function normalizeFcmAuthInput({ fcmToken, token, platform } = {}) {
+  const clean = String(fcmToken || token || '').trim();
+  if (!clean) return null;
+  return { token: clean, platform: platform === 'mobile' ? 'mobile' : 'web' };
+}
+
+/** Best-effort FCM save during signup/login — must not block auth. */
+export async function applyFcmOnAuth(audience, id, input) {
+  const normalized = normalizeFcmAuthInput(input);
+  if (!normalized) return null;
+  try {
+    if (audience === 'user') {
+      return registerUserFcmTokenService(id, normalized);
+    }
+    return registerDriverFcmTokenService(id, normalized);
+  } catch {
+    return null;
+  }
+}
+
+export function fcmAuthResponse(doc, platform) {
+  const plat = platform === 'mobile' ? 'mobile' : platform === 'web' ? 'web' : null;
+  let fcmToken = null;
+  if (doc) {
+    if (plat === 'mobile') fcmToken = doc.fcmTokenMobile || null;
+    else if (plat === 'web') fcmToken = doc.fcmTokenWeb || doc.fcmToken || null;
+    else fcmToken = doc.fcmTokenWeb || doc.fcmTokenMobile || doc.fcmToken || null;
+  }
+  return {
+    fcmToken: fcmToken || null,
+    platform: plat,
+    hasWeb: Boolean(doc?.fcmTokenWeb || doc?.fcmToken),
+    hasMobile: Boolean(doc?.fcmTokenMobile),
+  };
+}
+
+export async function resolveAuthFcm(audience, id, doc, input) {
+  const normalized = normalizeFcmAuthInput(input);
+  let fcmDoc = doc;
+  if (normalized) {
+    const updated = await applyFcmOnAuth(audience, id, input);
+    if (updated) fcmDoc = updated;
+  }
+  return fcmAuthResponse(fcmDoc, normalized?.platform);
+}

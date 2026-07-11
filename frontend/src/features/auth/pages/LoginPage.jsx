@@ -6,6 +6,7 @@ import { Phone, Lock, ArrowLeft, Mail, Smartphone } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
+import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -40,10 +41,11 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const payload =
+      const payload = await withFcmAuthPayload(
         mode === 'phone'
           ? { phone, password }
-          : { email: email.trim().toLowerCase(), password };
+          : { email: email.trim().toLowerCase(), password },
+      );
       const res = await api.post('/auth/login', payload);
       const { user } = res.data.data;
       setAuth(user);
