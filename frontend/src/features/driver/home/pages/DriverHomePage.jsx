@@ -108,7 +108,11 @@ const DriverHomePage = () => {
   const handleToggle = async (next) => {
     if (next) {
       const result = await setOnline(true);
-      if (result.success) refetchOnline();
+      if (result.success) {
+        // Satisfy browser autoplay policy so the next booking offer can ring.
+        window.dispatchEvent(new CustomEvent('sd:prime-offer-audio'));
+        refetchOnline();
+      }
       return;
     }
     const result = await setOnline(false);

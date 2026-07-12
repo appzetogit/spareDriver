@@ -34,6 +34,7 @@ import {
   notifyUserDriverAssigned,
   notifyUserDriverAccepted,
   notifyDriverNewBookingRequest,
+  notifyDriverBookingOfferWithdrawn,
   notifyAdminEmergencyPoolEntered,
 } from '../utils/notificationDispatch.js';
 
@@ -278,6 +279,10 @@ function notifyWaveWithdrawn(driverIds, bookingId, reason) {
       bookingId: String(bookingId),
       reason,
     });
+    notifyDriverBookingOfferWithdrawn(id, {
+      bookingId,
+      reason,
+    }).catch(() => null);
   }
 }
 
@@ -398,14 +403,11 @@ export async function dispatchNextDriverService(bookingId) {
   }
   await booking.save();
 
-  // Emit to every driver in the wave in parallel.
+  // Emit to every driver in the wave in parallel (socket + FCM hydrate).
   for (const driver of drivers) {
-    emitToDriver(
-      driver._id,
-      S2C_EVENTS.BOOKING_OFFERED,
-      buildOfferPayload(booking, driver, { customer, car }),
-    );
-    notifyDriverNewBookingRequest(driver._id, booking).catch(() => null);
+    const offerPayload = buildOfferPayload(booking, driver, { customer, car });
+    emitToDriver(driver._id, S2C_EVENTS.BOOKING_OFFERED, offerPayload);
+    notifyDriverNewBookingRequest(driver._id, booking, offerPayload).catch(() => null);
   }
   emitUserDispatchUpdate(booking);
 
@@ -684,6 +686,10 @@ export async function rejectBookingService(bookingId, driverId) {
     bookingId: String(booking._id),
     reason: 'rejected_by_driver',
   });
+  notifyDriverBookingOfferWithdrawn(driverId, {
+    bookingId: booking._id,
+    reason: 'rejected_by_driver',
+  }).catch(() => null);
 
   if (stillPending === 0) {
     // Everyone in the wave bailed — move on with an expanded radius.
@@ -753,3 +759,49 @@ export async function withdrawCurrentOfferService(bookingId, reason = 'cancelled
 
   notifyWaveWithdrawn(pending, bookingId, reason);
 }
+
+/**
+ * Resume helper: if this driver still has a live wave offer, rebuild the
+ * same payload the socket would have sent. Used when the app reconnects
+ * or comes back from background and may have missed BOOKING_OFFERED.
+ */
+export async function getPendingOfferForDriverService(driverId) {
+  if (!driverId) return null;
+
+  const now = new Date();
+  const booking = await Booking.findOne({
+    isDeleted: false,
+    status: BOOKING_STATUS.SEARCHING,
+    'dispatch.pendingOfferIds': driverId,
+    'dispatch.currentExpiresAt': { $gt: now },
+  }).lean();
+
+  if (!booking) return null;
+
+  const offerRow = (booking.dispatch?.offers || []).find(
+    (o) => String(o.driverId) === String(driverId) && o.response == null,
+  );
+
+  const [car, customer] = await Promise.all([
+    booking.carId
+      ? Car.findById(booking.carId)
+          .populate('carTypeId', 'name')
+          .populate('brandId', 'name')
+          .populate('modelId', 'name')
+          .populate('fuelTypeId', 'name')
+          .lean()
+      : null,
+    User.findById(booking.userId).select('name phone_no profilePicture').lean(),
+  ]);
+
+  // `buildOfferPayload` expects a driver-ish object with distanceMeters.
+  return buildOfferPayload(
+    booking,
+    {
+      _id: driverId,
+      distanceMeters: offerRow?.distanceMeters ?? null,
+    },
+    { customer, car },
+  );
+}
+

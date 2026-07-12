@@ -103,31 +103,57 @@ const BookingOfferModal = () => {
   const offer = useDriverIncomingOfferStore((s) => s.offer);
   const busy = useDriverIncomingOfferStore((s) => s.busy);
   const error = useDriverIncomingOfferStore((s) => s.error);
-  const setOffer = useDriverIncomingOfferStore((s) => s.setOffer);
+  const hydrateOffer = useDriverIncomingOfferStore((s) => s.hydrateOffer);
   const clearOffer = useDriverIncomingOfferStore((s) => s.clearOffer);
+  const syncExpiry = useDriverIncomingOfferStore((s) => s.syncExpiry);
   const acceptOffer = useDriverIncomingOfferStore((s) => s.accept);
   const rejectOffer = useDriverIncomingOfferStore((s) => s.reject);
   const navigate = useNavigate();
 
   // Looping alert tone that rings while an offer is on screen. Stops the
-  // moment the offer is cleared (accept / skip / server-side withdrawal).
-  const { play: playAlert, stop: stopAlert } = useNotificationSound(OFFER_ALERT_SRC, {
-    loop: true,
-    volume: 0.9,
-  });
+  // moment the offer is cleared (accept / skip / server-side withdrawal /
+  // local hard expiry).
+  const { play: playAlert, stop: stopAlert, prime: primeAlert } = useNotificationSound(
+    OFFER_ALERT_SRC,
+    {
+      loop: true,
+      volume: 0.9,
+    },
+  );
+
+  // Unlock autoplay after an explicit user gesture (Go Online).
+  useEffect(() => {
+    const onPrime = () => primeAlert();
+    window.addEventListener('sd:prime-offer-audio', onPrime);
+    return () => window.removeEventListener('sd:prime-offer-audio', onPrime);
+  }, [primeAlert]);
 
   // Inbound offer from server → push into the store.
   useSocketEvent(S2C_EVENTS.BOOKING_OFFERED, (payload) => {
-    setOffer(payload);
+    hydrateOffer(payload);
   });
 
   // Server withdrew the offer (timeout / cancellation / picked someone else).
   useSocketEvent(S2C_EVENTS.BOOKING_OFFER_WITHDRAWN, (payload) => {
     const current = useDriverIncomingOfferStore.getState().offer;
-    if (!current || current.bookingId === payload?.bookingId) {
+    if (!current || String(current.bookingId) === String(payload?.bookingId)) {
       clearOffer();
     }
   });
+
+  // After WebView/tab freeze we can miss the server withdraw — re-check
+  // wall-clock expiry whenever the page becomes visible again.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncExpiry();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [syncExpiry]);
 
   // Ring while there's an active offer; silence otherwise. Keyed on the
   // bookingId so a back-to-back new offer restarts the tone instead of

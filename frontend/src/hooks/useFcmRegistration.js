@@ -3,14 +3,27 @@ import { getMessaging, onMessage } from 'firebase/messaging';
 import { getFirebaseApp } from '../config/firebase';
 import api from '../utils/api';
 import { acquireFcmToken, getFcmPlatform } from '../utils/fcmTokenClient';
+import useDriverIncomingOfferStore from '../store/driver/useDriverIncomingOfferStore';
+import {
+  applyDriverOfferFcmAction,
+  parseDriverOfferFcmData,
+} from '../utils/fcmOfferPayload';
 
 async function postToken(path, token, platform) {
   await api.post(path, { token, platform });
 }
 
+function handleDriverFcmPayload(payload) {
+  const data = payload?.data || {};
+  const action = parseDriverOfferFcmData(data);
+  if (!action) return false;
+  return applyDriverOfferFcmAction(useDriverIncomingOfferStore, action);
+}
+
 /**
  * Registers FCM token with backend after login.
  * Handles foreground messages and periodic token refresh.
+ * Driver audience also hydrates booking offers from FCM (socket fallback).
  */
 export function useFcmRegistration({ enabled = false, audience = 'user' }) {
   useEffect(() => {
@@ -18,6 +31,7 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
 
     let cancelled = false;
     let refreshTimer;
+    let unsubscribeOnMessage;
 
     const path = audience === 'driver' ? '/driver/fcm-token' : '/auth/fcm-token';
     const platform = getFcmPlatform();
@@ -33,7 +47,11 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
         await postToken(path, token, platform);
 
         const messaging = getMessaging(app);
-        onMessage(messaging, (payload) => {
+        unsubscribeOnMessage = onMessage(messaging, (payload) => {
+          if (audience === 'driver' && handleDriverFcmPayload(payload)) {
+            return;
+          }
+
           const title = payload?.notification?.title || 'SpareDriver';
           const body = payload?.notification?.body || '';
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -59,6 +77,7 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
     return () => {
       cancelled = true;
       if (refreshTimer) clearInterval(refreshTimer);
+      if (typeof unsubscribeOnMessage === 'function') unsubscribeOnMessage();
     };
   }, [enabled, audience]);
 }

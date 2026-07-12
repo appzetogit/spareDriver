@@ -264,17 +264,131 @@ export function notifyUserSosUpdate(userId, data) {
 /* Driver notifications                                                */
 /* ------------------------------------------------------------------ */
 
-export function notifyDriverNewBookingRequest(driverId, booking) {
+export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = null) {
+  const bookingId = String(booking._id || booking.id || '');
+  const expiresAt = offerPayload?.offerExpiresAt
+    ? new Date(offerPayload.offerExpiresAt).toISOString()
+    : booking.dispatch?.currentExpiresAt
+      ? new Date(booking.dispatch.currentExpiresAt).toISOString()
+      : '';
+
+  const compactOffer = offerPayload
+    ? compactBookingOfferForPush(offerPayload)
+    : null;
+
+  const pickupHint =
+    compactOffer?.pickup?.address ||
+    booking.pickup?.address ||
+    'nearby';
+
   return sendPushNotification(
     { driverId },
     {
       title: 'New booking request',
-      body: 'You have a new ride request nearby.',
+      body: `Ride request near ${String(pickupHint).slice(0, 80)}`,
       severity: 'warn',
-      type: DRIVER_NOTIFICATION.NEW_BOOKING_REQUEST,
-      data: { ...bookingRef(booking), priority: 'high' },
+      type: DRIVER_NOTIFICATION.BOOKING_OFFER,
+      // Foreground already shows BookingOfferModal via BOOKING_OFFERED —
+      // skip duplicate socket toast; still persist + FCM for history/background.
+      emitSocket: false,
+      data: {
+        kind: DRIVER_NOTIFICATION.BOOKING_OFFER,
+        ...bookingRef(booking),
+        priority: 'high',
+        offerExpiresAt: expiresAt,
+        fcmTag: `booking_offer_${bookingId}`,
+        fcmChannelId: 'booking_offers',
+        ...(compactOffer ? { offer: compactOffer } : {}),
+      },
     },
   );
+}
+
+/**
+ * Cancel a previously pushed offer (timeout / other driver accepted / cancel).
+ * FCM-only — socket withdraw is emitted separately by the dispatcher.
+ */
+export function notifyDriverBookingOfferWithdrawn(driverId, { bookingId, reason = '' }) {
+  const id = String(bookingId);
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Booking request expired',
+      body: 'This ride request is no longer available.',
+      type: DRIVER_NOTIFICATION.BOOKING_OFFER_WITHDRAWN,
+      persist: false,
+      emitSocket: false,
+      fcmSilent: true,
+      data: {
+        kind: DRIVER_NOTIFICATION.BOOKING_OFFER_WITHDRAWN,
+        bookingId: id,
+        reason: reason || '',
+        priority: 'high',
+        fcmTag: `booking_offer_${id}`,
+        fcmChannelId: 'booking_offers',
+        fcmSilent: true,
+      },
+    },
+  );
+}
+
+/** Slim offer for FCM data (keep under ~4KB). */
+function compactBookingOfferForPush(offer) {
+  return {
+    bookingId: String(offer.bookingId),
+    bookingNumber: offer.bookingNumber || '',
+    serviceType: offer.serviceType || '',
+    bookingType: offer.bookingType || '',
+    paymentMode: offer.paymentMode || '',
+    pickup: offer.pickup
+      ? { address: offer.pickup.address || '' }
+      : null,
+    dropoff: offer.dropoff
+      ? { address: offer.dropoff.address || '' }
+      : null,
+    hourly: offer.hourly
+      ? {
+          durationHours: offer.hourly.durationHours ?? null,
+          scheduledStartAt: offer.hourly.scheduledStartAt || null,
+        }
+      : null,
+    outstation: offer.outstation
+      ? {
+          days: offer.outstation.days ?? null,
+          destinationAddress: offer.outstation.destinationAddress || '',
+        }
+      : null,
+    fare: offer.fare
+      ? {
+          driverEarning: offer.fare.driverEarning ?? 0,
+          currency: offer.fare.currency || 'INR',
+        }
+      : { driverEarning: 0, currency: 'INR' },
+    customer: offer.customer
+      ? {
+          name: offer.customer.name || '',
+          phone: offer.customer.phone || '',
+          profilePicture: offer.customer.profilePicture || '',
+        }
+      : null,
+    car: offer.car
+      ? {
+          _id: offer.car._id || '',
+          vehicleNumber: offer.car.vehicleNumber || '',
+          transmission: offer.car.transmission || '',
+          carTypeName: offer.car.carTypeName || '',
+          brandName: offer.car.brandName || '',
+          modelName: offer.car.modelName || '',
+          fuelTypeName: offer.car.fuelTypeName || '',
+        }
+      : null,
+    offerExpiresAt: offer.offerExpiresAt
+      ? new Date(offer.offerExpiresAt).toISOString()
+      : null,
+    distanceMeters:
+      typeof offer.distanceMeters === 'number' ? offer.distanceMeters : null,
+    waveSize: offer.waveSize ?? null,
+  };
 }
 
 export function notifyDriverOrderAssigned(driverId, booking) {

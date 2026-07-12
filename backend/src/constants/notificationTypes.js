@@ -45,6 +45,10 @@ export const USER_NOTIFICATION = Object.freeze({
 /** Driver-facing notification kinds */
 export const DRIVER_NOTIFICATION = Object.freeze({
   NEW_BOOKING_REQUEST: 'new_booking_request',
+  /** Rich dual-channel booking offer (socket + FCM hydrate payload). */
+  BOOKING_OFFER: 'booking_offer',
+  /** FCM/socket cancel when wave times out or another driver wins. */
+  BOOKING_OFFER_WITHDRAWN: 'booking_offer_withdrawn',
   BOOKING_CANCELLED: 'booking_cancelled',
   CUSTOMER_CANCELLED: 'customer_cancelled',
   ORDER_ASSIGNED: 'order_assigned',

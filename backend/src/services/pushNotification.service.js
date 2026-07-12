@@ -30,7 +30,6 @@ async function loadFcmDoc({ userId, driverId }) {
 }
 
 async function pruneInvalidToken(target, token) {
-  const updates = { fcmTokenWeb: '', fcmTokenMobile: '', fcmToken: '' };
   if (target.userId) {
     const doc = await User.findById(target.userId).select('fcmToken fcmTokenWeb fcmTokenMobile').lean();
     if (!doc) return;
@@ -60,6 +59,7 @@ function stringifyData(data = {}) {
   const out = {};
   for (const [key, value] of Object.entries(data)) {
     if (value == null) continue;
+    if (key === 'fcmTag' || key === 'fcmChannelId' || key === 'fcmSilent') continue;
     out[key] = typeof value === 'string' ? value : JSON.stringify(value);
   }
   return out;
@@ -85,7 +85,12 @@ async function persistUserDriverNotification(target, payload) {
   }
 }
 
-async function sendFcmToTarget(target, { title, body, data }) {
+/**
+ * @param {object} target
+ * @param {{ title?: string, body?: string, data?: object }} payload
+ * @param {{ silent?: boolean }} [opts]
+ */
+async function sendFcmToTarget(target, { title, body, data }, opts = {}) {
   if (!isFirebaseReady()) return;
 
   const doc = await loadFcmDoc(target);
@@ -93,15 +98,55 @@ async function sendFcmToTarget(target, { title, body, data }) {
   if (!tokens.length) return;
 
   const admin = getFirebaseAdmin();
-  const messageBase = {
-    notification: { title, body },
-    data: stringifyData(data),
-    android: { priority: data?.priority === 'high' ? 'high' : 'normal' },
-    apns: {
-      headers: data?.priority === 'high' ? { 'apns-priority': '10' } : {},
-      payload: { aps: { sound: 'default' } },
+  const high = data?.priority === 'high';
+  const tag = data?.fcmTag ? String(data.fcmTag) : undefined;
+  const channelId = data?.fcmChannelId ? String(data.fcmChannelId) : undefined;
+  const silent = Boolean(opts.silent || data?.fcmSilent);
+
+  const dataPayload = stringifyData(data);
+  // Keep tag in data so web SW / Flutter can cancel matching notifs.
+  if (tag) dataPayload.fcmTag = tag;
+  if (channelId) dataPayload.fcmChannelId = channelId;
+
+  const android = { priority: high ? 'high' : 'normal' };
+  if (tag) android.collapseKey = tag;
+  if (!silent) {
+    android.notification = {
+      sound: 'default',
+      ...(tag ? { tag } : {}),
+      ...(channelId ? { channelId } : {}),
+    };
+  }
+
+  const apns = {
+    headers: high ? { 'apns-priority': '10' } : {},
+    payload: {
+      aps: silent
+        ? { 'content-available': 1 }
+        : { sound: 'default', ...(tag ? { threadId: tag } : {}) },
     },
   };
+
+  const webpush = {
+    headers: high ? { Urgency: 'high' } : {},
+  };
+  if (!silent) {
+    webpush.notification = {
+      ...(tag ? { tag } : {}),
+      renotify: Boolean(tag),
+    };
+  }
+
+  const messageBase = {
+    data: dataPayload,
+    android,
+    apns,
+    webpush,
+  };
+
+  if (!silent && title) {
+    messageBase.notification = { title, body: body || '' };
+  }
 
   await Promise.all(
     tokens.map(async (token) => {
@@ -120,10 +165,25 @@ async function sendFcmToTarget(target, { title, body, data }) {
 
 /**
  * User/driver notification: Socket.IO toast + FCM push + DB record.
+ *
+ * @param {object} target
+ * @param {object} options
+ * @param {boolean} [options.persist=true]
+ * @param {boolean} [options.emitSocket=true]
+ * @param {boolean} [options.fcmSilent=false]  data-oriented FCM (withdraw/cancel)
  */
 export async function sendPushNotification(
   target,
-  { title, body = '', severity = 'info', data = {}, type } = {},
+  {
+    title,
+    body = '',
+    severity = 'info',
+    data = {},
+    type,
+    persist = true,
+    emitSocket = true,
+    fcmSilent = false,
+  } = {},
 ) {
   const payload = {
     title,
@@ -133,14 +193,18 @@ export async function sendPushNotification(
     type: data?.kind || type || 'general',
   };
 
-  if (target.userId) {
-    emitNotification({ userId: target.userId }, payload);
-  } else if (target.driverId) {
-    emitNotification({ driverId: target.driverId }, payload);
+  if (emitSocket) {
+    if (target.userId) {
+      emitNotification({ userId: target.userId }, payload);
+    } else if (target.driverId) {
+      emitNotification({ driverId: target.driverId }, payload);
+    }
   }
 
-  await persistUserDriverNotification(target, payload);
-  await sendFcmToTarget(target, payload);
+  if (persist) {
+    await persistUserDriverNotification(target, payload);
+  }
+  await sendFcmToTarget(target, payload, { silent: fcmSilent });
 }
 
 /**

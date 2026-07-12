@@ -32,6 +32,7 @@ import {
   acceptBookingService,
   rejectBookingService,
   withdrawCurrentOfferService,
+  getPendingOfferForDriverService,
 } from '../services/bookingDispatch.service.js';
 import {
   createBookingPaymentOrderService,
@@ -150,6 +151,13 @@ export const verifyBookingPayment = asyncHandler(async (req, res) => {
 export const getDriverActiveBooking = asyncHandler(async (req, res) => {
   const booking = await getActiveBookingForDriverService(req.driver._id);
   return res.status(200).json(new ApiResponse(200, { booking }, 'Driver active booking'));
+});
+
+export const getDriverPendingOffer = asyncHandler(async (req, res) => {
+  const offer = await getPendingOfferForDriverService(req.driver._id);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { offer }, offer ? 'Pending offer' : 'No pending offer'));
 });
 
 export const driverAcceptBooking = asyncHandler(async (req, res) => {
