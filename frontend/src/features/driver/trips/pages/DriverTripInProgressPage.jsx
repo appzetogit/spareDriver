@@ -80,6 +80,12 @@ const DriverTripInProgressPage = () => {
     return label;
   }, [booking]);
 
+  const customer = typeof booking?.userId === 'object' ? booking.userId : null;
+  const customerPhone = customer?.phone_no || customer?.phone || null;
+  const customerCallHref = customerPhone
+    ? `tel:+91${String(customerPhone).replace(/\D/g, '')}`
+    : null;
+
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
       <div className="bg-dark px-4 pt-4 pb-6 rounded-b-3xl text-center">
@@ -126,20 +132,31 @@ const DriverTripInProgressPage = () => {
           </div>
         ) : null}
         <div className="flex gap-3 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          {[
-            { icon: Phone, label: 'Call' },
-            { icon: Navigation, label: 'Navigation' },
-            { icon: Headphones, label: 'Support' },
-          ].map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              className="flex-1 flex flex-col items-center gap-1.5 p-3 bg-white rounded-2xl shadow-card"
-            >
-              <action.icon className="w-5 h-5 text-text-secondary" />
-              <span className="text-[10px] text-text-muted">{action.label}</span>
-            </button>
-          ))}
+          <button
+            type="button"
+            disabled={!customerCallHref}
+            onClick={() => {
+              if (customerCallHref) window.location.href = customerCallHref;
+            }}
+            className="flex-1 flex flex-col items-center gap-1.5 p-3 bg-white rounded-2xl shadow-card disabled:opacity-50"
+          >
+            <Phone className="w-5 h-5 text-text-secondary" />
+            <span className="text-[10px] text-text-muted">Call</span>
+          </button>
+          <button
+            type="button"
+            className="flex-1 flex flex-col items-center gap-1.5 p-3 bg-white rounded-2xl shadow-card"
+          >
+            <Navigation className="w-5 h-5 text-text-secondary" />
+            <span className="text-[10px] text-text-muted">Navigation</span>
+          </button>
+          <button
+            type="button"
+            className="flex-1 flex flex-col items-center gap-1.5 p-3 bg-white rounded-2xl shadow-card"
+          >
+            <Headphones className="w-5 h-5 text-text-secondary" />
+            <span className="text-[10px] text-text-muted">Support</span>
+          </button>
         </div>
       </div>
     </div>

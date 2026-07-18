@@ -2,7 +2,10 @@ import Booking from '../models/booking.model.js';
 import Car from '../models/user/car.model.js';
 import User from '../models/user.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
-import { findDriversInExpandingRadius } from './driverFinder.service.js';
+import {
+  findDriversInExpandingRadius,
+  findDriversWithinRadius,
+} from './driverFinder.service.js';
 import { syncFirebaseDriverStatus } from './driverLocation.service.js';
 import {
   adminMarkNoDriversFoundService,
@@ -16,6 +19,7 @@ import {
   PAYMENT_MODE,
   PAYMENT_POLICY,
   DISPATCH,
+  DISPATCH_MODE,
   DISPATCH_RESPONSE,
   SCHEDULED_BOOKING,
 } from '../constants/bookingStatus.js';
@@ -23,6 +27,11 @@ import {
   estimateBookingWindow,
   findConflictingDriverIds,
 } from './driverConflict.service.js';
+import {
+  isInboxBookingType,
+  resolveBookingSearchStartAt,
+} from '../utils/bookingInbox.js';
+import mongoose from 'mongoose';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
   emitToDriver,
@@ -35,34 +44,20 @@ import {
   notifyUserDriverAccepted,
   notifyDriverNewBookingRequest,
   notifyDriverBookingOfferWithdrawn,
-  notifyAdminEmergencyPoolEntered,
 } from '../utils/notificationDispatch.js';
 
 /**
- * Wave-broadcast booking dispatcher.
+ * Booking dispatcher — two modes:
  *
- * For every booking we run a sequence of "waves". Each wave:
+ * Instant (wave):
+ *   Expanding-radius waves of WAVE_SIZE drivers, OFFER_TIMEOUT_SECONDS
+ *   per wave, retries until MAX_ATTEMPTS → no_drivers_found.
  *
- *   1. Picks the closest WAVE_SIZE (=5) approved, online, idle drivers that
- *      haven't been offered yet, using an expanding-radius search starting at
- *      SEARCH_RADIUS_START_METERS (1 km) and growing up to either
- *      `dispatch.maxRadiusMeters` (default 5 km) or the booking's zone radius.
- *   2. Emits BOOKING_OFFERED to every selected driver in parallel.
- *   3. Starts a wave-level setTimeout. First driver to accept wins; the
- *      losing drivers receive BOOKING_OFFER_WITHDRAWN. If the timer expires
- *      without an accept, all unresponded offers are recorded as TIMEOUT
- *      and the next wave is dispatched.
- *
- * The lifecycle is essentially:
- *
- *   ┌─ dispatchNextWave ─────────────────────────────────────────────────┐
- *   │ 1. Pick next wave of N drivers (expanding radius)                  │
- *   │ 2. Emit BOOKING_OFFERED to all of them                             │
- *   │ 3. Start ONE wave timer                                            │
- *   │ 4. accept → withdraw others → STOP                                 │
- *   │ 5. all reject or timer expires → loop to step 1 (larger radius)    │
- *   │ 6. radius hits cap & wave is empty → no_drivers_found              │
- *   └────────────────────────────────────────────────────────────────────┘
+ * Scheduled (inbox):
+ *   One broadcast to every matching driver within max radius. No offer
+ *   expiry / wave timer / retry churn. Drivers discover via Incoming
+ *   Requests; first accept wins. Unmatched bookings past escalateAt are
+ *   swept into the emergency pool by the 45-min batch cron.
  *
  * Wave timers live in memory only (`waveTimers`). A server restart drops
  * outstanding timers; the next driver action or admin sweep resumes things.
@@ -239,7 +234,6 @@ function buildOfferPayload(booking, driver, { customer, car } = {}) {
     customer: customer
       ? {
           name: customer.name || '',
-          phone: customer.phone_no ? String(customer.phone_no) : '',
           profilePicture: customer.profilePicture || '',
         }
       : null,
@@ -254,10 +248,23 @@ function buildOfferPayload(booking, driver, { customer, car } = {}) {
           fuelTypeName: car.fuelTypeId?.name || '',
         }
       : null,
-    offerExpiresAt: booking.dispatch.currentExpiresAt,
+    offerExpiresAt: booking.dispatch.currentExpiresAt || null,
     distanceMeters: driver.distanceMeters ?? null,
     waveSize: booking.dispatch.pendingOfferIds.length,
+    /** True when this is an open inbox item (no countdown). */
+    inbox: booking.dispatch?.mode === DISPATCH_MODE.INBOX
+      || (isInboxBookingType(booking.bookingType)
+        && !booking.dispatch?.currentExpiresAt),
   };
+}
+
+function isInboxDispatch(booking) {
+  if (!booking) return false;
+  if (booking.dispatch?.mode === DISPATCH_MODE.INBOX) return true;
+  return (
+    isInboxBookingType(booking.bookingType)
+    && booking.dispatch?.mode !== DISPATCH_MODE.WAVE
+  );
 }
 
 function emitUserDispatchUpdate(booking) {
@@ -291,9 +298,225 @@ function notifyWaveWithdrawn(driverIds, bookingId, reason) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Start (or continue) the dispatch loop for a booking by sending the next
- * wave of offers. Idempotent — calling this multiple times for the same
- * booking is safe; only one wave timer can exist at a time per bookingId.
+ * Shared candidate prep used by both wave + inbox dispatch paths.
+ */
+async function prepareDispatchCandidates(booking, { excludeAlreadyOffered = true } = {}) {
+  const [lng, lat] = booking.pickup?.location?.coordinates || [];
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return { ok: false, reason: 'bad_pickup' };
+  }
+
+  const car = booking.carId
+    ? await Car.findById(booking.carId)
+        .populate('carTypeId', 'name')
+        .populate('brandId', 'name')
+        .populate('modelId', 'name')
+        .populate('fuelTypeId', 'name')
+        .lean()
+    : null;
+  const customer = await User.findById(booking.userId)
+    .select('name phone_no profilePicture')
+    .lean();
+  const carTypeIds = car?.carTypeId?._id ? [String(car.carTypeId._id)] : [];
+
+  const bufferMinutes = await resolveRideBufferMinutes(booking.serviceType);
+  const newWindow = estimateBookingWindow(booking);
+  const conflictedDriverIds = newWindow
+    ? await findConflictingDriverIds({
+        window: newWindow,
+        excludeBookingId: booking._id,
+        bufferMinutes,
+      })
+    : [];
+
+  const excludeDriverIds = [
+    ...(excludeAlreadyOffered ? alreadyOfferedDriverIds(booking) : []),
+    ...conflictedDriverIds,
+  ];
+
+  return {
+    ok: true,
+    lat,
+    lng,
+    car,
+    customer,
+    carTypeIds,
+    excludeDriverIds,
+    startMeters:
+      booking.dispatch?.currentRadiusMeters || DISPATCH.SEARCH_RADIUS_START_METERS,
+    maxMeters:
+      booking.dispatch?.maxRadiusMeters || DISPATCH.SEARCH_RADIUS_MAX_METERS,
+  };
+}
+
+/**
+ * One-shot (or refresh) inbox broadcast for scheduled bookings.
+ *
+ * @param {string} bookingId
+ * @param {{ rebroadcast?: boolean }} [opts]
+ *   rebroadcast=true → add newly matching drivers without clearing
+ *   existing pending inbox holders (used by the 45-min cron).
+ */
+export async function broadcastScheduledInboxService(bookingId, opts = {}) {
+  const rebroadcast = !!opts.rebroadcast;
+  const booking = await Booking.findById(bookingId);
+  if (!booking) return { ok: false, reason: 'not_found' };
+  if (booking.status !== BOOKING_STATUS.SEARCHING) {
+    return { ok: false, reason: 'not_searching' };
+  }
+
+  clearWaveTimer(bookingId);
+  await selfHealDriverLockState();
+
+  // First broadcast only: skip if already ran (kickoff idempotency).
+  // Rebroadcast path continues so newly-online drivers get the request.
+  if (
+    !rebroadcast
+    && booking.dispatch?.mode === DISPATCH_MODE.INBOX
+    && (booking.dispatch?.attemptsCount || 0) >= 1
+  ) {
+    return {
+      ok: true,
+      alreadyBroadcast: true,
+      driverIds: (booking.dispatch.pendingOfferIds || []).map(String),
+      newDriverCount: 0,
+    };
+  }
+
+  // Never re-offer drivers who already rejected, or who already hold a
+  // pending inbox row. Conflicted drivers come from prepare below.
+  const skipIds = new Set([
+    ...(booking.dispatch?.pendingOfferIds || []).map(String),
+    ...(booking.dispatch?.offers || [])
+      .filter(
+        (o) =>
+          o.response === DISPATCH_RESPONSE.REJECTED
+          || o.response === DISPATCH_RESPONSE.ACCEPTED,
+      )
+      .map((o) => String(o.driverId)),
+  ]);
+
+  const prepared = await prepareDispatchCandidates(booking, {
+    excludeAlreadyOffered: false,
+  });
+  if (!prepared.ok) {
+    booking.dispatch = booking.dispatch || {};
+    booking.dispatch.mode = DISPATCH_MODE.INBOX;
+    booking.dispatch.currentExpiresAt = null;
+    if (!rebroadcast) {
+      booking.dispatch.pendingOfferIds = [];
+      booking.dispatch.attemptsCount = 1;
+    }
+    await booking.save();
+    emitUserDispatchUpdate(booking);
+    return { ok: true, empty: true, reason: prepared.reason, newDriverCount: 0 };
+  }
+
+  const { lat, lng, car, customer, carTypeIds, excludeDriverIds, maxMeters } =
+    prepared;
+
+  const excludeMerged = [
+    ...new Set([...excludeDriverIds.map(String), ...skipIds]),
+  ];
+
+  // Outstation auto-search only offers to drivers who opted in, and
+  // prefer those who listed at least one of the booking's zones.
+  let extraMatch = null;
+  if (booking.bookingType === BOOKING_TYPE.OUTSTATION) {
+    extraMatch = { availableForOutstation: true };
+    const zoneOids = (booking.zoneIds || [])
+      .map((z) => {
+        try {
+          return new mongoose.Types.ObjectId(String(z?._id || z));
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    if (zoneOids.length) {
+      extraMatch.$or = [
+        { preferredOutstationZones: { $in: zoneOids } },
+        { outstationAllIndiaOk: true },
+      ];
+    }
+  }
+
+  const drivers = await findDriversWithinRadius({
+    lat,
+    lng,
+    radiusMeters: maxMeters,
+    limit: SCHEDULED_BOOKING.INBOX_BROADCAST_LIMIT,
+    carTypeIds,
+    excludeDriverIds: excludeMerged,
+    extraMatch,
+  });
+
+  booking.dispatch = booking.dispatch || {};
+  booking.dispatch.mode = DISPATCH_MODE.INBOX;
+  booking.dispatch.currentExpiresAt = null;
+  booking.dispatch.currentRadiusMeters = maxMeters;
+  booking.dispatch.attemptsCount = Math.max(1, booking.dispatch.attemptsCount || 0);
+
+  const existingPending = new Set(
+    (booking.dispatch.pendingOfferIds || []).map(String),
+  );
+  const alreadyOfferedRows = new Set(
+    (booking.dispatch.offers || []).map((o) => String(o.driverId)),
+  );
+
+  const newDrivers = [];
+  for (const driver of drivers) {
+    const id = String(driver._id);
+    if (existingPending.has(id)) continue;
+    existingPending.add(id);
+    newDrivers.push(driver);
+    if (!alreadyOfferedRows.has(id)) {
+      booking.dispatch.offers.push({
+        driverId: driver._id,
+        offeredAt: new Date(),
+        response: null,
+        distanceMeters: driver.distanceMeters ?? null,
+      });
+    } else {
+      // Previously timed-out / cancelled offer — reopen as pending
+      const row = booking.dispatch.offers.find(
+        (o) => String(o.driverId) === id && o.response == null,
+      );
+      if (!row) {
+        booking.dispatch.offers.push({
+          driverId: driver._id,
+          offeredAt: new Date(),
+          response: null,
+          distanceMeters: driver.distanceMeters ?? null,
+        });
+      }
+    }
+  }
+
+  booking.dispatch.pendingOfferIds = [...existingPending];
+  await booking.save();
+
+  for (const driver of newDrivers) {
+    const offerPayload = buildOfferPayload(booking, driver, { customer, car });
+    emitToDriver(driver._id, S2C_EVENTS.BOOKING_OFFERED, offerPayload);
+    notifyDriverNewBookingRequest(driver._id, booking, offerPayload).catch(() => null);
+  }
+  emitUserDispatchUpdate(booking);
+
+  return {
+    ok: true,
+    empty: existingPending.size === 0,
+    rebroadcast,
+    newDriverCount: newDrivers.length,
+    driverIds: [...existingPending],
+    radiusMeters: maxMeters,
+  };
+}
+
+/**
+ * Start (or continue) the dispatch loop for a booking. Scheduled bookings
+ * use the inbox broadcast; instant/outstation (and any booking already
+ * marked wave-mode) use timed waves.
  *
  * @param {string} bookingId
  */
@@ -302,6 +525,11 @@ export async function dispatchNextDriverService(bookingId) {
   if (!booking) return { ok: false, reason: 'not_found' };
   if (booking.status !== BOOKING_STATUS.SEARCHING) {
     return { ok: false, reason: 'not_searching' };
+  }
+
+  // Scheduled + outstation → open inbox (no timers).
+  if (isInboxBookingType(booking.bookingType)) {
+    return broadcastScheduledInboxService(bookingId);
   }
 
   clearWaveTimer(bookingId);
@@ -318,59 +546,23 @@ export async function dispatchNextDriverService(bookingId) {
     return failBookingNoDrivers(bookingId);
   }
 
-  const [lng, lat] = booking.pickup?.location?.coordinates || [];
-  if (typeof lat !== 'number' || typeof lng !== 'number') {
+  const prepared = await prepareDispatchCandidates(booking, {
+    excludeAlreadyOffered: true,
+  });
+  if (!prepared.ok) {
     return failBookingNoDrivers(bookingId);
   }
 
-  // Expanding search starts at the radius we left off on (1 km → step → cap).
-  const startMeters =
-    booking.dispatch?.currentRadiusMeters || DISPATCH.SEARCH_RADIUS_START_METERS;
-  const maxMeters = booking.dispatch?.maxRadiusMeters || DISPATCH.SEARCH_RADIUS_MAX_METERS;
-
-  // Restrict driver matching to the user's chosen car-type so the driver
-  // who picks up the offer is qualified to drive that vehicle. We also
-  // pull the full car + customer doc here so we can hydrate the offer
-  // payload without an extra round-trip per driver in the wave.
-  const car = booking.carId
-    ? await Car.findById(booking.carId)
-        .populate('carTypeId', 'name')
-        .populate('brandId', 'name')
-        .populate('modelId', 'name')
-        .populate('fuelTypeId', 'name')
-        .lean()
-    : null;
-  const customer = await User.findById(booking.userId)
-    .select('name phone_no profilePicture')
-    .lean();
-  const carTypeIds = car?.carTypeId?._id ? [String(car.carTypeId._id)] : [];
-
-  // Resolve the per-service buffer (admin-tunable). Falls back to the
-  // platform-wide default when pricing isn't configured for the service.
-  const bufferMinutes = await resolveRideBufferMinutes(booking.serviceType);
-
-  // Exclude drivers whose existing accepted/scheduled bookings would
-  // overlap this booking's time window once the buffer is applied. Lets
-  // a driver who's holding a 6 PM scheduled ride still pick up an
-  // 11 AM instant offer — but blocks them from a 5:30 PM ride that
-  // would clash with their commitment.
-  //
-  // The buffer is applied EXACTLY ONCE — on the existing booking side
-  // inside `findConflictingDriverIds` — so admins reading the modal as
-  // "30 min between rides" get exactly 30 min, not 60.
-  const newWindow = estimateBookingWindow(booking);
-  const conflictedDriverIds = newWindow
-    ? await findConflictingDriverIds({
-        window: newWindow,
-        excludeBookingId: booking._id,
-        bufferMinutes,
-      })
-    : [];
-
-  const excludeDriverIds = [
-    ...alreadyOfferedDriverIds(booking),
-    ...conflictedDriverIds,
-  ];
+  const {
+    lat,
+    lng,
+    car,
+    customer,
+    carTypeIds,
+    excludeDriverIds,
+    startMeters,
+    maxMeters,
+  } = prepared;
 
   const { drivers, radiusMeters } = await findDriversInExpandingRadius({
     lat,
@@ -389,6 +581,7 @@ export async function dispatchNextDriverService(bookingId) {
   }
 
   const expiresAt = new Date(Date.now() + DISPATCH.OFFER_TIMEOUT_SECONDS * 1000);
+  booking.dispatch.mode = DISPATCH_MODE.WAVE;
   booking.dispatch.currentExpiresAt = expiresAt;
   booking.dispatch.currentRadiusMeters = radiusMeters;
   booking.dispatch.attemptsCount = (booking.dispatch.attemptsCount || 0) + 1;
@@ -430,35 +623,24 @@ export async function dispatchNextDriverService(bookingId) {
 async function failBookingNoDrivers(bookingId) {
   clearWaveTimer(bookingId);
 
-  // Scheduled bookings get a "retry, then escalate" loop instead of an
-  // immediate dead-end. We park the booking back in PENDING_ASSIGNMENT
-  // and queue another assign attempt RETRY_DELAY_MINUTES later — until
-  // we run out of runway before the emergency-pool cutoff, at which
-  // point the booking is parked in the pool for an admin to take.
-  const peek = await Booking.findById(bookingId).select(
-    'bookingType bookingNumber userId',
-  );
+  // Scheduled: stay in SEARCHING with an empty inbox until the batch
+  // escalate cron (or a later manual path) moves the booking. Do NOT
+  // enqueue per-booking retry waves.
+  const peek = await Booking.findById(bookingId);
   if (peek?.bookingType === BOOKING_TYPE.SCHEDULED) {
-    const { scheduleAssignmentRetryOrEscalate } = await import(
-      './bookingScheduled.service.js'
-    );
-    const outcome = await scheduleAssignmentRetryOrEscalate(bookingId);
-    if (outcome.retried) {
-      const { notifyAdminScheduledDispatchRetry } = await import('../utils/notificationDispatch.js');
-      notifyAdminScheduledDispatchRetry(peek, outcome.attempt).catch(() => null);
-      return { ok: false, reason: 'scheduled_retry_queued', attempt: outcome.attempt };
+    peek.dispatch = peek.dispatch || {};
+    peek.dispatch.mode = DISPATCH_MODE.INBOX;
+    peek.dispatch.pendingOfferIds = [];
+    peek.dispatch.currentExpiresAt = null;
+    if (!(peek.dispatch.attemptsCount > 0)) {
+      peek.dispatch.attemptsCount = 1;
     }
-    if (outcome.escalated) {
-      notifyAdminEmergencyPoolEntered(peek).catch(() => null);
-      return { ok: false, reason: 'in_emergency_pool' };
-    }
-    // Unknown failure path (e.g. booking deleted out from under us);
-    // fall through to the legacy terminator so the caller still sees a
-    // settled status.
+    await peek.save();
+    emitUserDispatchUpdate(peek);
+    return { ok: false, reason: 'scheduled_awaiting_emergency_pool' };
   }
 
-  // Instant bookings (or scheduled bookings that somehow escaped the
-  // branch above) follow the legacy path: NO_DRIVERS_FOUND + refund.
+  // Instant bookings follow the legacy path: NO_DRIVERS_FOUND + refund.
   const booking = await adminMarkNoDriversFoundService(bookingId);
   const escalated = booking.status === BOOKING_STATUS.IN_EMERGENCY_POOL;
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, {
@@ -495,11 +677,11 @@ async function failBookingNoDrivers(bookingId) {
  */
 async function shouldImmediatelyLockDriver(booking) {
   if (!booking) return true;
-  if (booking.bookingType !== BOOKING_TYPE.SCHEDULED) return true;
+  if (!isInboxBookingType(booking.bookingType)) return true;
 
-  const scheduledAt = booking?.hourly?.scheduledStartAt;
+  const scheduledAt = resolveBookingSearchStartAt(booking);
   if (!scheduledAt) return true;
-  const startMs = new Date(scheduledAt).getTime();
+  const startMs = scheduledAt.getTime();
   if (!Number.isFinite(startMs)) return true;
 
   const bufferMinutes = await resolveRideBufferMinutes(booking.serviceType);
@@ -507,19 +689,49 @@ async function shouldImmediatelyLockDriver(booking) {
   return startMs - Date.now() <= lockLeadMs;
 }
 
-/** Driver accepts a live offer for a booking. First driver in the wave wins. */
+/** Driver accepts a live offer for a booking. First driver wins (atomic claim). */
 export async function acceptBookingService(bookingId, driverId) {
-  const booking = await Booking.findOne({ _id: bookingId, isDeleted: false });
-  if (!booking) return { ok: false, reason: 'not_found' };
-  if (booking.status !== BOOKING_STATUS.SEARCHING) {
-    return { ok: false, reason: 'no_longer_searching' };
-  }
-  const pending = (booking.dispatch?.pendingOfferIds || []).map(String);
-  if (!pending.includes(String(driverId))) {
+  // Atomic first-wins: claim the booking while still SEARCHING and this
+  // driver is in the pending set. Concurrent accepts fail the filter.
+  const booking = await Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      isDeleted: false,
+      status: BOOKING_STATUS.SEARCHING,
+      driverId: null,
+      'dispatch.pendingOfferIds': driverId,
+    },
+    {
+      $set: {
+        driverId,
+        'dispatch.pendingOfferIds': [],
+        'dispatch.currentExpiresAt': null,
+      },
+    },
+    { new: true },
+  );
+
+  if (!booking) {
+    const existing = await Booking.findOne({ _id: bookingId, isDeleted: false }).select(
+      'status driverId dispatch.pendingOfferIds',
+    );
+    if (!existing) return { ok: false, reason: 'not_found' };
+    if (existing.status !== BOOKING_STATUS.SEARCHING || existing.driverId) {
+      return { ok: false, reason: 'no_longer_searching' };
+    }
     return { ok: false, reason: 'not_in_active_wave' };
   }
 
   clearWaveTimer(bookingId);
+
+  // Rebuild loser list from offer rows still unmarked as responded.
+  const losers = (booking.dispatch?.offers || [])
+    .filter(
+      (o) =>
+        o.response == null
+        && String(o.driverId) !== String(driverId),
+    )
+    .map((o) => String(o.driverId));
 
   // Mark this driver's offer as accepted.
   const offer = booking.dispatch.offers.find(
@@ -530,8 +742,6 @@ export async function acceptBookingService(bookingId, driverId) {
     offer.respondedAt = new Date();
   }
 
-  // Withdraw all the other drivers in this wave — they lost the race.
-  const losers = pending.filter((id) => String(id) !== String(driverId));
   for (const loserId of losers) {
     const otherOffer = booking.dispatch.offers.find(
       (o) => String(o.driverId) === String(loserId) && o.response == null,
@@ -542,18 +752,9 @@ export async function acceptBookingService(bookingId, driverId) {
     }
   }
 
-  booking.dispatch.pendingOfferIds = [];
-  booking.dispatch.currentExpiresAt = null;
-  booking.driverId = driverId;
   const acceptedAt = new Date();
   booking.timeline.driverAssignedAt = acceptedAt;
 
-  // When a previous driver cancelled a *paid* booking the dispatcher
-  // re-queues it as SEARCHING with paymentStatus still PAID. In that
-  // case we skip the AWAITING_PAYMENT phase entirely and the new
-  // driver gets a fully-paid booking they can start immediately. The
-  // booking's `cancellation` block (set by redispatchAfterDriverCancel)
-  // is cleared so the UI doesn't keep showing the old popup.
   const alreadyPaid =
     booking.paymentStatus === BOOKING_PAYMENT_STATUS.PAID;
 
@@ -562,8 +763,6 @@ export async function acceptBookingService(bookingId, driverId) {
     booking.timeline.paymentDeadlineAt = null;
     booking.cancellation = null;
   } else {
-    // Standard "first acceptance" flow: lock in PRE_RIDE, set the 60s
-    // payment deadline, and arm the auto-cancel timer.
     booking.timeline.paymentDeadlineAt = new Date(
       acceptedAt.getTime() + PAYMENT_POLICY.PAYMENT_DEADLINE_SECONDS * 1000,
     );
@@ -573,32 +772,16 @@ export async function acceptBookingService(bookingId, driverId) {
   }
   await booking.save();
 
-  // Mark the driver as on-trip so future dispatches skip them. Other
-  // drivers in the lost wave stay available.
-  //
-  // For SCHEDULED bookings whose pickup is more than the configured
-  // buffer away we leave `isOnTrip` alone — the driver can still be
-  // offered other non-overlapping rides in the meantime, and the
-  // conflict-overlap check in `dispatchNextDriverService` prevents
-  // anything from clashing with the upcoming pickup. The flag flips
-  // on automatically when the driver hits "I'm on the way"
-  // (`markDriverEnRouteService`), which is the moment they're
-  // physically committed to that pickup.
   const shouldLockDriver = await shouldImmediatelyLockDriver(booking);
   if (shouldLockDriver) {
     await Driver.updateOne({ _id: driverId }, { $set: { isOnTrip: true } });
     syncFirebaseDriverStatus(driverId).catch(() => {});
   }
 
-  // Kick off the auto-cancel timer only for the standard (unpaid) flow.
-  // Re-dispatched bookings are already paid → no payment timer needed.
   if (!alreadyPaid) {
     schedulePaymentTimeout(booking._id);
   }
 
-  // For scheduled bookings, NOW is the right moment to queue the
-  // pre-pickup reminder toasts — we have a driver, so the reminders
-  // will be useful to both sides. Fire-and-forget (queue is best-effort).
   if (booking.bookingType === BOOKING_TYPE.SCHEDULED) {
     import('./bookingScheduled.service.js')
       .then(({ enqueueRemindersAfterAssignment }) =>
@@ -613,13 +796,8 @@ export async function acceptBookingService(bookingId, driverId) {
       );
   }
 
-  // Notify the losing drivers that the offer is gone.
   notifyWaveWithdrawn(losers, booking._id, 'awarded_to_other_driver');
 
-  // We split the payload by audience so the driver never sees the
-  // customer's `paymentMode`/`paymentStatus`. They only need to know the
-  // booking is parked in `awaiting_payment` so their UI can render the
-  // "user is making payment" overlay.
   const userPayload = {
     bookingId: String(booking._id),
     status: booking.status,
@@ -627,9 +805,6 @@ export async function acceptBookingService(bookingId, driverId) {
     paymentStatus: booking.paymentStatus,
     driverId: String(driverId),
     timeline: booking.timeline?.toObject?.() || booking.timeline,
-    // When this is a re-dispatched (already-paid) booking we wipe the
-    // old cancellation block so the FE doesn't keep flashing the
-    // "driver bailed" popup.
     cancellation: booking.cancellation
       ? booking.cancellation?.toObject?.() || booking.cancellation
       : null,
@@ -652,8 +827,9 @@ export async function acceptBookingService(bookingId, driverId) {
 }
 
 /**
- * Driver rejects their pending offer. Removes them from the active wave; if
- * the wave is now empty, immediately dispatches the next one.
+ * Driver rejects their pending offer. Removes them from the active set.
+ * Wave mode: if the wave is now empty, immediately dispatches the next one.
+ * Inbox mode: booking stays open for other drivers (no re-broadcast).
  */
 export async function rejectBookingService(bookingId, driverId) {
   const booking = await Booking.findOne({ _id: bookingId, isDeleted: false });
@@ -665,6 +841,8 @@ export async function rejectBookingService(bookingId, driverId) {
   if (!pending.includes(String(driverId))) {
     return { ok: false, reason: 'not_in_active_wave' };
   }
+
+  const inbox = isInboxDispatch(booking);
 
   const offer = booking.dispatch.offers.find(
     (o) => String(o.driverId) === String(driverId) && o.response == null,
@@ -691,13 +869,17 @@ export async function rejectBookingService(bookingId, driverId) {
     reason: 'rejected_by_driver',
   }).catch(() => null);
 
+  // Inbox: never auto-dispatch a next wave — stay open until accept /
+  // escalate (even if every candidate rejected).
+  if (inbox) {
+    return { ok: true, pendingDriverCount: stillPending, inbox: true };
+  }
+
   if (stillPending === 0) {
-    // Everyone in the wave bailed — move on with an expanded radius.
     clearWaveTimer(bookingId);
     return dispatchNextDriverService(bookingId);
   }
 
-  // Wave still has other drivers; keep waiting for them.
   return { ok: true, pendingDriverCount: stillPending };
 }
 
@@ -706,6 +888,20 @@ export async function handleWaveTimeoutService(bookingId) {
   const booking = await Booking.findOne({ _id: bookingId, isDeleted: false });
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.SEARCHING) return;
+
+  // Drain legacy scheduled rows that still had a wave timer: convert to
+  // open inbox instead of timing out / expanding waves.
+  if (booking.bookingType === BOOKING_TYPE.SCHEDULED || isInboxDispatch(booking)) {
+    clearWaveTimer(bookingId);
+    booking.dispatch.mode = DISPATCH_MODE.INBOX;
+    booking.dispatch.currentExpiresAt = null;
+    await booking.save();
+    // If nobody was pending (already expired wave), try one inbox broadcast.
+    if (!(booking.dispatch.pendingOfferIds || []).length) {
+      await broadcastScheduledInboxService(bookingId);
+    }
+    return;
+  }
 
   const pending = (booking.dispatch?.pendingOfferIds || []).map(String);
   if (pending.length === 0) return;
@@ -761,9 +957,8 @@ export async function withdrawCurrentOfferService(bookingId, reason = 'cancelled
 }
 
 /**
- * Resume helper: if this driver still has a live wave offer, rebuild the
- * same payload the socket would have sent. Used when the app reconnects
- * or comes back from background and may have missed BOOKING_OFFERED.
+ * Resume helper for timed wave offers only (instant). Scheduled inbox
+ * items are listed via `listIncomingScheduledForDriverService`.
  */
 export async function getPendingOfferForDriverService(driverId) {
   if (!driverId) return null;
@@ -772,8 +967,14 @@ export async function getPendingOfferForDriverService(driverId) {
   const booking = await Booking.findOne({
     isDeleted: false,
     status: BOOKING_STATUS.SEARCHING,
+    bookingType: { $ne: BOOKING_TYPE.SCHEDULED },
     'dispatch.pendingOfferIds': driverId,
     'dispatch.currentExpiresAt': { $gt: now },
+    $or: [
+      { 'dispatch.mode': DISPATCH_MODE.WAVE },
+      { 'dispatch.mode': { $exists: false } },
+      { 'dispatch.mode': null },
+    ],
   }).lean();
 
   if (!booking) return null;
@@ -794,7 +995,6 @@ export async function getPendingOfferForDriverService(driverId) {
     User.findById(booking.userId).select('name phone_no profilePicture').lean(),
   ]);
 
-  // `buildOfferPayload` expects a driver-ish object with distanceMeters.
   return buildOfferPayload(
     booking,
     {
@@ -803,5 +1003,100 @@ export async function getPendingOfferForDriverService(driverId) {
     },
     { customer, car },
   );
+}
+
+/**
+ * List open inbox requests (scheduled hourly + outstation + subscription)
+ * available to this driver.
+ */
+export async function listIncomingScheduledForDriverService(driverId) {
+  if (!driverId) return { requests: [], count: 0 };
+
+  const bookings = await Booking.find({
+    isDeleted: false,
+    status: BOOKING_STATUS.SEARCHING,
+    bookingType: { $in: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION] },
+    'dispatch.pendingOfferIds': driverId,
+  })
+    .sort({ 'hourly.scheduledStartAt': 1, 'outstation.pickupAt': 1 })
+    .lean();
+
+  let requests = [];
+  if (bookings.length) {
+    const carIds = [...new Set(bookings.map((b) => String(b.carId || '')).filter(Boolean))];
+    const userIds = [...new Set(bookings.map((b) => String(b.userId || '')).filter(Boolean))];
+
+    const [cars, customers] = await Promise.all([
+      carIds.length
+        ? Car.find({ _id: { $in: carIds } })
+            .populate('carTypeId', 'name')
+            .populate('brandId', 'name')
+            .populate('modelId', 'name')
+            .populate('fuelTypeId', 'name')
+            .lean()
+        : [],
+      userIds.length
+        ? User.find({ _id: { $in: userIds } })
+            .select('name phone_no profilePicture')
+            .lean()
+        : [],
+    ]);
+
+    const carById = new Map(cars.map((c) => [String(c._id), c]));
+    const customerById = new Map(customers.map((u) => [String(u._id), u]));
+
+    requests = bookings.map((booking) => {
+      const offerRow = (booking.dispatch?.offers || []).find(
+        (o) => String(o.driverId) === String(driverId) && o.response == null,
+      );
+      return buildOfferPayload(
+        booking,
+        {
+          _id: driverId,
+          distanceMeters: offerRow?.distanceMeters ?? null,
+        },
+        {
+          customer: customerById.get(String(booking.userId)),
+          car: carById.get(String(booking.carId)),
+        },
+      );
+    });
+  }
+
+  // Always merge subscription inbox offers — even when booking list is empty.
+  // (Previously we early-returned here, so count could show 1 subscription
+  // while the Incoming tab rendered zero cards.)
+  let subscriptionRequests = [];
+  try {
+    const { listIncomingSubscriptionsForDriverService } = await import(
+      './subscriptionDispatch.service.js'
+    );
+    subscriptionRequests = await listIncomingSubscriptionsForDriverService(driverId);
+  } catch (err) {
+    console.warn('[dispatch] subscription inbox list failed:', err?.message);
+  }
+
+  const merged = [...subscriptionRequests, ...requests];
+  return { requests: merged, count: merged.length };
+}
+
+export async function countIncomingScheduledForDriverService(driverId) {
+  if (!driverId) return 0;
+  const bookingCount = await Booking.countDocuments({
+    isDeleted: false,
+    status: BOOKING_STATUS.SEARCHING,
+    bookingType: { $in: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION] },
+    'dispatch.pendingOfferIds': driverId,
+  });
+  let subCount = 0;
+  try {
+    const { countIncomingSubscriptionsForDriverService } = await import(
+      './subscriptionDispatch.service.js'
+    );
+    subCount = await countIncomingSubscriptionsForDriverService(driverId);
+  } catch {
+    subCount = 0;
+  }
+  return bookingCount + subCount;
 }
 

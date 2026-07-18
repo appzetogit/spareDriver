@@ -132,3 +132,30 @@ export function mergeScheduledDispatchConfig(override) {
   }
   return { ...SCHEDULED_BOOKING, ...override };
 }
+
+/**
+ * Statuses where the counterparty's phone may be shown. Hidden until
+ * the driver taps "I have arrived". Keep in sync with backend
+ * `bookingStatus.js`.
+ */
+export const CONTACT_REVEALED_STATUSES = Object.freeze([
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+  BOOKING_STATUS.COMPLETED,
+]);
+
+export function isBookingContactRevealed(bookingOrStatus) {
+  if (!bookingOrStatus) return false;
+  const status =
+    typeof bookingOrStatus === 'string'
+      ? bookingOrStatus
+      : bookingOrStatus.status;
+  if (CONTACT_REVEALED_STATUSES.includes(status)) return true;
+  if (
+    status === BOOKING_STATUS.CANCELLED &&
+    bookingOrStatus?.timeline?.arrivedAt
+  ) {
+    return true;
+  }
+  return false;
+}

@@ -28,3 +28,16 @@ export const SUBSCRIPTION_ASSIGNMENT_STATUS = Object.freeze({
   ASSIGNED: 'assigned', // dedicated driver assigned
   RELEASED: 'released', // assignment ended (e.g. user/admin released the driver)
 });
+
+/**
+ * Defaults for subscription dedicated-driver auto-search (inbox broadcast).
+ * Overridable via AppSettings.subscriptionDispatch.
+ */
+export const SUBSCRIPTION_DISPATCH = Object.freeze({
+  AUTO_SEARCH_ENABLED: true,
+  /** Minutes after payment before auto-search stops and admin assigns manually. */
+  ESCALATE_MINUTES: 1440,
+  INBOX_BROADCAST_LIMIT: 50,
+  /** Geo radius (meters) around dailyPickup when searching. */
+  SEARCH_RADIUS_METERS: 25_000,
+});

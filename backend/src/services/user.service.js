@@ -597,11 +597,22 @@ export const addCarService = async (userId, carData) => {
     vehicleNumber,
     transmission,
     image,
+    insuranceExpiry,
+    pucExpiry,
     conditions: conditionsPayload,
   } = carData;
 
   if (!carTypeId || !brandId || !modelId || !fuelTypeId || !vehicleNumber || !transmission) {
     throw new ApiError(400, 'All vehicle details are required');
+  }
+  if (!insuranceExpiry || !pucExpiry) {
+    throw new ApiError(400, 'Insurance expiry and PUC expiry dates are required');
+  }
+
+  const insuranceAt = new Date(insuranceExpiry);
+  const pucAt = new Date(pucExpiry);
+  if (!Number.isFinite(insuranceAt.getTime()) || !Number.isFinite(pucAt.getTime())) {
+    throw new ApiError(400, 'Insurance expiry and PUC expiry must be valid dates');
   }
 
   await validateCarCatalogRefs({ carTypeId, brandId, modelId, fuelTypeId });
@@ -631,6 +642,8 @@ export const addCarService = async (userId, carData) => {
     vehicleNumber: vehicleNumber.toUpperCase(),
     transmission: String(transmission).toLowerCase(),
     image: image || '',
+    insuranceExpiry: insuranceAt,
+    pucExpiry: pucAt,
     conditions: normalizedConditions,
   });
 
@@ -654,16 +667,29 @@ export const getUserCarsService = async (userId) => {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(404, 'User not found');
 
-  const cars = await Car.find({ userId, isActive: true });
-  await migrateUserConditionsToCars(user, cars);
+  let cars = await Car.find({ userId, isActive: true });
+  cars = await migrateUserConditionsToCars(user, cars);
 
-  return Car.find({ userId, isActive: true })
+  const populated = await Car.find({ userId, isActive: true })
     .populate('carTypeId', 'name')
     .populate('brandId', 'name')
     .populate('modelId', 'name')
     .populate('fuelTypeId', 'name')
     .populate('conditions.conditionId', 'question description isRequired')
     .sort({ createdAt: -1 });
+
+  const activeConditions = await PlatformCondition.find({ isActive: true }).lean();
+
+  return populated.map((car) => {
+    const answerMap = buildConditionAnswerMap(
+      car.conditions?.length ? car.conditions : user.conditions,
+    );
+    return {
+      ...car.toObject(),
+      checklist: buildChecklistView(activeConditions, answerMap),
+      hasChecklist: isCarChecklistComplete(car, activeConditions, user.conditions),
+    };
+  });
 };
 
 export const deleteUserCarService = async (userId, carId) => {
@@ -702,11 +728,22 @@ export const updateCarService = async (userId, carId, carData) => {
     vehicleNumber,
     transmission,
     image,
+    insuranceExpiry,
+    pucExpiry,
     conditions: conditionsPayload,
   } = carData;
 
   if (!carTypeId || !brandId || !modelId || !fuelTypeId || !vehicleNumber || !transmission) {
     throw new ApiError(400, 'All vehicle details are required');
+  }
+  if (!insuranceExpiry || !pucExpiry) {
+    throw new ApiError(400, 'Insurance expiry and PUC expiry dates are required');
+  }
+
+  const insuranceAt = new Date(insuranceExpiry);
+  const pucAt = new Date(pucExpiry);
+  if (!Number.isFinite(insuranceAt.getTime()) || !Number.isFinite(pucAt.getTime())) {
+    throw new ApiError(400, 'Insurance expiry and PUC expiry must be valid dates');
   }
 
   const car = await Car.findOne({ _id: carId, userId, isActive: true });
@@ -736,6 +773,8 @@ export const updateCarService = async (userId, carId, carData) => {
   car.vehicleNumber = vehicleNumber.toUpperCase();
   car.transmission = String(transmission).toLowerCase();
   car.image = image || '';
+  car.insuranceExpiry = insuranceAt;
+  car.pucExpiry = pucAt;
   car.conditions = normalizedConditions;
 
   await car.save();

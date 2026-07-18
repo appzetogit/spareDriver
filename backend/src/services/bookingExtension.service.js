@@ -142,6 +142,8 @@ export function buildCommissionRevenueMeta(booking) {
   const totalDriverEarning = Number(bd.driverEarning) || 0;
   const totalPayable = Number(bd.totalPayable) || Number(booking?.fareSnapshot?.total) || 0;
   const waitingCharge = Number(booking?.waiting?.chargeRupees) || 0;
+  const couponDiscount =
+    Number(bd.couponDiscount ?? booking?.fareSnapshot?.couponDiscount) || 0;
 
   return {
     commissionPercent: Number(bd.platformCommissionPercent) || 0,
@@ -152,6 +154,11 @@ export function buildCommissionRevenueMeta(booking) {
     // Snapshot-level numbers (do NOT include extensions/waiting). Kept
     // for the breakdown popup so admins can see the original quote.
     totalPayable: round2(totalPayable),
+    subtotal: round2(Number(bd.subtotal) || 0),
+    netSubtotal: round2(Number(bd.netSubtotal) || 0),
+    couponCode: booking?.fareSnapshot?.couponCode || bd.couponCode || null,
+    couponDiscount: round2(couponDiscount),
+    platformFee: round2(Number(bd.platformFee ?? bd.serviceCharge) || 0),
     baseDriverEarning: round2(totalDriverEarning - extensionDriverEarning),
     basePlatformCommission: round2(totalCommission - extensionPlatformCommission),
     // Extension components.
@@ -595,15 +602,33 @@ async function creditDriverForWaitingCharge(booking, amount) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Re-derive the service-charge and GST factors that were applied to the
- * original fare snapshot so the extension uses the same percentages — even
+ * Re-derive the platform-fee and GST factors that were applied to the
+ * original fare snapshot so the extension uses the same rates — even
  * if the admin later edits the pricing config mid-ride.
  */
 function inferRates(fareBreakdown) {
+  const type =
+    fareBreakdown?.platformFeeType === 'flat' ? 'flat' : 'percentage';
+  const amount =
+    Number(
+      fareBreakdown?.platformFeeAmount
+        ?? (type === 'percentage' ? fareBreakdown?.serviceChargePercent : 0),
+    ) || 0;
   return {
-    serviceChargePercent: fareBreakdown?.serviceChargePercent || 0,
+    platformFeeType: type,
+    platformFeeAmount: amount,
+    // Legacy alias for older call sites.
+    serviceChargePercent: type === 'percentage' ? amount : 0,
     gstPercent: fareBreakdown?.gstPercent || 0,
   };
+}
+
+function computePlatformFeeFromRates(subtotal, rates) {
+  if (rates.platformFeeType === 'flat') {
+    return round2(Math.max(0, Number(rates.platformFeeAmount) || 0));
+  }
+  const pct = Number(rates.serviceChargePercent || rates.platformFeeAmount) || 0;
+  return round2((subtotal * pct) / 100);
 }
 
 function computeExtensionDelta(pricing, fareBreakdown, additionalHours) {
@@ -612,8 +637,9 @@ function computeExtensionDelta(pricing, fareBreakdown, additionalHours) {
     throw new ApiError(400, 'Extra-hour pricing is not configured for this service');
   }
   const subtotal = additionalHours * extraRate;
-  const { serviceChargePercent, gstPercent } = inferRates(fareBreakdown);
-  const serviceCharge = (subtotal * serviceChargePercent) / 100;
+  const rates = inferRates(fareBreakdown);
+  const { gstPercent } = rates;
+  const serviceCharge = computePlatformFeeFromRates(subtotal, rates);
   const gst = ((subtotal + serviceCharge) * gstPercent) / 100;
   const fareDelta = round2(subtotal + serviceCharge + gst);
 
@@ -639,7 +665,10 @@ function computeExtensionDelta(pricing, fareBreakdown, additionalHours) {
       ratePerHour: extraRate,
       subtotal: round2(subtotal),
       serviceCharge: round2(serviceCharge),
-      serviceChargePercent,
+      serviceChargePercent: rates.serviceChargePercent,
+      platformFee: round2(serviceCharge),
+      platformFeeType: rates.platformFeeType,
+      platformFeeAmount: rates.platformFeeAmount,
       gst: round2(gst),
       gstPercent,
       platformCommission: round2(platformCommission),
@@ -728,8 +757,9 @@ function computeOutstationExtensionDelta(
     foodAllowanceTotal + stayAllowanceTotal + legacyAllowanceTotal;
 
   const subtotal = dailyRateTotal + allowanceTotal;
-  const { serviceChargePercent, gstPercent } = inferRates(fareBreakdown);
-  const serviceCharge = (subtotal * serviceChargePercent) / 100;
+  const rates = inferRates(fareBreakdown);
+  const { gstPercent } = rates;
+  const serviceCharge = computePlatformFeeFromRates(subtotal, rates);
   const gst = ((subtotal + serviceCharge) * gstPercent) / 100;
   const fareDelta = round2(subtotal + serviceCharge + gst);
 
@@ -770,7 +800,10 @@ function computeOutstationExtensionDelta(
       extraNights,
       subtotal: round2(subtotal),
       serviceCharge: round2(serviceCharge),
-      serviceChargePercent,
+      serviceChargePercent: rates.serviceChargePercent,
+      platformFee: round2(serviceCharge),
+      platformFeeType: rates.platformFeeType,
+      platformFeeAmount: rates.platformFeeAmount,
       gst: round2(gst),
       gstPercent,
       platformCommission: round2(platformCommission),

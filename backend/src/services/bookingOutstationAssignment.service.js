@@ -29,13 +29,14 @@ import { loadScheduledDispatchConfig } from './bookingScheduled.service.js';
 import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
 
 /**
- * Outstation manual-assignment pipeline.
+ * Outstation bookings admin list + manual assign.
  *
- *   Outstation bookings are created in PENDING_ASSIGNMENT (no auto-
- *   dispatch). They surface in the admin "Outstation Assignments" queue
- *   where an admin / sub_admin (or a team_member, but read-only and
- *   zone-scoped) picks a driver by hand. The pick goes through three
- *   safety gates before the booking ever flips to DRIVER_ASSIGNED:
+ *   New outstation bookings auto-search (inbox) first. Unmatched rows
+ *   past `scheduled.escalateAt` move into the shared Emergency Pool.
+ *   This page lists ALL outstation bookings (every status). Staff can
+ *   still assign from Searching / Pending / Emergency Pool / No-drivers.
+ *
+ *   Safety gates before DRIVER_ASSIGNED:
  *
  *     1. Vehicle conflict — the booking's `carId` must not be on any
  *        OTHER active booking whose buffered window overlaps the
@@ -133,12 +134,25 @@ function bookingWindowMs(booking) {
  * Ordered by `outstation.startDate` ASC so the soonest-departing trip
  * sits at the top. Returns the standard pagination envelope.
  */
+/**
+ * Paginated list of outstation bookings (all statuses by default).
+ * Optional `status` narrows the queue. Team members are zone-scoped.
+ *
+ * Query params:
+ *   - page, limit
+ *   - search           booking # / ObjectId
+ *   - city             pickup.city regex
+ *   - status           single booking status
+ *   - zoneId           zone filter
+ *   - dateFrom/dateTo  outstation.pickupAt / startDate window
+ */
 export async function listOutstationAssignmentsService({ staff, query = {} }) {
   const {
     page = 1,
     limit = 20,
     search,
     city,
+    status,
     bookingType,
     zoneId,
     dateFrom,
@@ -148,10 +162,13 @@ export async function listOutstationAssignmentsService({ staff, query = {} }) {
   const skip = (Math.max(1, parseInt(page, 10)) - 1) * parseInt(limit, 10);
 
   const filter = {
-    status: BOOKING_STATUS.PENDING_ASSIGNMENT,
     serviceType: SERVICE_TYPES.OUTSTATION,
     isDeleted: false,
   };
+
+  if (status) {
+    filter.status = String(status);
+  }
 
   const scope = zoneScopeForStaff(staff);
   if (scope !== null) {
@@ -195,25 +212,34 @@ export async function listOutstationAssignmentsService({ staff, query = {} }) {
     filter.bookingType = bookingType;
   }
   if (dateFrom || dateTo) {
-    filter['outstation.startDate'] = {};
+    const dateFilter = {};
     if (dateFrom) {
       const d = new Date(dateFrom);
-      if (!Number.isNaN(d.getTime())) filter['outstation.startDate'].$gte = d;
+      if (!Number.isNaN(d.getTime())) dateFilter.$gte = d;
     }
     if (dateTo) {
       const d = new Date(dateTo);
-      if (!Number.isNaN(d.getTime())) filter['outstation.startDate'].$lte = d;
+      if (!Number.isNaN(d.getTime())) dateFilter.$lte = d;
     }
-    if (Object.keys(filter['outstation.startDate']).length === 0) {
-      delete filter['outstation.startDate'];
+    if (Object.keys(dateFilter).length) {
+      filter.$and = [
+        ...(filter.$and || []),
+        {
+          $or: [
+            { 'outstation.pickupAt': dateFilter },
+            { 'outstation.startDate': dateFilter },
+          ],
+        },
+      ];
     }
   }
 
   const [bookings, total] = await Promise.all([
     Booking.find(filter)
       .populate('userId', 'name phone_no')
+      .populate('driverId', 'name phone rating')
       .populate('zoneIds', 'name code city')
-      .sort({ 'outstation.startDate': 1, createdAt: 1 })
+      .sort({ 'outstation.pickupAt': -1, 'outstation.startDate': -1, createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit, 10))
       .lean(),
@@ -339,7 +365,12 @@ export async function listAvailableDriversForOutstationService(
   }
   const { booking, car, bufferMinutes, window } = detail;
 
-  if (booking.status !== BOOKING_STATUS.PENDING_ASSIGNMENT) {
+  if (
+    booking.status !== BOOKING_STATUS.PENDING_ASSIGNMENT
+    && booking.status !== BOOKING_STATUS.SEARCHING
+    && booking.status !== BOOKING_STATUS.IN_EMERGENCY_POOL
+    && booking.status !== BOOKING_STATUS.NO_DRIVERS_FOUND
+  ) {
     throw new ApiError(
       409,
       `Booking is no longer pending assignment (status: ${booking.status})`,
@@ -501,7 +532,12 @@ export async function adminAssignDriverToOutstationService(
   if (bookingDoc.serviceType !== SERVICE_TYPES.OUTSTATION) {
     throw new ApiError(400, 'Only outstation bookings can be assigned from this queue');
   }
-  if (bookingDoc.status !== BOOKING_STATUS.PENDING_ASSIGNMENT) {
+  if (
+    bookingDoc.status !== BOOKING_STATUS.PENDING_ASSIGNMENT
+    && bookingDoc.status !== BOOKING_STATUS.SEARCHING
+    && bookingDoc.status !== BOOKING_STATUS.IN_EMERGENCY_POOL
+    && bookingDoc.status !== BOOKING_STATUS.NO_DRIVERS_FOUND
+  ) {
     throw new ApiError(
       409,
       `Booking is no longer pending assignment (status: ${bookingDoc.status})`,
@@ -566,10 +602,18 @@ export async function adminAssignDriverToOutstationService(
   // findOneAndUpdate. Two admins clicking Assign on the same booking
   // are serialised here: only one update matches the guard.
   const now = new Date();
+  const previousPending = (bookingDoc.dispatch?.pendingOfferIds || []).map(String);
   const updatedBooking = await Booking.findOneAndUpdate(
     {
       _id: bookingDoc._id,
-      status: BOOKING_STATUS.PENDING_ASSIGNMENT,
+      status: {
+        $in: [
+          BOOKING_STATUS.PENDING_ASSIGNMENT,
+          BOOKING_STATUS.SEARCHING,
+          BOOKING_STATUS.IN_EMERGENCY_POOL,
+          BOOKING_STATUS.NO_DRIVERS_FOUND,
+        ],
+      },
       driverId: null,
       isDeleted: false,
     },
@@ -577,6 +621,8 @@ export async function adminAssignDriverToOutstationService(
       $set: {
         driverId: driver._id,
         status: BOOKING_STATUS.DRIVER_ASSIGNED,
+        'dispatch.pendingOfferIds': [],
+        'dispatch.currentExpiresAt': null,
         'timeline.driverAssignedAt': now,
         'scheduled.emergencyPool.assignedBy': staffId || null,
         'scheduled.emergencyPool.assignedAt': now,
@@ -663,6 +709,15 @@ export async function adminAssignDriverToOutstationService(
   emitToBooking(updatedBooking._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToDriver(driver._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, userPayload);
+
+  // Withdraw open inbox offers so other drivers drop the request.
+  for (const pendingId of previousPending) {
+    if (String(pendingId) === String(driver._id)) continue;
+    emitToDriver(pendingId, S2C_EVENTS.BOOKING_OFFER_WITHDRAWN, {
+      bookingId: String(updatedBooking._id),
+      reason: 'assigned_by_admin',
+    });
+  }
 
   notifyDriverOrderAssigned(driver._id, updatedBooking).catch(() => null);
 

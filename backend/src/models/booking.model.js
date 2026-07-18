@@ -103,16 +103,26 @@ const dispatchSchema = new mongoose.Schema(
     offers: { type: [dispatchOfferSchema], default: [] },
 
     /**
-     * Driver IDs that currently hold a live offer (one "wave" of up to
-     * DISPATCH.WAVE_SIZE drivers in parallel). The first driver to accept
-     * wins; the others receive BOOKING_OFFER_WITHDRAWN.
+     * Driver IDs that currently hold a live offer.
+     * Wave mode: up to DISPATCH.WAVE_SIZE in parallel with expiry.
+     * Inbox mode (scheduled): all matching drivers, no expiry — first
+     * accept wins and clears the list for everyone else.
      */
     pendingOfferIds: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Driver' }],
       default: [],
     },
-    /** When this wave's offers expire. Wave-level setTimeout fires against this. */
+    /**
+     * When this wave's offers expire (wave mode only). Null for inbox
+     * mode — scheduled requests stay open until accept / escalate / cancel.
+     */
     currentExpiresAt: { type: Date, default: null },
+
+    /**
+     * `wave` (instant timed offers) or `inbox` (scheduled open requests).
+     * See DISPATCH_MODE in bookingStatus.js.
+     */
+    mode: { type: String, enum: ['wave', 'inbox'], default: 'wave' },
 
     /**
      * Radius (in metres) used to find candidate drivers for the current wave.
@@ -128,9 +138,9 @@ const dispatchSchema = new mongoose.Schema(
       default: DISPATCH.SEARCH_RADIUS_MAX_METERS,
     },
 
-    /** Number of waves issued so far. */
+    /** Number of waves issued so far (wave mode). Inbox uses a single broadcast. */
     attemptsCount: { type: Number, default: 0 },
-    /** Max number of waves before declaring no_drivers_found. */
+    /** Max number of waves before declaring no_drivers_found (wave mode). */
     maxAttempts: { type: Number, default: DISPATCH.MAX_ATTEMPTS },
   },
   { _id: false },
@@ -428,6 +438,18 @@ const bookingSchema = new mongoose.Schema(
         assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
         assignedAt: { type: Date, default: null },
         notes: { type: String, default: '' },
+      },
+      /** Staff manual assign from Scheduled Bookings (any open status). */
+      manualAssign: {
+        assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        assignedAt: { type: Date, default: null },
+        notes: { type: String, default: '' },
+        reassigned: { type: Boolean, default: false },
+        previousDriverId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Driver',
+          default: null,
+        },
       },
     },
 

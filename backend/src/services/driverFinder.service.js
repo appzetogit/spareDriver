@@ -97,6 +97,7 @@ export async function findDriversWithinRadius({
   carTypeIds,
   excludeDriverIds,
   includeOnTrip = false,
+  extraMatch = null,
 } = {}) {
   if (!validateCoords({ lat, lng })) return [];
 
@@ -111,6 +112,7 @@ export async function findDriversWithinRadius({
     isOnline: true,
     approvalStatus: 'approved',
     isDeleted: false,
+    ...(extraMatch && typeof extraMatch === 'object' ? extraMatch : {}),
   };
   if (!includeOnTrip) match.isOnTrip = false;
   if (excludeIds.length) match._id = { $nin: excludeIds };

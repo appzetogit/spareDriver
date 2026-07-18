@@ -8,7 +8,7 @@ import { useSocketEvent } from '../../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../../constants/socketEvents';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
-import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
+import { BOOKING_STATUS, BOOKING_TYPE } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 
@@ -45,12 +45,32 @@ const SearchingDriverPage = () => {
   const bookingStatus = booking?.status;
   const bookingIdForRedirect = booking?._id;
   const serviceType = booking?.serviceType;
+  const bookingType = booking?.bookingType;
   const paymentMethod = booking?.paymentMethod;
   useEffect(() => {
     if (!bookingStatus) return;
     const assignedRoute = bookingIdForRedirect
       ? `/user/book/assigned/${bookingIdForRedirect}`
       : '/user/book/assigned';
+
+    // Scheduled / outstation should not sit on the instant spinner —
+    // send them to the booked-success screen instead.
+    const isDeferredAssign =
+      serviceType === SERVICE_TYPES.OUTSTATION
+      || bookingType === BOOKING_TYPE.OUTSTATION
+      || bookingType === BOOKING_TYPE.SCHEDULED
+      || bookingStatus === BOOKING_STATUS.PENDING_ASSIGNMENT
+      || bookingStatus === BOOKING_STATUS.IN_EMERGENCY_POOL;
+    if (
+      isDeferredAssign
+      && (bookingStatus === BOOKING_STATUS.SEARCHING
+        || bookingStatus === BOOKING_STATUS.PENDING_ASSIGNMENT
+        || bookingStatus === BOOKING_STATUS.IN_EMERGENCY_POOL)
+    ) {
+      navigate('/user/book/scheduled', { replace: true });
+      return;
+    }
+
     switch (bookingStatus) {
       case BOOKING_STATUS.DRIVER_ASSIGNED:
         navigate(assignedRoute);
@@ -66,11 +86,6 @@ const SearchingDriverPage = () => {
           navigate('/user/book/payment');
         }
         break;
-      // Scheduled long-lead bookings can land here on a hard refresh
-      // before the worker has fired the `assign` job (status still
-      // PENDING_ASSIGNMENT) — bounce them to the scheduled-confirmed
-      // screen. Same for IN_EMERGENCY_POOL where an admin is in the
-      // loop — neither state has a live "searching" UI to render.
       case BOOKING_STATUS.PENDING_ASSIGNMENT:
       case BOOKING_STATUS.IN_EMERGENCY_POOL:
         navigate('/user/book/scheduled', { replace: true });
@@ -112,6 +127,7 @@ const SearchingDriverPage = () => {
     bookingStatus,
     bookingIdForRedirect,
     serviceType,
+    bookingType,
     paymentMethod,
     navigate,
     draftReset,

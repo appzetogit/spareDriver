@@ -153,6 +153,37 @@ const userSubscriptionSchema = new mongoose.Schema(
     termsVersionSnapshot: { type: Number, default: 0, min: 0 },
     termsTitleSnapshot: { type: String, default: '' },
     termsContentSnapshot: { type: String, default: '' },
+
+    /**
+     * Open-inbox auto-search for dedicated-driver assignment
+     * (same shape as booking.dispatch for scheduled/outstation).
+     */
+    dispatch: {
+      mode: { type: String, default: 'inbox' },
+      pendingOfferIds: {
+        type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Driver' }],
+        default: [],
+      },
+      offers: {
+        type: [
+          new mongoose.Schema(
+            {
+              driverId: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver' },
+              offeredAt: { type: Date, default: Date.now },
+              respondedAt: { type: Date, default: null },
+              response: { type: String, default: null },
+              distanceMeters: { type: Number, default: null },
+            },
+            { _id: false },
+          ),
+        ],
+        default: [],
+      },
+      attemptsCount: { type: Number, default: 0, min: 0 },
+      escalateAt: { type: Date, default: null },
+      assignmentStartedAt: { type: Date, default: null },
+      escalatedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true },
 );

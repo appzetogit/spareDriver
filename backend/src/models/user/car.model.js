@@ -43,6 +43,16 @@ const carSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    /** Motor insurance policy expiry (date-only). */
+    insuranceExpiry: {
+      type: Date,
+      default: null,
+    },
+    /** Pollution Under Control (PUC) certificate expiry (date-only). */
+    pucExpiry: {
+      type: Date,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,

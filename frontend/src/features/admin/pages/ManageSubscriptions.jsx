@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Sparkles, Check, UserCheck, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, Sparkles, Check, UserCheck, FileText, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../utils/api';
 import Button from '../../../components/Button';
@@ -30,6 +30,13 @@ const emptyForm = {
   sortOrder: 0,
 };
 
+const emptyDispatch = {
+  AUTO_SEARCH_ENABLED: true,
+  ESCALATE_MINUTES: 1440,
+  INBOX_BROADCAST_LIMIT: 50,
+  SEARCH_RADIUS_METERS: 25000,
+};
+
 const ManageSubscriptions = () => {
   const cacheKey = buildCacheKey('admin-subscription-plans', {});
   const { data, loading, refetch } = useCachedQuery(
@@ -48,6 +55,9 @@ const ManageSubscriptions = () => {
   const [termsForm, setTermsForm] = useState({ title: '', content: '' });
   const [termsLoading, setTermsLoading] = useState(true);
   const [termsSaving, setTermsSaving] = useState(false);
+  const [dispatchForm, setDispatchForm] = useState(emptyDispatch);
+  const [dispatchLoading, setDispatchLoading] = useState(true);
+  const [dispatchSaving, setDispatchSaving] = useState(false);
 
   useEffect(() => {
     setTermsLoading(true);
@@ -62,6 +72,30 @@ const ManageSubscriptions = () => {
       .catch(() => {})
       .finally(() => setTermsLoading(false));
   }, []);
+
+  useEffect(() => {
+    setDispatchLoading(true);
+    api.get('/admin/settings/subscription-dispatch')
+      .then((res) => {
+        const cfg = res?.data?.data || {};
+        setDispatchForm({ ...emptyDispatch, ...cfg });
+      })
+      .catch(() => {})
+      .finally(() => setDispatchLoading(false));
+  }, []);
+
+  const saveDispatch = async () => {
+    setDispatchSaving(true);
+    try {
+      const res = await api.put('/admin/settings/subscription-dispatch', dispatchForm);
+      setDispatchForm({ ...emptyDispatch, ...(res?.data?.data || {}) });
+      toast.success('Driver search settings saved');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not save search settings');
+    } finally {
+      setDispatchSaving(false);
+    }
+  };
 
   const saveTerms = async () => {
     if (!termsForm.title.trim() || !termsForm.content.trim()) {
@@ -271,6 +305,76 @@ const ManageSubscriptions = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Search className="w-5 h-5 text-primary" />
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Dedicated-driver auto-search</h2>
+            <p className="text-xs text-slate-500">
+              After a customer pays, matching online drivers see the request in Incoming.
+              Unmatched subscriptions escalate to manual assignment after the window below.
+            </p>
+          </div>
+        </div>
+        {dispatchLoading ? (
+          <p className="text-sm text-slate-500">Loading search settings…</p>
+        ) : (
+          <div className="space-y-4">
+            <Toggle
+              label="Enable auto-search"
+              checked={!!dispatchForm.AUTO_SEARCH_ENABLED}
+              onChange={(v) =>
+                setDispatchForm((f) => ({ ...f, AUTO_SEARCH_ENABLED: v }))
+              }
+            />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Input
+                label="Escalate after (minutes)"
+                type="number"
+                min={5}
+                value={dispatchForm.ESCALATE_MINUTES}
+                onChange={(e) =>
+                  setDispatchForm((f) => ({
+                    ...f,
+                    ESCALATE_MINUTES: Number(e.target.value),
+                  }))
+                }
+                helper="Default 1440 = 24 hours"
+              />
+              <Input
+                label="Broadcast limit"
+                type="number"
+                min={1}
+                max={100}
+                value={dispatchForm.INBOX_BROADCAST_LIMIT}
+                onChange={(e) =>
+                  setDispatchForm((f) => ({
+                    ...f,
+                    INBOX_BROADCAST_LIMIT: Number(e.target.value),
+                  }))
+                }
+              />
+              <Input
+                label="Search radius (meters)"
+                type="number"
+                min={1000}
+                step={1000}
+                value={dispatchForm.SEARCH_RADIUS_METERS}
+                onChange={(e) =>
+                  setDispatchForm((f) => ({
+                    ...f,
+                    SEARCH_RADIUS_METERS: Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <Button variant="admin" onClick={saveDispatch} disabled={dispatchSaving}>
+              {dispatchSaving ? 'Saving…' : 'Save search settings'}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">

@@ -38,6 +38,18 @@ const SOURCE_META = {
     icon: TrendingUp,
     tone: 'text-emerald-700',
   },
+  platform_fee: {
+    label: 'Platform fee',
+    variant: 'success',
+    icon: Banknote,
+    tone: 'text-emerald-700',
+  },
+  coupon_discount: {
+    label: 'Coupon (absorbed)',
+    variant: 'warning',
+    icon: CircleSlash,
+    tone: 'text-amber-700',
+  },
   cancellation_fee: {
     label: 'Cancellation',
     variant: 'warning',
@@ -61,6 +73,15 @@ const SOURCE_META = {
 function formatCurrency(n) {
   const v = Number(n) || 0;
   return `\u20B9${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+}
+
+/** Ledger display — coupon rows are stored negative but shown as admin cost. */
+function formatLedgerAmount(source, amountRupees) {
+  const v = Number(amountRupees) || 0;
+  if (source === 'coupon_discount') {
+    return `\u2212${formatCurrency(Math.abs(v))}`;
+  }
+  return formatCurrency(v);
 }
 
 function formatDateTime(d) {
@@ -110,20 +131,27 @@ const ManageRevenue = () => {
         accent: 'text-emerald-700',
       },
       {
+        label: 'Platform fee',
+        value: formatCurrency(totals?.bySource?.platform_fee?.amount || 0),
+        icon: Banknote,
+        accent: 'text-emerald-700',
+      },
+      {
+        label: 'Coupons absorbed',
+        value: formatCurrency(
+          Math.abs(totals?.bySource?.coupon_discount?.amount || 0),
+        ),
+        icon: CircleSlash,
+        accent: 'text-amber-700',
+        hint: 'Deducted from net revenue',
+      },
+      {
         label: 'Cancellation',
         value: formatCurrency(
           totals?.bySource?.cancellation_fee?.amount || 0,
         ),
         icon: CircleSlash,
         accent: 'text-amber-700',
-      },
-      {
-        label: 'Driver penalty',
-        value: formatCurrency(
-          totals?.bySource?.driver_penalty?.amount || 0,
-        ),
-        icon: AlertOctagon,
-        accent: 'text-rose-700',
       },
     ],
     [totals],
@@ -135,8 +163,9 @@ const ManageRevenue = () => {
         <div>
           <h2 className="text-xl font-bold text-text">Revenue</h2>
           <p className="text-xs text-text-muted mt-1 max-w-xl">
-            Every rupee the platform kept — commission on completed
-            trips and the company&apos;s share of cancellation fees.
+            Every rupee the platform kept — commission, platform fee, and
+            coupon cost absorbed on completed trips, plus cancellation
+            fees.
             Filter by source or date range to slice the totals.
           </p>
         </div>
@@ -165,6 +194,9 @@ const ManageRevenue = () => {
               <p className={`mt-2 text-lg font-bold ${card.accent}`}>
                 {card.value}
               </p>
+              {card.hint ? (
+                <p className="text-[10px] text-text-muted mt-0.5">{card.hint}</p>
+              ) : null}
             </div>
           );
         })}
@@ -187,6 +219,8 @@ const ManageRevenue = () => {
         >
           <option value="">All sources</option>
           <option value="commission">Commission</option>
+          <option value="platform_fee">Platform fee</option>
+          <option value="coupon_discount">Coupon discount</option>
           <option value="cancellation_fee">Cancellation fee</option>
           <option value="driver_penalty">Driver penalty</option>
         </select>

@@ -28,3 +28,8 @@ export const validateCoupon = asyncHandler(async (req, res) => {
   const result = await couponService.validateCouponService({ code, serviceType, subtotal });
   return res.status(200).json(new ApiResponse(200, result, 'Coupon is valid'));
 });
+
+export const adminCouponAnalytics = asyncHandler(async (req, res) => {
+  const data = await couponService.getCouponAnalyticsService(req.params.id);
+  return res.status(200).json(new ApiResponse(200, data, 'Coupon analytics'));
+});

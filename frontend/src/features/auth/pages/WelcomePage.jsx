@@ -1,8 +1,19 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../../components/Button';
+import useUserAuthStore from '../../../store/useUserAuthStore';
+import { navigateUserAfterAuth } from '../utils/authNavigation';
+import { useStoreHydration } from '../../../hooks/useStoreHydration';
 
 const WelcomePage = () => {
   const navigate = useNavigate();
+  const hydrated = useStoreHydration(useUserAuthStore);
+  const { user, isAuthenticated } = useUserAuthStore();
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated || !user) return;
+    navigateUserAfterAuth(navigate, user);
+  }, [hydrated, isAuthenticated, user, navigate]);
 
   return (
     <div className="flex flex-col bg-white min-h-dvh relative">

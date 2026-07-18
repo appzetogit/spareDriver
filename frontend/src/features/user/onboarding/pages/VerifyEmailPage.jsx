@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -15,10 +15,28 @@ function isRealEmail(email) {
   return normalized && !normalized.endsWith('@phone.sparedriver.local');
 }
 
+/** After email is OK: add first car, edit incomplete cars, or go home. */
+async function resolvePostEmailPath(setOnboarding) {
+  try {
+    const res = await api.get('/auth/onboarding/status');
+    const data = res.data?.data || {};
+    setOnboarding?.({
+      carCount: data.carCount,
+      hasCar: data.hasCar,
+      hasChecklist: data.hasChecklist,
+    });
+    if (!data.hasCar || data.carCount === 0) return '/user/add-car';
+    if (!data.hasChecklist) return '/user/my-cars';
+    return '/user/home';
+  } catch {
+    return '/user/home';
+  }
+}
+
 const VerifyEmailPage = () => {
   const navigate = useNavigate();
   const redirectedRef = useRef(false);
-  const { user, isAuthenticated, setAuth } = useUserAuthStore();
+  const { user, isAuthenticated, setAuth, setOnboarding } = useUserAuthStore();
 
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -34,20 +52,26 @@ const VerifyEmailPage = () => {
     }
   }, [user]);
 
-  useEffect(() => {
+  const leaveAfterEmail = useCallback(async () => {
     if (redirectedRef.current) return;
+    redirectedRef.current = true;
+    const path = await resolvePostEmailPath(setOnboarding);
+    navigate(path, { replace: true });
+  }, [navigate, setOnboarding]);
 
+  useEffect(() => {
     if (!isAuthenticated) {
-      redirectedRef.current = true;
-      navigate('/login', { replace: true });
+      if (!redirectedRef.current) {
+        redirectedRef.current = true;
+        navigate('/login', { replace: true });
+      }
       return;
     }
 
     if (!userNeedsEmail(user)) {
-      redirectedRef.current = true;
-      navigate('/user/add-car', { replace: true });
+      leaveAfterEmail();
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, leaveAfterEmail]);
 
   const handleSendOtp = async () => {
     const trimmed = email.trim();
@@ -81,7 +105,8 @@ const VerifyEmailPage = () => {
       if (verifiedUser) setAuth(verifiedUser);
       setShowOtpModal(false);
       toast.success('Email verified');
-      navigate('/user/add-car', { replace: true });
+      redirectedRef.current = false;
+      await leaveAfterEmail();
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid verification code');
     } finally {

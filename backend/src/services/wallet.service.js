@@ -8,6 +8,7 @@ import WalletTransaction, {
 import { ApiError } from '../utils/apiError.js';
 import {
   createRazorpayOrder,
+  fetchRazorpayPayment,
   getRazorpayKeyId,
   verifyRazorpayPaymentSignature,
 } from '../utils/razorpay.js';
@@ -23,9 +24,10 @@ import {
  *      ledger renders without re-deriving from history.
  *
  * Top-ups are split into two RPCs (`createTopupOrder` returns a Razorpay
- * order; `verifyTopupPayment` validates the signature and credits the
- * wallet). The two-step shape mirrors the booking-payment flow so the
- * FE checkout helper is reusable as-is.
+ * order; `verifyTopupPayment` validates the signature, fetches the
+ * captured payment's `fee`, and credits only the **net** amount). The
+ * two-step shape mirrors the booking-payment flow so the FE checkout
+ * helper is reusable as-is.
  */
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -413,8 +415,13 @@ export async function createTopupOrderService(userId, amount) {
 
 /**
  * Validate a Razorpay payment signature, mark the matching PENDING
- * transaction as SUCCESS, and atomically credit the wallet for the
- * amount on the order.
+ * transaction as SUCCESS, and atomically credit the wallet with the
+ * **net** amount (gross paid − Razorpay fee including GST).
+ *
+ * Example: user pays ₹500 → Razorpay fee (~2% + GST) is deducted →
+ * only the remaining rupees land in the wallet. Fee comes from the
+ * captured payment entity (`fee` already includes GST; do not also
+ * subtract `tax`).
  *
  * Idempotent: if the order has already been credited (matching SUCCESS
  * row exists) we no-op and return the latest balance.
@@ -449,9 +456,42 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
     return { wallet, transaction: pending.toObject(), alreadyCredited: true };
   }
 
-  // Atomically credit. We re-use the lifetime-credit increment from
-  // the helper above but write directly so we can keep the same row.
-  const amt = round2(pending.amountRupees);
+  let payment;
+  try {
+    payment = await fetchRazorpayPayment(paymentId);
+  } catch (err) {
+    throw new ApiError(
+      502,
+      err?.message || 'Could not fetch payment details from Razorpay. Please retry.',
+    );
+  }
+
+  if (payment.order_id && payment.order_id !== orderId) {
+    throw new ApiError(400, 'Payment does not belong to this top-up order');
+  }
+
+  const status = String(payment.status || '').toLowerCase();
+  if (status !== 'captured' && status !== 'authorized') {
+    throw new ApiError(400, `Payment is not successful (status: ${status || 'unknown'})`);
+  }
+
+  const grossPaise = Math.max(
+    0,
+    Number(payment.amount) || Number(pending.razorpay?.amountPaise) || toPaise(pending.amountRupees),
+  );
+  // Razorpay docs: `fee` is the total deduction including GST.
+  const feePaise = Math.max(0, Number(payment.fee) || 0);
+  const taxPaise = Math.max(0, Number(payment.tax) || 0);
+  const netPaise = Math.max(0, grossPaise - feePaise);
+  const amt = round2(netPaise / 100);
+
+  if (amt <= 0) {
+    throw new ApiError(400, 'Net credit after gateway fee is zero');
+  }
+
+  const grossRupees = round2(grossPaise / 100);
+  const feeRupees = round2(feePaise / 100);
+
   const updated = await User.findOneAndUpdate(
     { _id: userId, isDeleted: false },
     { $inc: { 'wallet.balance': amt, 'wallet.totalCredited': amt } },
@@ -460,11 +500,20 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
   if (!updated) throw new ApiError(404, 'User not found');
 
   pending.status = WALLET_TXN_STATUS.SUCCESS;
+  pending.amountRupees = amt;
   pending.balanceAfter = round2(updated.wallet?.balance || 0);
+  pending.description =
+    feePaise > 0
+      ? `Wallet top-up \u20B9${grossRupees} (net \u20B9${amt} after \u20B9${feeRupees} Razorpay fee)`
+      : `Wallet top-up \u20B9${amt}`;
   pending.razorpay = {
     ...(pending.razorpay?.toObject?.() || pending.razorpay || {}),
     paymentId,
     signature,
+    amountPaise: grossPaise,
+    feePaise,
+    taxPaise,
+    netAmountPaise: netPaise,
   };
   await pending.save();
 
@@ -477,6 +526,9 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
     },
     transaction: pending.toObject(),
     alreadyCredited: false,
+    creditedRupees: amt,
+    feeRupees,
+    grossRupees,
   };
 }
 

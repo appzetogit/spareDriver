@@ -84,20 +84,33 @@ export function calculateSubscriptionCheckout(plan, coupon = null) {
  *
  *   `allowancePassThrough` is the food + stay allowance portion of the
  *   subtotal. Platform commission is NEVER applied to it; those rupees
- *   flow 1:1 to the driver. Service charge + GST still hit the full
- *   subtotal — they're customer-facing fees, not platform-vs-driver
- *   math.
+ *   flow 1:1 to the driver. Platform fee + GST still hit the net
+ *   (post-coupon) subtotal — they're customer-facing fees.
  */
+function resolvePlatformFeeConfig(pricing = {}) {
+  const type = pricing.platformFeeType === 'flat' ? 'flat' : 'percentage';
+  const amount = Math.max(0, Number(pricing.platformFeeAmount) || 0);
+  const legacyPct = Math.max(0, Number(pricing.serviceChargePercent) || 0);
+  if (type === 'flat') return { type: 'flat', amount };
+  if (amount > 0) return { type: 'percentage', amount };
+  if (legacyPct > 0) return { type: 'percentage', amount: legacyPct };
+  return { type: 'percentage', amount: 0 };
+}
+
 function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrough = 0, coupon = null) {
   const couponDiscount = applyCouponDiscount(subtotal, coupon);
   const netSubtotal = Math.max(0, round2(subtotal - couponDiscount));
 
-  const serviceChargePercent = pricing.serviceChargePercent || 0;
+  const { type: platformFeeType, amount: platformFeeAmount } =
+    resolvePlatformFeeConfig(pricing || {});
+  const platformFee =
+    platformFeeType === 'flat'
+      ? platformFeeAmount
+      : (netSubtotal * platformFeeAmount) / 100;
   const gstPercent = pricing.gstPercent || 0;
-  const serviceCharge = (netSubtotal * serviceChargePercent) / 100;
-  const gstAmount = ((netSubtotal + serviceCharge) * gstPercent) / 100;
+  const gstAmount = ((netSubtotal + platformFee) * gstPercent) / 100;
   const subscriptionDiscount = applySubscriptionDiscount(netSubtotal, subscription);
-  const totalPayable = Math.max(0, netSubtotal + serviceCharge + gstAmount - subscriptionDiscount);
+  const totalPayable = Math.max(0, netSubtotal + platformFee + gstAmount - subscriptionDiscount);
 
   const platformCommissionPercent = pricing.platformCommissionPercent || 0;
   const passThrough = Math.max(0, Math.min(Number(allowancePassThrough) || 0, subtotal));
@@ -110,8 +123,11 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
   return {
     couponDiscount: round2(couponDiscount),
     netSubtotal: round2(netSubtotal),
-    serviceCharge: round2(serviceCharge),
-    serviceChargePercent,
+    platformFee: round2(platformFee),
+    platformFeeType,
+    platformFeeAmount,
+    serviceCharge: round2(platformFee),
+    serviceChargePercent: platformFeeType === 'percentage' ? platformFeeAmount : 0,
     gstAmount: round2(gstAmount),
     gstPercent,
     subscriptionDiscount: round2(subscriptionDiscount),

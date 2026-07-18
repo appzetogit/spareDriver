@@ -4,17 +4,30 @@ import { Car } from 'lucide-react';
 import { useVehicleCatalog } from '../../hooks/useVehicleCatalog';
 import { TRANSMISSION_OPTIONS } from '../../utils/vehicleCatalog';
 
+function toDateInputValue(value) {
+  if (!value) return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 const emptyValues = {
-  carTypeId: '',
   brandId: '',
+  carTypeId: '',
   modelId: '',
   fuelTypeId: '',
   vehicleNumber: '',
   transmission: 'manual',
+  insuranceExpiry: '',
+  pucExpiry: '',
 };
 
 /**
  * Reusable vehicle detail fields for user car registration.
+ * Order: brand → category → model → number → fuel/transmission → expiry dates.
  */
 const VehicleDetailsForm = ({
   values = emptyValues,
@@ -22,6 +35,7 @@ const VehicleDetailsForm = ({
   errors = {},
   disabled = false,
   showVehicleNumber = true,
+  showExpiryDates = true,
   editLabels = null,
 }) => {
   const {
@@ -57,18 +71,6 @@ const VehicleDetailsForm = ({
       )}
 
       <Select
-        label="Car category"
-        options={categoryOptions}
-        value={values.carTypeId}
-        onChange={setField('carTypeId')}
-        placeholder={loading ? 'Loading...' : 'Select category'}
-        error={errors.carTypeId}
-        searchable
-        disabled={disabled || loading}
-        prefilledLabel={editLabels?.carType}
-      />
-
-      <Select
         label="Car brand"
         options={brandOptions}
         value={values.brandId}
@@ -78,6 +80,18 @@ const VehicleDetailsForm = ({
         searchable
         disabled={disabled || loading}
         prefilledLabel={editLabels?.brand}
+      />
+
+      <Select
+        label="Car category"
+        options={categoryOptions}
+        value={values.carTypeId}
+        onChange={setField('carTypeId')}
+        placeholder={loading ? 'Loading...' : 'Select category'}
+        error={errors.carTypeId}
+        searchable
+        disabled={disabled || loading}
+        prefilledLabel={editLabels?.carType}
       />
 
       <Select
@@ -134,6 +148,27 @@ const VehicleDetailsForm = ({
           disabled={disabled}
         />
       </div>
+
+      {showExpiryDates && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="Insurance expiry"
+            type="date"
+            value={toDateInputValue(values.insuranceExpiry)}
+            onChange={(e) => setField('insuranceExpiry')(e.target.value)}
+            error={errors.insuranceExpiry}
+            disabled={disabled}
+          />
+          <Input
+            label="PUC expiry"
+            type="date"
+            value={toDateInputValue(values.pucExpiry)}
+            onChange={(e) => setField('pucExpiry')(e.target.value)}
+            error={errors.pucExpiry}
+            disabled={disabled}
+          />
+        </div>
+      )}
     </div>
   );
 };

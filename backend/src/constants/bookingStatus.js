@@ -186,18 +186,19 @@ export const DISPATCH_RESPONSE = Object.freeze({
  *      → defer: enqueue an `assign` job that fires at
  *        `scheduledStartAt − LONG_LEAD_HOURS`.
  *
- * When the `assign` (or any subsequent `retry`) job runs and the wave
- * dispatcher comes back empty, we DON'T immediately give up. Instead
- * we re-queue another retry `RETRY_DELAY_MINUTES` later and keep doing
- * so until we run out of runway before the emergency-pool cutoff (at
- * `scheduledStartAt − EMERGENCY_POOL_MINUTES`). Past that cutoff the
- * `escalate` job parks the booking in the admin-managed pool.
+ * Once the assignment window opens, scheduled bookings use a single
+ * non-expiring inbox broadcast to every matching driver (no wave
+ * timers, no RETRY_DELAY_MINUTES churn). Instant rides keep the timed
+ * wave dispatcher.
  *
- * Reminder jobs (`REMINDER_OFFSETS_MINUTES`) are NOT enqueued at
- * booking-creation time any more — they only fire once a driver has
- * actually been assigned to the booking (whether by the dispatcher or
- * by an admin pulling it out of the emergency pool). All knobs are
- * overridable per-service via `ServicePricing.scheduledDispatch`.
+ * Escalation into the admin emergency pool is a recurring batch sweep
+ * every `EMERGENCY_POOL_BATCH_INTERVAL_MINUTES` (default 45). The
+ * cutoff itself remains `scheduledStartAt − EMERGENCY_POOL_MINUTES`
+ * (worst-case lag into the pool ≈ one batch interval after cutoff).
+ *
+ * Reminder jobs (`REMINDER_OFFSETS_MINUTES`) only fire once a driver
+ * has been assigned. Knobs are overridable per-service via
+ * `ServicePricing.scheduledDispatch`.
  */
 export const SCHEDULED_BOOKING = Object.freeze({
   MORNING_START_HOUR: 6,
@@ -212,16 +213,22 @@ export const SCHEDULED_BOOKING = Object.freeze({
   LEAD_SCHEDULE_HOUR: 18,
   EMERGENCY_POOL_MINUTES: 120,
   /**
-   * Minutes to wait between assignment retries when the dispatcher
-   * comes back empty. The retry loop keeps firing until we run out of
-   * runway before `scheduledStartAt − EMERGENCY_POOL_MINUTES`; after
-   * that the escalate job takes over.
+   * How often the batch escalate cron scans for overdue unmatched
+   * scheduled bookings. 45 min balances sweep cost vs latency into
+   * the emergency pool (worst-case lag ≈ one interval after cutoff).
+   * Override via ServicePricing.scheduledDispatch when tighter sweeps
+   * are needed.
+   */
+  EMERGENCY_POOL_BATCH_INTERVAL_MINUTES: 45,
+  /**
+   * @deprecated Scheduled dispatch no longer retries empty rounds.
+   * Kept so older ServicePricing overrides / docs still parse.
    */
   RETRY_DELAY_MINUTES: 5,
   /**
    * Buffer (in minutes) padded around every booking's time window when
-   * checking for conflicts on the distipatch side. A driver is offered a
-   * new booking ONLY if none of their existing acve/scheduled
+   * checking for conflicts on the dispatch side. A driver is offered a
+   * new booking ONLY if none of their existing active/scheduled
    * bookings overlap `[newStart − RIDE_BUFFER_MINUTES, newEnd +
    * RIDE_BUFFER_MINUTES]`. Lets drivers stack future scheduled
    * bookings safely without back-to-back overlaps.
@@ -236,4 +243,45 @@ export const SCHEDULED_BOOKING = Object.freeze({
    * needing a ride sooner should pick "Instant".
    */
   MIN_SCHEDULED_LEAD_HOURS: 2,
+  /** Cap for one-shot inbox broadcast (matching drivers within max radius). */
+  INBOX_BROADCAST_LIMIT: 50,
 });
+
+/** Dispatch modes stored on `booking.dispatch.mode`. */
+export const DISPATCH_MODE = Object.freeze({
+  /** Instant (and legacy) timed waves with offer expiry. */
+  WAVE: 'wave',
+  /** Scheduled open inbox — no offer countdown. */
+  INBOX: 'inbox',
+});
+
+/**
+ * Statuses where the counterparty's phone/email may be shared with
+ * the driver or the customer. Hidden until the driver taps
+ * "I have arrived" (status → arrived).
+ */
+export const CONTACT_REVEALED_STATUSES = Object.freeze([
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+  BOOKING_STATUS.COMPLETED,
+]);
+
+/**
+ * Whether either party may see the other's contact details.
+ * Cancelled trips keep contact only if the driver had already arrived.
+ */
+export function isBookingContactRevealed(bookingOrStatus) {
+  if (!bookingOrStatus) return false;
+  const status =
+    typeof bookingOrStatus === 'string'
+      ? bookingOrStatus
+      : bookingOrStatus.status;
+  if (CONTACT_REVEALED_STATUSES.includes(status)) return true;
+  if (
+    status === BOOKING_STATUS.CANCELLED &&
+    bookingOrStatus?.timeline?.arrivedAt
+  ) {
+    return true;
+  }
+  return false;
+}

@@ -176,10 +176,12 @@ const ManagePricing = () => {
                   {renderSummary(pricing)}
                   <Row label="GST" value={`${pricing.gstPercent || 0}%`} />
                   <Row
-                    label="Service · Commission"
-                    value={`${pricing.serviceChargePercent || 0}% · ${
-                      pricing.platformCommissionPercent || 0
-                    }%`}
+                    label="Platform fee · Commission"
+                    value={`${
+                      pricing.platformFeeType === 'flat'
+                        ? `₹${pricing.platformFeeAmount || 0}`
+                        : `${pricing.platformFeeAmount || pricing.serviceChargePercent || 0}%`
+                    } · ${pricing.platformCommissionPercent || 0}%`}
                   />
                 </div>
               )}

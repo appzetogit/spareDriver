@@ -57,6 +57,21 @@ const DriverReachedPage = () => {
   const driverName = driverObj?.name || 'Your driver';
   const driverRating = driverObj?.rating;
   const otpCode = booking?.rideStartOtp?.code;
+  const driverPhone = driverObj?.phone_no || driverObj?.phone || null;
+  const driverCallHref = driverPhone
+    ? `tel:+91${String(driverPhone).replace(/\D/g, '')}`
+    : null;
+
+  useEffect(() => {
+    // Contact is stripped until arrived — refetch once so Call works.
+    if (
+      booking?.status === BOOKING_STATUS.ARRIVED &&
+      driverObj &&
+      !driverPhone
+    ) {
+      fetchActive().catch(() => {});
+    }
+  }, [booking?.status, driverObj, driverPhone, fetchActive]);
 
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
@@ -112,7 +127,18 @@ const DriverReachedPage = () => {
           ) : null}
 
           <div className="flex gap-3 mb-2">
-            <Button variant="secondary" size="md" className="flex-1" icon={Phone}>Call</Button>
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              icon={Phone}
+              disabled={!driverCallHref}
+              onClick={() => {
+                if (driverCallHref) window.location.href = driverCallHref;
+              }}
+            >
+              Call
+            </Button>
             <Button variant="secondary" size="md" className="flex-1" icon={MessageSquare}>Message</Button>
           </div>
         </Card>

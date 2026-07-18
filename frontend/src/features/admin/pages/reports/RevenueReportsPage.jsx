@@ -23,6 +23,8 @@ function formatCount(n) {
 
 const SOURCE_COLORS = {
   commission: '#10B981',
+  platform_fee: '#0EA5E9',
+  coupon_discount: '#F59E0B',
   cancellation_fee: '#F59E0B',
   driver_penalty: '#EF4444',
   subscription: '#8B5CF6',

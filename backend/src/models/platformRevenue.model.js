@@ -28,6 +28,13 @@ import mongoose from 'mongoose';
 export const PLATFORM_REVENUE_SOURCE = Object.freeze({
   /** Platform's commission on a completed booking. */
   COMMISSION: 'commission',
+  /** Customer-facing platform fee collected on a completed booking. */
+  PLATFORM_FEE: 'platform_fee',
+  /**
+   * Coupon discount the platform absorbs on a completed booking
+   * (stored as a negative amountRupees so net revenue declines).
+   */
+  COUPON_DISCOUNT: 'coupon_discount',
   /** Platform's share of a cancellation fee. */
   CANCELLATION_FEE: 'cancellation_fee',
   /** Driver cancellation penalty — entire amount goes to the platform. */

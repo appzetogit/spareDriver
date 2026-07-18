@@ -31,6 +31,7 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
   const mode = getBookingAssignmentMode(booking);
   const config = BOOKING_ASSIGN_CONFIG[mode] || null;
   const isOutstation = mode === 'outstation';
+  const isReassign = mode === 'reassign';
   const limit = isOutstation ? OUTSTATION_LIMIT : EMERGENCY_LIMIT;
 
   const [fullBooking, setFullBooking] = useState(null);
@@ -219,7 +220,7 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
         driverId: selectedDriver._id,
         notes: notes || '',
       });
-      toast.success('Driver assigned successfully');
+      toast.success(isReassign ? 'Driver reassigned successfully' : 'Driver assigned successfully');
       onAssigned();
     } catch (err) {
       const data = err?.response?.data;
@@ -243,7 +244,7 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
     <div className="px-5 py-4 flex items-center justify-between gap-3 border-b border-slate-100">
       <div className="min-w-0">
         <p className="text-[11px] uppercase tracking-wide text-slate-500">
-          Assign driver · {config.label}
+          {isReassign ? 'Assign another driver' : 'Assign driver'} · {config.label}
         </p>
         <h2 className="text-base font-bold text-slate-900 truncate">
           {displayBooking.bookingNumber || booking.bookingNumber || booking._id?.slice(-6)}
@@ -266,7 +267,7 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
           <p className="text-[12px] text-emerald-700 truncate">
-            Ready to assign <strong>{selectedDriver.name}</strong>
+            Ready to {isReassign ? 'reassign to' : 'assign'} <strong>{selectedDriver.name}</strong>
           </p>
         </div>
       ) : null}
@@ -290,7 +291,11 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
           disabled={!selectedDriver || hasVehicleConflict || selectedDriver?.hasConflict}
           onClick={handleAssign}
         >
-          {selectedDriver ? `Assign to ${selectedDriver.name?.split(' ')[0] || 'driver'}` : 'Assign driver'}
+          {selectedDriver
+            ? `${isReassign ? 'Reassign to' : 'Assign to'} ${selectedDriver.name?.split(' ')[0] || 'driver'}`
+            : isReassign
+              ? 'Reassign driver'
+              : 'Assign driver'}
         </Button>
       </div>
     </div>

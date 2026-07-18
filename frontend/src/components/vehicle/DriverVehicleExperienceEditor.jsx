@@ -73,6 +73,7 @@ const DriverVehicleExperienceEditor = ({
             errors={fieldErrors[index] || {}}
             disabled={disabled}
             showVehicleNumber={false}
+            showExpiryDates={false}
           />
         </div>
       ))}

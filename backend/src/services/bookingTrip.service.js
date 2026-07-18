@@ -58,6 +58,7 @@ import {
   buildCommissionRevenueMeta,
   settleDriverEarning,
 } from './bookingExtension.service.js';
+import { incrementCouponUsageService } from './coupon.service.js';
 
 /**
  * Generate a numeric OTP of the configured length. We zero-pad so codes that
@@ -710,11 +711,20 @@ export async function completeTripService(driverId, bookingId) {
     );
   }
 
-  // Book the platform's commission as revenue. Same fareSnapshot the
-  // booking was created with — guaranteed in lockstep with what the
-  // customer paid. Best-effort: a failure here logs but never wedges
-  // trip completion.
-  const commission = Number(booking.fareSnapshot?.breakdown?.platformCommission) || 0;
+  // Book the platform's revenue from this trip:
+  //   - commission (cut of the ride subtotal)
+  //   - platform fee (customer-facing fee, formerly "service charge")
+  //   - coupon discount as a negative line (admin bears the cost)
+  // Best-effort: a failure here logs but never wedges trip completion.
+  const snap = booking.fareSnapshot || {};
+  const bd = snap.breakdown || {};
+  const commission = Number(bd.platformCommission ?? snap.platformCommission) || 0;
+  const platformFee =
+    Number(bd.platformFee ?? bd.serviceCharge ?? snap.serviceCharge) || 0;
+  const couponDiscount =
+    Number(bd.couponDiscount ?? snap.couponDiscount) || 0;
+  const revenueMeta = buildCommissionRevenueMeta(booking);
+
   if (commission > 0) {
     recordPlatformRevenue({
       source: PLATFORM_REVENUE_SOURCE.COMMISSION,
@@ -724,10 +734,70 @@ export async function completeTripService(driverId, bookingId) {
       serviceType: booking.serviceType || '',
       userId: booking.userId,
       driverId: booking.driverId || null,
-      meta: buildCommissionRevenueMeta(booking),
+      meta: revenueMeta,
     }).catch((err) =>
       console.warn(
         '[bookingTrip] failed to log commission revenue:',
+        err?.message,
+      ),
+    );
+  }
+
+  if (platformFee > 0) {
+    recordPlatformRevenue({
+      source: PLATFORM_REVENUE_SOURCE.PLATFORM_FEE,
+      amountRupees: platformFee,
+      bookingId: booking._id,
+      bookingNumber: booking.bookingNumber || '',
+      serviceType: booking.serviceType || '',
+      userId: booking.userId,
+      driverId: booking.driverId || null,
+      meta: {
+        ...revenueMeta,
+        platformFeeType: bd.platformFeeType || null,
+        platformFeeAmount: bd.platformFeeAmount ?? bd.serviceChargePercent ?? null,
+      },
+    }).catch((err) =>
+      console.warn(
+        '[bookingTrip] failed to log platform fee revenue:',
+        err?.message,
+      ),
+    );
+  }
+
+  if (couponDiscount > 0) {
+    recordPlatformRevenue({
+      source: PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT,
+      amountRupees: -round2(couponDiscount),
+      bookingId: booking._id,
+      bookingNumber: booking.bookingNumber || '',
+      serviceType: booking.serviceType || '',
+      userId: booking.userId,
+      driverId: booking.driverId || null,
+      meta: {
+        ...revenueMeta,
+        couponCode: snap.couponCode || bd.couponCode || null,
+        couponId: snap.couponId ? String(snap.couponId) : null,
+        couponDiscount,
+        subtotal: round2(bd.subtotal || 0),
+        netSubtotal: round2(bd.netSubtotal || 0),
+        totalPayable: round2(bd.totalPayable || snap.total || 0),
+        driverEarning: round2(bd.driverEarning || 0),
+      },
+    }).catch((err) =>
+      console.warn(
+        '[bookingTrip] failed to log coupon discount debit:',
+        err?.message,
+      ),
+    );
+  }
+
+  // Credit limited-use coupon only on a completed trip (not on cancel /
+  // no-drivers). Idempotent at the business level: completion runs once.
+  if (snap.couponId) {
+    incrementCouponUsageService(snap.couponId).catch((err) =>
+      console.warn(
+        '[bookingTrip] failed to increment coupon usage:',
         err?.message,
       ),
     );

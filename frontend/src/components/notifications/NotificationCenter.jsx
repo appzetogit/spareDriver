@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, Loader2, X } from 'lucide-react';
 import { notificationNavigatePath } from '../../constants/notificationTypes';
 
 function formatWhen(iso) {
@@ -61,21 +61,33 @@ export function NotificationCenterPanel({
         className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <div>
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+          <div className="min-w-0">
             <h2 className="font-semibold text-text">{title}</h2>
             {unreadCount > 0 ? (
               <p className="text-xs text-text-muted">{unreadCount} unread</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => markAllRead().catch(() => null)}
-            className="flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            <CheckCheck className="w-3.5 h-3.5" />
-            Mark all read
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => markAllRead().catch(() => null)}
+                className="flex items-center gap-1 text-xs text-primary hover:underline px-2 py-1.5"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                Mark all read
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl hover:bg-gray-100 text-text-secondary transition-colors"
+              aria-label="Close notifications"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto">

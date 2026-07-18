@@ -1,22 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
-import { Phone, Lock, ArrowLeft, Mail, Smartphone } from 'lucide-react';
+import { Phone, Lock, ArrowLeft, Mail, Smartphone, Loader2 } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
+import { useStoreHydration } from '../../../hooks/useStoreHydration';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const setAuth = useUserAuthStore((state) => state.setAuth);
+  const hydrated = useStoreHydration(useUserAuthStore);
+  const { user, isAuthenticated, setAuth } = useUserAuthStore();
   const [mode, setMode] = useState('phone');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated || !user) return;
+    navigateUserAfterAuth(navigate, user);
+  }, [hydrated, isAuthenticated, user, navigate]);
+
+  if (!hydrated || (isAuthenticated && user)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   const validate = () => {
     const newErrors = {};

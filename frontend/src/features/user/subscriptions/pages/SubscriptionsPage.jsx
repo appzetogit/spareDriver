@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,23 +6,35 @@ import {
   Loader2,
   Sparkles,
   Star,
+  ChevronRight,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
-import { useUserSubscriptionPlansStore } from '../../../../store/user/useUserPricingStore';
+import {
+  useUserSubscriptionPlansStore,
+  useUserSubscriptionStore,
+} from '../../../../store/user/useUserPricingStore';
 import { SUBSCRIPTION_BANNER } from '../../home/constants/serviceCatalog';
 import { calculateSubscriptionCheckout, formatCurrency } from '../../../../utils/fareCalculator';
 
 const SubscriptionsPage = () => {
   const navigate = useNavigate();
+  const mySubscriptions = useUserSubscriptionStore((s) => s.mySubscriptions);
+  const fetchMySubscription = useUserSubscriptionStore((s) => s.fetchMySubscription);
+  const mySubsLoading = useUserSubscriptionStore((s) => s.loading);
 
   const { data, loading } = useCachedQuery(
     useUserSubscriptionPlansStore,
     buildCacheKey('user-subscriptions-active'),
   );
 
+  useEffect(() => {
+    fetchMySubscription().catch(() => {});
+  }, [fetchMySubscription]);
+
+  const activeCount = Array.isArray(mySubscriptions) ? mySubscriptions.length : 0;
   const plans = useMemo(() => {
     const list = Array.isArray(data) ? data : [];
     return list
@@ -42,7 +54,7 @@ const SubscriptionsPage = () => {
           <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100">
             <ArrowLeft className="w-5 h-5 text-text" />
           </button>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-text">Subscriptions</h1>
             <p className="text-xs text-text-muted">A driver of your own, on your schedule.</p>
           </div>
@@ -51,6 +63,30 @@ const SubscriptionsPage = () => {
 
       <div className="flex-1 p-4 space-y-4">
         <HeroCard />
+
+        <button
+          type="button"
+          onClick={() => navigate('/user/account/subscription')}
+          className="w-full flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3.5 text-left hover:bg-primary/10 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-text">Active subscriptions</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {mySubsLoading && !activeCount
+                ? 'Loading…'
+                : activeCount > 0
+                  ? `You have ${activeCount} active subscription${activeCount === 1 ? '' : 's'}`
+                  : 'No active subscriptions yet'}
+            </p>
+          </div>
+          <span className="min-w-[1.75rem] h-7 px-2 rounded-full bg-primary text-dark text-xs font-bold flex items-center justify-center">
+            {activeCount}
+          </span>
+          <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
+        </button>
 
         {loading && !plans.length ? (
           <div className="flex items-center justify-center py-16 text-text-muted">

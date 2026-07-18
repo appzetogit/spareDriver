@@ -20,7 +20,10 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
  *
  *   @param {object} params
  *   @param {string} params.source           PLATFORM_REVENUE_SOURCE.*
- *   @param {number} params.amountRupees     ₹ kept by the platform (>0)
+ *   @param {number} params.amountRupees     ₹ kept by the platform.
+ *                                           Positive for income; negative
+ *                                           allowed only for COUPON_DISCOUNT
+ *                                           (admin-absorbed coupon cost).
  *   @param {string|ObjectId} params.bookingId
  *   @param {string} [params.bookingNumber]
  *   @param {string} [params.serviceType]
@@ -29,8 +32,8 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
  *   @param {object} [params.meta]           source-specific blob
  *   @param {Date}   [params.occurredAt]     defaults to now
  *
- * Zero / negative amounts are dropped silently — there's nothing to
- * ledger and we don't want noisy no-op rows polluting the admin view.
+ * Zero amounts are dropped silently. Negative amounts are rejected
+ * except for `coupon_discount` (and admin refunds via the debit helper).
  */
 export async function recordPlatformRevenue({
   source,
@@ -48,7 +51,9 @@ export async function recordPlatformRevenue({
     throw new ApiError(400, `Invalid platform revenue source: ${source}`);
   }
   const amt = round2(Number(amountRupees) || 0);
-  if (amt <= 0) return null;
+  const allowNegative = source === PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT;
+  if (amt === 0) return null;
+  if (amt < 0 && !allowNegative) return null;
   if (source === PLATFORM_REVENUE_SOURCE.SUBSCRIPTION) {
     if (!userSubscriptionId) {
       throw new ApiError(400, 'userSubscriptionId is required for subscription revenue');

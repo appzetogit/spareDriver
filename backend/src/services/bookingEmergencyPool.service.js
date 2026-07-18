@@ -28,17 +28,17 @@ import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
 /**
  * Emergency pool — the manual-assignment safety net for scheduled rides.
  *
- *   Worker fires `escalate` at `scheduledStartAt − EMERGENCY_POOL_MINUTES`.
- *     → if no driver yet, the booking moves to `IN_EMERGENCY_POOL`.
+ *   Recurring `escalate-batch` job (every ~45 min) finds unmatched
+ *   scheduled + outstation bookings past `scheduled.escalateAt` (= start −
+ *   EMERGENCY_POOL_MINUTES) and calls `escalateToEmergencyPool`.
+ *     → booking moves to `IN_EMERGENCY_POOL`.
  *     → admin/sub-admin see every entry; team_member only sees rows
  *       whose `zoneIds` overlap their `assignedZones`.
  *     → admin picks a driver and calls `adminAssignDriverToEmergencyPool`,
- *       which mirrors the standard accept-booking transition (driver
- *       gets `isOnTrip = true`, status flips to DRIVER_ASSIGNED, full
- *       socket fan-out).
+ *       which mirrors the standard accept-booking transition.
  *
- * The wave dispatcher is bypassed at assignment — this is a human picking
- * a specific driver, not an offer broadcast.
+ * The wave/inbox dispatcher is bypassed at assignment — this is a human
+ * picking a specific driver, not an offer broadcast.
  */
 
 /**
@@ -68,11 +68,17 @@ async function resolveBufferMinutesFor(serviceType) {
  */
 async function shouldImmediatelyLockOnEmergencyAssign(booking) {
   if (!booking) return true;
-  if (booking.bookingType !== BOOKING_TYPE.SCHEDULED) return true;
+  if (
+    booking.bookingType !== BOOKING_TYPE.SCHEDULED
+    && booking.bookingType !== BOOKING_TYPE.OUTSTATION
+  ) {
+    return true;
+  }
 
-  const scheduledAt = booking?.hourly?.scheduledStartAt;
+  const { resolveBookingSearchStartAt } = await import('../utils/bookingInbox.js');
+  const scheduledAt = resolveBookingSearchStartAt(booking);
   if (!scheduledAt) return true;
-  const startMs = new Date(scheduledAt).getTime();
+  const startMs = scheduledAt.getTime();
   if (!Number.isFinite(startMs)) return true;
 
   const bufferMinutes = await resolveBufferMinutesFor(booking.serviceType);
@@ -85,16 +91,14 @@ async function shouldImmediatelyLockOnEmergencyAssign(booking) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Worker handler for the `escalate` job. Moves a scheduled booking into
- * the manual-assignment queue if the dispatcher still hasn't paired it
- * with a driver.
+ * Moves a scheduled booking into the manual-assignment queue if still
+ * unmatched. Called by the batch escalate cron (and legacy per-booking
+ * escalate jobs during drain).
  *
  *   - PENDING_ASSIGNMENT / SEARCHING / NO_DRIVERS_FOUND → IN_EMERGENCY_POOL
- *   - any other status → no-op (booking already has a driver or is
- *     cancelled / completed; no action needed).
+ *   - any other status → no-op
  *
- * Withdraws any in-flight offers so the wave dispatcher doesn't keep
- * paging drivers while the booking is parked in the pool.
+ * Withdraws any in-flight inbox/wave offers so drivers stop seeing it.
  */
 export async function escalateToEmergencyPool(bookingId) {
   const booking = await Booking.findById(bookingId);
@@ -142,6 +146,15 @@ export async function escalateToEmergencyPool(bookingId) {
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, payload);
   emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, payload);
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
+  emitToAdmins(S2C_EVENTS.ADMIN_ALERT, {
+    kind: 'emergency_pool_entered',
+    severity: 'warn',
+    message:
+      booking.bookingType === BOOKING_TYPE.OUTSTATION
+        ? `Outstation booking ${booking.bookingNumber} needs manual driver assignment`
+        : `Scheduled booking ${booking.bookingNumber} needs manual driver assignment`,
+    data: { bookingId: String(booking._id) },
+  });
   notifyAdminEmergencyPoolEntered(booking).catch(() => null);
 
   return { ok: true };
@@ -250,6 +263,16 @@ export async function listEmergencyPoolBookingsService({ staff, query = {} }) {
     Booking.find(filter)
       .populate('userId', 'name phone_no')
       .populate('zoneIds', 'name code city')
+      .populate({
+        path: 'carId',
+        select: 'vehicleNumber transmission image carTypeId brandId modelId fuelTypeId',
+        populate: [
+          { path: 'carTypeId', select: 'name' },
+          { path: 'brandId', select: 'name' },
+          { path: 'modelId', select: 'name' },
+          { path: 'fuelTypeId', select: 'name' },
+        ],
+      })
       .sort({ 'hourly.scheduledStartAt': 1, createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit, 10))
@@ -263,6 +286,22 @@ export async function listEmergencyPoolBookingsService({ staff, query = {} }) {
     page: parseInt(page, 10),
     pages: Math.ceil(total / Math.max(1, parseInt(limit, 10))),
   };
+}
+
+/**
+ * Lightweight count for admin sidebar badge. Scoped like the list.
+ */
+export async function countEmergencyPoolBookingsService({ staff } = {}) {
+  const filter = {
+    status: BOOKING_STATUS.IN_EMERGENCY_POOL,
+    isDeleted: false,
+  };
+  const scope = zoneScopeForStaff(staff);
+  if (scope !== null) {
+    if (!scope.length) return 0;
+    filter.zoneIds = { $in: scope };
+  }
+  return Booking.countDocuments(filter);
 }
 
 /* ------------------------------------------------------------------ */

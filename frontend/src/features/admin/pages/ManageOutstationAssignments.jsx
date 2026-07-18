@@ -26,6 +26,8 @@ import {
   Navigation,
   FileText,
   Users,
+  Eye,
+  UserPlus,
 } from 'lucide-react';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
@@ -48,8 +50,45 @@ import {
   formatPickupDateTime,
   formatDateTime12,
 } from '../../../utils/datetime';
+import { BOOKING_STATUS } from '../../../constants/bookingStatus';
+import RowActionsMenu from '../components/RowActionsMenu';
 
 const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
+
+const ASSIGNABLE_STATUSES = new Set([
+  BOOKING_STATUS.PENDING_ASSIGNMENT,
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.IN_EMERGENCY_POOL,
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
+]);
+
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: BOOKING_STATUS.SEARCHING, label: 'Searching' },
+  { value: BOOKING_STATUS.PENDING_ASSIGNMENT, label: 'Pending assignment' },
+  { value: BOOKING_STATUS.IN_EMERGENCY_POOL, label: 'Emergency pool' },
+  { value: BOOKING_STATUS.DRIVER_ASSIGNED, label: 'Driver assigned' },
+  { value: BOOKING_STATUS.EN_ROUTE, label: 'En route' },
+  { value: BOOKING_STATUS.ARRIVED, label: 'Arrived' },
+  { value: BOOKING_STATUS.STARTED, label: 'In progress' },
+  { value: BOOKING_STATUS.COMPLETED, label: 'Completed' },
+  { value: BOOKING_STATUS.CANCELLED, label: 'Cancelled' },
+  { value: BOOKING_STATUS.NO_DRIVERS_FOUND, label: 'No drivers found' },
+];
+
+const STATUS_BADGE = {
+  [BOOKING_STATUS.SEARCHING]: { variant: 'info', label: 'Searching' },
+  [BOOKING_STATUS.PENDING_ASSIGNMENT]: { variant: 'warning', label: 'Pending assign' },
+  [BOOKING_STATUS.IN_EMERGENCY_POOL]: { variant: 'danger', label: 'Emergency pool' },
+  [BOOKING_STATUS.DRIVER_ASSIGNED]: { variant: 'primary', label: 'Assigned' },
+  [BOOKING_STATUS.EN_ROUTE]: { variant: 'info', label: 'En route' },
+  [BOOKING_STATUS.ARRIVED]: { variant: 'info', label: 'Arrived' },
+  [BOOKING_STATUS.STARTED]: { variant: 'success', label: 'In progress' },
+  [BOOKING_STATUS.COMPLETED]: { variant: 'success', label: 'Completed' },
+  [BOOKING_STATUS.CANCELLED]: { variant: 'default', label: 'Cancelled' },
+  [BOOKING_STATUS.NO_DRIVERS_FOUND]: { variant: 'danger', label: 'No drivers' },
+  [BOOKING_STATUS.AWAITING_PAYMENT]: { variant: 'warning', label: 'Awaiting payment' },
+};
 
 /* ================================================================== */
 /* Main page                                                           */
@@ -76,6 +115,7 @@ const ManageOutstationAssignments = () => {
     search: '',
     zoneId: '',
     city: '',
+    status: '',
     dateFrom: '',
     dateTo: '',
   });
@@ -122,7 +162,7 @@ const ManageOutstationAssignments = () => {
       setPagination({ total: data.total || 0, pages: data.pages || 1 });
       setError(null);
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to load outstation queue');
+      setError(err?.response?.data?.message || 'Failed to load outstation bookings');
     } finally {
       setLoading(false);
     }
@@ -137,6 +177,7 @@ const ManageOutstationAssignments = () => {
       debouncedFilters.search ||
       debouncedFilters.zoneId ||
       debouncedFilters.city ||
+      debouncedFilters.status ||
       debouncedFilters.dateFrom ||
       debouncedFilters.dateTo,
     ),
@@ -144,7 +185,7 @@ const ManageOutstationAssignments = () => {
   );
 
   const clearAllFilters = () => {
-    setFilters({ search: '', zoneId: '', city: '', dateFrom: '', dateTo: '' });
+    setFilters({ search: '', zoneId: '', city: '', status: '', dateFrom: '', dateTo: '' });
     setPage(1);
   };
 
@@ -249,7 +290,7 @@ const ManageOutstationAssignments = () => {
       {
         key: 'fare',
         label: 'Fare',
-        width: '10%',
+        width: '8%',
         render: (_, row) => (
           <span className="text-sm font-bold text-emerald-600 flex items-center gap-0.5">
             <IndianRupee className="w-3.5 h-3.5" />
@@ -258,24 +299,63 @@ const ManageOutstationAssignments = () => {
         ),
       },
       {
+        key: 'status',
+        label: 'Status',
+        width: '10%',
+        render: (_, row) => {
+          const meta = STATUS_BADGE[row.status] || {
+            variant: 'default',
+            label: String(row.status || '—').replace(/_/g, ' '),
+          };
+          return (
+            <div className="space-y-1">
+              <Badge variant={meta.variant} className="capitalize">
+                {meta.label}
+              </Badge>
+              {row.driverId?.name && (
+                <p className="text-[10px] text-slate-500 truncate">
+                  {row.driverId.name}
+                </p>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        key: 'inbox',
+        label: 'Inbox',
+        width: '6%',
+        render: (_, row) => (
+          <span className="text-xs text-slate-600">
+            {(row.dispatch?.pendingOfferIds || []).length}
+          </span>
+        ),
+      },
+      {
         key: 'actions',
-        label: 'Action',
+        label: '',
         sortable: false,
         unclamp: true,
-        width: '9%',
-        render: (_, row) =>
-          canAssign ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setAssignBooking(row); }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-dark text-xs font-bold hover:bg-primary-dark transition-all duration-150 shadow-sm hover:shadow"
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              Assign
-            </button>
-          ) : (
-            <Badge variant="info" text="View only" />
-          ),
+        width: '6%',
+        render: (_, row) => {
+          const items = [
+            {
+              label: 'View',
+              icon: Eye,
+              onClick: () => setDetailBooking(row),
+            },
+          ];
+          const canAssignRow =
+            canAssign && ASSIGNABLE_STATUSES.has(row.status) && !row.driverId;
+          if (canAssignRow) {
+            items.push({
+              label: 'Assign',
+              icon: UserPlus,
+              onClick: () => setAssignBooking(row),
+            });
+          }
+          return <RowActionsMenu items={items} />;
+        },
       },
     ],
     [canAssign],
@@ -311,10 +391,10 @@ const ManageOutstationAssignments = () => {
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-slate-900 leading-tight">
-                Outstation Pool
+                Outstation Bookings
               </h1>
               <p className="text-[12px] text-slate-400 mt-0.5">
-                Multi-day trips waiting for manual driver assignment
+                All outstation trips — auto-search first, then emergency pool if unmatched
                 {admin?.role === 'team_member' ? ' in your zones' : ''}
               </p>
             </div>
@@ -371,7 +451,7 @@ const ManageOutstationAssignments = () => {
               {STAFF_ROLE_LABELS[admin?.role] || 'Team member'} access
             </p>
             <p className="text-[12px] text-amber-700 leading-snug mt-0.5">
-              You can monitor outstation requests in your assigned zones.
+              You can monitor outstation bookings in your assigned zones.
               Only admins and sub-admins can assign a driver.
             </p>
           </div>
@@ -393,7 +473,7 @@ const ManageOutstationAssignments = () => {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {canAssign && (
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
@@ -412,6 +492,19 @@ const ManageOutstationAssignments = () => {
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             </div>
           )}
+          <div className="relative">
+            <ListTree className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <select
+              value={filters.status}
+              onChange={(e) => { setFilters((f) => ({ ...f, status: e.target.value })); setPage(1); }}
+              className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none transition-all"
+            >
+              {STATUS_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
           <div className="relative">
             <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <input
@@ -462,7 +555,7 @@ const ManageOutstationAssignments = () => {
         onPageChange={setPage}
         onRowClick={(row) => setDetailBooking(row)}
         entityLabel="bookings"
-        emptyMessage="No outstation trips waiting for assignment."
+        emptyMessage="No outstation bookings found."
       />
 
       {assignBooking && (
@@ -496,7 +589,7 @@ const ManageOutstationAssignments = () => {
 function OutstationQueueStats({ total, overdue, today }) {
   const tiles = [
     {
-      label: 'Total in queue',
+      label: 'Total bookings',
       value: total,
       icon: ListTree,
       gradient: 'from-primary/20 to-primary/5',

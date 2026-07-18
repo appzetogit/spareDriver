@@ -30,6 +30,18 @@ const SOURCE_META = {
     icon: TrendingUp,
     tone: 'text-emerald-700',
   },
+  platform_fee: {
+    label: 'Platform fee',
+    variant: 'success',
+    icon: Banknote,
+    tone: 'text-emerald-700',
+  },
+  coupon_discount: {
+    label: 'Coupon absorbed',
+    variant: 'warning',
+    icon: CircleSlash,
+    tone: 'text-amber-700',
+  },
   cancellation_fee: {
     label: 'Cancellation fee',
     variant: 'warning',
@@ -109,10 +121,17 @@ const RevenueDetailsModal = ({ isOpen, onClose, row }) => {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-slate-500">Platform kept</p>
-            <p className={`text-2xl font-bold ${sourceMeta.tone}`}>
-              {formatCurrency(row.amountRupees)}
+            <p className="text-xs text-slate-500">
+              {row.source === 'coupon_discount' ? 'Platform cost' : 'Platform kept'}
             </p>
+            <p className={`text-2xl font-bold ${sourceMeta.tone}`}>
+              {row.source === 'coupon_discount'
+                ? formatCurrency(Math.abs(Number(row.amountRupees) || 0))
+                : formatCurrency(row.amountRupees)}
+            </p>
+            {row.source === 'coupon_discount' && (
+              <p className="text-[10px] text-amber-600 mt-0.5">Deducted from revenue</p>
+            )}
           </div>
         </div>
       }
@@ -129,6 +148,12 @@ const RevenueDetailsModal = ({ isOpen, onClose, row }) => {
 
         {row.source === 'commission' && (
           <CommissionBreakdown meta={meta} amount={row.amountRupees} />
+        )}
+        {row.source === 'platform_fee' && (
+          <PlatformFeeBreakdown meta={meta} amount={row.amountRupees} />
+        )}
+        {row.source === 'coupon_discount' && (
+          <CouponDiscountBreakdown meta={meta} amount={row.amountRupees} />
         )}
         {row.source === 'cancellation_fee' && (
           <CancellationBreakdown meta={meta} amount={row.amountRupees} />
@@ -166,6 +191,11 @@ function CommissionBreakdown({ meta, amount }) {
   const {
     commissionPercent = 0,
     totalPayable = 0,
+    subtotal = 0,
+    netSubtotal = 0,
+    couponCode = null,
+    couponDiscount = 0,
+    platformFee = 0,
     baseDriverEarning = 0,
     basePlatformCommission = 0,
     extensionsCount = 0,
@@ -188,9 +218,31 @@ function CommissionBreakdown({ meta, amount }) {
 
   const hasExtensions = extensionsCount > 0 || extensionFareDelta > 0;
   const hasWaiting = waitingChargeRupees > 0;
+  const hasCoupon = couponDiscount > 0;
 
   return (
     <>
+      {hasCoupon && (
+        <SectionCard
+          title="Coupon discount"
+          subtitle="Customer saved — platform absorbs; driver commission unchanged"
+        >
+          <KV label="Coupon code" value={couponCode || '\u2014'} />
+          <KV label="Ride subtotal (before coupon)" value={formatCurrency(subtotal)} />
+          <KV label="Customer discount" value={formatCurrency(couponDiscount)} />
+          <KV label="Net ride subtotal" value={formatCurrency(netSubtotal)} />
+          <KV
+            label="Platform cost absorbed"
+            value={
+              <span className="font-bold text-amber-700">
+                {formatCurrency(couponDiscount)}
+              </span>
+            }
+            hint="Booked as a separate coupon_discount ledger row on completion"
+          />
+        </SectionCard>
+      )}
+
       <SectionCard
         title="Base fare"
         subtitle={`Original booking quote \u2014 ${commissionPercent}% platform commission`}
@@ -252,6 +304,9 @@ function CommissionBreakdown({ meta, amount }) {
 
       <SectionCard title="Totals" subtitle="What the customer paid vs. how it was split" icon={Banknote}>
         <KV label="Customer paid (effective total)" value={formatCurrency(effectiveTotal)} />
+        {platformFee > 0 && (
+          <KV label="Platform fee (customer)" value={formatCurrency(platformFee)} />
+        )}
         <KV
           label="Platform kept (commission only)"
           value={
@@ -265,6 +320,24 @@ function CommissionBreakdown({ meta, amount }) {
               : null
           }
         />
+        {hasCoupon && (
+          <KV
+            label="Less coupon absorbed"
+            value={
+              <span className="font-bold text-amber-700">
+                −{formatCurrency(couponDiscount)}
+              </span>
+            }
+          />
+        )}
+        {hasCoupon && platformFee > 0 && (
+          <KV
+            label="Net platform (commission + fee − coupon)"
+            value={formatCurrency(
+              Math.max(0, Number(amount) + Number(platformFee) - Number(couponDiscount)),
+            )}
+          />
+        )}
         <KV
           label="Driver received (this trip)"
           value={
@@ -281,6 +354,81 @@ function CommissionBreakdown({ meta, amount }) {
         )}
       </SectionCard>
     </>
+  );
+}
+
+function PlatformFeeBreakdown({ meta, amount }) {
+  const {
+    platformFeeType = null,
+    platformFeeAmount = null,
+    totalPayable = 0,
+    subtotal = 0,
+    couponDiscount = 0,
+  } = meta;
+  return (
+    <SectionCard
+      title="Platform fee"
+      subtitle="Customer-facing fee collected on this trip"
+    >
+      <KV label="Ride subtotal" value={formatCurrency(subtotal)} />
+      {couponDiscount > 0 && (
+        <KV label="Coupon discount (absorbed separately)" value={formatCurrency(couponDiscount)} />
+      )}
+      <KV label="Customer total (base fare)" value={formatCurrency(totalPayable)} />
+      <KV
+        label="Platform fee kept"
+        value={
+          <span className="font-bold text-emerald-700">{formatCurrency(amount)}</span>
+        }
+        hint={
+          platformFeeType === 'flat'
+            ? 'Flat fee'
+            : platformFeeAmount
+              ? `${platformFeeAmount}% of net subtotal`
+              : null
+        }
+      />
+    </SectionCard>
+  );
+}
+
+function CouponDiscountBreakdown({ meta, amount }) {
+  const {
+    couponCode = null,
+    couponDiscount = 0,
+    subtotal = 0,
+    netSubtotal = 0,
+    totalPayable = 0,
+    driverEarning = 0,
+    platformCommission = 0,
+  } = meta;
+  const absorbed = Math.abs(Number(amount) || couponDiscount || 0);
+  return (
+    <SectionCard
+      title="Coupon cost absorbed"
+      subtitle="Platform bears the discount — driver earning is not reduced"
+    >
+      <KV label="Coupon code" value={couponCode || '\u2014'} />
+      <KV label="Ride subtotal (before coupon)" value={formatCurrency(subtotal)} />
+      <KV label="Customer discount" value={formatCurrency(couponDiscount || absorbed)} />
+      <KV label="Net ride subtotal" value={formatCurrency(netSubtotal)} />
+      <KV label="Customer paid (incl. fees & GST)" value={formatCurrency(totalPayable)} />
+      <KV
+        label="Amount absorbed by platform"
+        value={
+          <span className="font-bold text-amber-700">{formatCurrency(absorbed)}</span>
+        }
+      />
+      <KV
+        label="Driver earning"
+        value={formatCurrency(driverEarning)}
+        hint={
+          platformCommission > 0
+            ? `Commission ${formatCurrency(platformCommission)} on pre-coupon subtotal`
+            : 'Unchanged by coupon'
+        }
+      />
+    </SectionCard>
   );
 }
 

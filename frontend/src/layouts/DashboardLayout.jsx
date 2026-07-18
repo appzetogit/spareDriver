@@ -4,6 +4,7 @@ import { Home, MapPin, User, Car, DollarSign } from 'lucide-react';
 import BookingOfferModal from '../features/driver/trips/components/BookingOfferModal';
 import { UserNotificationBridge, DriverNotificationBridge } from '../components/notifications/NotificationBridge';
 import { DriverOfferResumeBridge } from '../components/DriverOfferResumeBridge';
+import useDriverIncomingScheduledStore from '../store/driver/useDriverIncomingScheduledStore';
 
 const userNavItems = [
   { path: '/user/home', label: 'Home', icon: Home },
@@ -13,13 +14,6 @@ const userNavItems = [
   // model matches.
   { path: '/user/activity', label: 'Trips', icon: Car },
   { path: '/user/account', label: 'Account', icon: User },
-];
-
-const driverNavItems = [
-  { path: '/driver/home', label: 'Home', icon: Home },
-  { path: '/driver/trips', label: 'Trips', icon: Car },
-  { path: '/driver/earnings', label: 'Earnings', icon: DollarSign },
-  { path: '/driver/account', label: 'Account', icon: User },
 ];
 
 export const UserDashboardLayout = () => {
@@ -33,6 +27,14 @@ export const UserDashboardLayout = () => {
 };
 
 export const DriverDashboardLayout = () => {
+  const incomingCount = useDriverIncomingScheduledStore((s) => s.count);
+  const driverNavItems = [
+    { path: '/driver/home', label: 'Home', icon: Home },
+    { path: '/driver/trips', label: 'Trips', icon: Car, badge: incomingCount },
+    { path: '/driver/earnings', label: 'Earnings', icon: DollarSign },
+    { path: '/driver/account', label: 'Account', icon: User },
+  ];
+
   return (
     <div className="flex-1 flex flex-col pb-16">
       <DriverNotificationBridge />

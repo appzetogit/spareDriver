@@ -717,6 +717,14 @@ export const verifySubscriptionPaymentService = async (
     },
   );
 
+  // Auto-search dedicated drivers (open inbox) — best-effort.
+  try {
+    const { setupSubscriptionSearch } = await import('./subscriptionDispatch.service.js');
+    await setupSubscriptionSearch(subscription);
+  } catch (err) {
+    console.warn('[subscription] auto-search setup failed:', err?.message);
+  }
+
   return { subscription: serializeSubscriptionForUser(subscription), alreadyPaid: false };
 };
 
@@ -805,12 +813,44 @@ function applySubscriptionDiscount(subtotal, subscription) {
 }
 
 /**
- * Apply the customer-facing layers (service charge, GST, subscription
+ * Resolve platform-fee knobs from a pricing doc (or fare-breakdown
+ * snapshot). Prefer the new flat|percentage pair; fall back to the
+ * legacy `serviceChargePercent` so old docs keep working until re-saved.
+ */
+function resolvePlatformFeeConfig(pricing = {}) {
+  const type = pricing.platformFeeType === 'flat' ? 'flat' : 'percentage';
+  const amount = Math.max(0, Number(pricing.platformFeeAmount) || 0);
+  const legacyPct = Math.max(0, Number(pricing.serviceChargePercent) || 0);
+
+  if (type === 'flat') {
+    return { type: 'flat', amount };
+  }
+  // Percentage: use new amount when set; otherwise legacy percent.
+  if (amount > 0) return { type: 'percentage', amount };
+  if (legacyPct > 0) return { type: 'percentage', amount: legacyPct };
+  return { type: 'percentage', amount: 0 };
+}
+
+function computePlatformFee(netSubtotal, pricing) {
+  const { type, amount } = resolvePlatformFeeConfig(pricing);
+  if (amount <= 0) return { fee: 0, type, amount };
+  if (type === 'flat') {
+    return { fee: round2(amount), type, amount };
+  }
+  return {
+    fee: round2((Math.max(0, Number(netSubtotal) || 0) * amount) / 100),
+    type,
+    amount,
+  };
+}
+
+/**
+ * Apply the customer-facing layers (platform fee, GST, subscription
  * discount) and split the booked subtotal into platform commission +
  * driver earning.
  *
- * Coupon discount is applied to the ride subtotal BEFORE service charge
- * and GST. GST is calculated on (netSubtotal + serviceCharge).
+ * Coupon discount is applied to the ride subtotal BEFORE platform fee
+ * and GST. GST is calculated on (netSubtotal + platformFee).
  *
  * `allowancePassThrough` is the portion of `subtotal` we treat as a
  * pure driver allowance (food + stay): the platform doesn't take any
@@ -820,18 +860,20 @@ function applySubscriptionDiscount(subtotal, subscription) {
  * (the daily-rate / slab-price portion the platform actually brokered).
  *
  * Platform commission is computed on the pre-coupon subtotal so drivers
- * are not penalised when a coupon is used.
+ * are not penalised when a coupon is used. The coupon cost is absorbed
+ * by the platform (recorded as a COUPON_DISCOUNT revenue debit on
+ * trip completion).
  */
 function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrough = 0, coupon = null) {
   const couponDiscount = computeCouponDiscount(subtotal, coupon);
   const netSubtotal = Math.max(0, round2(subtotal - couponDiscount));
 
-  const serviceChargePercent = pricing.serviceChargePercent || 0;
+  const { fee: platformFee, type: platformFeeType, amount: platformFeeAmount } =
+    computePlatformFee(netSubtotal, pricing);
   const gstPercent = pricing.gstPercent || 0;
-  const serviceCharge = (netSubtotal * serviceChargePercent) / 100;
-  const gstAmount = ((netSubtotal + serviceCharge) * gstPercent) / 100;
+  const gstAmount = ((netSubtotal + platformFee) * gstPercent) / 100;
   const subscriptionDiscount = applySubscriptionDiscount(netSubtotal, subscription);
-  const totalPayable = Math.max(0, netSubtotal + serviceCharge + gstAmount - subscriptionDiscount);
+  const totalPayable = Math.max(0, netSubtotal + platformFee + gstAmount - subscriptionDiscount);
 
   const platformCommissionPercent = pricing.platformCommissionPercent || 0;
   const passThrough = Math.max(0, Math.min(Number(allowancePassThrough) || 0, subtotal));
@@ -847,8 +889,13 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
   return {
     couponDiscount: round2(couponDiscount),
     netSubtotal: round2(netSubtotal),
-    serviceCharge: round2(serviceCharge),
-    serviceChargePercent,
+    // New names
+    platformFee: round2(platformFee),
+    platformFeeType,
+    platformFeeAmount,
+    // Back-compat aliases used across fareSnapshot / FE / invoices
+    serviceCharge: round2(platformFee),
+    serviceChargePercent: platformFeeType === 'percentage' ? platformFeeAmount : 0,
     gstAmount: round2(gstAmount),
     gstPercent,
     subscriptionDiscount: round2(subscriptionDiscount),
@@ -1921,6 +1968,16 @@ export const assignDriverToSubscriptionService = async (
   sub.assignmentStatus = SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED;
   sub.releasedAt = null;
   sub.releaseReason = '';
+
+  try {
+    const { withdrawSubscriptionInboxOffers } = await import(
+      './subscriptionDispatch.service.js'
+    );
+    await withdrawSubscriptionInboxOffers(sub, 'assigned_by_admin');
+  } catch {
+    /* ignore */
+  }
+
   await sub.save();
 
   await sub.populate('zoneId', 'name city');

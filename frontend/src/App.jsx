@@ -111,6 +111,9 @@ const ProfileUnderReviewPage = lazy(() => import('./features/driver/registration
 
 // Driver Home & Trips
 const DriverHomePage = lazy(() => import('./features/driver/home/pages/DriverHomePage'));
+const DriverSubscriptionDetailPage = lazy(
+  () => import('./features/driver/account/pages/DriverSubscriptionDetailPage'),
+);
 const NewBookingRequestPage = lazy(() => import('./features/driver/trips/pages/NewBookingRequestPage'));
 const NavigateToCustomerPage = lazy(() => import('./features/driver/trips/pages/NavigateToCustomerPage'));
 const ArrivedStartTripPage = lazy(() => import('./features/driver/trips/pages/ArrivedStartTripPage'));
@@ -153,6 +156,7 @@ const ManageEmergencyPool = lazy(() => import('./features/admin/pages/ManageEmer
 const ManageOutstationAssignments = lazy(() => import('./features/admin/pages/ManageOutstationAssignments'));
 const ManageUserSubscriptions = lazy(() => import('./features/admin/pages/ManageUserSubscriptions'));
 const ManageScheduledJobs = lazy(() => import('./features/admin/pages/ManageScheduledJobs'));
+const ManageScheduledQueue = lazy(() => import('./features/admin/pages/ManageScheduledQueue'));
 const PlatformSettings = lazy(() => import('./features/admin/pages/PlatformSettings'));
 const ManageTeam = lazy(() => import('./features/admin/pages/ManageTeam'));
 const ManageKits = lazy(() => import('./features/admin/pages/ManageKits'));
@@ -304,6 +308,7 @@ function App() {
             {/* ========== Driver Dashboard (with bottom nav) ========== */}
             <Route element={<DriverDashboardLayout />}>
               <Route path="/driver/home" element={<DriverHomePage />} />
+              <Route path="/driver/subscriptions/:id" element={<DriverSubscriptionDetailPage />} />
               <Route path="/driver/trips" element={<MyTripsPage />} />
               <Route path="/driver/earnings" element={<EarningsPage />} />
               <Route path="/driver/account" element={<DriverAccountPage />} />
@@ -383,6 +388,10 @@ function App() {
             <Route
               path="/admin/bookings/scheduled-jobs"
               element={<ManageScheduledJobs />}
+            />
+            <Route
+              path="/admin/queues/scheduled-booking"
+              element={<ManageScheduledQueue />}
             />
             <Route
               path="/admin/bookings/emergency-pool"

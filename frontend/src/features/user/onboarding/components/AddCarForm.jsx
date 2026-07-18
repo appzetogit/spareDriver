@@ -42,20 +42,26 @@ const AddCarForm = ({
   const [localData, setLocalData] = useState(() => {
     if (!editCar) return null;
     return {
-      carTypeId:    editCar.carTypeId?._id    || String(editCar.carTypeId    || ''),
       brandId:      editCar.brandId?._id      || String(editCar.brandId      || ''),
+      carTypeId:    editCar.carTypeId?._id    || String(editCar.carTypeId    || ''),
       modelId:      editCar.modelId?._id      || String(editCar.modelId      || ''),
       fuelTypeId:   editCar.fuelTypeId?._id   || String(editCar.fuelTypeId   || ''),
       vehicleNumber: editCar.vehicleNumber || '',
       transmission:  editCar.transmission  || '',
+      insuranceExpiry: editCar.insuranceExpiry
+        ? String(editCar.insuranceExpiry).slice(0, 10)
+        : '',
+      pucExpiry: editCar.pucExpiry
+        ? String(editCar.pucExpiry).slice(0, 10)
+        : '',
     };
   });
 
   // Name strings from the populated API response — used as instant display
   // labels in the selects while the catalog options are still fetching.
   const editLabels = editCar ? {
-    carType:    editCar.carTypeId?.name  || '',
     brand:      editCar.brandId?.name    || '',
+    carType:    editCar.carTypeId?.name  || '',
     model:      editCar.modelId?.name    || '',
     fuelType:   editCar.fuelTypeId?.name || '',
   } : null;
@@ -96,13 +102,22 @@ const AddCarForm = ({
     if (!conditions.length) return;
     const initialAnswers = {};
     conditions.forEach((c) => {
-      const existing = editCar?.conditions?.find(
+      const fromConditions = editCar?.conditions?.find(
         (ec) => String(ec.conditionId?._id || ec.conditionId) === String(c._id),
       );
-      initialAnswers[c._id] = existing ? existing.value : null;
+      const fromChecklist = editCar?.checklist?.find(
+        (item) => String(item._id) === String(c._id),
+      );
+      if (fromConditions && (fromConditions.value === true || fromConditions.value === false)) {
+        initialAnswers[c._id] = fromConditions.value;
+      } else if (fromChecklist && (fromChecklist.value === true || fromChecklist.value === false)) {
+        initialAnswers[c._id] = fromChecklist.value;
+      } else {
+        initialAnswers[c._id] = null;
+      }
     });
     setAnswers(initialAnswers);
-  }, [conditions, editCar?._id, editCar?.conditions]);
+  }, [conditions, editCar?._id, editCar?.conditions, editCar?.checklist]);
 
   const checklistProgress = useMemo(
     () => countChecklistProgress(conditions, answers),
@@ -126,12 +141,14 @@ const AddCarForm = ({
 
   const validate = () => {
     const next = {};
-    if (!formData.carTypeId) next.carTypeId = 'Select car category';
     if (!formData.brandId) next.brandId = 'Select car brand';
+    if (!formData.carTypeId) next.carTypeId = 'Select car category';
     if (!formData.modelId) next.modelId = 'Select car model';
     if (!formData.vehicleNumber?.trim()) next.vehicleNumber = 'Enter vehicle number';
     if (!formData.fuelTypeId) next.fuelTypeId = 'Select fuel type';
     if (!formData.transmission) next.transmission = 'Select transmission';
+    if (!formData.insuranceExpiry) next.insuranceExpiry = 'Select insurance expiry date';
+    if (!formData.pucExpiry) next.pucExpiry = 'Select PUC expiry date';
     if (!allRequiredUploaded(['car_image'])) next.image = 'Car image is required';
     if (!checklistComplete && conditions.length) {
       const { answered, total, requiredYes, requiredTotal } = checklistProgress;
@@ -167,6 +184,8 @@ const AddCarForm = ({
         vehicleNumber: formData.vehicleNumber.trim(),
         transmission: formData.transmission,
         image: imagePayload.fileUrl,
+        insuranceExpiry: formData.insuranceExpiry,
+        pucExpiry: formData.pucExpiry,
         conditions: buildConditionPayload(conditions, answers),
       };
 

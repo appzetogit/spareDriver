@@ -5,7 +5,6 @@ import {
   estimateFareService,
   getServicePricingByTypeService,
 } from './pricing.service.js';
-import { incrementCouponUsageService } from './coupon.service.js';
 import {
   cancelPaymentTimeout,
   releaseDriverFromBooking,
@@ -59,6 +58,7 @@ import {
   BOOKING_TYPE,
   BOOKING_TYPE_LIST,
   SCHEDULED_BOOKING,
+  isBookingContactRevealed,
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES, SERVICE_TYPE_LIST } from '../constants/serviceTypes.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
@@ -122,7 +122,8 @@ function buildFareSnapshot(estimate) {
     pricingId: estimate?.pricingId || null,
     baseFare: round2(baseFare),
     extras: round2(extras),
-    serviceCharge: round2(bd.serviceCharge || 0),
+    serviceCharge: round2(bd.serviceCharge || bd.platformFee || 0),
+    platformFee: round2(bd.platformFee || bd.serviceCharge || 0),
     gst: round2(bd.gstAmount || 0),
     couponDiscount: round2(bd.couponDiscount || 0),
     discount: round2((bd.couponDiscount || 0) + (bd.subscriptionDiscount || 0)),
@@ -232,6 +233,18 @@ export function driverEarningFromFareSnapshot(fareSnapshot) {
  * `otpRequired` is preserved so the driver UI knows when to render the
  * OTP-entry sheet.
  */
+/**
+ * Strip counterparty phone/email until the driver has arrived at pickup.
+ * Mutates a lean booking POJO in place.
+ */
+function stripContactIfHidden(person) {
+  if (!person || typeof person !== 'object') return person;
+  delete person.phone_no;
+  delete person.phone;
+  delete person.email;
+  return person;
+}
+
 export function sanitizeBookingForDriver(booking) {
   if (!booking) return booking;
   const obj = booking;
@@ -302,7 +315,28 @@ export function sanitizeBookingForDriver(booking) {
       };
     });
   }
+
+  // Hide customer phone/email until the driver marks arrived at pickup.
+  if (!isBookingContactRevealed(obj) && obj.userId && typeof obj.userId === 'object') {
+    stripContactIfHidden(obj.userId);
+  }
+
   return obj;
+}
+
+/**
+ * User-facing booking view: hide the driver's phone until arrived.
+ */
+export function sanitizeBookingForUser(booking) {
+  if (!booking) return booking;
+  if (
+    !isBookingContactRevealed(booking) &&
+    booking.driverId &&
+    typeof booking.driverId === 'object'
+  ) {
+    stripContactIfHidden(booking.driverId);
+  }
+  return booking;
 }
 
 /**
@@ -446,7 +480,7 @@ export async function getActiveBookingForUserService(userId) {
   // Re-attach it here so the prompt + auto-complete cycle never goes
   // missing for an active customer fetch.
   resumeNoShowScheduleIfNeeded(booking).catch(() => {});
-  return attachCancellationPreview(booking, 'user');
+  return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
 }
 
 /**
@@ -466,7 +500,11 @@ export async function listActiveBookingsForUserService(userId) {
     .populate('driverId', DRIVER_USER_FIELDS)
     .lean();
   candidates.sort((a, b) => rankActiveBooking(a) - rankActiveBooking(b));
-  return candidates.map((b) => attachCancellationPreview(b, 'user'));
+  return Promise.all(
+    candidates.map((b) =>
+      attachCancellationPreview(sanitizeBookingForUser(b), 'user'),
+    ),
+  );
 }
 
 /**
@@ -480,7 +518,11 @@ export async function listAllBookingsForUserService(userId) {
     .lean();
   
   // Attach cancellation preview for consistency, even on history items.
-  return Promise.all(bookings.map((b) => attachCancellationPreview(b, 'user')));
+  return Promise.all(
+    bookings.map((b) =>
+      attachCancellationPreview(sanitizeBookingForUser(b), 'user'),
+    ),
+  );
 }
 
 export async function getBookingByIdService(bookingId, { userId, driverId } = {}) {
@@ -506,7 +548,11 @@ export async function getBookingByIdService(bookingId, { userId, driverId } = {}
       { driverId },
     );
   }
-  return attachCancellationPreview(booking, 'user');
+  if (userId) {
+    return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
+  }
+  // Admin / internal callers get the full document (including phones).
+  return booking;
 }
 
 export async function getActiveBookingForDriverService(driverId) {
@@ -1049,15 +1095,10 @@ export async function createBookingService(userId, body) {
         createdAt: new Date(),
         paymentReceivedAt: new Date(),
       },
-      // Outstation rides skip the wave dispatcher entirely — they sit in
-      // PENDING_ASSIGNMENT until an admin/sub_admin (or zone-scoped
-      // team_member) picks a driver from the outstation-assignment
-      // queue. Hourly bookings (instant + immediate-tier scheduled)
-      // continue to start in SEARCHING and let the dispatcher take over.
-      status:
-        serviceType === SERVICE_TYPES.OUTSTATION
-          ? BOOKING_STATUS.PENDING_ASSIGNMENT
-          : BOOKING_STATUS.SEARCHING,
+      // Outstation + hourly both start in SEARCHING. Outstation uses the
+      // same open-inbox broadcast as scheduled hourly (opted-in drivers);
+      // unmatched rows escalate into the manual outstation queue.
+      status: BOOKING_STATUS.SEARCHING,
     });
   } catch (err) {
     // Compensating credit if booking creation fails after we've already
@@ -1086,6 +1127,10 @@ export async function createBookingService(userId, body) {
     throw err;
   }
 
+  // Coupon usage is credited only when the trip completes successfully
+  // (see bookingTrip.service). Cancelled / no-drivers bookings must not
+  // burn a limited-use code.
+
   // Backfill the refId on the wallet txn now that we know the booking id.
   try {
     walletTx.refId = String(booking._id);
@@ -1094,35 +1139,27 @@ export async function createBookingService(userId, body) {
     console.warn('[booking] failed to link wallet txn to booking:', linkErr?.message);
   }
 
-  if (fareSnapshot.couponId) {
-    await incrementCouponUsageService(fareSnapshot.couponId);
-  }
-
-  // Scheduled hourly bookings branch through the scheduled-ride
-  // dispatcher: short-window + morning rides search immediately (just
-  // like instant), longer-lead rides sit in PENDING_ASSIGNMENT until
-  // the BullMQ `assign` job fires. The emergency-pool `escalate` job
-  // is enqueued for every scheduled booking either way.
-  //
-  // Outstation bookings are always manually assigned (no auto-dispatch).
-  // The booking lives in PENDING_ASSIGNMENT until an admin picks a
-  // driver from the outstation-assignment queue.
-  let shouldDispatchNow = serviceType !== SERVICE_TYPES.OUTSTATION;
-  if (
+  // Scheduled hourly + outstation branch through the inbox dispatcher:
+  // broadcast immediately to matching drivers; unmatched rows past
+  // escalateAt are swept into the shared emergency pool by the
+  // escalate-batch cron.
+  let shouldDispatchNow = true;
+  const isScheduledHourly =
     bookingType === BOOKING_TYPE.SCHEDULED &&
     serviceType === SERVICE_TYPES.HOURLY &&
-    booking.hourly?.scheduledStartAt
-  ) {
+    booking.hourly?.scheduledStartAt;
+  const isOutstationInbox =
+    serviceType === SERVICE_TYPES.OUTSTATION &&
+    (booking.outstation?.pickupAt || booking.outstation?.startDate);
+  if (isScheduledHourly || isOutstationInbox) {
     try {
       const decision = await setupScheduledBooking(booking);
       shouldDispatchNow = decision.immediate;
     } catch (scheduleErr) {
       console.error(
-        '[booking] scheduled setup failed — falling back to immediate dispatch:',
+        '[booking] scheduled/outstation setup failed — falling back to immediate dispatch:',
         scheduleErr?.message,
       );
-      // Best-effort fallback: behave like an instant booking so the
-      // user isn't stuck with a booking that never searches.
       shouldDispatchNow = true;
     }
   }
@@ -1480,6 +1517,7 @@ export async function listAdminBookingsService(query = {}) {
       .populate('userId', 'name phone_no email')
       .populate('driverId', 'name phone_no email')
       .populate('zoneIds', 'name code city')
+      .populate(CAR_DRIVER_POPULATE)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit, 10))

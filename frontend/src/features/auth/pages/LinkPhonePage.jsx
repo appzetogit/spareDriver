@@ -93,7 +93,15 @@ const LinkPhonePage = ({ accountType = 'user' }) => {
         if (userNeedsEmail(linkedUser)) {
           navigate('/user/verify-email', { replace: true });
         } else {
-          navigate('/user/add-car', { replace: true });
+          try {
+            const statusRes = await api.get('/auth/onboarding/status');
+            const data = statusRes.data?.data || {};
+            if (!data.hasCar) navigate('/user/add-car', { replace: true });
+            else if (!data.hasChecklist) navigate('/user/my-cars', { replace: true });
+            else navigate('/user/home', { replace: true });
+          } catch {
+            navigate('/user/home', { replace: true });
+          }
         }
       }
       toast.success('Phone number linked');

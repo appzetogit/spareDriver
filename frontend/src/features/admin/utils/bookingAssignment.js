@@ -1,10 +1,49 @@
+/** Statuses where staff can manually assign a scheduled ride (no driver yet). */
+const SCHEDULED_ASSIGN_STATUSES = new Set([
+  'searching',
+  'pending_assignment',
+  'in_emergency_pool',
+  'no_drivers_found',
+]);
+
+/** Pre-trip statuses where admin can swap an already-assigned driver. */
+const REASSIGN_STATUSES = new Set([
+  'driver_assigned',
+  'awaiting_payment',
+  'en_route',
+  'arrived',
+]);
+
+function hasDriver(booking) {
+  return Boolean(booking?.driverId);
+}
+
 /** Whether admin can manually assign a driver from the bookings list. */
 export function getBookingAssignmentMode(booking) {
-  if (!booking || booking.driverId) return null;
-  if (booking.status === 'in_emergency_pool') return 'emergency_pool';
+  if (!booking) return null;
+
+  // Already assigned → reassign (pre-trip only).
+  if (hasDriver(booking) && REASSIGN_STATUSES.has(booking.status)) {
+    return 'reassign';
+  }
+
+  if (hasDriver(booking)) return null;
+
+  // Outstation pool has its own conflict-aware assign path.
   if (booking.status === 'pending_assignment' && booking.serviceType === 'outstation') {
     return 'outstation';
   }
+
+  const isScheduled =
+    booking.bookingType === 'scheduled' ||
+    // List rows from scheduled-jobs are always scheduled
+    booking._assignmentContext === 'scheduled';
+
+  if (isScheduled && SCHEDULED_ASSIGN_STATUSES.has(booking.status)) {
+    return 'scheduled';
+  }
+
+  if (booking.status === 'in_emergency_pool') return 'emergency_pool';
   return null;
 }
 
@@ -12,7 +51,24 @@ export function canAdminAssignBooking(booking) {
   return getBookingAssignmentMode(booking) !== null;
 }
 
+/** Prefer when opening the drawer from Scheduled Bookings page. */
+export function canAssignScheduledBooking(booking) {
+  if (!booking || hasDriver(booking)) return false;
+  if (booking.serviceType === 'outstation') return false;
+  return SCHEDULED_ASSIGN_STATUSES.has(booking.status);
+}
+
+/** Label for the assign / reassign row action. */
+export function getAssignActionLabel(booking) {
+  return hasDriver(booking) ? 'Reassign' : 'Assign';
+}
+
 export const BOOKING_ASSIGN_CONFIG = {
+  scheduled: {
+    driversPath: (id) => `/admin/bookings/scheduled-jobs/${id}/available-drivers`,
+    assignPath: (id) => `/admin/bookings/scheduled-jobs/${id}/assign-driver`,
+    label: 'Scheduled ride',
+  },
   emergency_pool: {
     driversPath: (id) => `/admin/emergency-pool/${id}/available-drivers`,
     assignPath: (id) => `/admin/emergency-pool/${id}/assign-driver`,
@@ -23,6 +79,11 @@ export const BOOKING_ASSIGN_CONFIG = {
     assignPath: (id) => `/admin/outstation-assignments/${id}/assign-driver`,
     detailPath: (id) => `/admin/outstation-assignments/${id}`,
     label: 'Outstation trip',
+  },
+  reassign: {
+    driversPath: (id) => `/admin/bookings/${id}/available-drivers`,
+    assignPath: (id) => `/admin/bookings/${id}/assign-driver`,
+    label: 'Reassign driver',
   },
 };
 

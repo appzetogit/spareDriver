@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Car, CalendarCheck, DollarSign, Settings,
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
   LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag, Headphones,
-  BarChart3, BellRing,
+  BarChart3, BellRing, Layers,
 } from 'lucide-react';
 import { APP_NAME } from '../../../utils/constants';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import useAdminEmergencyPoolStore from '../../../store/admin/useAdminEmergencyPoolStore';
 import { roleCanAccess } from '../../../constants/staffRoles';
+import { useSocketEvent } from '../../../hooks/useSocket';
+import { S2C_EVENTS } from '../../../constants/socketEvents';
+import { BOOKING_STATUS } from '../../../constants/bookingStatus';
 
 const navItems = [
   {
@@ -51,24 +55,17 @@ const navItems = [
       },
       {
         path: '/admin/bookings/scheduled-jobs',
-        label: 'Scheduled Jobs',
+        label: 'Scheduled Bookings',
         icon: Timer,
-        roles: ['admin', 'sub_admin'],
-      },
-      {
-        path: '/admin/bookings/emergency-pool',
-        label: 'Schedule Pool',
-        icon: LifeBuoy,
-        // All staff can view; the page itself scopes team_members to
-        // their assigned zones and hides the "assign driver" CTA.
+        // Team members see/assign only within their assignedZones.
         roles: ['admin', 'sub_admin', 'team_member'],
       },
       {
         path: '/admin/bookings/outstation-assignments',
-        label: 'Outstation Pool',
+        label: 'Outstation Bookings',
         icon: Compass,
-        // Outstation rides skip auto-dispatch entirely; staff assign
-        // here. Team members see read-only rows in their zones.
+        // Auto-search first; unmatched rows escalate into Emergency Pool.
+        // This page lists every outstation booking (all statuses).
         roles: ['admin', 'sub_admin', 'team_member'],
       },
       {
@@ -76,6 +73,20 @@ const navItems = [
         label: 'Subscription Requests',
         icon: Sparkles,
         roles: ['admin', 'sub_admin', 'team_member'],
+      },
+      {
+        path: '/admin/bookings/emergency-pool',
+        label: 'Emergency Pool',
+        icon: LifeBuoy,
+        // All staff can view; the page itself scopes team_members to
+        // their assigned zones and hides the "assign driver" CTA.
+        roles: ['admin', 'sub_admin', 'team_member'],
+      },
+      {
+        path: '/admin/queues/scheduled-booking',
+        label: 'Scheduled Queue',
+        icon: Layers,
+        roles: ['admin', 'sub_admin'],
       },
     ],
   },
@@ -228,6 +239,10 @@ const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { admin, logout } = useAdminAuthStore();
+  const emergencyPoolCount = useAdminEmergencyPoolStore((s) => s.count);
+  const fetchEmergencyPoolCount = useAdminEmergencyPoolStore((s) => s.fetchCount);
+  const bumpEmergencyPool = useAdminEmergencyPoolStore((s) => s.bump);
+  const setEmergencyPoolCount = useAdminEmergencyPoolStore((s) => s.setCount);
   const [expandedItems, setExpandedItems] = useState([
     'Settings',
     'Account',
@@ -237,8 +252,34 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const filteredNavItems = filterNavByRole(navItems, admin?.role);
 
+  useEffect(() => {
+    fetchEmergencyPoolCount().catch(() => {});
+  }, [fetchEmergencyPoolCount]);
+
+  useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
+    if (payload?.kind === 'emergency_pool_entered') {
+      // Prefer a recount so zone-scoped team members stay accurate.
+      fetchEmergencyPoolCount().catch(() => bumpEmergencyPool(1));
+    }
+  });
+
+  useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
+    if (!payload?.status) return;
+    if (payload.status === BOOKING_STATUS.IN_EMERGENCY_POOL) {
+      fetchEmergencyPoolCount().catch(() => {});
+    } else if (
+      payload.status === BOOKING_STATUS.DRIVER_ASSIGNED
+      || payload.status === BOOKING_STATUS.CANCELLED
+      || payload.status === BOOKING_STATUS.COMPLETED
+    ) {
+      // Assign/cancel out of pool — recount rather than guess.
+      fetchEmergencyPoolCount().catch(() => {});
+    }
+  });
+
   const handleLogout = () => {
     logout();
+    setEmergencyPoolCount(0);
     navigate('/admin/login');
   };
 
@@ -337,7 +378,11 @@ const Sidebar = ({ isOpen, onClose }) => {
 
                 {hasChildren && isExpanded && (
                   <div className="ml-9 space-y-1">
-                    {item.children.map((child) => (
+                    {item.children.map((child) => {
+                      const showBadge =
+                        child.path === '/admin/bookings/emergency-pool'
+                        && emergencyPoolCount > 0;
+                      return (
                       <NavLink
                         key={child.path}
                         to={child.path}
@@ -349,9 +394,15 @@ const Sidebar = ({ isOpen, onClose }) => {
                         }
                       >
                         {child.icon && <child.icon className="w-3.5 h-3.5" />}
-                        <span>{child.label}</span>
+                        <span className="flex-1">{child.label}</span>
+                        {showBadge && (
+                          <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+                            {emergencyPoolCount > 99 ? '99+' : emergencyPoolCount}
+                          </span>
+                        )}
                       </NavLink>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

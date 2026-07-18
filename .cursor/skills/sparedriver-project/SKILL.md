@@ -60,8 +60,8 @@ frontend/src/
   store/                  # zustand stores
     useUserAuthStore.js, useDriverAuthStore.js, useAdminAuthStore.js, useSocketStore.js
     user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore
-    driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
-    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,Refunds,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush}Store
+    driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverIncomingScheduledStore (scheduled + outstation + subscription inbox), useDriverSubscriptionsStore (assigned dedicated-driver plans), useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
+    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,Refunds,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool}Store
   hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...
   constants/              # mapTheme.js, etc.
   config/                 # axios, firebase, env
@@ -69,6 +69,8 @@ frontend/src/
 ```
 
 Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
+
+Inbox auto-search (scheduled hourly + outstation bookings + subscription assignment): `bookingScheduled.service` / `bookingDispatch.broadcastScheduledInboxService` / `subscriptionDispatch.service`. Admin knobs: `ServicePricing.scheduledDispatch` (hourly + outstation pricing modal) and `AppSettings.subscriptionDispatch` (Manage Subscriptions). Drivers see offers in My Trips → Incoming via `useDriverIncomingScheduledStore`.
 
 ## Naming Conventions
 

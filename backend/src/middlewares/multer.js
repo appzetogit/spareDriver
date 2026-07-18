@@ -3,7 +3,7 @@ import multer from 'multer';
 const storage = multer.memoryStorage();
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-const MAX_IMAGE_BYTES = 200 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const imageFileFilter = (req, file, cb) => {
   if (IMAGE_MIME_TYPES.includes(file.mimetype)) {

@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
-import PersonContactCard from '../../../../components/PersonContactCard';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import AdsCarousel from '../../../../components/AdsCarousel';
 import Avatar from '../../../../components/Avatar';
@@ -33,6 +32,7 @@ import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import {
   BOOKING_STATUS,
   BOOKING_PAYMENT_STATUS,
+  isBookingContactRevealed,
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { haversineMeters, formatDistance } from '../../../../utils/geo';
@@ -157,6 +157,18 @@ const DriverAssignedPage = () => {
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     applyUpdate(payload);
+    // Contact details are only returned after the driver arrives — refetch
+    // so phone/call CTAs appear without a manual refresh.
+    if (payload?.status && isBookingContactRevealed(payload.status)) {
+      const current = useUserActiveBookingStore.getState().booking;
+      const hasPhone =
+        current?.driverId &&
+        typeof current.driverId === 'object' &&
+        (current.driverId.phone_no || current.driverId.phone);
+      if (!hasPhone) {
+        refreshCurrentOrActive?.().catch(() => {});
+      }
+    }
   });
 
   // Driver hit Dismiss on the OTP banner. We need to:
@@ -396,12 +408,6 @@ const DriverAssignedPage = () => {
     const docs = Array.isArray(driver.documents) ? driver.documents : [];
     const selfie = docs.find((d) => d?.type === 'selfie' && d?.fileUrl);
     return selfie?.fileUrl || driver.profilePicture || null;
-  }, [driver]);
-
-  const driverCallHref = useMemo(() => {
-    const raw = driver?.phone_no || driver?.phone;
-    if (!raw) return null;
-    return `tel:+91${String(raw).replace(/\D/g, '')}`;
   }, [driver]);
 
   // Ride duration timer + extension prompt (only active once STARTED).
@@ -736,25 +742,16 @@ const DriverAssignedPage = () => {
           ═══════════════════════════════════════════ */}
       <div className="relative z-20 mt-auto pointer-events-auto">
 
-        {/* ── Ads strip — visible only when sheet is expanded ──
-             AdsCarousel renders nothing when no ads are loaded. */}
-        {sheetExpanded && (
-          <div className="px-4 pb-2">
-            <AdsCarousel />
-          </div>
-        )}
-
         {/* ── The sheet itself ──
              Split into two zones:
-               1. Header (handle + peek row) — never scrolls, always pinned
+               1. Header (handle + trip meta) — never scrolls, always pinned
                2. Body  — scrollable, capped at 72dvh when expanded          */}
         <div className="bg-white rounded-t-[28px] shadow-[0_-8px_32px_rgba(0,0,0,0.18)]">
 
           {/* Zone 1: sticky header — tap to toggle.
-              We render the trigger as a div+role=button (not a <button>)
-              so the call CTA inside can stay a real <a href="tel:..">
-              without nesting an interactive inside another interactive
-              (which Chrome strips and a11y tools flag). */}
+              Driver details live only in the expanded body (single place).
+              Collapsed peek shows trip meta + status so the map stays
+              the focus. */}
           <div
             role="button"
             tabIndex={0}
@@ -771,9 +768,9 @@ const DriverAssignedPage = () => {
             {/* Drag handle pill */}
             <div className="mx-auto w-10 h-1 rounded-full bg-gray-200" />
 
-            {/* Top meta row: trip-type chip + fare */}
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide bg-primary/10 text-primary-dark px-2.5 py-1 rounded-full">
+            {/* Top meta row: trip-type chip + fare + chevron */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide bg-primary/10 text-primary-dark px-2.5 py-1 rounded-full shrink-0">
                 <Car className="w-3 h-3" />
                 {SERVICE_TYPE_LABELS[booking.serviceType] || booking.serviceType || 'Trip'}
                 {booking.hourly?.durationHours
@@ -782,48 +779,11 @@ const DriverAssignedPage = () => {
                     ? ` · ${booking.outstation.days}d`
                     : ''}
               </span>
-              <span className="text-sm font-extrabold text-gray-900">
-                {'\u20B9'}{total}
-              </span>
-            </div>
-
-            {/* Collapsed peek row — driver avatar + name + call + chevron */}
-            <div className="w-full flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <Avatar
-                  src={driverPhotoUrl}
-                  name={driver?.name || 'Driver'}
-                  size="lg"
-                  online={!!liveDriver}
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900 truncate">
-                    {driver?.name || 'Assigning driver…'}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {liveDriver
-                      ? `${formatDistance(distanceMeters)} away`
-                      : booking.status === BOOKING_STATUS.PENDING_ASSIGNMENT
-                        ? 'Driver assigned at scheduled time'
-                        : 'Locating driver…'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {driverCallHref && (
-                  <a
-                    href={driverCallHref}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Call driver"
-                    className="w-11 h-11 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md hover:bg-emerald-600 active:scale-90 transition"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                      <path fillRule="evenodd" d="M1.5 4.5a3 3 0 0 1 3-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 0 1-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 0 0 6.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 0 1 1.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 0 1-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5Z" clipRule="evenodd" />
-                    </svg>
-                  </a>
-                )}
-                <div className={`w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center transition-transform duration-300 ${sheetExpanded ? 'rotate-180' : ''}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-extrabold text-gray-900 tabular-nums">
+                  {'\u20B9'}{total}
+                </span>
+                <div className={`w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center transition-transform duration-300 shrink-0 ${sheetExpanded ? 'rotate-180' : ''}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-500">
                     <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
                   </svg>
@@ -831,25 +791,28 @@ const DriverAssignedPage = () => {
               </div>
             </div>
 
-            {/* Always-visible cancel CTA — the previous version was nested
-                inside the expanded sheet body, so users had to discover
-                they could expand the sheet before they could cancel.
-                Keeping it in the peek row means it's reachable in one tap
-                no matter the sheet state. */}
-            {cancellable && (
-              <button
-                type="button"
-                disabled={cancelling}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCancel();
-                }}
-                className="self-end inline-flex items-center gap-1 text-xs font-semibold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 disabled:opacity-60 transition"
-              >
-                <X className="w-3.5 h-3.5" />
-                {cancelling ? 'Cancelling…' : 'Cancel booking'}
-              </button>
-            )}
+            {/* Compact status line — no second driver card */}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500 truncate min-w-0">
+                {liveDriver && distanceMeters != null && booking.status !== BOOKING_STATUS.ARRIVED
+                  ? `${formatDistance(distanceMeters)} away · ${view.subtitle}`
+                  : view.subtitle}
+              </p>
+              {cancellable && (
+                <button
+                  type="button"
+                  disabled={cancelling}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCancel();
+                  }}
+                  className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 disabled:opacity-60 transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  {cancelling ? 'Cancelling…' : 'Cancel'}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Zone 2: scrollable body — only rendered (and takes up space) when expanded */}
@@ -876,7 +839,7 @@ const DriverAssignedPage = () => {
                   <RideStartOtpCard code={booking.rideStartOtp.code} />
                 )}
 
-                {/* Driver profile — large photo + rating + call/message */}
+                {/* Driver profile — single place for name / rating / call */}
                 {booking.status !== BOOKING_STATUS.PENDING_ASSIGNMENT && driver && (
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="bg-gradient-to-br from-primary/10 to-primary/5 px-5 pt-5 pb-4 flex items-center gap-4">
@@ -916,7 +879,8 @@ const DriverAssignedPage = () => {
                         )}
                       </div>
                     </div>
-                    {(driver?.phone_no || driver?.phone) && (
+                    {(isBookingContactRevealed(booking) &&
+                      (driver?.phone_no || driver?.phone)) && (
                       <div className="px-5 py-3 border-t border-gray-100">
                         <a
                           href={`tel:+91${String(driver.phone_no || driver.phone).replace(/\D/g, '')}`}
@@ -928,6 +892,13 @@ const DriverAssignedPage = () => {
                           </svg>
                           Call driver
                         </a>
+                      </div>
+                    )}
+                    {driver && !isBookingContactRevealed(booking) && (
+                      <div className="px-5 py-3 border-t border-gray-100">
+                        <p className="text-xs text-center text-gray-500">
+                          Driver contact unlocks after they arrive at pickup
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1020,8 +991,8 @@ const DriverAssignedPage = () => {
                   </div>
                 ) : null}
 
-                {/* (Cancel CTA lives in the always-visible peek row above
-                    so it's reachable without expanding this sheet.) */}
+                {/* Ads sit below SOS so emergency CTA stays above promos */}
+                <AdsCarousel />
 
                 {/* Safe-area bottom padding */}
                 <div className="h-2" />

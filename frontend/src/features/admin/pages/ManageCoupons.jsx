@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, Tag, Check } from 'lucide-react';
+import { Plus, Edit2, Trash2, Tag, Check, BarChart3, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../utils/api';
 import Button from '../../../components/Button';
@@ -51,6 +51,24 @@ const ManageCoupons = () => {
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [analyticsCoupon, setAnalyticsCoupon] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  const openAnalytics = async (coupon) => {
+    setAnalyticsCoupon(coupon);
+    setAnalytics(null);
+    setAnalyticsLoading(true);
+    try {
+      const res = await api.get(`/admin/coupons/${coupon._id}/analytics`);
+      setAnalytics(res?.data?.data || null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load analytics');
+      setAnalyticsCoupon(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -200,6 +218,15 @@ const ManageCoupons = () => {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
+                          onClick={() => openAnalytics(coupon)}
+                          className="p-2 rounded-lg hover:bg-surface-secondary text-text-secondary"
+                          aria-label="Analytics"
+                          title="Usage analytics"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openEdit(coupon)}
                           className="p-2 rounded-lg hover:bg-surface-secondary text-text-secondary"
                           aria-label="Edit"
@@ -338,8 +365,112 @@ const ManageCoupons = () => {
           </div>
         </form>
       </Modal>
+
+      <Modal
+        isOpen={!!analyticsCoupon}
+        onClose={() => {
+          setAnalyticsCoupon(null);
+          setAnalytics(null);
+        }}
+        title={analyticsCoupon ? `Analytics · ${analyticsCoupon.code}` : 'Coupon analytics'}
+        size="3xl"
+      >
+        {analyticsLoading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-text-muted" />
+          </div>
+        ) : analytics ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Stat
+                label="Completed (counted)"
+                value={analytics.summary?.completedTrips || 0}
+              />
+              <Stat
+                label="Applications"
+                value={analytics.summary?.totalApplications || 0}
+              />
+              <Stat
+                label="Not counted"
+                value={analytics.summary?.cancelledOrUnfulfilled || 0}
+              />
+              <Stat
+                label="Absorbed discount"
+                value={`₹${Number(analytics.summary?.absorbedDiscountTotal || 0).toLocaleString('en-IN')}`}
+              />
+            </div>
+            <p className="text-xs text-text-muted">
+              Usage limit only increments on completed trips. Cancelled and
+              no-driver bookings are listed but do not burn the coupon.
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-border-light max-h-[50vh]">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-surface-secondary">
+                  <tr className="border-b border-border-light text-left text-text-secondary">
+                    <th className="px-3 py-2">Booking</th>
+                    <th className="px-3 py-2">User</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Discount</th>
+                    <th className="px-3 py-2">Counted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(analytics.redemptions || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-8 text-center text-text-muted">
+                        No trips have used this coupon yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    analytics.redemptions.map((row) => (
+                      <tr key={row.bookingId} className="border-b border-border-light last:border-0">
+                        <td className="px-3 py-2 font-mono text-xs">
+                          {row.bookingNumber}
+                          <div className="text-[10px] text-text-muted capitalize">
+                            {row.serviceType}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-text">
+                            {row.user?.name || '—'}
+                          </div>
+                          <div className="text-[11px] text-text-muted">
+                            {row.user?.phone || row.user?.email || ''}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 capitalize text-text-secondary">
+                          {String(row.status || '').replace(/_/g, ' ')}
+                        </td>
+                        <td className="px-3 py-2">
+                          ₹{Number(row.couponDiscount || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.countedTowardLimit ? (
+                            <span className="text-emerald-700 text-xs font-semibold">Yes</span>
+                          ) : (
+                            <span className="text-amber-700 text-xs font-semibold">No</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 };
+
+function Stat({ label, value }) {
+  return (
+    <div className="rounded-xl border border-border-light bg-surface-secondary/40 px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="text-sm font-bold text-text mt-0.5">{value}</p>
+    </div>
+  );
+}
 
 export default ManageCoupons;

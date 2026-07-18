@@ -79,7 +79,15 @@ function buildOutstationRows(bd) {
   ];
 }
 
-const FareCard = ({ estimate, estimating = false, error = null, dense = false, footnote = null, title = 'Fare estimate' }) => {
+const FareCard = ({
+  estimate,
+  estimating = false,
+  error = null,
+  dense = false,
+  footnote = null,
+  title = 'Fare estimate',
+  bare = false,
+}) => {
   // `breakdown` is wrapped in useMemo so the identity is stable
   // whenever the estimate hasn't changed — otherwise the
   // `useMemo(detailRows)` below would re-fire every render
@@ -111,8 +119,8 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
   const fareTotal = breakdown.totalPayable || 0;
   const grandTotal = Math.round((fareTotal + bufferRupees) * 100) / 100;
 
-  return (
-    <Card>
+  const body = (
+    <>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-text">{title}</h3>
         {estimating && <Loader2 className="w-4 h-4 animate-spin text-text-muted" />}
@@ -161,12 +169,14 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
           {serviceCharge > 0 && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">
-                Service charge
-                {breakdown.serviceChargePercent > 0 && (
-                  <span className="ml-1 text-[10px] text-text-muted">
-                    ({breakdown.serviceChargePercent}%)
-                  </span>
-                )}
+                Platform fee
+                {breakdown.platformFeeType === 'flat'
+                  ? ' (flat)'
+                  : (breakdown.platformFeeAmount ?? breakdown.serviceChargePercent) > 0 && (
+                      <span className="ml-1 text-[10px] text-text-muted">
+                        ({breakdown.platformFeeAmount ?? breakdown.serviceChargePercent}%)
+                      </span>
+                    )}
               </span>
               <span className="text-sm text-text">{rupees(serviceCharge)}</span>
             </div>
@@ -212,19 +222,17 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
                 <span className="text-sm text-text-secondary">
                   Waiting reserve
                   <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">
-                    Held, not charged
+                    Held
                   </span>
                 </span>
                 <span className="text-sm text-text">₹{bufferRupees}</span>
               </div>
-              <p className="text-[11px] text-text-muted -mt-1">
-                ₹{bufferRupees} stays in your wallet and can&rsquo;t be
-                spent elsewhere — used only if the driver waits beyond{' '}
-                {buffer?.freeWaitingMinutes || 0} min at pickup
-                (₹{buffer?.chargePerMinute || 0}/min, up to{' '}
-                {buffer?.maxBillableMinutes || 0} min). Anything not used
-                is unlocked after the trip.
-              </p>
+              {!dense && (
+                <p className="text-[11px] text-text-muted -mt-1">
+                  Held for waiting beyond {buffer?.freeWaitingMinutes || 0} min.
+                  Unused amount unlocks after the trip.
+                </p>
+              )}
               <div className="h-px bg-border-light my-1" />
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-text">
@@ -232,9 +240,6 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
                 </span>
                 <span className="text-base font-bold text-text">₹{grandTotal}</span>
               </div>
-              <p className="text-[11px] text-text-muted -mt-1">
-                Charged now: ₹{fareTotal}. Reserved: ₹{bufferRupees}.
-              </p>
             </>
           )}
           {bufferRupees <= 0 && (
@@ -243,18 +248,14 @@ const FareCard = ({ estimate, estimating = false, error = null, dense = false, f
               <span className="text-lg font-bold text-text">{rupees(fareTotal)}</span>
             </div>
           )}
-          {/*
-            Outstation toll/parking is intentionally NOT shown here
-            anymore — it's surfaced as a confirmation popup the
-            customer must acknowledge when tapping the Pay CTA on
-            the review screen, instead of a passive footnote that's
-            easy to miss.
-          */}
           {footnote && <p className="text-[11px] text-text-muted">{footnote}</p>}
         </div>
       )}
-    </Card>
+    </>
   );
+
+  if (bare) return <div>{body}</div>;
+  return <Card>{body}</Card>;
 };
 
 export default FareCard;

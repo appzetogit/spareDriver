@@ -42,6 +42,16 @@ export function verifyRazorpayPaymentSignature({ orderId, paymentId, signature }
   return expected === signature;
 }
 
+/**
+ * Fetch a captured payment from Razorpay. Used after signature verify so
+ * we can read `fee` (already includes GST) and credit only the net.
+ */
+export async function fetchRazorpayPayment(paymentId) {
+  if (!paymentId) throw new ApiError(400, 'paymentId is required');
+  const razorpay = getRazorpay();
+  return razorpay.payments.fetch(paymentId);
+}
+
 export function verifyRazorpayWebhookSignature(rawBody, signature) {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   if (!secret || !signature) return false;

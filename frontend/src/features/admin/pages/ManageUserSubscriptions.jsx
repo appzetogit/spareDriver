@@ -16,12 +16,16 @@ import {
   CalendarRange,
   Filter,
   Car,
+  Eye,
+  UserPlus,
+  UserRoundCog,
 } from 'lucide-react';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
 import Badge from '../../../components/Badge';
 import Drawer from '../../../components/Drawer';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
+import RowActionsMenu from '../components/RowActionsMenu';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
@@ -100,7 +104,7 @@ const ManageUserSubscriptions = () => {
   const columns = useMemo(() => [
     {
       key: 'customer',
-      header: 'Customer',
+      label: 'Customer',
       render: (_, row) => (
         <div className="min-w-0">
           <p className="font-semibold text-slate-800 truncate">{row.userId?.name || '—'}</p>
@@ -110,7 +114,7 @@ const ManageUserSubscriptions = () => {
     },
     {
       key: 'plan',
-      header: 'Plan',
+      label: 'Plan',
       render: (_, row) => (
         <div className="min-w-0">
           <p className="font-medium text-slate-800">{row.planNameSnapshot || row.planId?.name || '—'}</p>
@@ -125,7 +129,7 @@ const ManageUserSubscriptions = () => {
     },
     {
       key: 'car',
-      header: 'Car',
+      label: 'Car',
       render: (_, row) => (
         <span className="inline-flex items-center gap-1 text-sm text-slate-600">
           <Car className="w-3.5 h-3.5 shrink-0" />
@@ -135,7 +139,7 @@ const ManageUserSubscriptions = () => {
     },
     {
       key: 'zone',
-      header: 'Zone',
+      label: 'Zone',
       render: (_, row) => (
         <span className="inline-flex items-center gap-1 text-sm text-slate-600">
           <MapPin className="w-3.5 h-3.5 shrink-0" />
@@ -146,7 +150,7 @@ const ManageUserSubscriptions = () => {
     },
     {
       key: 'period',
-      header: 'Period',
+      label: 'Period',
       render: (_, row) => (
         <div className="text-xs text-slate-600">
           <p>{row.startDate ? formatDateTime12(row.startDate) : '—'}</p>
@@ -156,7 +160,7 @@ const ManageUserSubscriptions = () => {
     },
     {
       key: 'driver',
-      header: 'Driver',
+      label: 'Driver',
       render: (_, row) => {
         if (row.assignedDriverId) {
           return (
@@ -171,7 +175,7 @@ const ManageUserSubscriptions = () => {
     },
     {
       key: 'status',
-      header: 'Status',
+      label: 'Status',
       render: (_, row) => {
         const variant =
           row.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED
@@ -183,22 +187,34 @@ const ManageUserSubscriptions = () => {
       },
     },
     {
-      key: 'actions',
-      header: '',
+      key: 'inbox',
+      label: 'Inbox',
       render: (_, row) => (
-        canAssign ? (
-          <Button
-            size="sm"
-            variant={row.assignedDriverId ? 'outline' : 'primary'}
-            onClick={(e) => {
-              e.stopPropagation();
-              setAssignRow(row);
-            }}
-          >
-            {row.assignedDriverId ? 'Reassign' : 'Assign'}
-          </Button>
-        ) : null
+        <span className="text-xs text-slate-600">
+          {(row.dispatch?.pendingOfferIds || []).length}
+        </span>
       ),
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (_, row) => {
+        const items = [];
+        if (canAssign) {
+          items.push({
+            label: row.assignedDriverId ? 'Reassign' : 'Assign',
+            icon: row.assignedDriverId ? UserRoundCog : UserPlus,
+            onClick: () => setAssignRow(row),
+          });
+        } else {
+          items.push({
+            label: 'View',
+            icon: Eye,
+            onClick: () => setAssignRow(row),
+          });
+        }
+        return <RowActionsMenu items={items} />;
+      },
     },
   ], [canAssign]);
 

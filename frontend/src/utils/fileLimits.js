@@ -1,7 +1,7 @@
 /** Max image upload size (driver documents, car photos, etc.) */
-export const MAX_IMAGE_BYTES = 200 * 1024;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-export const MAX_IMAGE_LABEL = '200 KB';
+export const MAX_IMAGE_LABEL = '5 MB';
 
 export function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;

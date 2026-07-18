@@ -2,11 +2,13 @@ import { getRedisConnection } from '../config/redis.js';
 import {
   SCHEDULED_BOOKING_QUEUE_NAME,
   SCHEDULED_JOB_NAMES,
+  ensureEscalateBatchScheduler,
 } from './scheduledBooking.queue.js';
 import {
   kickoffScheduledAssignment,
   runScheduledRetry,
   sendScheduledReminder,
+  runScheduledInboxBatchJob,
 } from '../services/bookingScheduled.service.js';
 
 /**
@@ -15,13 +17,9 @@ import {
  * Started once at server boot from `server.js`. If Redis isn't configured
  * the worker is skipped entirely (with a warning) so dev/CI can still run.
  *
- * Handlers are intentionally tiny — they delegate to
- * `bookingScheduled.service.js` / `bookingEmergencyPool.service.js` which
- * own the business logic.
- *
- * Errors thrown from a handler bubble up to BullMQ, which respects the
- * queue's `attempts` + `backoff` config. We log inline to make ops
- * triage easier.
+ * On start we also arm the recurring `escalate-batch` scheduler so overdue
+ * unmatched scheduled bookings enter the emergency pool without
+ * per-booking delayed escalate jobs.
  */
 
 let workerInstance = null;
@@ -44,34 +42,43 @@ export async function startScheduledBookingWorker() {
     workerInstance = new dynamicBullmq.Worker(
       SCHEDULED_BOOKING_QUEUE_NAME,
       async (job) => {
-        const { bookingId, minutesAhead } = job.data || {};
-        if (!bookingId) {
-          throw new Error('scheduledBooking job missing bookingId');
-        }
         switch (job.name) {
-          case SCHEDULED_JOB_NAMES.ASSIGN:
+          case SCHEDULED_JOB_NAMES.ESCALATE_BATCH:
+            return runScheduledInboxBatchJob();
+          case SCHEDULED_JOB_NAMES.ASSIGN: {
+            const { bookingId } = job.data || {};
+            if (!bookingId) throw new Error('scheduledBooking assign missing bookingId');
             await kickoffScheduledAssignment(bookingId);
             return { ok: true, kind: 'assign' };
-          case SCHEDULED_JOB_NAMES.RETRY:
+          }
+          case SCHEDULED_JOB_NAMES.RETRY: {
+            // Legacy drain — new bookings no longer enqueue retries.
+            const { bookingId } = job.data || {};
+            if (!bookingId) throw new Error('scheduledBooking retry missing bookingId');
             await runScheduledRetry(bookingId);
             return {
               ok: true,
               kind: 'retry',
               attempt: job.data?.attemptNumber || null,
+              drained: true,
             };
-          case SCHEDULED_JOB_NAMES.REMINDER:
+          }
+          case SCHEDULED_JOB_NAMES.REMINDER: {
+            const { bookingId, minutesAhead } = job.data || {};
+            if (!bookingId) throw new Error('scheduledBooking reminder missing bookingId');
             await sendScheduledReminder(bookingId, Number(minutesAhead) || 0);
             return { ok: true, kind: 'reminder', minutesAhead };
+          }
           case SCHEDULED_JOB_NAMES.ESCALATE: {
-            // Dynamic import keeps `bookingEmergencyPool.service.js` and
-            // `scheduledBooking.queue.js` out of the same module boot cycle
-            // (the queue file is imported at the top, the service imports
-            // the queue back for cleanup).
+            // Legacy per-booking escalate — still safe for in-flight jobs;
+            // new bookings rely on escalate-batch instead.
+            const { bookingId } = job.data || {};
+            if (!bookingId) throw new Error('scheduledBooking escalate missing bookingId');
             const { escalateToEmergencyPool } = await import(
               '../services/bookingEmergencyPool.service.js'
             );
             await escalateToEmergencyPool(bookingId);
-            return { ok: true, kind: 'escalate' };
+            return { ok: true, kind: 'escalate', legacy: true };
           }
           default:
             throw new Error(`Unknown scheduledBooking job name: ${job.name}`);
@@ -95,7 +102,8 @@ export async function startScheduledBookingWorker() {
           payload: job?.data || {},
           error: err?.message || String(err),
           bookingId: job?.data?.bookingId || null,
-          escalateBooking: job?.name === SCHEDULED_JOB_NAMES.ASSIGN
+          escalateBooking:
+            job?.name === SCHEDULED_JOB_NAMES.ASSIGN
             || job?.name === SCHEDULED_JOB_NAMES.RETRY,
         });
       } catch (recordErr) {
@@ -107,11 +115,17 @@ export async function startScheduledBookingWorker() {
     });
     workerInstance.on('completed', (job) => {
       const data = job?.data || {};
+      if (job?.name === SCHEDULED_JOB_NAMES.ESCALATE_BATCH) {
+        console.log('[scheduledBooking] escalate-batch completed', job.returnvalue || {});
+        return;
+      }
       console.log(
         `[scheduledBooking] ${job.name} completed for booking ${data.bookingId}` +
           (data.minutesAhead != null ? ` (-${data.minutesAhead}m)` : ''),
       );
     });
+
+    await ensureEscalateBatchScheduler();
 
     console.log('[scheduledBooking] worker started');
     return workerInstance;

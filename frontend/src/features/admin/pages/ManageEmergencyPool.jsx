@@ -5,7 +5,6 @@ import {
   MapPin,
   Clock,
   Phone,
-  User as UserIcon,
   CalendarClock,
   Search,
   RefreshCw,
@@ -17,6 +16,8 @@ import {
   Filter,
   ChevronDown,
   Navigation,
+  Eye,
+  UserPlus,
 } from 'lucide-react';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
@@ -25,6 +26,7 @@ import Badge from '../../../components/Badge';
 import Drawer from '../../../components/Drawer';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import BookingDetailsModal from '../components/ManageBookings/BookingDetailsModal';
+import RowActionsMenu from '../components/RowActionsMenu';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useSocketEvent } from '../../../hooks/useSocket';
@@ -101,7 +103,7 @@ const ManageEmergencyPool = () => {
       });
       setError(null);
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to load the schedule pool');
+      setError(err?.response?.data?.message || 'Failed to load the emergency pool');
     } finally {
       setLoading(false);
     }
@@ -220,25 +222,24 @@ const ManageEmergencyPool = () => {
         label: 'Action',
         sortable: false,
         unclamp: true,
-        width: '10%',
-        render: (_, row) =>
-          canAssign ? (
-            <Button
-              size="sm"
-              onClick={(e) => {
-                // Don't bubble to the row-click handler — clicking the
-                // Assign CTA should jump straight to the driver-picker
-                // drawer, not also open the read-only details panel.
-                e.stopPropagation();
-                setSelectedBooking(row);
-              }}
-              icon={UserIcon}
-            >
-              Assign
-            </Button>
-          ) : (
-            <Badge variant="info" text="View only" />
-          ),
+        width: '8%',
+        render: (_, row) => {
+          const items = [
+            {
+              label: 'View',
+              icon: Eye,
+              onClick: () => setDetailBooking(row),
+            },
+          ];
+          if (canAssign) {
+            items.push({
+              label: 'Assign',
+              icon: UserPlus,
+              onClick: () => setSelectedBooking(row),
+            });
+          }
+          return <RowActionsMenu items={items} />;
+        },
       },
     ],
     [canAssign],
@@ -253,7 +254,7 @@ const ManageEmergencyPool = () => {
             <LifeBuoy className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold">Schedule Pool</h1>
+            <h1 className="text-lg font-bold">Emergency Pool</h1>
             <p className="text-[12px] text-white/80 mt-0.5 leading-snug">
               Scheduled rides we couldn&apos;t auto-assign{' '}
               {admin?.role === 'team_member' ? (

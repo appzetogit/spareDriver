@@ -30,6 +30,7 @@ import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import {
   BOOKING_STATUS,
+  BOOKING_TYPE,
   mergeScheduledDispatchConfig,
 } from '../../../../constants/bookingStatus';
 import { formatPickupDateTime } from '../../../../utils/datetime';
@@ -103,6 +104,9 @@ const ConfirmAndPayPage = () => {
   const [outstationPickupEditOpen, setOutstationPickupEditOpen] = useState(false);
   const [conflictError, setConflictError] = useState(null); // { title, message, type: 'car'|'time' }
   const [tollAckOpen, setTollAckOpen] = useState(false);
+  // Sticky until the user removes the code — otherwise a failed coupon
+  // would blank the fare (and re-including it on every retry loops).
+  const [couponInvalidMessage, setCouponInvalidMessage] = useState(null);
 
   // Guard: bounce back to the start of the flow if state is incomplete.
   useEffect(() => {
@@ -159,14 +163,27 @@ const ConfirmAndPayPage = () => {
       base.foodProvided = draft.outstation.needsFood;
       base.stayProvided = draft.outstation.needsStay;
     }
-    if (couponCode) base.couponCode = couponCode;
+    if (couponCode && !couponInvalidMessage) base.couponCode = couponCode;
     return base;
-  }, [draft, couponCode]);
+  }, [draft, couponCode, couponInvalidMessage]);
 
   const { estimate, loading: estimating, error: estimateError } = useFareEstimate(
     estimatePayload,
     { onResult: (data) => setFareEstimate(data) },
   );
+
+  // Capture coupon failures without blocking the (coupon-free) re-estimate.
+  useEffect(() => {
+    if (!couponCode) {
+      setCouponInvalidMessage(null);
+      return;
+    }
+    if (estimateError) setCouponInvalidMessage(estimateError);
+  }, [couponCode, estimateError]);
+
+  // Sticky coupon error lives on the chip; fare card keeps a clean estimate.
+  const couponError = couponInvalidMessage;
+  const fareError = couponCode && couponInvalidMessage ? null : estimateError;
 
   // `total` is the *full wallet requirement*: fare charged immediately
   // + the waiting reserve we hold against `wallet.heldRupees`. Even
@@ -181,7 +198,7 @@ const ConfirmAndPayPage = () => {
   const balance = Number(wallet.balance || 0);
   const heldElsewhere = Number(wallet.heldRupees || 0);
   const available = Math.max(0, Math.round((balance - heldElsewhere) * 100) / 100);
-  const canPay = available >= total && total > 0;
+  const canPay = !couponError && available >= total && total > 0;
 
   // Pull the service pricing for the active service type so we can
   // surface the admin-configured outstation lead time on the in-place
@@ -326,12 +343,15 @@ const ConfirmAndPayPage = () => {
         // already happened server-side; this keeps the bottom-nav badge
         // and the wallet page in sync without a manual refresh.
         fetchWallet().catch(() => { });
-        // Long-lead scheduled bookings (`PENDING_ASSIGNMENT`) go to a
-        // dedicated "ride scheduled" screen — the worker hasn't even
-        // started searching yet, so the spinner page would be misleading.
-        // Morning + short-window scheduled bookings come back as
-        // SEARCHING and use the existing flow.
-        if (booking.status === BOOKING_STATUS.PENDING_ASSIGNMENT) {
+        // Scheduled hourly + outstation → success / "we'll find a driver"
+        // screen. Instant hourly stays on the live searching spinner.
+        const isDeferredAssign =
+          booking.serviceType === SERVICE_TYPES.OUTSTATION
+          || booking.bookingType === BOOKING_TYPE.OUTSTATION
+          || booking.bookingType === BOOKING_TYPE.SCHEDULED
+          || booking.status === BOOKING_STATUS.PENDING_ASSIGNMENT
+          || booking.status === BOOKING_STATUS.IN_EMERGENCY_POOL;
+        if (isDeferredAssign) {
           navigate('/user/book/scheduled');
         } else {
           navigate('/user/book/searching');
@@ -429,29 +449,18 @@ const ConfirmAndPayPage = () => {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold text-text">Review &amp; pay</h1>
-            <p className="text-xs text-text-muted">
-              Confirm the details and pay from your wallet to start
-              searching for a driver.
-            </p>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 p-4 space-y-4">
+      <div className="flex-1 p-4 space-y-3">
         <TripSummary
           draft={draft}
           car={selectedCar}
           onEditCar={() => setCarEditOpen(true)}
           onEditPickup={handleEditPickup}
         />
-        {/*
-          Outstation: two independent toggles for the driver's food
-          and stay arrangements. Each one patches its own
-          `needsFood` / `needsStay` flag on the draft, which is the
-          exact key `useFareEstimate` keys off — so the next
-          `/auth/bookings/estimate` call (debounced ~250 ms) reflects
-          the new choice and the fare card + pay CTA both update.
-        */}
+
         {isOutstation && (
           <FoodStayCard
             foodProvided={foodProvided}
@@ -465,28 +474,41 @@ const ConfirmAndPayPage = () => {
             onStayChange={handleStayToggle}
           />
         )}
+
         <Card>
-          <h3 className="text-sm font-semibold text-text mb-3">Have a coupon?</h3>
-          <CouponCodeInput
-            appliedCode={!estimateError && estimate?.coupon?.code ? estimate.coupon.code : null}
-            onApply={(code) => setCouponCode(code)}
-            onRemove={() => setCouponCode(null)}
-            applying={estimating}
-            error={couponCode && estimateError ? estimateError : null}
-          />
+          <div className="space-y-3">
+            <CouponCodeInput
+              code={couponCode}
+              appliedCode={
+                !couponError && estimate?.coupon?.code
+                  ? estimate.coupon.code
+                  : null
+              }
+              onApply={(code) => {
+                setCouponInvalidMessage(null);
+                setCouponCode(code);
+              }}
+              onRemove={() => {
+                setCouponInvalidMessage(null);
+                setCouponCode(null);
+              }}
+              applying={estimating && !!couponCode && !couponError}
+              error={couponError}
+            />
+            <div className="border-t border-border-light pt-3">
+              <FareCard
+                estimate={estimate}
+                estimating={estimating}
+                error={fareError}
+                dense
+                bare
+              />
+            </div>
+          </div>
         </Card>
-        <FareCard estimate={estimate} estimating={estimating} error={estimateError} />
+
         <FareNotices estimate={estimate} />
-        {isOutstation ? (
-          <OutstationCancellationPolicySummary
-            policy={estimate?.cancellationPolicy?.outstation}
-            dailyRate={Number(estimate?.fareBreakdown?.dailyRate) || 0}
-          />
-        ) : isHourly ? (
-          <HourlyCancellationPolicySummary
-            policy={estimate?.cancellationPolicy?.hourly}
-          />
-        ) : null}
+
         {isHourly && foodRequired && (
           <FoodAcknowledgement
             thresholdHours={Number(
@@ -496,6 +518,7 @@ const ConfirmAndPayPage = () => {
             onChange={(v) => setHourly({ foodAcknowledged: v })}
           />
         )}
+
         <WalletBalanceCard
           balance={balance}
           available={available}
@@ -510,10 +533,17 @@ const ConfirmAndPayPage = () => {
             setTopupOpen(true);
           }}
         />
-        <p className="text-[11px] text-text-muted text-center">
-          The fare is held in your wallet. If no driver is found you get a
-          full refund right back to your wallet.
-        </p>
+
+        {isOutstation ? (
+          <OutstationCancellationPolicySummary
+            policy={estimate?.cancellationPolicy?.outstation}
+            dailyRate={Number(estimate?.fareBreakdown?.dailyRate) || 0}
+          />
+        ) : isHourly ? (
+          <HourlyCancellationPolicySummary
+            policy={estimate?.cancellationPolicy?.hourly}
+          />
+        ) : null}
       </div>
 
       {/* Sticky footer — pay CTA (with the running total) is always
@@ -523,16 +553,24 @@ const ConfirmAndPayPage = () => {
           fullWidth
           icon={WalletIcon}
           loading={submitting}
-          disabled={!estimate || estimating || total <= 0 || foodGateUnmet}
+          disabled={
+            !!couponError
+            || !estimate
+            || estimating
+            || total <= 0
+            || foodGateUnmet
+          }
           onClick={handlePay}
         >
-          {!total
-            ? 'Calculating fare\u2026'
-            : foodGateUnmet
-              ? 'Confirm driver\u2019s meal to continue'
-              : canPay
-                ? `Pay \u20B9${total} from wallet`
-                : `Add \u20B9${Math.max(0, total - balance).toFixed(2)} & pay`}
+          {couponError
+            ? 'Remove coupon to continue'
+            : !total
+              ? 'Calculating fare\u2026'
+              : foodGateUnmet
+                ? 'Confirm driver\u2019s meal to continue'
+                : canPay
+                  ? `Pay \u20B9${total}`
+                  : `Add \u20B9${Math.max(0, total - available).toFixed(0)} & pay`}
         </Button>
       </div>
 
@@ -645,123 +683,53 @@ function WalletBalanceCard({
   onAddMoney,
 }) {
   const enough = total > 0 && available >= total;
-  const pct =
-    total > 0 ? Math.min(100, Math.round((available / total) * 100)) : 0;
   const fmt = (n) =>
-    `\u20B9${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    `\u20B9${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
   if (enough) {
     return (
-      <div className="rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-white/60">
-              Wallet balance
-            </p>
-            <p className="text-2xl font-bold mt-1">{fmt(balance)}</p>
-            {heldElsewhere > 0 && (
-              <p className="text-[10px] text-white/60 mt-0.5">
-                {fmt(heldElsewhere)} locked in active bookings · {fmt(available)} available
-              </p>
-            )}
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-400/20 text-emerald-300 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
+      <div className="rounded-2xl bg-slate-900 text-white px-4 py-3.5 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-emerald-400/20 text-emerald-300 flex items-center justify-center shrink-0">
+          <CheckCircle2 className="w-4 h-4" />
         </div>
-        <div className="mt-4 space-y-1 text-[12px] text-white/80">
-          <div className="flex items-center justify-between">
-            <span>Charged from wallet</span>
-            <strong className="text-white">{fmt(fareTotal)}</strong>
-          </div>
-          {bufferRupees > 0 && (
-            <div className="flex items-center justify-between">
-              <span>Reserved for waiting (refundable)</span>
-              <strong className="text-white">{fmt(bufferRupees)}</strong>
-            </div>
-          )}
-          <div className="pt-1 flex items-center justify-between border-t border-white/10 mt-2">
-            <span className="font-semibold text-white">Wallet needed</span>
-            <span className="inline-flex items-center gap-1 text-emerald-300 font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5" /> {fmt(total)}
-            </span>
-          </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white">
+            Wallet ready · {fmt(available)} available
+          </p>
+          <p className="text-[11px] text-white/60 mt-0.5">
+            Paying {fmt(fareTotal)}
+            {bufferRupees > 0 ? ` · ${fmt(bufferRupees)} held for waiting` : ''}
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-3xl overflow-hidden border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-wide text-amber-800/80">
-            Wallet balance
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+          <WalletIcon className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-text">
+            Need {fmt(shortBy)} more
           </p>
-          <p className="text-2xl font-bold text-text mt-1">{fmt(balance)}</p>
           <p className="text-[11px] text-text-muted mt-0.5">
-            {heldElsewhere > 0
-              ? `${fmt(heldElsewhere)} locked elsewhere \u00B7 ${fmt(available)} available`
-              : `You need ${fmt(total)} to book this ride`}{' '}
-            {loading ? <span className="text-text-muted">…</span> : null}
+            {fmt(available)} available
+            {heldElsewhere > 0 ? ` · ${fmt(heldElsewhere)} locked` : ''}
+            {loading ? ' · updating…' : ''}
           </p>
         </div>
-        <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-          <WalletIcon className="w-5 h-5" />
-        </div>
+        <button
+          type="button"
+          onClick={onAddMoney}
+          className="inline-flex items-center gap-1 px-3 h-9 rounded-xl bg-primary text-white text-xs font-semibold shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add {fmt(Math.round(shortBy))}
+        </button>
       </div>
-
-      {total > 0 && bufferRupees > 0 && (
-        <div className="mt-3 rounded-2xl bg-white/60 border border-amber-200 px-3 py-2 text-[11px] text-text-secondary space-y-0.5">
-          <div className="flex items-center justify-between">
-            <span>Fare (charged now)</span>
-            <strong className="text-text">{fmt(fareTotal)}</strong>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Waiting reserve (held in wallet)</span>
-            <strong className="text-text">{fmt(bufferRupees)}</strong>
-          </div>
-        </div>
-      )}
-
-      {total > 0 && (
-        <div className="mt-3">
-          <div className="h-1.5 rounded-full bg-amber-100 overflow-hidden">
-            <div
-              className="h-full bg-amber-500 transition-[width] duration-300"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <div className="mt-1 flex justify-between text-[10px] text-amber-800/80 font-medium">
-            <span>{pct}% covered</span>
-            <span>100%</span>
-          </div>
-        </div>
-      )}
-
-      {total > 0 && (
-        <div className="mt-3 rounded-2xl bg-white border border-amber-200 p-3 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-4 h-4" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-text">
-              You need {fmt(shortBy)} more in your wallet
-            </p>
-            <p className="text-[11px] text-text-muted">
-              Top up now &mdash; we&apos;ll retry your booking automatically.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onAddMoney}
-            className="inline-flex items-center gap-1 px-3 h-9 rounded-xl bg-primary text-white text-xs font-semibold shadow-sm hover:bg-primary-dark transition shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add {fmt(Math.round(shortBy))}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -790,36 +758,14 @@ function FareNotices({ estimate }) {
   return (
     <div className="space-y-2">
       {isOutstationFood && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-            <Utensils className="w-4 h-4 text-amber-700" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-amber-900">
-              {`Driver food allowance included (\u20B9${bd.foodAllowance})`}
-            </p>
-            <p className="text-[12px] text-amber-800 leading-snug mt-0.5">
-              Toggle &ldquo;I&apos;ll arrange the driver&apos;s meals&rdquo;
-              above to remove this from the fare.
-            </p>
-          </div>
-        </div>
+        <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          Food allowance ₹{bd.foodAllowance} included — toggle meals above to remove it.
+        </p>
       )}
       {nightTriggered && (
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-            <Moon className="w-4 h-4 text-indigo-700" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-indigo-900">
-              {`Night charge applied (\u20B9${bd.nightCharge})`}
-            </p>
-            <p className="text-[12px] text-indigo-800 leading-snug mt-0.5">
-              Your booking covers night hours. The night charge is already
-              included in the fare above.
-            </p>
-          </div>
-        </div>
+        <p className="text-[12px] text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2">
+          Night charge ₹{bd.nightCharge} applied for overnight hours.
+        </p>
       )}
     </div>
   );
@@ -1797,58 +1743,32 @@ function OutstationCancellationPolicySummary({ policy, dailyRate }) {
   );
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-          <ShieldCheck className="w-5 h-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-text">Cancellation policy</p>
-          <p className="text-[11px] text-text-muted mt-0.5">
-            Calculated from your pickup time. Refunds go straight back to
-            your wallet.
-          </p>
-        </div>
-      </div>
-
+    <details className="rounded-2xl border border-border-light bg-white px-4 py-3 group">
+      <summary className="flex items-center gap-2 cursor-pointer list-none">
+        <ShieldCheck className="w-4 h-4 text-text-muted shrink-0" />
+        <span className="text-sm font-semibold text-text flex-1">Cancellation policy</span>
+        <span className="text-[11px] text-text-muted group-open:hidden">View</span>
+      </summary>
       <ul className="mt-3 space-y-2 text-[12px] text-text-secondary">
-        <li className="flex gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span>
-            <strong className="text-text">More than {freeHours}h before pickup</strong>
-            {' '}— {beforeFee === 'no fee'
-              ? 'full refund, no cancellation fee.'
-              : `${beforeFee} is deducted, the rest refunded.`}
-          </span>
+        <li>
+          <strong className="text-text">More than {freeHours}h before pickup</strong>
+          {' '}— {beforeFee === 'no fee'
+            ? 'full refund.'
+            : `${beforeFee} deducted.`}
         </li>
-        <li className="flex gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-          <span>
-            <strong className="text-text">Within {freeHours}h, driver not yet arrived</strong>
-            {' '}— {preFee === 'no fee'
-              ? 'no cancellation fee.'
-              : `${preFee} is deducted, the rest refunded.`}
-          </span>
+        <li>
+          <strong className="text-text">Within {freeHours}h, before arrival</strong>
+          {' '}— {preFee === 'no fee' ? 'no fee.' : `${preFee} deducted.`}
         </li>
-        <li className="flex gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-          <span>
-            <strong className="text-text">After the driver reaches pickup</strong>
-            {' '}— {arrivedFee}
-            {arrivedFloor > 0 ? (
-              <>
-                {' '}or <strong className="text-text">₹{Math.round(arrivedFloor)}</strong>{' '}
-                ({arrivedFeeMinDays === 1
-                  ? "one day\u2019s fare"
-                  : `${arrivedFeeMinDays} days\u2019 fare`}), whichever is higher.
-              </>
-            ) : (
-              <>.</>
-            )}
-          </span>
+        <li>
+          <strong className="text-text">After driver arrives</strong>
+          {' '}— {arrivedFee}
+          {arrivedFloor > 0
+            ? ` or ₹${Math.round(arrivedFloor)} min, whichever is higher.`
+            : '.'}
         </li>
       </ul>
-    </div>
+    </details>
   );
 }
 
@@ -1882,50 +1802,33 @@ function HourlyCancellationPolicySummary({ policy }) {
     : 'no fee';
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-          <ShieldCheck className="w-5 h-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-text">Cancellation policy</p>
-          <p className="text-[11px] text-text-muted mt-0.5">
-            Depends on the booking stage when you cancel. Refunds go
-            straight back to your wallet.
-          </p>
-        </div>
-      </div>
-
+    <details className="rounded-2xl border border-border-light bg-white px-4 py-3 group">
+      <summary className="flex items-center gap-2 cursor-pointer list-none">
+        <ShieldCheck className="w-4 h-4 text-text-muted shrink-0" />
+        <span className="text-sm font-semibold text-text flex-1">Cancellation policy</span>
+        <span className="text-[11px] text-text-muted group-open:hidden">View</span>
+      </summary>
       <ul className="mt-3 space-y-2 text-[12px] text-text-secondary">
-        <li className="flex gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span>
-            <strong className="text-text">Before a driver is assigned</strong>
-            {' '}&mdash; full refund, no cancellation fee.
-          </span>
+        <li>
+          <strong className="text-text">Before a driver is assigned</strong>
+          {' '}&mdash; full refund.
         </li>
-        <li className="flex gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-          <span>
-            <strong className="text-text">Driver assigned, not yet arrived</strong>
-            {' '}&mdash;{' '}
-            {flatFee > 0 ? (
-              <>flat <strong className="text-text">&#8377;{flatFee}</strong> mobilisation fee, the rest refunded.</>
-            ) : (
-              'no cancellation fee.'
-            )}
-          </span>
+        <li>
+          <strong className="text-text">Driver assigned, not yet arrived</strong>
+          {' '}&mdash;{' '}
+          {flatFee > 0 ? (
+            <>₹{flatFee} fee, rest refunded.</>
+          ) : (
+            'no fee.'
+          )}
         </li>
-        <li className="flex gap-2">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-          <span>
-            <strong className="text-text">After the driver reaches pickup</strong>
-            {' '}&mdash; {arrivedLabel}
-            {arrivedAmount > 0 ? ' is deducted, the rest refunded.' : '.'}
-          </span>
+        <li>
+          <strong className="text-text">After driver arrives</strong>
+          {' '}&mdash; {arrivedLabel}
+          {arrivedAmount > 0 ? ' deducted.' : '.'}
         </li>
       </ul>
-    </div>
+    </details>
   );
 }
 

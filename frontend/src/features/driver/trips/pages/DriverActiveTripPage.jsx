@@ -39,7 +39,7 @@ import { useGeolocation } from '../../../../hooks/useGeolocation';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
 import useDriverIncomingOfferStore from '../../../../store/driver/useDriverIncomingOfferStore';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
-import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
+import { BOOKING_STATUS, isBookingContactRevealed } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
@@ -501,12 +501,16 @@ const DriverActiveTripPage = () => {
 
   const customer = typeof booking.userId === 'object' ? booking.userId : null;
   const customerName = customer?.name || null;
+  const contactRevealed = isBookingContactRevealed(booking);
   // Server populates the user's primary contact field as `phone_no`.
   // Older builds returned `phone`; we honour both so the call CTA keeps
-  // working on bookings created before the rename.
-  const customerPhone = customer?.phone_no || customer?.phone || null;
+  // working on bookings created before the rename. Contact is withheld
+  // until the driver marks arrived at pickup.
+  const customerPhone = contactRevealed
+    ? customer?.phone_no || customer?.phone || null
+    : null;
   const customerPhoto = customer?.profilePicture || null;
-  const customerEmail = customer?.email || null;
+  const customerEmail = contactRevealed ? customer?.email || null : null;
   const customerSince = customer?.createdAt
     ? new Date(customer.createdAt).toLocaleDateString('en-IN', {
       month: 'short',
@@ -640,6 +644,7 @@ const DriverActiveTripPage = () => {
           email={customerEmail}
           since={customerSince}
           callHref={customerCallHref}
+          contactLocked={!contactRevealed}
         />
 
         {/* Vehicle — image + brand/model + plate. Driver needs to spot
@@ -1300,7 +1305,7 @@ function WaitingTimerCard({
  * accent gradient + verified chip mirror the visual hierarchy we use
  * on the user-side driver card so both audiences feel parallel.
  */
-function CustomerHeroCard({ photo, name, phone, email, since, callHref }) {
+function CustomerHeroCard({ photo, name, phone, email, since, callHref, contactLocked = false }) {
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-5 pt-5 pb-4 flex items-start gap-4">
@@ -1331,6 +1336,11 @@ function CustomerHeroCard({ photo, name, phone, email, since, callHref }) {
       </div>
 
       <div className="px-5 pt-3 pb-4 border-t border-border-light bg-white space-y-2">
+        {contactLocked && (
+          <p className="text-xs text-text-muted text-center py-1">
+            Customer contact unlocks after you arrive at pickup
+          </p>
+        )}
         {phone && (
           <ContactRow
             icon={Phone}

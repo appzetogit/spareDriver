@@ -166,6 +166,8 @@ const UserProfilePage = () => {
                           value: `${getCarFuelName(car)} · ${car.transmission}`,
                           capitalize: true,
                         },
+                        { label: 'Insurance expiry', value: formatDate(car.insuranceExpiry) },
+                        { label: 'PUC expiry', value: formatDate(car.pucExpiry) },
                       ]}
                     />
                   </div>

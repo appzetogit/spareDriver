@@ -8,7 +8,6 @@ import {
   Loader2,
   RefreshCw,
   Wallet,
-  ChevronRight,
 } from 'lucide-react';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import Badge from '../../../../components/Badge';
@@ -90,7 +89,7 @@ const UserHomePage = () => {
   const handleScroll = useCallback(() => {
     if (!mapRef.current || !scrollRef.current) return;
     const mapRect = mapRef.current.getBoundingClientRect();
-    const headerBottom = 120;
+    const headerBottom = 104;
     if (mapRect.top <= headerBottom && !showDriverSheet) {
       setShowDriverSheet(true);
     }
@@ -114,51 +113,50 @@ const UserHomePage = () => {
   return (
     <div className="flex-1 flex flex-col bg-bg relative">
       {/* ====== Sticky Header ====== */}
-      <div className="sticky top-0 z-30 bg-dark px-4 pt-4 pb-4 rounded-b-3xl shadow-lg">
-        <div className="flex items-center justify-between mb-3">
-          <div className="min-w-0 max-w-[75%]">
-            <p className="text-white/60 text-xs">Your location</p>
-            <div className="flex items-center gap-1 mt-0.5 min-w-0">
-              <MapPin className="w-4 h-4 text-primary shrink-0" />
+      <div className="sticky top-0 z-30 bg-surface/95 backdrop-blur-sm px-4 pt-3.5 pb-3.5 rounded-b-3xl shadow-lg">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-text-muted text-xs font-medium">Your location</p>
+            <div className="flex items-center gap-1.5 mt-1 min-w-0">
+              <MapPin className="w-4 h-4 text-primary-dark shrink-0" />
               <span
-                className="text-white text-sm font-medium truncate"
+                className="text-text text-sm font-semibold truncate"
                 title={currentLocation?.address || locationLine}
               >
                 {locationLine}
               </span>
               {locationLoading && (
-                <Loader2 className="w-3.5 h-3.5 text-white/60 animate-spin shrink-0" />
+                <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin shrink-0" />
               )}
             </div>
           </div>
-          <button
-            className="relative p-2.5 rounded-xl bg-white/10 hover:bg-white/15 transition-colors"
-            type="button"
-            aria-label="Notifications"
-            onClick={() => openNotifications(true)}
-          >
-            <Bell className="w-5 h-5 text-white" />
-            {unreadCount > 0 ? (
-              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            ) : null}
-          </button>
-        </div>
 
-        <div className="flex items-center justify-between mt-1.5 pt-3 border-t border-white/5">
-          <span className="text-white/50 text-[11px] font-bold tracking-wider uppercase">Wallet</span>
-          <button
-            type="button"
-            onClick={() => navigate('/user/wallet')}
-            className="flex items-center gap-2 px-3.5 py-1.5 bg-white/5 hover:bg-white/10 active:scale-[0.97] rounded-xl border border-white/10 transition-all cursor-pointer"
-          >
-            <Wallet className="w-4 h-4 text-primary" />
-            <span className="text-white text-sm font-bold">
-              ₹{wallet?.balance?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-            </span>
-            <ChevronRight className="w-3.5 h-3.5 text-white/40" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('/user/wallet')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-primary-50 hover:bg-primary-light/40 active:scale-[0.97] rounded-xl border border-primary/30 transition-all cursor-pointer"
+              aria-label="Wallet"
+            >
+              <Wallet className="w-4 h-4 text-primary-dark" />
+              <span className="text-text text-sm font-bold">
+                ₹{wallet?.balance?.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+              </span>
+            </button>
+            <button
+              className="relative p-2.5 rounded-xl bg-bg hover:bg-border-light transition-colors"
+              type="button"
+              aria-label="Notifications"
+              onClick={() => openNotifications(true)}
+            >
+              <Bell className="w-5 h-5 text-text-secondary" />
+              {unreadCount > 0 ? (
+                <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              ) : null}
+            </button>
+          </div>
         </div>
       </div>
 

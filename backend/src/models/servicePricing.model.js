@@ -431,13 +431,12 @@ const driverSearchSchema = new mongoose.Schema(
  *                         18 (= 6 PM) so drivers see them after their
  *                         day winds down.
  *   EMERGENCY_POOL_MINUTES — if no driver is assigned this many minutes
- *                         before pickup, the booking moves to the
- *                         admin-managed emergency pool.
- *   RETRY_DELAY_MINUTES — minutes to wait between assignment retries
- *                         when the wave dispatcher comes back empty.
- *                         Retries keep firing until pickup is closer
- *                         than EMERGENCY_POOL_MINUTES, after which the
- *                         escalate job parks the booking in the pool.
+ *                         before pickup, the batch escalate cron moves
+ *                         the booking to the admin emergency pool
+ *                         (sweep every EMERGENCY_POOL_BATCH_INTERVAL_MINUTES).
+ *   RETRY_DELAY_MINUTES — @deprecated Scheduled inbox dispatch no longer
+ *                         retries empty rounds. Kept for older pricing
+ *                         documents; ignored by the new flow.
  *   MIN_SCHEDULED_LEAD_HOURS — hard floor on how far in advance the
  *                         customer can create a scheduled booking.
  *                         The booking-create endpoint rejects anything
@@ -508,6 +507,19 @@ const servicePricingSchema = new mongoose.Schema(
     stayAllowance: { type: stayAllowanceSchema, default: () => ({}) },
 
     // ── Platform charges (shared) ──
+    /**
+     * Customer-facing platform fee (formerly "service charge").
+     * `platformFeeType` + `platformFeeAmount` mirror night-charge /
+     * coupon flat|percentage knobs. Legacy `serviceChargePercent` is
+     * still read as a fallback when the new fields are unset (0).
+     */
+    platformFeeType: {
+      type: String,
+      enum: ['flat', 'percentage'],
+      default: 'percentage',
+    },
+    platformFeeAmount: { type: Number, default: 0, min: 0 },
+    /** @deprecated Prefer platformFeeType=percentage + platformFeeAmount. */
     serviceChargePercent: { type: Number, default: 0, min: 0, max: 100 },
     gstPercent: { type: Number, default: 18, min: 0, max: 100 },
     platformCommissionPercent: { type: Number, default: 0, min: 0, max: 100 },

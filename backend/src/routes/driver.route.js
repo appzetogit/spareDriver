@@ -62,6 +62,12 @@ import {
   driverDismissBookingExtension,
   rateCustomerByDriver,
   getDriverPendingOffer,
+  getDriverIncomingScheduled,
+  getDriverIncomingScheduledCount,
+  driverAcceptSubscription,
+  driverRejectSubscription,
+  getDriverAssignedSubscriptions,
+  getDriverAssignedSubscriptionById,
 } from '../controllers/booking.controller.js';
 import {
   getDriverWithdrawalLimits,
@@ -137,6 +143,12 @@ router.get('/earnings/ledger', protectDriver, getDriverEarningsLedger);
 // Booking lifecycle for the driver (Phase 4)
 router.get('/bookings/active', protectDriver, getDriverActiveBooking);
 router.get('/bookings/pending-offer', protectDriver, getDriverPendingOffer);
+router.get('/bookings/incoming-scheduled', protectDriver, getDriverIncomingScheduled);
+router.get('/bookings/incoming-scheduled/count', protectDriver, getDriverIncomingScheduledCount);
+router.get('/subscriptions', protectDriver, getDriverAssignedSubscriptions);
+router.get('/subscriptions/:id', protectDriver, getDriverAssignedSubscriptionById);
+router.post('/subscriptions/:id/accept', protectDriver, driverAcceptSubscription);
+router.post('/subscriptions/:id/reject', protectDriver, driverRejectSubscription);
 router.get('/bookings/:id', protectDriver, driverGetBookingById);
 router.post('/bookings/:id/accept', protectDriver, driverAcceptBooking);
 router.post('/bookings/:id/reject', protectDriver, driverRejectBooking);

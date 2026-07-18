@@ -320,9 +320,6 @@ const TRIPS_TAB_FILTERS = {
  * Driver trip history.
  *
  *   GET /driver/trips?tab=all|ongoing|completed|cancelled&page=&limit=
- *
- * Mirrors the admin-list pagination shape used elsewhere in the codebase:
- * `{ data, pagination: { total, page, pages } }`.
  */
 export async function getDriverTripsListService(driverId, query = {}) {
   const tab = String(query.tab || 'all').toLowerCase();

@@ -1,10 +1,12 @@
 import Coupon from '../models/coupon.model.js';
+import Booking from '../models/booking.model.js';
 import { ApiError } from '../utils/apiError.js';
 import {
   COUPON_DISCOUNT_TYPES,
   COUPON_DISCOUNT_TYPE_LIST,
   COUPON_APPLICABLE_SERVICE_LIST,
 } from '../constants/couponTypes.js';
+import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -193,4 +195,82 @@ export const validateCouponService = async ({ code, serviceType, subtotal = 0 })
 export const incrementCouponUsageService = async (couponId) => {
   if (!couponId) return;
   await Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } });
+};
+
+/**
+ * Redemptions for a coupon: every booking that carried the code, with
+ * user/trip context. `countedTowardLimit` is true only for completed
+ * trips (matches when usedCount is incremented).
+ */
+export const getCouponAnalyticsService = async (couponId) => {
+  if (!couponId) throw new ApiError(400, 'Coupon id is required');
+  const coupon = await Coupon.findById(couponId).lean();
+  if (!coupon) throw new ApiError(404, 'Coupon not found');
+
+  const bookings = await Booking.find({
+    isDeleted: { $ne: true },
+    $or: [
+      { 'fareSnapshot.couponId': coupon._id },
+      { 'fareSnapshot.couponCode': coupon.code },
+    ],
+  })
+    .select(
+      'bookingNumber status serviceType userId driverId fareSnapshot.couponDiscount fareSnapshot.couponCode fareSnapshot.total fareSnapshot.serviceCharge createdAt timeline.completedAt timeline.cancelledAt',
+    )
+    .populate('userId', 'name email phone_no')
+    .populate('driverId', 'name phone')
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+
+  const redemptions = bookings.map((b) => {
+    const counted = b.status === BOOKING_STATUS.COMPLETED;
+    return {
+      bookingId: b._id,
+      bookingNumber: b.bookingNumber,
+      status: b.status,
+      serviceType: b.serviceType,
+      countedTowardLimit: counted,
+      couponDiscount: round2(b.fareSnapshot?.couponDiscount || 0),
+      couponCode: b.fareSnapshot?.couponCode || coupon.code,
+      fareTotal: round2(b.fareSnapshot?.total || 0),
+      platformFee: round2(b.fareSnapshot?.serviceCharge || 0),
+      createdAt: b.createdAt,
+      completedAt: b.timeline?.completedAt || null,
+      cancelledAt: b.timeline?.cancelledAt || null,
+      user: b.userId
+        ? {
+            _id: b.userId._id,
+            name: b.userId.name || '',
+            email: b.userId.email || '',
+            phone: b.userId.phone_no || '',
+          }
+        : null,
+      driver: b.driverId
+        ? {
+            _id: b.driverId._id,
+            name: b.driverId.name || '',
+            phone: b.driverId.phone || '',
+          }
+        : null,
+    };
+  });
+
+  const completed = redemptions.filter((r) => r.countedTowardLimit);
+  const absorbedDiscount = round2(
+    completed.reduce((sum, r) => sum + (Number(r.couponDiscount) || 0), 0),
+  );
+
+  return {
+    coupon,
+    summary: {
+      totalApplications: redemptions.length,
+      completedTrips: completed.length,
+      cancelledOrUnfulfilled: redemptions.length - completed.length,
+      usedCount: coupon.usedCount || 0,
+      maxUses: coupon.maxUses,
+      absorbedDiscountTotal: absorbedDiscount,
+    },
+    redemptions,
+  };
 };

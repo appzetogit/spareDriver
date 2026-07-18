@@ -8,6 +8,7 @@ import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../../../utils/geo';
+import { isBookingContactRevealed } from '../../../../constants/bookingStatus';
 
 /**
  * Driver-side "navigate to customer" screen — replaces the static mock
@@ -44,7 +45,10 @@ const NavigateToCustomerPage = () => {
 
   const customer = typeof booking?.userId === 'object' ? booking.userId : null;
   const customerName = customer?.name || null;
-  const customerPhone = customer?.phone_no || customer?.phone || null;
+  const contactRevealed = isBookingContactRevealed(booking);
+  const customerPhone = contactRevealed
+    ? customer?.phone_no || customer?.phone || null
+    : null;
   const customerPhoto = customer?.profilePicture || null;
 
   return (
@@ -85,7 +89,10 @@ const NavigateToCustomerPage = () => {
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-text truncate">{customerName || 'Customer'}</h3>
               <p className="text-xs text-text-muted truncate">
-                {customerPhone || booking?.bookingNumber || '—'}
+                {customerPhone ||
+                  (contactRevealed
+                    ? booking?.bookingNumber || '—'
+                    : 'Contact unlocks after you arrive')}
               </p>
             </div>
           </div>

@@ -98,6 +98,8 @@ const buildDefaultForm = (serviceType) => ({
   },
 
   // Platform
+  platformFeeType: 'percentage',
+  platformFeeAmount: 0,
   serviceChargePercent: 0,
   gstPercent: 18,
   platformCommissionPercent: 20,
@@ -162,9 +164,21 @@ const buildDefaultForm = (serviceType) => ({
 
 const buildFormFromExisting = (existing) => {
   const base = buildDefaultForm(existing.serviceType);
+  const platformFeeType =
+    existing.platformFeeType === 'flat' ? 'flat' : 'percentage';
+  const platformFeeAmount =
+    Number(existing.platformFeeAmount) > 0
+      ? Number(existing.platformFeeAmount)
+      : platformFeeType === 'percentage'
+        ? Number(existing.serviceChargePercent) || 0
+        : Number(existing.platformFeeAmount) || 0;
   return {
     ...base,
     ...existing,
+    platformFeeType,
+    platformFeeAmount,
+    serviceChargePercent:
+      platformFeeType === 'percentage' ? platformFeeAmount : 0,
     outstation: { ...base.outstation, ...(existing.outstation || {}) },
     waitingCharge: { ...base.waitingCharge, ...(existing.waitingCharge || {}) },
     nightCharge: { ...base.nightCharge, ...(existing.nightCharge || {}) },
@@ -783,16 +797,51 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
           {/* Platform charges */}
           <Section
             title="Platform charges"
-            subtitle="Service charge and GST are added to the customer's total. Commission is deducted from the driver's earning."
+            subtitle="Platform fee and GST are added to the customer's total. Commission is deducted from the driver's earning."
           >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Platform fee type
+                </label>
+                <select
+                  value={form.platformFeeType || 'percentage'}
+                  onChange={(e) => {
+                    const platformFeeType = e.target.value;
+                    update({
+                      platformFeeType,
+                      serviceChargePercent:
+                        platformFeeType === 'percentage'
+                          ? Number(form.platformFeeAmount) || 0
+                          : 0,
+                    });
+                  }}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm"
+                >
+                  <option value="percentage">Percentage (%)</option>
+                  <option value="flat">Flat (₹)</option>
+                </select>
+              </div>
               <Input
-                label="Service charge (%)"
+                label={
+                  form.platformFeeType === 'flat'
+                    ? 'Platform fee (₹)'
+                    : 'Platform fee (%)'
+                }
                 type="number"
                 min={0}
-                max={100}
-                value={form.serviceChargePercent}
-                onChange={(e) => update({ serviceChargePercent: Number(e.target.value) })}
+                max={form.platformFeeType === 'flat' ? undefined : 100}
+                value={form.platformFeeAmount ?? 0}
+                onChange={(e) => {
+                  const platformFeeAmount = Number(e.target.value);
+                  update({
+                    platformFeeAmount,
+                    serviceChargePercent:
+                      form.platformFeeType === 'percentage'
+                        ? platformFeeAmount
+                        : 0,
+                  });
+                }}
               />
               <Input
                 label="GST (%)"
@@ -993,10 +1042,14 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
               </div>
             )}
           </Section>
-          {isHourly && (
+          {(isHourly || isOutstation) && (
             <Section
-              title="Scheduled-ride dispatcher"
-              subtitle="When does the system start hunting for a driver for a future-scheduled hourly ride? Morning rides booked the day before fire immediately so drivers can plan; everything earlier gets queued until closer to pickup."
+              title={isOutstation ? 'Outstation dispatcher' : 'Scheduled-ride dispatcher'}
+              subtitle={
+                isOutstation
+                  ? 'When auto-search starts for an outstation booking, how long drivers have before the request escalates to the manual assignment queue, and how far in advance customers must book.'
+                  : 'When does the system start hunting for a driver for a future-scheduled hourly ride? Morning rides booked the day before fire immediately so drivers can plan; everything earlier gets queued until closer to pickup.'
+              }
             >
               <div className="p-3 bg-slate-50 rounded-xl space-y-3">
                 <div>
@@ -1112,7 +1165,7 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                     }
                   />
                   <Input
-                    label="Retry delay (minutes)"
+                    label="Retry delay (minutes, unused)"
                     type="number"
                     min={1}
                     value={form.scheduledDispatch.RETRY_DELAY_MINUTES}
@@ -1135,13 +1188,13 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                   />
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  When a dispatch round finds no driver we wait this many
-                  minutes and try again — looping until pickup is closer
-                  than the emergency-pool window, at which point the
-                  booking is parked for admin to assign manually. The
-                  ride buffer is padded around every existing booking so
-                  drivers with a future scheduled ride still receive new
-                  offers, as long as the new ride finishes at least this
+                  Scheduled rides broadcast once to matching drivers (open
+                  inbox, no offer timer). Past the emergency-pool window a
+                  ~45 min batch sweep parks unmatched bookings for admin
+                  assignment. Retry delay is unused. The ride buffer is
+                  padded around every existing booking so drivers with a
+                  future scheduled ride still receive new offers, as long
+                  as the new ride finishes at least this
                   many minutes before the next pickup (and vice-versa).
                 </p>
               </div>
@@ -1191,34 +1244,6 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                     }
                   />
                 </div>
-              </div>
-            </Section>
-          )}
-          {!isHourly && (
-            <Section
-              title="Outstation booking lead time"
-              subtitle="The customer's date picker is capped to at least this many hours from now (the backend enforces the same floor on create). Use it to give ops enough time to manually assign a driver before the trip starts."
-            >
-              <div className="p-3 bg-slate-50 rounded-xl space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Input
-                    label="Minimum lead time (hours)"
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    value={form.scheduledDispatch.MIN_SCHEDULED_LEAD_HOURS}
-                    onChange={(e) =>
-                      updateNested('scheduledDispatch', {
-                        MIN_SCHEDULED_LEAD_HOURS: Number(e.target.value),
-                      })
-                    }
-                    helper={`Customer-facing copy will read \u201cWe need at least ${form.scheduledDispatch.MIN_SCHEDULED_LEAD_HOURS || 0} hour${(form.scheduledDispatch.MIN_SCHEDULED_LEAD_HOURS || 0) === 1 ? '' : 's'} between booking and pickup\u201d.`}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Past-time pickups are rejected too — the same 422
-                  error covers anything inside this window.
-                </p>
               </div>
             </Section>
           )}

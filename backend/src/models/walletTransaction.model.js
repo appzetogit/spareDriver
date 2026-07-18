@@ -97,7 +97,14 @@ const walletTransactionSchema = new mongoose.Schema(
       orderId: { type: String, default: '', trim: true, index: true },
       paymentId: { type: String, default: '', trim: true },
       signature: { type: String, default: '', trim: true },
+      /** Gross amount the user paid (paise). */
       amountPaise: { type: Number, default: 0, min: 0 },
+      /** Razorpay platform fee including GST (paise). Deducted before credit. */
+      feePaise: { type: Number, default: 0, min: 0 },
+      /** GST component of the fee (paise); informational — already inside feePaise. */
+      taxPaise: { type: Number, default: 0, min: 0 },
+      /** Net credited = amountPaise − feePaise. */
+      netAmountPaise: { type: Number, default: 0, min: 0 },
     },
 
     status: {

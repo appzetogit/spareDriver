@@ -4,40 +4,31 @@ import { SCHEDULED_BOOKING } from '../constants/bookingStatus.js';
 /**
  * BullMQ queue for the scheduled-ride flow.
  *
- * Four job kinds, all keyed off the booking's `scheduledStartAt`:
+ * Job kinds:
  *
  *   assign         (single, fires LONG_LEAD_HOURS / LEAD_SCHEDULE_HOUR
  *                  before pickup — see `decideScheduleTier`)
- *     → flips PENDING_ASSIGNMENT → SEARCHING and kicks the wave dispatcher.
- *       Skipped (delay = 0) for morning + short-window tiers because they
- *       already searched immediately at booking creation.
- *
- *   retry-{n}      (one per failed dispatch round, queued by
- *                  `enqueueAssignmentRetry`)
- *     → flips the booking back into SEARCHING and re-runs the wave
- *       dispatcher. We keep re-queuing this every RETRY_DELAY_MINUTES
- *       while there's still runway before `escalateAt`. When the next
- *       retry would land inside the emergency window we stop scheduling
- *       and let the `escalate` job take over.
+ *     → flips PENDING_ASSIGNMENT → SEARCHING and broadcasts the open
+ *       inbox to every matching driver. Skipped (delay = 0) for morning
+ *       + short-window tiers because they already searched at create.
  *
  *   reminder-{m}   (one per offset in REMINDER_OFFSETS_MINUTES)
  *     → emits a NOTIFICATION over socket so the user/driver app can
- *       toast. ONLY enqueued AFTER a driver has been assigned, via
- *       `enqueueReminderJobsForBooking` (called from
- *       `acceptBookingService` / `adminAssignDriverToEmergencyPoolService`).
+ *       toast. ONLY enqueued AFTER a driver has been assigned.
  *
- *   escalate       (single, fires EMERGENCY_POOL_MINUTES before pickup)
- *     → if no driver is assigned yet, moves the booking into the
- *       admin-managed emergency pool for manual assignment.
+ *   escalate-batch (repeatable, every EMERGENCY_POOL_BATCH_INTERVAL_MINUTES)
+ *     → scans for unmatched scheduled bookings past escalateAt and
+ *       moves them into the admin emergency pool. Worst-case lag into
+ *       the pool ≈ one batch interval after cutoff.
  *
- * Job IDs are deterministic so:
- *   - re-creating the same booking is idempotent (BullMQ rejects duplicates),
- *   - cancelling a booking can target & remove jobs by ID without scanning.
+ * Legacy (still handled by the worker for in-flight / drain):
+ *   retry-{n}, escalate (per-booking) — no longer enqueued for new
+ *   bookings; handlers no-op or drain safely.
  *
- * Falls back to a no-op when Redis is not configured. Callers should treat
- * `enqueueScheduledBookingJobs` and `removeScheduledBookingJobs` as
- * fire-and-forget — they never throw on transport failure; they log and
- * return false so the booking-create path keeps moving.
+ * Job IDs are deterministic so re-creates are idempotent and cancelling
+ * a booking can target & remove jobs by ID without scanning.
+ *
+ * Falls back to a no-op when Redis is not configured.
  */
 
 export const SCHEDULED_BOOKING_QUEUE_NAME = 'scheduled-booking';
@@ -47,7 +38,10 @@ export const SCHEDULED_JOB_NAMES = Object.freeze({
   RETRY: 'retry',
   REMINDER: 'reminder',
   ESCALATE: 'escalate',
+  ESCALATE_BATCH: 'escalate-batch',
 });
+
+export const ESCALATE_BATCH_JOB_ID = 'escalate-batch-recurring';
 
 let queueInstance = null;
 let dynamicBullmq = null;
@@ -67,11 +61,8 @@ export async function getScheduledBookingQueue() {
     queueInstance = new dynamicBullmq.Queue(SCHEDULED_BOOKING_QUEUE_NAME, {
       connection,
       defaultJobOptions: {
-        // Keep a tail of completed jobs for ops debugging without ballooning
-        // Redis. Failures are kept longer so we can investigate them.
         removeOnComplete: { count: 200 },
         removeOnFail: { count: 500 },
-        // Worker handlers are idempotent — a couple of retries is fine.
         attempts: 3,
         backoff: { type: 'exponential', delay: 5_000 },
       },
@@ -92,11 +83,6 @@ function jobIdFor(kind, bookingId, qualifier) {
   return `reminder-${qualifier}-${String(bookingId)}`;
 }
 
-/**
- * Resolve the admin-tunable scheduling knobs for this service type,
- * falling back to platform defaults. Logs and degrades silently so a
- * pricing-collection outage doesn't take the queue down with it.
- */
 async function loadDispatchConfig(serviceType) {
   if (!serviceType) return { ...SCHEDULED_BOOKING };
   try {
@@ -117,14 +103,10 @@ async function loadDispatchConfig(serviceType) {
 }
 
 /**
- * Enqueue the assignment kickoff + escalation jobs for a scheduled
- * booking. Idempotent — re-calling for the same booking ID is safe
- * (BullMQ silently drops duplicate job IDs).
- *
- * Reminder jobs are NOT pushed here. They're queued later — only after
- * a driver has actually been assigned — via
- * `enqueueReminderJobsForBooking`. This keeps Redis clean of reminders
- * for bookings that fizzle (no driver found / cancelled before assign).
+ * Enqueue the assignment kickoff for a scheduled booking. Idempotent.
+ * Reminder jobs are queued later via `enqueueReminderJobsForBooking`.
+ * Escalation is handled by the recurring `escalate-batch` job — not
+ * per-booking delayed escalate jobs.
  *
  * @param {{ _id: any, serviceType: string, hourly?: { scheduledStartAt: Date|string|null } }} booking
  * @returns {Promise<boolean>} true if at least one job was enqueued
@@ -133,16 +115,16 @@ export async function enqueueScheduledBookingJobs(booking) {
   const queue = await getScheduledBookingQueue();
   if (!queue) return false;
   const bookingId = String(booking?._id || '');
-  const start = booking?.hourly?.scheduledStartAt
-    ? new Date(booking.hourly.scheduledStartAt).getTime()
-    : 0;
+  const { resolveBookingSearchStartAt } = await import(
+    '../utils/bookingInbox.js'
+  );
+  const startAt = resolveBookingSearchStartAt(booking);
+  const start = startAt ? startAt.getTime() : 0;
   if (!bookingId || !start) return false;
   const now = Date.now();
 
   const config = await loadDispatchConfig(booking.serviceType);
 
-  // Reuse the single source of truth for the schedule decision so the
-  // queue and the booking flow can never disagree on assignAt.
   const { decideScheduleTier } = await import(
     '../services/bookingScheduled.service.js'
   );
@@ -151,34 +133,15 @@ export async function enqueueScheduledBookingJobs(booking) {
     ? 0
     : Math.max(0, new Date(decision.assignAt).getTime() - now);
 
-  const tasks = [
-    queue.add(
+  try {
+    await queue.add(
       SCHEDULED_JOB_NAMES.ASSIGN,
       { bookingId, scheduledStartAt: new Date(start).toISOString() },
       {
         jobId: jobIdFor(SCHEDULED_JOB_NAMES.ASSIGN, bookingId),
         delay: assignDelay,
       },
-    ),
-  ];
-
-  // Escalate to emergency pool (no-op for past-due, e.g. user books
-  // within the emergency window — escalate immediately in that case).
-  const escalateAt = start - config.EMERGENCY_POOL_MINUTES * 60_000;
-  const escalateDelay = Math.max(0, escalateAt - now);
-  tasks.push(
-    queue.add(
-      SCHEDULED_JOB_NAMES.ESCALATE,
-      { bookingId, scheduledStartAt: new Date(start).toISOString() },
-      {
-        jobId: jobIdFor(SCHEDULED_JOB_NAMES.ESCALATE, bookingId),
-        delay: escalateDelay,
-      },
-    ),
-  );
-
-  try {
-    await Promise.all(tasks);
+    );
     return true;
   } catch (err) {
     console.warn(
@@ -191,44 +154,68 @@ export async function enqueueScheduledBookingJobs(booking) {
 }
 
 /**
- * Queue another assignment attempt for a scheduled booking whose
- * previous wave-dispatch round came back empty. Job ID embeds
- * `attemptNumber` so successive retries don't collide in BullMQ.
+ * Ensure the recurring emergency-pool batch escalate job exists.
+ * Called once at worker boot. Interval comes from SCHEDULED_BOOKING
+ * (and optionally a future ServicePricing platform override).
  *
- * Caller (`scheduleAssignmentRetryOrEscalate`) is responsible for
- * deciding whether there's still runway before `escalateAt` — this
- * helper just queues whatever it's told.
- *
- * @param {string|object} bookingId
- * @param {{ delayMs: number, attemptNumber: number, scheduledStartAt?: Date|string|null }} opts
  * @returns {Promise<boolean>}
  */
-export async function enqueueAssignmentRetry(bookingId, opts = {}) {
+export async function ensureEscalateBatchScheduler() {
   const queue = await getScheduledBookingQueue();
-  if (!queue || !bookingId) return false;
-  const bid = String(bookingId);
-  const delay = Math.max(0, Number(opts.delayMs) || 0);
-  const attempt = Math.max(1, Number(opts.attemptNumber) || 1);
+  if (!queue) return false;
+
+  const intervalMinutes = Math.max(
+    5,
+    Number(SCHEDULED_BOOKING.EMERGENCY_POOL_BATCH_INTERVAL_MINUTES) || 45,
+  );
+  const everyMs = intervalMinutes * 60_000;
+
   try {
-    await queue.add(
-      SCHEDULED_JOB_NAMES.RETRY,
-      {
-        bookingId: bid,
-        attemptNumber: attempt,
-        scheduledStartAt: opts.scheduledStartAt
-          ? new Date(opts.scheduledStartAt).toISOString()
-          : null,
-      },
-      {
-        jobId: jobIdFor(SCHEDULED_JOB_NAMES.RETRY, bid, attempt),
-        delay,
-      },
+    // BullMQ v4+/v5: upsertJobScheduler is preferred; fall back to
+    // repeatable add for older clients.
+    if (typeof queue.upsertJobScheduler === 'function') {
+      await queue.upsertJobScheduler(
+        ESCALATE_BATCH_JOB_ID,
+        { every: everyMs },
+        {
+          name: SCHEDULED_JOB_NAMES.ESCALATE_BATCH,
+          data: { kind: 'escalate-batch' },
+          opts: {
+            removeOnComplete: { count: 50 },
+            removeOnFail: { count: 100 },
+          },
+        },
+      );
+    } else {
+      // Remove prior repeatable definitions with the same key, then add.
+      const repeatables = await queue.getRepeatableJobs();
+      for (const job of repeatables) {
+        if (
+          job.name === SCHEDULED_JOB_NAMES.ESCALATE_BATCH
+          || job.id === ESCALATE_BATCH_JOB_ID
+          || job.key?.includes(ESCALATE_BATCH_JOB_ID)
+        ) {
+          await queue.removeRepeatableByKey(job.key).catch(() => {});
+        }
+      }
+      await queue.add(
+        SCHEDULED_JOB_NAMES.ESCALATE_BATCH,
+        { kind: 'escalate-batch' },
+        {
+          jobId: ESCALATE_BATCH_JOB_ID,
+          repeat: { every: everyMs },
+          removeOnComplete: { count: 50 },
+          removeOnFail: { count: 100 },
+        },
+      );
+    }
+    console.log(
+      `[scheduledBooking] escalate-batch scheduler armed (every ${intervalMinutes}m)`,
     );
     return true;
   } catch (err) {
     console.warn(
-      '[scheduledBooking] failed to enqueue retry for',
-      bid,
+      '[scheduledBooking] failed to arm escalate-batch scheduler:',
       err?.message || err,
     );
     return false;
@@ -236,24 +223,30 @@ export async function enqueueAssignmentRetry(bookingId, opts = {}) {
 }
 
 /**
+ * @deprecated Scheduled dispatch no longer retries empty rounds.
+ * Kept as a no-op-safe export for any leftover callers.
+ */
+export async function enqueueAssignmentRetry(bookingId, opts = {}) {
+  console.warn(
+    '[scheduledBooking] enqueueAssignmentRetry is deprecated — ignoring',
+    String(bookingId),
+    opts?.attemptNumber,
+  );
+  return false;
+}
+
+/**
  * Queue the reminder toasts for a freshly-assigned scheduled booking.
- * Called from the accept-booking flow (and the emergency-pool manual
- * assign flow) — never at booking creation time.
- *
- * Past-due offsets (e.g. driver accepted only 10 min before pickup → the
- * 60-min reminder is already in the past) are skipped silently. Returns
- * true when at least one reminder was queued.
- *
- * @param {{ _id: any, serviceType?: string, hourly?: { scheduledStartAt: Date|string|null } }} booking
- * @returns {Promise<boolean>}
  */
 export async function enqueueReminderJobsForBooking(booking) {
   const queue = await getScheduledBookingQueue();
   if (!queue) return false;
   const bookingId = String(booking?._id || '');
-  const start = booking?.hourly?.scheduledStartAt
-    ? new Date(booking.hourly.scheduledStartAt).getTime()
-    : 0;
+  const { resolveBookingSearchStartAt } = await import(
+    '../utils/bookingInbox.js'
+  );
+  const startAt = resolveBookingSearchStartAt(booking);
+  const start = startAt ? startAt.getTime() : 0;
   if (!bookingId || !start) return false;
   const now = Date.now();
 
@@ -299,17 +292,18 @@ export async function enqueueReminderJobsForBooking(booking) {
 }
 
 /**
- * Snapshot of every job in the scheduled-booking queue, grouped by
- * BullMQ status. Used by the admin "Scheduled Jobs" dashboard so ops
- * can see what's queued, what's running, what failed, and when the next
- * one fires.
+ * Snapshot of jobs in the scheduled-booking BullMQ queue for the admin
+ * Queue module. Hides legacy leftovers (`assign`, `escalate`, `retry`) —
+ * the live surface is reminders + escalate-batch only.
  *
- * Falls back to `{ enabled: false, ... }` when Redis isn't wired up so
- * the admin UI can render a clear "queue disabled" empty state instead
- * of a crash. Limits are intentionally generous (admins do paginate
- * client-side) but capped so a huge queue doesn't OOM the API.
+ * @param {{ limit?: number, state?: string, name?: string, includeLegacy?: boolean }} [opts]
  */
-export async function listScheduledBookingJobs({ limit = 200 } = {}) {
+export async function listScheduledBookingJobs({
+  limit = 200,
+  state = null,
+  name = null,
+  includeLegacy = false,
+} = {}) {
   const queue = await getScheduledBookingQueue();
   if (!queue) {
     return {
@@ -319,27 +313,41 @@ export async function listScheduledBookingJobs({ limit = 200 } = {}) {
       total: 0,
     };
   }
+
+  /** Per-booking leftovers from the old wave/escalate flow — never shown by default. */
+  const LEGACY_JOB_NAMES = new Set([
+    SCHEDULED_JOB_NAMES.ASSIGN,
+    SCHEDULED_JOB_NAMES.ESCALATE,
+    SCHEDULED_JOB_NAMES.RETRY,
+  ]);
+
   const cap = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500);
   const states = ['delayed', 'waiting', 'active', 'failed', 'completed'];
+  const stateFilter = state && states.includes(String(state)) ? String(state) : null;
+
   try {
     const counts = await queue.getJobCounts(...states);
-    // Pull jobs per state with a small cap each so a chatty queue
-    // doesn't blow up the response payload.
     const perState = Math.min(cap, 100);
     const buckets = await Promise.all(
-      states.map((state) => queue.getJobs([state], 0, perState - 1, true)),
+      (stateFilter ? [stateFilter] : states).map((s) =>
+        queue.getJobs([s], 0, perState - 1, true),
+      ),
     );
 
     const rows = [];
-    states.forEach((state, idx) => {
+    const usedStates = stateFilter ? [stateFilter] : states;
+    usedStates.forEach((st, idx) => {
       for (const job of buckets[idx]) {
+        if (!includeLegacy && LEGACY_JOB_NAMES.has(job.name)) continue;
+        if (name && job.name !== name) continue;
+
         const ts = job.timestamp || 0;
         const delay = Number(job.delay || 0);
-        const nextRunAt = state === 'delayed' ? new Date(ts + delay) : null;
+        const nextRunAt = st === 'delayed' ? new Date(ts + delay) : null;
         rows.push({
           id: job.id,
           name: job.name,
-          state,
+          state: st,
           bookingId: job.data?.bookingId || null,
           minutesAhead: job.data?.minutesAhead ?? null,
           scheduledStartAt: job.data?.scheduledStartAt || null,
@@ -359,8 +367,6 @@ export async function listScheduledBookingJobs({ limit = 200 } = {}) {
     });
 
     rows.sort((a, b) => {
-      // delayed jobs first, ordered by next run; everything else by
-      // recency so failures don't push the live queue down.
       if (a.state === 'delayed' && b.state === 'delayed') {
         return new Date(a.nextRunAt || 0) - new Date(b.nextRunAt || 0);
       }
@@ -371,9 +377,31 @@ export async function listScheduledBookingJobs({ limit = 200 } = {}) {
       return bT - aT;
     });
 
+    // Counts: when excluding legacy, recount from filtered rows for accuracy
+    // of the visible set (raw Redis counts still include leftovers).
+    const visibleCounts = {
+      delayed: 0,
+      waiting: 0,
+      active: 0,
+      failed: 0,
+      completed: 0,
+    };
+    for (const row of rows) {
+      if (visibleCounts[row.state] != null) visibleCounts[row.state] += 1;
+    }
+
     return {
       enabled: true,
-      counts: {
+      counts: includeLegacy
+        ? {
+            delayed: counts.delayed || 0,
+            waiting: counts.waiting || 0,
+            active: counts.active || 0,
+            failed: counts.failed || 0,
+            completed: counts.completed || 0,
+          }
+        : visibleCounts,
+      rawCounts: {
         delayed: counts.delayed || 0,
         waiting: counts.waiting || 0,
         active: counts.active || 0,
@@ -393,22 +421,13 @@ export async function listScheduledBookingJobs({ limit = 200 } = {}) {
 }
 
 /**
- * Remove every queued job for a booking. Called from every cancellation
- * path so a cancelled booking never wakes back up. Best-effort.
- *
- * We can't enumerate reminder offsets or retry attempts from the
- * constant any more — admins can change reminders, and retries are
- * driven by runtime dispatch outcomes — so we scan the queue's pending
- * buckets and drop anything tagged with this `bookingId` in
- * `job.data`. The fixed `assign`/`escalate` IDs are still removed by
- * hand so a reschedule that re-uses them stays idempotent.
+ * Remove every queued job for a booking. Best-effort.
  */
 export async function removeScheduledBookingJobs(bookingId) {
   const queue = await getScheduledBookingQueue();
   if (!queue || !bookingId) return false;
   const bid = String(bookingId);
   try {
-    // Static IDs (assign / escalate) for fast removal.
     const fixed = [
       jobIdFor(SCHEDULED_JOB_NAMES.ASSIGN, bid),
       jobIdFor(SCHEDULED_JOB_NAMES.ESCALATE, bid),
@@ -420,8 +439,6 @@ export async function removeScheduledBookingJobs(bookingId) {
       }),
     );
 
-    // Scan delayed/waiting/active for reminder jobs (their ID embeds
-    // the minutesAhead, which we can no longer predict).
     const pending = await queue.getJobs(
       ['delayed', 'waiting', 'active'],
       0,

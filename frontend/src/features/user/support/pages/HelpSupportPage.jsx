@@ -316,7 +316,7 @@ const HelpSupportPage = ({ audience = 'user' }) => {
                       doc={screenshotDoc}
                       onUpload={handleScreenshotUpload}
                       variant="card"
-                      hint="PNG or JPG, max 200 KB"
+                      hint="PNG or JPG, max 5 MB"
                     />
                     <Button type="submit" className="w-full" loading={submitting}>
                       <Send className="w-4 h-4 mr-2" />

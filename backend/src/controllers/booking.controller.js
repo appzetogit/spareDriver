@@ -33,6 +33,8 @@ import {
   rejectBookingService,
   withdrawCurrentOfferService,
   getPendingOfferForDriverService,
+  listIncomingScheduledForDriverService,
+  countIncomingScheduledForDriverService,
 } from '../services/bookingDispatch.service.js';
 import {
   createBookingPaymentOrderService,
@@ -47,6 +49,7 @@ import {
 } from '../services/bookingTrip.service.js';
 import {
   listEmergencyPoolBookingsService,
+  countEmergencyPoolBookingsService,
   adminAssignDriverToEmergencyPoolService,
   listAvailableDriversForAssignmentService,
   getBookingCarTypeIdService,
@@ -58,7 +61,12 @@ import {
   adminAssignDriverToOutstationService,
   probeDriverConflictService,
 } from '../services/bookingOutstationAssignment.service.js';
-import { listScheduledBookingJobs } from '../queues/scheduledBooking.queue.js';
+import {
+  listScheduledBookingsForAdminService,
+  listAvailableDriversForScheduledBookingService,
+  adminAssignDriverToScheduledBookingService,
+} from '../services/bookingScheduled.service.js';
+import { listAdminScheduledQueueService } from '../services/adminScheduledQueue.service.js';
 import Booking from '../models/booking.model.js';
 
 /* ------------------------------------------------------------------ */
@@ -158,6 +166,59 @@ export const getDriverPendingOffer = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { offer }, offer ? 'Pending offer' : 'No pending offer'));
+});
+
+export const getDriverIncomingScheduled = asyncHandler(async (req, res) => {
+  const result = await listIncomingScheduledForDriverService(req.driver._id);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Incoming scheduled requests'));
+});
+
+export const getDriverIncomingScheduledCount = asyncHandler(async (req, res) => {
+  const count = await countIncomingScheduledForDriverService(req.driver._id);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { count }, 'Incoming scheduled count'));
+});
+
+export const driverAcceptSubscription = asyncHandler(async (req, res) => {
+  const { acceptSubscriptionOfferService } = await import(
+    '../services/subscriptionDispatch.service.js'
+  );
+  const result = await acceptSubscriptionOfferService(req.params.id, req.driver._id);
+  return res.status(200).json(new ApiResponse(200, result, 'Subscription accepted'));
+});
+
+export const driverRejectSubscription = asyncHandler(async (req, res) => {
+  const { rejectSubscriptionOfferService } = await import(
+    '../services/subscriptionDispatch.service.js'
+  );
+  const result = await rejectSubscriptionOfferService(req.params.id, req.driver._id);
+  return res.status(200).json(new ApiResponse(200, result, 'Subscription ignored'));
+});
+
+export const getDriverAssignedSubscriptions = asyncHandler(async (req, res) => {
+  const { listDriverAssignedSubscriptionsService } = await import(
+    '../services/subscriptionDispatch.service.js'
+  );
+  const result = await listDriverAssignedSubscriptionsService(req.driver._id);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Assigned subscriptions'));
+});
+
+export const getDriverAssignedSubscriptionById = asyncHandler(async (req, res) => {
+  const { getDriverAssignedSubscriptionService } = await import(
+    '../services/subscriptionDispatch.service.js'
+  );
+  const result = await getDriverAssignedSubscriptionService(
+    req.driver._id,
+    req.params.id,
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Subscription details'));
 });
 
 export const driverAcceptBooking = asyncHandler(async (req, res) => {
@@ -416,6 +477,13 @@ export const getEmergencyPoolBookings = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, result, 'Emergency-pool bookings fetched'));
 });
 
+export const getEmergencyPoolCount = asyncHandler(async (req, res) => {
+  const count = await countEmergencyPoolBookingsService({ staff: req.staff });
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { count }, 'Emergency-pool count'));
+});
+
 export const getEmergencyPoolAvailableDrivers = asyncHandler(async (req, res) => {
   // Resolve carTypeId from query or from the booking's car.
   const carTypeId =
@@ -539,53 +607,68 @@ export const probeOutstationDriverConflict = asyncHandler(async (req, res) => {
 /* ------------------------------------------------------------------ */
 
 /**
- * GET /admin/scheduled-jobs
- *
- * Live snapshot of the BullMQ scheduled-booking queue. Returns the
- * queue counts + a list of jobs across `delayed | waiting | active |
- * failed | completed` so admins can see what's coming, what's stuck,
- * and what just ran. Each row is hydrated with a tiny booking summary
- * (number / status / pickup time) when the bookingId resolves so the
- * dashboard can link to the booking detail without a second fetch.
+ * GET /admin/bookings/scheduled-jobs
+ * Mongo scheduled rides list (with filters). Team members only see
+ * bookings in their assigned zones. Queue jobs live under
+ * GET /admin/queues/scheduled-booking.
  */
 export const getScheduledJobs = asyncHandler(async (req, res) => {
-  const snapshot = await listScheduledBookingJobs({ limit: req.query?.limit });
-
-  const bookingIds = [
-    ...new Set(
-      (snapshot.jobs || [])
-        .map((j) => j.bookingId)
-        .filter((id) => /^[0-9a-fA-F]{24}$/.test(String(id || ''))),
-    ),
-  ];
-  let bookingMap = {};
-  if (bookingIds.length) {
-    const bookings = await Booking.find({ _id: { $in: bookingIds } })
-      .select('bookingNumber status hourly.scheduledStartAt serviceType bookingType userId')
-      .populate('userId', 'name phone_no')
-      .lean();
-    bookingMap = bookings.reduce((acc, b) => {
-      acc[String(b._id)] = {
-        bookingNumber: b.bookingNumber,
-        status: b.status,
-        scheduledStartAt: b.hourly?.scheduledStartAt || null,
-        serviceType: b.serviceType,
-        bookingType: b.bookingType,
-        customerName: b.userId?.name || null,
-        customerPhone: b.userId?.phone_no || null,
-      };
-      return acc;
-    }, {});
-  }
-
-  const jobs = (snapshot.jobs || []).map((job) => ({
-    ...job,
-    booking: job.bookingId ? bookingMap[String(job.bookingId)] || null : null,
-  }));
-
+  const scheduledBookings = await listScheduledBookingsForAdminService({
+    staff: req.staff,
+    query: req.query,
+  });
   return res
     .status(200)
-    .json(new ApiResponse(200, { ...snapshot, jobs }, 'Scheduled jobs fetched'));
+    .json(new ApiResponse(200, { scheduledBookings }, 'Scheduled rides fetched'));
+});
+
+/**
+ * GET /admin/bookings/scheduled-jobs/:id/available-drivers
+ * Geo-ranked drivers for manual assign (zone-scoped for team_member).
+ */
+export const getScheduledBookingAvailableDrivers = asyncHandler(async (req, res) => {
+  const result = await listAvailableDriversForScheduledBookingService(
+    req.params.id,
+    {
+      staff: req.staff,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      carTypeId: req.query?.carTypeId,
+    },
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Available drivers fetched'));
+});
+
+/**
+ * POST /admin/bookings/scheduled-jobs/:id/assign-driver
+ * Manual assign for open scheduled rides. Admin/sub_admin: any zone.
+ * Team members: only bookings overlapping their assignedZones.
+ */
+export const assignDriverToScheduledBooking = asyncHandler(async (req, res) => {
+  const { driverId, notes } = req.body || {};
+  if (!driverId) throw new ApiError(400, 'driverId is required');
+  const result = await adminAssignDriverToScheduledBookingService(
+    req.params.id,
+    driverId,
+    { staff: req.staff, notes },
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Driver assigned to scheduled booking'));
+});
+
+/**
+ * GET /admin/queues/scheduled-booking
+ * BullMQ worker jobs (reminders + escalate-batch). Legacy assign /
+ * escalate / retry leftovers are hidden.
+ */
+export const getScheduledQueueJobs = asyncHandler(async (req, res) => {
+  const snapshot = await listAdminScheduledQueueService(req.query);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, snapshot, 'Scheduled queue jobs fetched'));
 });
 
 export const adminUpdateBookingStatus = asyncHandler(async (req, res) => {
@@ -597,4 +680,44 @@ export const adminUpdateBookingStatus = asyncHandler(async (req, res) => {
     req.staff,
   );
   return res.status(200).json(new ApiResponse(200, result, 'Booking status updated'));
+});
+
+/**
+ * GET /admin/bookings/:id/available-drivers
+ * Drivers picker for general assign / reassign from the bookings list.
+ */
+export const getAdminBookingAvailableDrivers = asyncHandler(async (req, res) => {
+  const { listAvailableDriversForAdminBookingService } = await import(
+    '../services/adminBookingOps.service.js'
+  );
+  const result = await listAvailableDriversForAdminBookingService(req.params.id, {
+    page: req.query.page,
+    limit: req.query.limit,
+  });
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Available drivers fetched'));
+});
+
+/**
+ * POST /admin/bookings/:id/assign-driver
+ * Assign or reassign a driver on a live booking (ops roles).
+ */
+export const assignDriverToAdminBooking = asyncHandler(async (req, res) => {
+  const { adminAssignBookingDriverService } = await import(
+    '../services/adminBookingOps.service.js'
+  );
+  const { driverId, notes } = req.body || {};
+  if (!driverId) throw new ApiError(400, 'driverId is required');
+  const result = await adminAssignBookingDriverService(req.params.id, driverId, {
+    notes,
+    staff: req.staff,
+  });
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      result,
+      result.reassigned ? 'Driver reassigned' : 'Driver assigned',
+    ),
+  );
 });

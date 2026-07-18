@@ -54,6 +54,7 @@ const SubscribeCheckoutPage = () => {
   const [outOfServiceOpen, setOutOfServiceOpen] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [pendingCouponCode, setPendingCouponCode] = useState(null);
   const [couponError, setCouponError] = useState(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
@@ -84,6 +85,7 @@ const SubscribeCheckoutPage = () => {
   const handleApplyCoupon = useCallback(async (code) => {
     if (!plan) return;
     setValidatingCoupon(true);
+    setPendingCouponCode(code);
     setCouponError(null);
     try {
       const res = await api.post('/auth/coupons/validate', {
@@ -92,6 +94,7 @@ const SubscribeCheckoutPage = () => {
         subtotal: plan.price,
       });
       setAppliedCoupon(res?.data?.data?.coupon || null);
+      setPendingCouponCode(null);
     } catch (err) {
       setAppliedCoupon(null);
       setCouponError(err?.response?.data?.message || 'Invalid coupon code');
@@ -102,6 +105,7 @@ const SubscribeCheckoutPage = () => {
 
   const handleRemoveCoupon = useCallback(() => {
     setAppliedCoupon(null);
+    setPendingCouponCode(null);
     setCouponError(null);
   }, []);
 
@@ -179,8 +183,8 @@ const SubscribeCheckoutPage = () => {
         },
       });
 
-      toast.success('Subscription activated! We will assign your dedicated driver soon.');
-      navigate('/user/account/subscription', { replace: true });
+      toast.success('Subscription activated!');
+      navigate('/user/book/scheduled?kind=subscription', { replace: true });
     } catch (err) {
       if (err?.message !== 'Payment cancelled') {
         toast.error(err?.response?.data?.message || err?.message || 'Could not complete subscription');
@@ -287,6 +291,7 @@ const SubscribeCheckoutPage = () => {
         <Card>
           <h3 className="text-sm font-semibold text-text mb-3">Have a coupon?</h3>
           <CouponCodeInput
+            code={appliedCoupon?.code || pendingCouponCode}
             appliedCode={appliedCoupon?.code || null}
             onApply={handleApplyCoupon}
             onRemove={handleRemoveCoupon}
@@ -484,7 +489,7 @@ function CheckoutLines({ checkout }) {
       )}
       {checkout.serviceCharge > 0 && (
         <div className="flex justify-between text-text-secondary">
-          <span>Service charge ({checkout.serviceChargePercent}%)</span>
+          <span>Platform fee ({checkout.serviceChargePercent}%)</span>
           <span>{formatCurrency(checkout.serviceCharge)}</span>
         </div>
       )}

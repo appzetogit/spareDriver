@@ -1,8 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, ArrowDownLeft, ArrowUpRight, Loader2, RefreshCcw } from 'lucide-react';
+import {
+  ArrowLeft,
+  Plus,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Loader2,
+  RefreshCcw,
+  ChevronRight,
+  Wallet as WalletIcon,
+  CreditCard,
+  Receipt,
+} from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
+import BottomSheet from '../../../../components/BottomSheet';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import TopupSheet from '../components/TopupSheet';
 
@@ -11,8 +23,16 @@ import TopupSheet from '../components/TopupSheet';
  * transaction ledger. The "+ Add money" CTA opens the shared
  * `TopupSheet`. After a successful top-up the page silently re-fetches
  * the transaction list so the new credit lands at the top.
+ * Tapping a ledger row opens a breakdown sheet (same pattern as
+ * driver earnings).
  */
 const PAGE_SIZE = 20;
+
+const fmtRupees = (n) =>
+  `\u20B9${Number(n || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 const WalletPage = () => {
   const navigate = useNavigate();
@@ -26,6 +46,7 @@ const WalletPage = () => {
   const fetchTransactions = useUserWalletStore((s) => s.fetchTransactions);
 
   const [topupOpen, setTopupOpen] = useState(false);
+  const [selectedTx, setSelectedTx] = useState(null);
 
   useEffect(() => {
     fetchWallet().catch(() => {});
@@ -50,9 +71,7 @@ const WalletPage = () => {
     wallet.availableRupees != null
       ? Number(wallet.availableRupees)
       : Math.max(0, balance - heldRupees);
-  const fmt = (n) =>
-    `\u20B9${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-  const balanceLabel = useMemo(() => fmt(available), [available]);
+  const balanceLabel = useMemo(() => fmtRupees(available), [available]);
 
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
@@ -94,7 +113,8 @@ const WalletPage = () => {
           <p className="text-3xl font-bold mt-1">{balanceLabel}</p>
           {heldRupees > 0 && (
             <p className="text-[11px] text-emerald-200 mt-1">
-              {fmt(heldRupees)} held against active bookings &middot; total balance {fmt(balance)}
+              {fmtRupees(heldRupees)} held against active bookings &middot; total
+              balance {fmtRupees(balance)}
             </p>
           )}
           <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] text-white/80">
@@ -147,7 +167,11 @@ const WalletPage = () => {
             <>
               <Card padding="p-0" className="divide-y divide-border-light overflow-hidden">
                 {transactions.map((tx) => (
-                  <TransactionRow key={tx._id} tx={tx} />
+                  <TransactionRow
+                    key={tx._id}
+                    tx={tx}
+                    onSelect={setSelectedTx}
+                  />
                 ))}
               </Card>
               {hasMore && (
@@ -176,35 +200,220 @@ const WalletPage = () => {
           fetchTransactions({ page: 1, limit: PAGE_SIZE }).catch(() => {})
         }
       />
+
+      <TransactionDetailSheet
+        tx={selectedTx}
+        onClose={() => setSelectedTx(null)}
+      />
     </div>
   );
 };
 
-function TransactionRow({ tx }) {
+function TransactionRow({ tx, onSelect }) {
   const isCredit = tx.direction === 'credit';
   const Icon = isCredit ? ArrowDownLeft : ArrowUpRight;
   const tone = isCredit ? 'text-success bg-success/10' : 'text-text bg-gray-100';
   return (
-    <div className="flex items-center gap-3 px-3 py-3">
+    <button
+      type="button"
+      onClick={() => onSelect?.(tx)}
+      className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors text-left"
+    >
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${tone}`}>
         <Icon className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-text truncate">
-          {tx.description || sourceLabel(tx.source)}
+          {sourceLabel(tx.source)}
         </p>
-        <p className="text-[11px] text-text-muted">
-          {formatDate(tx.createdAt)} · {tx.status}
+        <p className="text-[11px] text-text-muted truncate">
+          {formatDate(tx.createdAt)} · {statusLabel(tx.status)}
         </p>
       </div>
-      <div className="text-right">
+      <div className="text-right shrink-0">
         <p className={`text-sm font-bold ${isCredit ? 'text-success' : 'text-text'}`}>
-          {isCredit ? '+' : '-'}₹{Number(tx.amountRupees || 0).toLocaleString('en-IN')}
+          {isCredit ? '+' : '\u2212'}
+          {fmtRupees(tx.amountRupees)}
         </p>
         <p className="text-[10px] text-text-muted">
-          bal ₹{Number(tx.balanceAfter || 0).toLocaleString('en-IN')}
+          bal {fmtRupees(tx.balanceAfter)}
         </p>
       </div>
+      <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
+    </button>
+  );
+}
+
+/**
+ * Bottom sheet opened when the user taps a ledger row — mirrors the
+ * driver earnings breakdown sheet.
+ */
+function TransactionDetailSheet({ tx, onClose }) {
+  const isOpen = !!tx;
+  const isCredit = tx?.direction === 'credit';
+  const title = sourceLabel(tx?.source);
+  const Icon = isCredit ? ArrowDownLeft : ArrowUpRight;
+  const tone = isCredit ? 'text-success bg-success/10' : 'text-text bg-gray-100';
+  const amountTone = isCredit ? 'text-success' : 'text-rose-700';
+  const sign = isCredit ? '+' : '\u2212';
+
+  const rzp = tx?.razorpay || {};
+  const grossPaise = Number(rzp.amountPaise) || 0;
+  const feePaise = Number(rzp.feePaise) || 0;
+  const netPaise =
+    Number(rzp.netAmountPaise) ||
+    Math.max(0, grossPaise - feePaise);
+  const showTopupBreakdown =
+    tx?.source === 'topup' && (grossPaise > 0 || feePaise > 0);
+
+  return (
+    <BottomSheet isOpen={isOpen} onClose={onClose} title={title} showHandle>
+      {tx && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${tone}`}
+            >
+              <Icon className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-text truncate">{title}</p>
+              <p className="text-[11px] text-text-muted truncate">
+                {[formatDate(tx.createdAt), statusLabel(tx.status)]
+                  .filter(Boolean)
+                  .join(' \u00B7 ')}
+              </p>
+            </div>
+            <p className={`text-base font-bold ${amountTone} shrink-0`}>
+              {sign}
+              {fmtRupees(tx.amountRupees)}
+            </p>
+          </div>
+
+          {showTopupBreakdown ? (
+            <TopupBreakdownBlock
+              grossPaise={grossPaise}
+              feePaise={feePaise}
+              netPaise={netPaise}
+              credited={tx.amountRupees}
+            />
+          ) : (
+            <div className="bg-gray-50 rounded-2xl divide-y divide-border-light">
+              <DetailLine
+                icon={isCredit ? ArrowDownLeft : ArrowUpRight}
+                tone={tone}
+                label={isCredit ? 'Amount credited' : 'Amount debited'}
+                sublabel={sourceLabel(tx.source)}
+                value={`${sign}${fmtRupees(tx.amountRupees)}`}
+                valueClass={amountTone}
+              />
+            </div>
+          )}
+
+          <div className="bg-gray-50 rounded-2xl divide-y divide-border-light">
+            <DetailLine
+              icon={WalletIcon}
+              tone="text-slate-700 bg-slate-100"
+              label="Balance after"
+              value={fmtRupees(tx.balanceAfter)}
+            />
+            {tx.description ? (
+              <DetailLine
+                icon={Receipt}
+                tone="text-slate-700 bg-slate-100"
+                label="Description"
+                sublabel={tx.description}
+              />
+            ) : null}
+            {tx.refType && tx.refId ? (
+              <DetailLine
+                icon={Receipt}
+                tone="text-slate-700 bg-slate-100"
+                label="Reference"
+                sublabel={`${tx.refType} · ${tx.refId}`}
+              />
+            ) : null}
+            {rzp.paymentId ? (
+              <DetailLine
+                icon={CreditCard}
+                tone="text-indigo-700 bg-indigo-100"
+                label="Razorpay payment"
+                sublabel={rzp.paymentId}
+              />
+            ) : null}
+            {rzp.orderId ? (
+              <DetailLine
+                icon={CreditCard}
+                tone="text-indigo-700 bg-indigo-100"
+                label="Razorpay order"
+                sublabel={rzp.orderId}
+              />
+            ) : null}
+          </div>
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+function TopupBreakdownBlock({ grossPaise, feePaise, netPaise, credited }) {
+  const gross = grossPaise / 100;
+  const fee = feePaise / 100;
+  const net = netPaise > 0 ? netPaise / 100 : Number(credited) || 0;
+
+  return (
+    <div className="bg-gray-50 rounded-2xl divide-y divide-border-light">
+      {grossPaise > 0 && (
+        <DetailLine
+          icon={CreditCard}
+          tone="text-indigo-700 bg-indigo-100"
+          label="Amount paid"
+          sublabel="Charged via Razorpay"
+          value={fmtRupees(gross)}
+        />
+      )}
+      {feePaise > 0 && (
+        <DetailLine
+          icon={Receipt}
+          tone="text-amber-700 bg-amber-100"
+          label="Razorpay fee"
+          sublabel="Platform fee incl. GST"
+          value={`\u2212${fmtRupees(fee)}`}
+          valueClass="text-rose-700"
+        />
+      )}
+      <div className="flex items-center justify-between px-4 py-3">
+        <p className="text-sm font-semibold text-text">Credited to wallet</p>
+        <p className="text-base font-bold text-success">{fmtRupees(net)}</p>
+      </div>
+    </div>
+  );
+}
+
+function DetailLine({
+  icon: Icon,
+  tone,
+  label,
+  sublabel,
+  value,
+  valueClass = 'text-text',
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div
+        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${tone}`}
+      >
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-text truncate">{label}</p>
+        {sublabel && (
+          <p className="text-[11px] text-text-muted break-all">{sublabel}</p>
+        )}
+      </div>
+      {value != null && value !== '' && (
+        <p className={`text-sm font-bold shrink-0 ${valueClass}`}>{value}</p>
+      )}
     </div>
   );
 }
@@ -223,9 +432,22 @@ function sourceLabel(source) {
       return 'Booking refund';
     case 'booking_no_drivers_refund':
       return 'Refund (no drivers)';
+    case 'waiting_charge':
+      return 'Waiting charge';
+    case 'waiting_buffer_refund':
+      return 'Waiting buffer refund';
+    case 'booking_extension_payment':
+      return 'Extension payment';
+    case 'cancellation_fee_waived':
+      return 'Cancellation fee waived';
     default:
-      return source || 'Transaction';
+      return source ? String(source).replace(/_/g, ' ') : 'Transaction';
   }
+}
+
+function statusLabel(status) {
+  if (!status) return '';
+  return String(status).charAt(0).toUpperCase() + String(status).slice(1);
 }
 
 function formatDate(iso) {

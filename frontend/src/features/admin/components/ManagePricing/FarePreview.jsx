@@ -237,37 +237,48 @@ const FlagToggle = ({ label, active, onClick }) => (
 
 const Divider = () => <div className="border-t border-slate-100 my-1.5" />;
 
-const PlatformRows = ({ breakdown }) => (
-  <>
-    <Row label="Subtotal" value={formatCurrency(breakdown.subtotal)} />
-    <Row
-      label={`Service charge (${breakdown.serviceChargePercent}%)`}
-      value={formatCurrency(breakdown.serviceCharge)}
-      muted
-    />
-    <Row
-      label={`GST (${breakdown.gstPercent}%)`}
-      value={formatCurrency(breakdown.gstAmount)}
-      muted
-    />
-    {breakdown.subscriptionDiscount > 0 && (
+const PlatformRows = ({ breakdown }) => {
+  const feeType = breakdown.platformFeeType || 'percentage';
+  const feeLabel =
+    feeType === 'flat'
+      ? 'Platform fee (flat)'
+      : `Platform fee (${breakdown.platformFeeAmount ?? breakdown.serviceChargePercent ?? 0}%)`;
+  const feeValue = breakdown.platformFee ?? breakdown.serviceCharge;
+  return (
+    <>
+      <Row label="Subtotal" value={formatCurrency(breakdown.subtotal)} />
+      {Number(breakdown.couponDiscount) > 0 && (
+        <Row
+          label="Coupon discount"
+          value={`− ${formatCurrency(breakdown.couponDiscount)}`}
+          muted
+        />
+      )}
+      <Row label={feeLabel} value={formatCurrency(feeValue)} muted />
       <Row
-        label="Subscription discount"
-        value={`− ${formatCurrency(breakdown.subscriptionDiscount)}`}
+        label={`GST (${breakdown.gstPercent}%)`}
+        value={formatCurrency(breakdown.gstAmount)}
         muted
       />
-    )}
-    <Divider />
-    <Row label="Total payable" value={formatCurrency(breakdown.totalPayable)} highlight />
-    <Divider />
-    <Row
-      label={`Platform commission (${breakdown.platformCommissionPercent}%)`}
-      value={formatCurrency(breakdown.platformCommission)}
-      muted
-    />
-    <Row label="Driver earns" value={formatCurrency(breakdown.driverEarning)} highlight />
-  </>
-);
+      {breakdown.subscriptionDiscount > 0 && (
+        <Row
+          label="Subscription discount"
+          value={`− ${formatCurrency(breakdown.subscriptionDiscount)}`}
+          muted
+        />
+      )}
+      <Divider />
+      <Row label="Total payable" value={formatCurrency(breakdown.totalPayable)} highlight />
+      <Divider />
+      <Row
+        label={`Platform commission (${breakdown.platformCommissionPercent}%)`}
+        value={formatCurrency(breakdown.platformCommission)}
+        muted
+      />
+      <Row label="Driver earns" value={formatCurrency(breakdown.driverEarning)} highlight />
+    </>
+  );
+};
 
 // ─── Entry component ──────────────────────────────────────────────────────────
 const FarePreview = ({ form }) => (

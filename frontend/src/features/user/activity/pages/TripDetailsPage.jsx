@@ -32,6 +32,7 @@ import Badge from '../../../../components/Badge';
 import {
   ACTIVE_BOOKING_STATUSES,
   BOOKING_STATUS,
+  isBookingContactRevealed,
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { SERVICE_CATALOG } from '../../home/constants/serviceCatalog';
@@ -264,8 +265,12 @@ const TripDetailsPage = () => {
   const driver = booking?.driverId && typeof booking.driverId === 'object'
     ? booking.driverId
     : null;
-  const driverCallHref = driver?.phone_no
-    ? `tel:${String(driver.phone_no).replace(/[^+\d]/g, '')}`
+  const contactRevealed = isBookingContactRevealed(booking);
+  const driverPhone = contactRevealed
+    ? driver?.phone_no || driver?.phone || null
+    : null;
+  const driverCallHref = driverPhone
+    ? `tel:${String(driverPhone).replace(/[^+\d]/g, '')}`
     : null;
 
   const fareBreakdown = booking?.fareSnapshot?.breakdown || {};
@@ -432,7 +437,7 @@ const TripDetailsPage = () => {
           <DriverCard
             name={driver.name}
             photo={driverPhotoUrl}
-            phone={driver.phone_no}
+            phone={driverPhone}
             callHref={driverCallHref}
             rating={driver.rating}
             experienceYears={driver.experienceYears}
@@ -839,11 +844,21 @@ function FareCard({
     lines.push({ label: 'Base fare', value: baseTotal });
   }
 
-  const serviceCharge = Number(breakdown?.serviceCharge) || 0;
-  if (serviceCharge > 0) {
-    lines.push({ label: 'Service charge', value: serviceCharge, muted: true });
+  const couponDiscount = Number(breakdown?.couponDiscount) || 0;
+  if (couponDiscount > 0) {
+    const code = booking?.fareSnapshot?.couponCode;
+    lines.push({
+      label: code ? `Coupon (${code})` : 'Coupon discount',
+      value: -couponDiscount,
+      muted: true,
+    });
   }
-  const gst = Number(breakdown?.gst) || 0;
+  const serviceCharge =
+    Number(breakdown?.platformFee ?? breakdown?.serviceCharge) || 0;
+  if (serviceCharge > 0) {
+    lines.push({ label: 'Platform fee', value: serviceCharge, muted: true });
+  }
+  const gst = Number(breakdown?.gst ?? breakdown?.gstAmount) || 0;
   if (gst > 0) {
     lines.push({ label: 'GST', value: gst, muted: true });
   }

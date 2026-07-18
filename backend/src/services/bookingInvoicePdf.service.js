@@ -193,7 +193,9 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
 
   if (fare.baseFare != null) drawRow(doc, 'Base fare', `₹${fare.baseFare}`);
   if (fare.extras) drawRow(doc, 'Extras', `₹${fare.extras}`);
-  if (fare.serviceCharge) drawRow(doc, 'Service charge', `₹${fare.serviceCharge}`);
+  if (fare.serviceCharge || fare.platformFee) {
+    drawRow(doc, 'Platform fee', `₹${fare.platformFee || fare.serviceCharge}`);
+  }
   if (fare.gst) drawRow(doc, 'GST', `₹${fare.gst}`);
   if (fare.discount) drawRow(doc, 'Discount', `-₹${fare.discount}`);
   if (fare.couponDiscount) {

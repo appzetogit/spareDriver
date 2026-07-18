@@ -98,6 +98,7 @@ import {
   adminCreateCoupon,
   adminUpdateCoupon,
   adminDeleteCoupon,
+  adminCouponAnalytics,
 } from '../controllers/coupon.controller.js';
 import {
   getTaskAssignees,
@@ -151,16 +152,24 @@ import {
 import {
   getAdminSupportConfig,
   updateAdminSupportConfig,
+  getAdminSubscriptionDispatch,
+  updateAdminSubscriptionDispatch,
 } from '../controllers/appSettings.controller.js';
 import { listPlatformRevenue } from '../controllers/revenue.controller.js';
 import {
   getAdminBookings,
   getAdminBookingById,
   adminUpdateBookingStatus,
+  getAdminBookingAvailableDrivers,
+  assignDriverToAdminBooking,
   getEmergencyPoolBookings,
+  getEmergencyPoolCount,
   getEmergencyPoolAvailableDrivers,
   assignDriverToEmergencyPoolBooking,
   getScheduledJobs,
+  getScheduledBookingAvailableDrivers,
+  assignDriverToScheduledBooking,
+  getScheduledQueueJobs,
   getOutstationAssignments,
   getOutstationAssignmentDetail,
   getOutstationAssignmentDrivers,
@@ -260,17 +269,46 @@ router.patch('/tasks/:id/assign', protectStaff, restrictTo(...OPERATIONS), assig
 router.post('/tasks/:id/claim', protectStaff, restrictTo(...OPERATIONS), claimTask);
 
 router.get('/bookings', protectStaff, restrictTo(...ALL_STAFF), getAdminBookings);
-/* ---- Scheduled Jobs (BullMQ snapshot) --------------------------------- */
-// Mounted under /bookings/* so it lives in the same admin sub-section as
-// the all-bookings table. Listed before /bookings/:id so the static
-// segment wins over the param route.
+/* ---- Scheduled Bookings (Mongo list + manual assign) ---------------- */
+// ALL_STAFF: team_members see/assign only within assignedZones (service).
+// Listed before /bookings/:id so the static segment wins.
 router.get(
   '/bookings/scheduled-jobs',
   protectStaff,
-  restrictTo(...OPERATIONS),
+  restrictTo(...ALL_STAFF),
   getScheduledJobs,
 );
+router.get(
+  '/bookings/scheduled-jobs/:id/available-drivers',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getScheduledBookingAvailableDrivers,
+);
+router.post(
+  '/bookings/scheduled-jobs/:id/assign-driver',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  assignDriverToScheduledBooking,
+);
+router.get(
+  '/queues/scheduled-booking',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  getScheduledQueueJobs,
+);
 router.get('/bookings/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminBookingById);
+router.get(
+  '/bookings/:id/available-drivers',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  getAdminBookingAvailableDrivers,
+);
+router.post(
+  '/bookings/:id/assign-driver',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  assignDriverToAdminBooking,
+);
 router.patch(
   '/bookings/:id/status',
   protectStaff,
@@ -288,6 +326,12 @@ router.get(
   protectStaff,
   restrictTo(...ALL_STAFF),
   getEmergencyPoolBookings,
+);
+router.get(
+  '/emergency-pool/count',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getEmergencyPoolCount,
 );
 router.get(
   '/emergency-pool/:id/available-drivers',
@@ -470,6 +514,18 @@ router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...OPERATIO
 
 router.get('/settings/support', protectStaff, restrictTo(...OPERATIONS), getAdminSupportConfig);
 router.put('/settings/support', protectStaff, restrictTo(...OPERATIONS), updateAdminSupportConfig);
+router.get(
+  '/settings/subscription-dispatch',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  getAdminSubscriptionDispatch,
+);
+router.put(
+  '/settings/subscription-dispatch',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  updateAdminSubscriptionDispatch,
+);
 
 router.post('/kits', protectStaff, restrictTo(...OPERATIONS), createKit);
 router.get('/kits', protectStaff, restrictTo(...ALL_STAFF), getKits);
@@ -495,6 +551,7 @@ router.delete('/pricing/subscriptions/:id', protectStaff, restrictTo(...OPERATIO
 
 router.get('/coupons', protectStaff, restrictTo(...OPERATIONS), adminListCoupons);
 router.post('/coupons', protectStaff, restrictTo(...OPERATIONS), adminCreateCoupon);
+router.get('/coupons/:id/analytics', protectStaff, restrictTo(...OPERATIONS), adminCouponAnalytics);
 router.put('/coupons/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateCoupon);
 router.delete('/coupons/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteCoupon);
 

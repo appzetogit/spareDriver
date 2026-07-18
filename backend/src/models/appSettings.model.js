@@ -18,6 +18,16 @@ const appSettingsSchema = new mongoose.Schema(
     },
     androidAppUrl: { type: String, default: '', trim: true },
     iosAppUrl: { type: String, default: '', trim: true },
+    /**
+     * Dedicated-driver subscription auto-search knobs
+     * (mirrors scheduled/outstation inbox dispatch).
+     */
+    subscriptionDispatch: {
+      AUTO_SEARCH_ENABLED: { type: Boolean, default: true },
+      ESCALATE_MINUTES: { type: Number, default: 1440, min: 5 },
+      INBOX_BROADCAST_LIMIT: { type: Number, default: 50, min: 1, max: 100 },
+      SEARCH_RADIUS_METERS: { type: Number, default: 25000, min: 1000 },
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

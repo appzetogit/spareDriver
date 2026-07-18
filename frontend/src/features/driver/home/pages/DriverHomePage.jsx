@@ -6,19 +6,23 @@ import {
   Star,
   TrendingUp,
   Bell,
-  MapPin,
   AlertCircle,
   ShieldAlert,
   ChevronRight,
   Car,
   ShieldCheck,
   Flag,
+  Inbox,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import { useDriverOnlineStore } from '../../../../store/driver/useDriverOnlineStore';
 import { useDriverKitActiveStore } from '../../../../store/driver/useDriverKitStore';
 import { useDriverHomeSummaryStore } from '../../../../store/driver/useDriverTripsStore';
+import useDriverIncomingScheduledStore from '../../../../store/driver/useDriverIncomingScheduledStore';
+import useDriverSubscriptionsStore from '../../../../store/driver/useDriverSubscriptionsStore';
 import { useDriverOnlineToggle } from '../../../../hooks/useDriverOnlineToggle';
 import { useDriverLocation } from '../../../../hooks/useDriverLocation';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
@@ -49,6 +53,11 @@ const DriverHomePage = () => {
     { audience: 'driver', title: 'Notifications' },
   );
   const updateDriver = useDriverAuthStore((s) => s.updateDriver);
+  const incomingCount = useDriverIncomingScheduledStore((s) => s.count);
+  const fetchIncomingCount = useDriverIncomingScheduledStore((s) => s.fetchCount);
+  const assignedSubscriptions = useDriverSubscriptionsStore((s) => s.subscriptions);
+  const assignedSubsLoading = useDriverSubscriptionsStore((s) => s.loading);
+  const fetchAssignedSubscriptions = useDriverSubscriptionsStore((s) => s.fetchAssigned);
   const onlineKey = buildCacheKey('driver-online-status', {});
   const activeKey = buildCacheKey('driver-kit-active', {});
   const summaryKey = buildCacheKey('driver-home-summary', {});
@@ -104,6 +113,16 @@ const DriverHomePage = () => {
       });
     }
   }, [onlineStatus, updateDriver]);
+
+  useEffect(() => {
+    if (isOnline) {
+      fetchIncomingCount().catch(() => {});
+    }
+  }, [isOnline, fetchIncomingCount]);
+
+  useEffect(() => {
+    fetchAssignedSubscriptions().catch(() => {});
+  }, [fetchAssignedSubscriptions]);
 
   const handleToggle = async (next) => {
     if (next) {
@@ -196,6 +215,14 @@ const DriverHomePage = () => {
           />
         )}
 
+        {(assignedSubsLoading || assignedSubscriptions.length > 0) && (
+          <AssignedSubscriptionsSection
+            loading={assignedSubsLoading}
+            subscriptions={assignedSubscriptions}
+            onOpen={(sub) => navigate(`/driver/subscriptions/${sub._id}`)}
+          />
+        )}
+
         {!hasActiveBooking && cancellationChances && (
           <CancellationChancesCard chance={cancellationChances} />
         )}
@@ -238,15 +265,29 @@ const DriverHomePage = () => {
 
         {isOnline && (
           <Card className="animate-fade-in-up border-l-4 border-l-success">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-success-light rounded-full flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-success" />
+            <button
+              type="button"
+              onClick={() => navigate('/driver/trips?tab=incoming')}
+              className="w-full flex items-center gap-3 text-left"
+            >
+              <div className="relative w-10 h-10 bg-success-light rounded-full flex items-center justify-center shrink-0">
+                <Inbox className="w-5 h-5 text-success" />
+                {incomingCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+                    {incomingCount > 99 ? '99+' : incomingCount}
+                  </span>
+                )}
               </div>
-              <div>
-                <p className="text-sm font-medium text-text">You are online and ready to receive trips</p>
-                <p className="text-xs text-text-muted mt-0.5">Incoming requests will appear here</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-text">Incoming Requests</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {incomingCount > 0
+                    ? `${incomingCount} scheduled request${incomingCount === 1 ? '' : 's'} waiting`
+                    : 'Scheduled rides for you show up here'}
+                </p>
               </div>
-            </div>
+              <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
+            </button>
           </Card>
         )}
 
@@ -293,6 +334,59 @@ const DriverHomePage = () => {
 /* ------------------------------------------------------------------ */
 /* Sub-components                                                      */
 /* ------------------------------------------------------------------ */
+
+function AssignedSubscriptionsSection({ loading, subscriptions, onOpen }) {
+  if (loading && !subscriptions.length) {
+    return (
+      <Card className="animate-fade-in-up flex items-center justify-center py-6">
+        <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
+      </Card>
+    );
+  }
+
+  if (!subscriptions.length) return null;
+
+  return (
+    <Card className="animate-fade-in-up border-l-4 border-l-emerald-500 space-y-2">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+          <Sparkles className="w-4 h-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-text">Your subscriptions</p>
+          <p className="text-[11px] text-text-muted">
+            Dedicated driver assignments active for you
+          </p>
+        </div>
+      </div>
+
+      {subscriptions.map((sub) => {
+        const carLabel = [sub.car?.brandName, sub.car?.modelName, sub.car?.vehicleNumber]
+          .filter(Boolean)
+          .join(' · ');
+        return (
+          <button
+            key={sub._id}
+            type="button"
+            onClick={() => onOpen?.(sub)}
+            className="w-full flex items-center gap-3 rounded-xl border border-border-light bg-bg/60 px-3 py-2.5 text-left hover:bg-bg transition-colors"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-text truncate">
+                {sub.planName || 'Subscription'}
+              </p>
+              <p className="text-xs text-text-muted mt-0.5 truncate">
+                {sub.customer?.name ? `${sub.customer.name}` : 'Customer'}
+                {carLabel ? ` · ${carLabel}` : ''}
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
+          </button>
+        );
+      })}
+    </Card>
+  );
+}
 
 /**
  * Compact "You have an active trip" banner shown on the driver home.

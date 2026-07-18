@@ -103,10 +103,13 @@ const TopupSheet = ({
             paymentId: response.razorpay_payment_id,
             signature: response.razorpay_signature,
           });
+          const credited = Number(
+            result?.creditedRupees ?? result?.transaction?.amountRupees ?? amount,
+          );
           toast.success(
             result?.alreadyCredited
               ? 'Wallet already credited.'
-              : `₹${Number(amount)} added to wallet.`,
+              : `₹${credited.toLocaleString('en-IN')} added to wallet.`,
           );
           await onSuccess?.(result?.wallet);
           onClose?.();
@@ -174,6 +177,10 @@ const TopupSheet = ({
           </div>
           <p className="text-[11px] text-text-muted mt-1">
             Min ₹{min} · Max ₹{max.toLocaleString('en-IN')}
+          </p>
+          <p className="text-[11px] text-text-muted mt-1.5 leading-snug">
+            Razorpay gateway fees are deducted from this amount. Only the
+            remaining net balance is credited to your wallet.
           </p>
         </div>
 

@@ -64,5 +64,6 @@ export function navigateUserAfterAuth(navigate, user, needsPhone) {
     return;
   }
 
+  // Let UserOnboardingGuard send incomplete profiles to add-car / my-cars.
   navigate('/user/home', { replace: true });
 }

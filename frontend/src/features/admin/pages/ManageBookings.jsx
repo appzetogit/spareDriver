@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { User as UserIcon } from 'lucide-react';
+import { Eye, UserPlus, UserRoundCog } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
@@ -10,7 +10,11 @@ import BookingDetailsModal from '../components/ManageBookings/BookingDetailsModa
 import AssignBookingDriverDrawer from '../components/ManageBookings/AssignBookingDriverDrawer';
 import BookingFilters from '../components/ManageBookings/BookingFilters';
 import BookingStats from '../components/ManageBookings/BookingStats';
-import { canAdminAssignBooking } from '../utils/bookingAssignment';
+import RowActionsMenu from '../components/RowActionsMenu';
+import {
+  canAdminAssignBooking,
+  getAssignActionLabel,
+} from '../utils/bookingAssignment';
 
 const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
 
@@ -213,33 +217,31 @@ const ManageBookings = () => {
           </div>
         ),
       },
-      ...(canAssign
-        ? [
+      {
+        key: 'actions',
+        label: 'Action',
+        sortable: false,
+        unclamp: true,
+        width: '8%',
+        render: (_, row) => {
+          const items = [
             {
-              key: 'actions',
-              label: 'Action',
-              sortable: false,
-              unclamp: true,
-              width: '9%',
-              render: (_, row) =>
-                canAdminAssignBooking(row) ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAssignBooking(row);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-dark text-xs font-bold hover:bg-primary-dark transition-all duration-150 shadow-sm hover:shadow"
-                  >
-                    <UserIcon className="w-3.5 h-3.5" />
-                    Assign
-                  </button>
-                ) : (
-                  <span className="text-xs text-slate-300">—</span>
-                ),
+              label: 'View',
+              icon: Eye,
+              onClick: () => setSelectedBooking(row),
             },
-          ]
-        : []),
+          ];
+          if (canAssign && canAdminAssignBooking(row)) {
+            const reassign = Boolean(row.driverId);
+            items.push({
+              label: getAssignActionLabel(row),
+              icon: reassign ? UserRoundCog : UserPlus,
+              onClick: () => setAssignBooking(row),
+            });
+          }
+          return <RowActionsMenu items={items} />;
+        },
+      },
     ],
     [canAssign],
   );
@@ -251,6 +253,11 @@ const ManageBookings = () => {
     completed: 0,
     cancelled: 0,
   };
+
+  const detailVehicle =
+    selectedBooking?.carId && typeof selectedBooking.carId === 'object'
+      ? selectedBooking.carId
+      : null;
 
   return (
     <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up">
@@ -320,6 +327,7 @@ const ManageBookings = () => {
         isOpen={!!selectedBooking}
         onClose={() => setSelectedBooking(null)}
         booking={selectedBooking}
+        vehicle={detailVehicle}
         canEditStatus={canAssign}
         onStatusUpdated={(updated) => {
           setSelectedBooking((prev) => (prev ? { ...prev, ...updated } : prev));
