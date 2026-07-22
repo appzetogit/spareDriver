@@ -1,9 +1,6 @@
 import Booking from '../models/booking.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import ServicePricing from '../models/servicePricing.model.js';
-import PlatformRevenue, {
-  PLATFORM_REVENUE_SOURCE,
-} from '../models/platformRevenue.model.js';
 import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
@@ -14,9 +11,10 @@ import {
 import {
   settleWaitingBuffer,
   clearPendingExtensionsOnTerminate,
-  buildCommissionRevenueMeta,
   settleDriverEarning,
 } from './bookingExtension.service.js';
+import { recordCompletedTripPlatformRevenue } from './platformRevenue.service.js';
+import { incrementCouponUsageService } from './coupon.service.js';
 
 /**
  * No-show timer service.
@@ -334,26 +332,20 @@ async function autoCompleteForNoShow(bookingId) {
     );
   }
 
-  // Mirror normal commission-on-complete revenue write.
-  const commission = Number(booking.fareSnapshot?.breakdown?.platformCommission) || 0;
-  if (commission > 0) {
-    try {
-      await PlatformRevenue.create({
-        source: PLATFORM_REVENUE_SOURCE.COMMISSION,
-        amountRupees: commission,
-        bookingId: booking._id,
-        bookingNumber: booking.bookingNumber || '',
-        serviceType: booking.serviceType || '',
-        userId: booking.userId,
-        driverId: booking.driverId || null,
-        meta: {
-          ...buildCommissionRevenueMeta(booking),
-          noShowAutoComplete: true,
-        },
-      });
-    } catch (err) {
-      console.warn('[noShow] revenue write failed:', err?.message);
-    }
+  // Mirror normal trip-complete revenue: commission + platform fee +
+  // admin-absorbed coupon. Previously only commission was booked here,
+  // which overstated platform revenue whenever a coupon was applied.
+  await recordCompletedTripPlatformRevenue(booking, {
+    noShowAutoComplete: true,
+  }).catch((err) =>
+    console.warn('[noShow] revenue write failed:', err?.message),
+  );
+
+  const snap = booking.fareSnapshot || {};
+  if (snap.couponId) {
+    incrementCouponUsageService(snap.couponId).catch((err) =>
+      console.warn('[noShow] failed to increment coupon usage:', err?.message),
+    );
   }
 
   // Mirror normal trip-complete: settle the driver's earning into their

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
@@ -14,6 +14,7 @@ import OnboardingGuard from './guards/OnboardingGuard';
 import UserOnboardingGuard from './guards/UserOnboardingGuard';
 import SuperAdminOnlyGuard from './guards/SuperAdminOnlyGuard';
 import AdminLayout from './layouts/AdminLayout';
+import useAuthSessionStore from './store/useAuthSessionStore';
 
 // Side-effect: starts the global Socket.IO lifecycle (auto-connects when any
 // auth store has a session, auto-disconnects on logout).
@@ -197,6 +198,12 @@ function PageLoader() {
 }
 
 function App() {
+  const bootstrap = useAuthSessionStore((s) => s.bootstrap);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

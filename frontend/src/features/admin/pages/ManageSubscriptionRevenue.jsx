@@ -108,6 +108,9 @@ function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
       <h2 className="text-lg font-extrabold text-slate-900 mt-0.5">
         {sub.planNameSnapshot || 'Subscription'}
       </h2>
+      {sub.subscriptionNumber && (
+        <p className="text-xs font-mono text-slate-400 mt-0.5">{sub.subscriptionNumber}</p>
+      )}
       <p className="text-sm text-slate-500 mt-1">
         {sub.userId?.name || 'Customer'} · {formatDate(sub.startDate)} – {formatDate(sub.expiryDate)}
       </p>
@@ -390,6 +393,9 @@ const ManageSubscriptionRevenue = () => {
         render: (_, row) => (
           <div>
             <p className="font-medium">{row.planNameSnapshot || '—'}</p>
+            {row.subscriptionNumber && (
+              <p className="text-[11px] font-mono text-slate-400">{row.subscriptionNumber}</p>
+            )}
             <p className="text-xs text-slate-500">{row.zoneId?.name || '—'}</p>
           </div>
         ),

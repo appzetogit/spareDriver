@@ -163,9 +163,8 @@ useDriverAuthStore.subscribe(applyAuthState);
 useUserAuthStore.subscribe(applyAuthState);
 useAdminAuthStore.subscribe(applyAuthState);
 
-// First load: if a session is already restored from localStorage, kick off.
+// First load: connect once JWT bootstrap has populated an auth store.
 if (typeof window !== 'undefined') {
-  // Defer one tick so all auth stores can hydrate from storage.
   queueMicrotask(applyAuthState);
 
   // Dev-only: expose the store on window so you can poke the socket from

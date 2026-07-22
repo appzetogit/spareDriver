@@ -33,7 +33,7 @@ const EMPTY = { earnings: 0, trips: 0 };
  * Driver earnings dashboard.
  *
  *   Sticky header  → title + this-week hero
- *   Scrolling body → bar chart · today/week/month stats · payout CTA · recent payouts
+ *   Scrolling body → bar chart · today/week/month stats · ledger feed
  *
  * No mock fallbacks: if the API hasn't loaded yet we show a skeleton; if
  * it errors we surface a retry. Never fake numbers in an earnings UI.
@@ -217,15 +217,6 @@ const EarningsPage = () => {
           </Card>
 
           <EarningsBreakdown totals={ledgerTotals} />
-
-          <Button
-            fullWidth
-            variant="driver"
-            icon={Wallet}
-            onClick={() => navigate('/driver/payments')}
-          >
-            View payout history
-          </Button>
 
           <AllEarningsFeed
             rows={ledgerRows}

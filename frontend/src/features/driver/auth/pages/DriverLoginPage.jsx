@@ -2,24 +2,34 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
-import { Phone, Lock, ArrowLeft } from 'lucide-react';
+import { Phone, Lock, ArrowLeft, Loader2 } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
+import { useStoreHydration } from '../../../../hooks/useStoreHydration';
 
 const DriverLoginPage = () => {
   const navigate = useNavigate();
+  const hydrated = useStoreHydration(useDriverAuthStore);
   const { isAuthenticated, driver, setAuth } = useDriverAuthStore();
 
   useEffect(() => {
-    if (!isAuthenticated || !driver) return;
+    if (!hydrated || !isAuthenticated || !driver) return;
     navigateDriverAfterAuth(navigate, driver);
-  }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.needsPhone, navigate]);
-  
+  }, [hydrated, isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.needsPhone, navigate]);
+
   const [formData, setFormData] = useState({ phone: '', password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  if (!hydrated || (isAuthenticated && driver)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   const handleChange = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));

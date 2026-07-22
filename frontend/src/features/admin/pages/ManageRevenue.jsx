@@ -119,10 +119,11 @@ const ManageRevenue = () => {
   const summaryCards = useMemo(
     () => [
       {
-        label: 'Total revenue',
+        label: 'Net revenue',
         value: formatCurrency(totals?.totalAmount || 0),
         icon: Banknote,
         accent: 'text-primary',
+        hint: 'Commission + fees − coupons absorbed',
       },
       {
         label: 'Commission',
@@ -179,7 +180,7 @@ const ManageRevenue = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (

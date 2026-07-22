@@ -8,6 +8,7 @@ import {
   Receipt,
   ArrowRight,
   BarChart3,
+  CircleSlash,
 } from 'lucide-react';
 import StatsCard from '../../components/StatsCard';
 import DashboardTrendBars from '../../components/Dashboard/DashboardTrendBars';
@@ -106,11 +107,27 @@ const ReportsOverviewPage = () => {
         />
         <StatsCard
           icon={BarChart3}
+          label="Net platform revenue"
+          value={formatCurrency(summary?.platformRevenue?.amount)}
+          trend={summary?.platformRevenue?.trend}
+          trendLabel="vs previous period"
+          color="#0D9488"
+        />
+        <StatsCard
+          icon={BarChart3}
           label="Platform commission"
           value={formatCurrency(summary?.platformCommission?.amount)}
           trend={summary?.platformCommission?.trend}
           trendLabel="vs previous period"
-          color="#0D9488"
+          color="#059669"
+        />
+        <StatsCard
+          icon={CircleSlash}
+          label="Coupons absorbed"
+          value={formatCurrency(summary?.couponsAbsorbed?.amount)}
+          trend={summary?.couponsAbsorbed?.trend}
+          trendLabel="vs previous period"
+          color="#F59E0B"
         />
         <StatsCard
           icon={Receipt}
@@ -132,7 +149,7 @@ const ReportsOverviewPage = () => {
         />
         <DashboardTrendBars
           title="Revenue"
-          subtitle="Platform revenue"
+          subtitle="Net platform revenue (after coupons)"
           points={trends?.revenue || []}
           valueKey="amount"
           formatValue={(v) => formatCurrency(v)}

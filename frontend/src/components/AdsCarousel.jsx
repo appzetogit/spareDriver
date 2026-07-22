@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import api from '../utils/api';
+import { useCachedQuery } from '../hooks/useCachedQuery';
+import { buildCacheKey } from '../store/lib/buildCacheKey';
+import { useAdsStore } from '../store/user/useAdsStore';
 
 /**
  * Horizontally-scrolling ad carousel rendered on the user home screen.
  *
- * - Pulls active ads from `GET /common/ads`.
+ * - Pulls active ads from `GET /common/ads` (Zustand-cached — remounts
+ *   after route changes reuse the snapshot instead of re-fetching).
  * - Renders each ad as a 16:9 card (image or muted autoplay video).
  * - If the ad has a `linkUrl`, tapping it opens the link in a new
  *   browser tab. Otherwise the card is non-interactive.
@@ -14,33 +17,14 @@ import api from '../utils/api';
  * - Renders nothing while loading the first time and on fetch error,
  *   so the home layout doesn't reserve space for an empty section.
  */
+const ADS_CACHE_KEY = buildCacheKey('common-ads');
+
 const AdsCarousel = () => {
-  const [ads, setAds] = useState([]);
-  const [loaded, setLoaded] = useState(false);
+  const { data, isFetched } = useCachedQuery(useAdsStore, ADS_CACHE_KEY);
+  const ads = Array.isArray(data) ? data : [];
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollerRef = useRef(null);
   const interactingRef = useRef(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get('/common/ads')
-      .then((res) => {
-        if (cancelled) return;
-        setAds(Array.isArray(res?.data?.data) ? res.data.data : []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setAds([]);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const scrollToIndex = useCallback((idx) => {
     const el = scrollerRef.current;
@@ -89,7 +73,7 @@ const AdsCarousel = () => {
     window.open(ad.linkUrl, '_blank', 'noopener,noreferrer');
   };
 
-  if (!loaded || ads.length === 0) return null;
+  if (!isFetched || ads.length === 0) return null;
 
   return (
     <section

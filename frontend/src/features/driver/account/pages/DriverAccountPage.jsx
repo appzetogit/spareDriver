@@ -13,6 +13,7 @@ import {
   History,
   Circle,
   Trash2,
+  GraduationCap,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Avatar from '../../../../components/Avatar';
@@ -50,6 +51,7 @@ const MENU_GROUPS = [
       { icon: User, label: 'My Profile', path: '/driver/account/profile' },
       { icon: FileText, label: 'Profile & Documents', path: '/driver/account/documents' },
       { icon: Building2, label: 'Bank Details', path: '/driver/account/bank' },
+      { icon: GraduationCap, label: 'Training & Certification', path: '/driver/register/training' },
       { icon: History, label: 'Payment History', path: '/driver/payments' },
     ],
   },

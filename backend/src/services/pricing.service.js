@@ -305,8 +305,10 @@ export function calculateSubscriptionCheckout(plan, coupon = null) {
   const serviceCharge = round2((netBasePrice * serviceChargePercent) / 100);
   const gstAmount = round2(((netBasePrice + serviceCharge) * gstPercent) / 100);
   const totalPayable = round2(netBasePrice + serviceCharge + gstAmount);
-  const platformShareRupees = round2((netBasePrice * platformSharePercent) / 100);
-  const driverShareRupees = round2((netBasePrice * driverSharePercent) / 100);
+  // Driver share is computed on the pre-coupon base so admin-created
+  // coupons are absorbed by the platform (same policy as trip bookings).
+  const driverShareRupees = round2((basePrice * driverSharePercent) / 100);
+  const platformShareRupees = round2(Math.max(0, netBasePrice - driverShareRupees));
 
   return {
     basePrice,
@@ -610,6 +612,7 @@ export const createSubscriptionPurchaseOrderService = async (
 
   return {
     subscriptionId: subscription._id,
+    subscriptionNumber: subscription.subscriptionNumber || '',
     keyId: getRazorpayKeyId(),
     orderId: razorpayOrder.id,
     amount: amountPaise,
@@ -1438,6 +1441,7 @@ export function serializeSubscriptionForUser(subscription) {
   const assigned = doc.assignedDriverId;
   return {
     _id: doc._id,
+    subscriptionNumber: doc.subscriptionNumber || '',
     status: doc.status,
     planNameSnapshot: doc.planNameSnapshot,
     planId: doc.planId,
@@ -1710,6 +1714,7 @@ export const getSubscriptionDriverPayoutDetailService = async (subscriptionId) =
   return {
     subscription: {
       _id: sub._id,
+      subscriptionNumber: sub.subscriptionNumber || '',
       planNameSnapshot: sub.planNameSnapshot,
       startDate: sub.startDate,
       expiryDate: sub.expiryDate,

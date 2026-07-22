@@ -249,7 +249,7 @@ const PlatformRows = ({ breakdown }) => {
       <Row label="Subtotal" value={formatCurrency(breakdown.subtotal)} />
       {Number(breakdown.couponDiscount) > 0 && (
         <Row
-          label="Coupon discount"
+          label="Coupon discount (platform absorbs)"
           value={`− ${formatCurrency(breakdown.couponDiscount)}`}
           muted
         />
@@ -275,6 +275,20 @@ const PlatformRows = ({ breakdown }) => {
         value={formatCurrency(breakdown.platformCommission)}
         muted
       />
+      {Number(breakdown.couponDiscount) > 0 && (
+        <Row
+          label="Net platform (commission + fee − coupon)"
+          value={formatCurrency(
+            Math.max(
+              0,
+              (Number(breakdown.platformCommission) || 0) +
+                (Number(feeValue) || 0) -
+                (Number(breakdown.couponDiscount) || 0),
+            ),
+          )}
+          muted
+        />
+      )}
       <Row label="Driver earns" value={formatCurrency(breakdown.driverEarning)} highlight />
     </>
   );

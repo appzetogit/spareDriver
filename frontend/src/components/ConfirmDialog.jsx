@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Info,
@@ -25,6 +26,7 @@ import {
  *   variant         ("danger" | "warning" | "info" | "success")
  *                                 — colour + icon palette (default "danger")
  *   loading         (bool)        — disables both CTAs + shows spinner on primary
+ *   confirmDisabled (bool)        — disables the primary CTA
  *   hideCancel      (bool)        — render only the primary CTA (single-button mode)
  *   children        (node)        — optional rich content rendered above the CTAs
  *                                   (e.g. an extra warning row)
@@ -81,6 +83,7 @@ const ConfirmDialog = ({
   cancelLabel = 'Cancel',
   variant = 'danger',
   loading = false,
+  confirmDisabled = false,
   hideCancel = false,
   children,
 }) => {
@@ -100,11 +103,11 @@ const ConfirmDialog = ({
   const meta = VARIANT_META[variant] || VARIANT_META.danger;
   const Icon = meta.icon;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
       onClick={(e) => {
         if (e.target === e.currentTarget && !loading) onClose?.();
       }}
@@ -150,7 +153,7 @@ const ConfirmDialog = ({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
             className={`py-3 rounded-2xl text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60 ${meta.primaryBtn}`}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -158,7 +161,8 @@ const ConfirmDialog = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

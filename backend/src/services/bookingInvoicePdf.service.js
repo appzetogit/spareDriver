@@ -46,6 +46,10 @@ function acceptedExtensionTotal(extensions = []) {
   );
 }
 
+function round2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
 function drawDivider(doc) {
   const y = doc.y + 4;
   doc
@@ -104,7 +108,10 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
 
   const fare = booking.fareSnapshot || {};
   const extensionTotal = acceptedExtensionTotal(booking.extensions);
-  const grandTotal = (Number(fare.total) || 0) + extensionTotal;
+  const waitingTotal = Number(booking.waiting?.chargeRupees) || 0;
+  const grandTotal = round2(
+    (Number(fare.total) || 0) + extensionTotal + waitingTotal,
+  );
 
   const serviceLabel =
     SERVICE_TYPE_LABELS[booking.serviceType] || pretty(booking.serviceType);
@@ -202,7 +209,21 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
     const couponLabel = fare.couponCode ? `Coupon (${fare.couponCode})` : 'Coupon discount';
     drawRow(doc, couponLabel, `-₹${fare.couponDiscount}`);
   }
-  if (extensionTotal) drawRow(doc, 'Trip extensions', `₹${extensionTotal}`);
+  const acceptedExtensions = (booking.extensions || []).filter(
+    (ext) => ext?.status === 'accepted',
+  );
+  for (const ext of acceptedExtensions) {
+    const hours = Number(ext.additionalHours) || 0;
+    const days = Number(ext.additionalDays) || 0;
+    const label =
+      days > 0
+        ? `Trip extension (+${days} day${days === 1 ? '' : 's'})`
+        : `Trip extension (+${hours}h)`;
+    drawRow(doc, label, `₹${Number(ext.fareDelta) || 0}`);
+  }
+  if (waitingTotal) {
+    drawRow(doc, 'Waiting charge', `₹${waitingTotal}`);
+  }
 
   doc.moveDown(0.4);
   drawDivider(doc);

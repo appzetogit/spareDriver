@@ -20,7 +20,10 @@ const SOURCE_LABELS = {
 };
 
 function buildRevenueMatch(query, dateRange) {
-  const match = { ...mongoDateRange(dateRange, 'occurredAt') };
+  const match = {
+    ...mongoDateRange(dateRange, 'occurredAt'),
+    source: { $ne: PLATFORM_REVENUE_SOURCE.SUBSCRIPTION },
+  };
   if (query.serviceType) match.serviceType = query.serviceType;
   return match;
 }
@@ -73,6 +76,31 @@ export async function getAdminRevenueReportsService(query = {}) {
 
   const total = round2(totalAgg[0]?.total || 0);
   const prevTotal = round2(prevTotalAgg[0]?.total || 0);
+  const bySource = sourceAgg.map((row) => ({
+    source: row._id,
+    label: SOURCE_LABELS[row._id] || row._id,
+    amount: round2(row.total),
+    /** Coupons are stored negative — expose absolute cost for UI cards. */
+    displayAmount:
+      row._id === PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT
+        ? round2(Math.abs(row.total))
+        : round2(row.total),
+    count: row.count,
+  }));
+  const couponsAbsorbed = round2(
+    Math.abs(
+      sourceAgg.find((r) => r._id === PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT)
+        ?.total || 0,
+    ),
+  );
+  const commission = round2(
+    sourceAgg.find((r) => r._id === PLATFORM_REVENUE_SOURCE.COMMISSION)?.total ||
+      0,
+  );
+  const platformFee = round2(
+    sourceAgg.find((r) => r._id === PLATFORM_REVENUE_SOURCE.PLATFORM_FEE)
+      ?.total || 0,
+  );
 
   return {
     filters: buildFiltersMeta(query, dateRange),
@@ -80,14 +108,12 @@ export async function getAdminRevenueReportsService(query = {}) {
       totalRevenue: total,
       trend: percentChange(total, prevTotal),
       previousPeriodTotal: prevTotal,
+      commission,
+      platformFee,
+      couponsAbsorbed,
     },
     breakdown: {
-      bySource: sourceAgg.map((row) => ({
-        source: row._id,
-        label: SOURCE_LABELS[row._id] || row._id,
-        amount: round2(row.total),
-        count: row.count,
-      })),
+      bySource,
     },
     trends: {
       revenue: fillDailyTrend(

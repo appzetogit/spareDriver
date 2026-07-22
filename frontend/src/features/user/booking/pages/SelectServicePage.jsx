@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import ServiceCard from '../../home/components/ServiceCard';
 import { SERVICE_CATALOG } from '../../home/constants/serviceCatalog';
@@ -10,8 +11,10 @@ import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 
 const SelectServicePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const setServiceType = useBookingDraftStore((s) => s.setServiceType);
   const currentServiceType = useBookingDraftStore((s) => s.serviceType);
+  const [fromNoDriversFound] = useState(!!location.state?.noDriversFound);
 
   const { data, loading, error } = useCachedQuery(
     useUserServicePricingsStore,
@@ -33,6 +36,14 @@ const SelectServicePage = () => {
     }
   };
 
+  const handleBack = () => {
+    if (fromNoDriversFound) {
+      navigate('/user/home', { replace: true });
+      return;
+    }
+    navigate(-1);
+  };
+
   // Keep the currently-selected ring as a subtle visual indicator without
   // adding any logic here — the same accent already lives in the catalog.
   void currentServiceType;
@@ -41,7 +52,12 @@ const SelectServicePage = () => {
     <div className="flex-1 flex flex-col bg-bg">
       <div className="bg-white px-4 pt-4 pb-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 -ml-2 rounded-xl hover:bg-gray-100"
+            aria-label="Back"
+          >
             <ArrowLeft className="w-5 h-5 text-text" />
           </button>
           <div>

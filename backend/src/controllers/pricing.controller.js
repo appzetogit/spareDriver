@@ -197,11 +197,16 @@ export const adminUpdateUserSubscriptionStatus = asyncHandler(async (req, res) =
   const { adminUpdateUserSubscriptionStatusService } = await import(
     '../services/adminSubscriptionOps.service.js'
   );
-  const { status, reason } = req.body || {};
-  const result = await adminUpdateUserSubscriptionStatusService(req.params.id, {
-    status,
-    reason,
-  });
+  const { status, reason, settlementConfirmed } = req.body || {};
+  const result = await adminUpdateUserSubscriptionStatusService(
+    req.params.id,
+    {
+      status,
+      reason,
+      settlementConfirmed,
+    },
+    req.staff,
+  );
   return res.status(200).json(new ApiResponse(200, result, 'Subscription status updated'));
 });
 

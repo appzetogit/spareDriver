@@ -1,18 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
-import { Mail, Lock, Shield } from 'lucide-react';
+import { Mail, Lock, Shield, Loader2 } from 'lucide-react';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { useStoreHydration } from '../../../hooks/useStoreHydration';
 
 const AdminLoginPage = () => {
   const navigate = useNavigate();
-  const setAuth = useAdminAuthStore((state) => state.setAuth);
-  
+  const hydrated = useStoreHydration(useAdminAuthStore);
+  const { isAuthenticated, admin, setAuth } = useAdminAuthStore();
+
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated || !admin) return;
+    if (admin.role === 'admin') navigate('/admin', { replace: true });
+    else navigate('/admin/tasks', { replace: true });
+  }, [hydrated, isAuthenticated, admin, navigate]);
+
+  if (!hydrated || (isAuthenticated && admin)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   const handleChange = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));

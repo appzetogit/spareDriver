@@ -88,6 +88,9 @@ function SubscriptionDetailCard({ sub }) {
           <h2 className="text-lg font-extrabold text-text mt-2">
             {sub.planNameSnapshot || sub.planId?.name || 'Subscription'}
           </h2>
+          {sub.subscriptionNumber && (
+            <p className="text-xs font-mono text-text-muted mt-0.5">{sub.subscriptionNumber}</p>
+          )}
           <p className="text-sm text-text-muted mt-1 flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5" />
             {sub.zoneId?.name || 'Your zone'}

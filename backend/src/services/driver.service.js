@@ -357,7 +357,9 @@ export const updateTrainingProgressService = async (driverId, data) => {
     throw new ApiError(400, 'Complete live verification before training');
   }
 
-  if (isApplicationSubmitted(driver)) {
+  // Approved legacy drivers may complete training added after their approval.
+  // Their approval status and onboarding submission must remain unchanged.
+  if (isApplicationSubmitted(driver) && driver.approvalStatus !== 'approved') {
     throw new ApiError(400, 'Application already submitted');
   }
 

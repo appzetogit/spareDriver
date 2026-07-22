@@ -55,4 +55,5 @@ export const adminUpdateBookingStatusSchema = z.object({
 export const adminUpdateSubscriptionStatusSchema = z.object({
   status: z.enum(['active', 'expired', 'cancelled']),
   reason: z.string().max(500).optional(),
+  settlementConfirmed: z.boolean().optional(),
 });

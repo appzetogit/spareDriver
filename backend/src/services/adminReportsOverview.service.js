@@ -21,6 +21,9 @@ import {
 const USER_FILTER = { role: USER_ROLES.USER, isDeleted: false };
 const DRIVER_FILTER = { isDeleted: false };
 const BOOKING_FILTER = { isDeleted: false };
+const TRIP_REVENUE_MATCH = {
+  source: { $nin: [PLATFORM_REVENUE_SOURCE.SUBSCRIPTION] },
+};
 
 function dateMatch(range, field = 'createdAt') {
   const m = mongoDateRange(range, field);
@@ -44,8 +47,12 @@ export async function getAdminReportsOverviewService(query = {}) {
     bookingsPrevPeriod,
     tripRevenueAgg,
     tripRevenuePrevAgg,
-    commissionAgg,
-    commissionPrevAgg,
+    platformRevenueAgg,
+    platformRevenuePrevAgg,
+    commissionOnlyAgg,
+    commissionOnlyPrevAgg,
+    couponAbsorbedAgg,
+    couponAbsorbedPrevAgg,
     gstBookingsAgg,
     gstBookingsPrevAgg,
     gstSubsAgg,
@@ -81,11 +88,47 @@ export async function getAdminReportsOverviewService(query = {}) {
       { $group: { _id: null, total: { $sum: bookingFareExpr() } } },
     ]),
     PlatformRevenue.aggregate([
-      { $match: { ...revenueDate } },
+      { $match: { ...TRIP_REVENUE_MATCH, ...revenueDate } },
       { $group: { _id: null, total: { $sum: '$amountRupees' } } },
     ]),
     PlatformRevenue.aggregate([
-      { $match: { ...prevRevenueDate } },
+      { $match: { ...TRIP_REVENUE_MATCH, ...prevRevenueDate } },
+      { $group: { _id: null, total: { $sum: '$amountRupees' } } },
+    ]),
+    PlatformRevenue.aggregate([
+      {
+        $match: {
+          source: PLATFORM_REVENUE_SOURCE.COMMISSION,
+          ...revenueDate,
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amountRupees' } } },
+    ]),
+    PlatformRevenue.aggregate([
+      {
+        $match: {
+          source: PLATFORM_REVENUE_SOURCE.COMMISSION,
+          ...prevRevenueDate,
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amountRupees' } } },
+    ]),
+    PlatformRevenue.aggregate([
+      {
+        $match: {
+          source: PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT,
+          ...revenueDate,
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amountRupees' } } },
+    ]),
+    PlatformRevenue.aggregate([
+      {
+        $match: {
+          source: PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT,
+          ...prevRevenueDate,
+        },
+      },
       { $group: { _id: null, total: { $sum: '$amountRupees' } } },
     ]),
     Booking.aggregate([
@@ -137,7 +180,7 @@ export async function getAdminReportsOverviewService(query = {}) {
       { $sort: { _id: 1 } },
     ]),
     PlatformRevenue.aggregate([
-      { $match: { ...revenueDate } },
+      { $match: { ...TRIP_REVENUE_MATCH, ...revenueDate } },
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt' } },
@@ -166,8 +209,12 @@ export async function getAdminReportsOverviewService(query = {}) {
 
   const tripRevenue = round2(tripRevenueAgg[0]?.total || 0);
   const tripRevenuePrev = round2(tripRevenuePrevAgg[0]?.total || 0);
-  const commission = round2(commissionAgg[0]?.total || 0);
-  const commissionPrev = round2(commissionPrevAgg[0]?.total || 0);
+  const platformRevenue = round2(platformRevenueAgg[0]?.total || 0);
+  const platformRevenuePrev = round2(platformRevenuePrevAgg[0]?.total || 0);
+  const commission = round2(commissionOnlyAgg[0]?.total || 0);
+  const commissionPrev = round2(commissionOnlyPrevAgg[0]?.total || 0);
+  const couponsAbsorbed = round2(Math.abs(couponAbsorbedAgg[0]?.total || 0));
+  const couponsAbsorbedPrev = round2(Math.abs(couponAbsorbedPrevAgg[0]?.total || 0));
   const bookingGst = round2(gstBookingsAgg[0]?.total || 0);
   const subscriptionGst = round2(gstSubsAgg[0]?.total || 0);
   const gstCollected = round2(bookingGst + subscriptionGst);
@@ -194,9 +241,19 @@ export async function getAdminReportsOverviewService(query = {}) {
         amount: tripRevenue,
         trend: percentChange(tripRevenue, tripRevenuePrev),
       },
+      /** Net platform take (commission + fees − coupons absorbed, etc.). */
+      platformRevenue: {
+        amount: platformRevenue,
+        trend: percentChange(platformRevenue, platformRevenuePrev),
+      },
+      /** Gross commission only — coupons are NOT deducted here. */
       platformCommission: {
         amount: commission,
         trend: percentChange(commission, commissionPrev),
+      },
+      couponsAbsorbed: {
+        amount: couponsAbsorbed,
+        trend: percentChange(couponsAbsorbed, couponsAbsorbedPrev),
       },
       gstCollected: {
         amount: gstCollected,

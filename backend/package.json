@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "fix:payment-index": "node scripts/fixPaymentIndex.js",
+    "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
     "seed": "node scripts/seed.js"
   },
   "keywords": [],

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { DollarSign, Download, Loader2, ExternalLink } from 'lucide-react';
+import { DollarSign, Download, Loader2, ExternalLink, CircleSlash, TrendingUp } from 'lucide-react';
 import StatsCard from '../../components/StatsCard';
 import AnalyticsTrendChart from '../../components/UserAnalytics/AnalyticsTrendChart';
 import { SectionCard } from '../../components/DetailBlocks';
@@ -102,14 +102,26 @@ const RevenueReportsPage = () => {
 
       {error && <ReportErrorBanner message={error} onRetry={refetch} />}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           icon={DollarSign}
-          label="Total platform revenue"
+          label="Net platform revenue"
           value={formatCurrency(summary?.totalRevenue)}
           trend={summary?.trend}
           trendLabel="vs previous period"
           color="#10B981"
+        />
+        <StatsCard
+          icon={TrendingUp}
+          label="Commission"
+          value={formatCurrency(summary?.commission)}
+          color="#059669"
+        />
+        <StatsCard
+          icon={CircleSlash}
+          label="Coupons absorbed"
+          value={formatCurrency(summary?.couponsAbsorbed)}
+          color="#F59E0B"
         />
         <StatsCard
           icon={DollarSign}
@@ -121,7 +133,7 @@ const RevenueReportsPage = () => {
 
       <AnalyticsTrendChart
         title="Daily revenue"
-        subtitle="Platform revenue by day"
+        subtitle="Net platform revenue by day (commission + fees − coupons)"
         points={trends?.revenue || []}
         valueKey="amount"
         formatValue={(v) => formatCurrency(v)}
@@ -130,17 +142,25 @@ const RevenueReportsPage = () => {
 
       <SectionCard title="Breakdown by source">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {(breakdown?.bySource || []).map((row) => (
-            <div
-              key={row.source}
-              className="rounded-xl border border-slate-100 p-4"
-              style={{ borderLeftWidth: 4, borderLeftColor: SOURCE_COLORS[row.source] || '#94A3B8' }}
-            >
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{row.label}</p>
-              <p className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(row.amount)}</p>
-              <p className="text-xs text-slate-400 mt-1">{formatCount(row.count)} entries</p>
-            </div>
-          ))}
+          {(breakdown?.bySource || []).map((row) => {
+            const isCoupon = row.source === 'coupon_discount';
+            const shown = isCoupon
+              ? row.displayAmount ?? Math.abs(Number(row.amount) || 0)
+              : row.amount;
+            return (
+              <div
+                key={row.source}
+                className="rounded-xl border border-slate-100 p-4"
+                style={{ borderLeftWidth: 4, borderLeftColor: SOURCE_COLORS[row.source] || '#94A3B8' }}
+              >
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{row.label}</p>
+                <p className={`text-xl font-bold mt-1 ${isCoupon ? 'text-amber-700' : 'text-slate-900'}`}>
+                  {isCoupon ? `−${formatCurrency(shown)}` : formatCurrency(shown)}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">{formatCount(row.count)} entries</p>
+              </div>
+            );
+          })}
         </div>
       </SectionCard>
     </div>

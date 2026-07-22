@@ -87,6 +87,11 @@ export default function DriverSubscriptionDetailPage() {
               <h1 className="text-lg font-bold text-text mt-0.5 truncate">
                 {detail.planName || 'Dedicated driver plan'}
               </h1>
+              {detail.subscriptionNumber && (
+                <p className="text-[11px] font-mono text-text-muted mt-0.5">
+                  {detail.subscriptionNumber}
+                </p>
+              )}
               <p className="text-xs text-text-muted mt-1">
                 {detail.durationMonths || '—'} month
                 {Number(detail.durationMonths) === 1 ? '' : 's'} · {hoursLabel}

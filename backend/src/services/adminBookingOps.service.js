@@ -273,23 +273,15 @@ export async function adminUpdateBookingStatusService(
     return { booking: booking.toObject(), previousStatus, changed: false };
   }
 
+  if (status === BOOKING_STATUS.CANCELLED) {
+    const { cancelBookingByAdminService } = await import('./booking.service.js');
+    const cancelled = await cancelBookingByAdminService(bookingId, reason);
+    return { booking: cancelled, previousStatus, changed: true };
+  }
+
   booking.status = status;
 
   const now = new Date();
-  if (status === BOOKING_STATUS.CANCELLED) {
-    booking.cancellation = {
-      ...(booking.cancellation?.toObject?.() || booking.cancellation || {}),
-      cancelledAt: now,
-      cancelledBy: 'admin',
-      reason: reason || booking.cancellation?.reason || 'admin_cancelled',
-    };
-    cancelPaymentTimeout(booking._id);
-    if (booking.driverId) {
-      const { Driver } = await import('../models/driverModels/driver.model.js');
-      await Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } });
-    }
-  }
-
   if (status === BOOKING_STATUS.COMPLETED && !booking.timeline?.completedAt) {
     booking.timeline = {
       ...(booking.timeline?.toObject?.() || booking.timeline || {}),

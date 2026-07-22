@@ -76,6 +76,7 @@ function buildSubscriptionOfferPayload(sub, driver, { customer, car, plan } = {}
     bookingType: 'subscription',
     inbox: true,
     subscriptionId: String(sub._id),
+    subscriptionNumber: sub.subscriptionNumber || '',
     bookingId: String(sub._id),
     planName: plan?.name || sub.planNameSnapshot || '',
     includedHoursPerDay: sub.includedHoursPerDay,
@@ -587,6 +588,7 @@ function serializeSubscriptionForDriver(sub) {
   const zone = sub.zoneId && typeof sub.zoneId === 'object' ? sub.zoneId : null;
   return {
     _id: String(sub._id),
+    subscriptionNumber: sub.subscriptionNumber || '',
     status: sub.status,
     assignmentStatus: sub.assignmentStatus,
     planName: sub.planNameSnapshot || '',

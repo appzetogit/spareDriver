@@ -1,20 +1,19 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../../../components/Card';
 import Toggle from '../../../../components/Toggle';
 import {
-  Star,
-  TrendingUp,
+  MapPin,
   Bell,
   AlertCircle,
   ShieldAlert,
   ChevronRight,
-  Car,
-  ShieldCheck,
-  Flag,
   Inbox,
   Sparkles,
   Loader2,
+  ShieldCheck,
+  Flag,
+  Car,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
@@ -25,6 +24,9 @@ import useDriverIncomingScheduledStore from '../../../../store/driver/useDriverI
 import useDriverSubscriptionsStore from '../../../../store/driver/useDriverSubscriptionsStore';
 import { useDriverOnlineToggle } from '../../../../hooks/useDriverOnlineToggle';
 import { useDriverLocation } from '../../../../hooks/useDriverLocation';
+import { useGeolocation } from '../../../../hooks/useGeolocation';
+import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
+import { reverseGeocode } from '../../../../utils/geocoding';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { formatCurrency } from '../../../../utils/formatters';
 import {
@@ -34,6 +36,7 @@ import {
 import OnlineBlockedDialog from '../../kit/components/OnlineBlockedDialog';
 import DriverKitHomeCard from '../../kit/components/DriverKitHomeCard';
 import OutstationOptInCard from '../components/OutstationOptInCard';
+import DriverTripCard from '../../trips/components/DriverTripCard';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
 import { useNotificationPanel } from '../../../../components/notifications/NotificationCenter';
 import { useDriverNotificationStore } from '../../../../store/useNotificationStore';
@@ -74,10 +77,6 @@ const DriverHomePage = () => {
     {},
   );
 
-  // Driver profile drives the outstation opt-in card below —
-  // both the toggle state and the persisted zone selections live on
-  // the profile document. We piggyback on the existing profile fetch
-  // so the home screen only pays one extra request the first time.
   const profileKey = buildCacheKey('driver-profile', {});
   const { data: driverProfile } = useCachedQuery(
     useDriverProfileStore,
@@ -86,12 +85,13 @@ const DriverHomePage = () => {
   );
 
   const todayEarnings = summary?.today?.earnings ?? 0;
-  const todayTrips = summary?.today?.trips ?? 0;
-  const driverRating = summary?.rating?.value ?? 0;
-  const ratingCount = summary?.rating?.count ?? 0;
-  const activeBooking = summary?.activeBooking || null;
-  const hasActiveBooking =
-    activeBooking && ACTIVE_BOOKING_STATUSES.includes(activeBooking.status);
+  const activeBookings = (
+    summary?.activeBookings?.length
+      ? summary.activeBookings
+      : summary?.activeBooking
+        ? [summary.activeBooking]
+        : []
+  ).filter((b) => b && ACTIVE_BOOKING_STATUSES.includes(b.status));
   const cancellationChances = summary?.cancellationChances || null;
 
   const { setOnline, toggling, blocked, clearBlocked } = useDriverOnlineToggle();
@@ -104,6 +104,28 @@ const DriverHomePage = () => {
   const primaryReason = blocker?.reasons?.[0] || null;
 
   const location = useDriverLocation({ enabled: isOnline });
+
+  // Display location in the sticky header (independent of online GPS stream).
+  const { maps, ready: mapsReady } = useGoogleMaps();
+  const { coords, loading: locating, error: geoError } = useGeolocation();
+  const [currentLocation, setCurrentLocation] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!mapsReady || !maps || !coords) return undefined;
+    (async () => {
+      const point = await reverseGeocode(maps, { lat: coords.lat, lng: coords.lng });
+      if (!cancelled && point) setCurrentLocation(point);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [maps, mapsReady, coords]);
+
+  const locationLine = currentLocation?.city
+    ? currentLocation.city
+    : currentLocation?.address || (geoError ? 'Location unavailable' : 'Locating you…');
+  const locationLoading = !geoError && !currentLocation && (locating || !mapsReady);
 
   useEffect(() => {
     if (onlineStatus) {
@@ -128,7 +150,6 @@ const DriverHomePage = () => {
     if (next) {
       const result = await setOnline(true);
       if (result.success) {
-        // Satisfy browser autoplay policy so the next booking offer can ring.
         window.dispatchEvent(new CustomEvent('sd:prime-offer-audio'));
         refetchOnline();
       }
@@ -148,46 +169,106 @@ const DriverHomePage = () => {
     navigate('/driver/kit');
   };
 
+  const cancelChip = buildCancelChip(cancellationChances);
+  const CancelIcon = cancelChip?.Icon;
+
   return (
-    <div className="flex-1 flex flex-col bg-bg">
-      <div className="bg-dark px-4 pt-4 pb-6 rounded-b-3xl">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-lg font-bold text-white">Home</h1>
-          <button
-            type="button"
-            className="relative p-2.5 rounded-xl bg-white/10 hover:bg-white/15 transition-colors"
-            aria-label="Notifications"
-            onClick={() => openNotifications(true)}
-          >
-            <Bell className="w-5 h-5 text-white" />
-            {unreadCount > 0 ? (
-              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
-                {unreadCount > 99 ? '99+' : unreadCount}
+    <div className="flex-1 flex flex-col bg-bg min-h-0">
+      {/* Sticky white header — mirrors user home density */}
+      <div className="sticky top-0 z-30 bg-surface/95 backdrop-blur-sm px-4 pt-3.5 pb-3.5 rounded-b-3xl shadow-lg">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-text-muted text-[11px] font-medium leading-none">Your location</p>
+            <div className="flex items-center gap-1.5 mt-1.5 min-w-0">
+              <MapPin className="w-4 h-4 text-primary shrink-0" />
+              <span
+                className="text-text text-sm font-semibold truncate"
+                title={currentLocation?.address || locationLine}
+              >
+                {locationLine}
               </span>
-            ) : null}
-          </button>
-        </div>
-        <Card className="!bg-white/10 backdrop-blur-sm !shadow-none">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-3 h-3 rounded-full ${isOnline ? 'bg-success animate-pulse' : 'bg-gray-400'}`}
-              />
-              <div>
-                <span className="text-white text-sm font-medium block">
-                  {isOnline ? 'You are Online' : 'You are Offline'}
-                </span>
-                {!isOnline && primaryReason && (
-                  <span className="text-white/60 text-[10px]">{primaryReason}</span>
-                )}
-              </div>
+              {locationLoading && (
+                <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin shrink-0" />
+              )}
             </div>
-            <Toggle checked={isOnline} onChange={handleToggle} disabled={toggling} />
           </div>
-        </Card>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('/driver/earnings')}
+              className="flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-2xl bg-white border border-border-light shadow-sm hover:border-primary/30 hover:bg-primary-50/50 active:scale-[0.97] transition-all"
+              aria-label="Today's earnings"
+            >
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold">₹</span>
+              </div>
+              <div className="text-left leading-none">
+                <p className="text-[9px] uppercase tracking-wide text-text-muted font-semibold">
+                  Today
+                </p>
+                <p className="text-sm font-bold text-text mt-1">
+                  {summaryLoading && !summary ? '—' : formatCurrency(todayEarnings)}
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="relative p-2.5 rounded-xl bg-bg hover:bg-border-light transition-colors"
+              aria-label="Notifications"
+              onClick={() => openNotifications(true)}
+            >
+              <Bell className="w-5 h-5 text-text-secondary" />
+              {unreadCount > 0 ? (
+                <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              ) : null}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-bg/80 border border-border-light px-3 py-2.5">
+          {cancelChip && CancelIcon ? (
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold shrink-0 ${cancelChip.className}`}
+              title={cancelChip.title}
+            >
+              <CancelIcon className="w-3.5 h-3.5" />
+              <span>{cancelChip.label}</span>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <p className="text-[11px] text-text-muted">Ready for trips</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="text-right min-w-0">
+              <p className="text-sm font-semibold text-text leading-none inline-flex items-center gap-1.5 justify-end">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    isOnline ? 'bg-success animate-pulse' : 'bg-gray-300'
+                  }`}
+                />
+                {isOnline ? 'Online' : 'Offline'}
+              </p>
+              {!isOnline && primaryReason ? (
+                <p className="text-[10px] text-text-muted truncate mt-0.5 max-w-[9rem]">
+                  {primaryReason}
+                </p>
+              ) : null}
+            </div>
+            <Toggle
+              checked={isOnline}
+              onChange={handleToggle}
+              disabled={toggling}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 p-4 -mt-3 space-y-4 pb-8">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-8">
         {needsKitAction && <DriverKitHomeCard onUpdate={handleKitUpdate} />}
 
         {hasOtherBlocker && (
@@ -208,60 +289,13 @@ const DriverHomePage = () => {
           </Card>
         )}
 
-        {hasActiveBooking && (
-          <ActiveTripsBanner
-            booking={activeBooking}
-            onOpen={() => navigate('/driver/trips?tab=ongoing')}
-          />
-        )}
-
-        {(assignedSubsLoading || assignedSubscriptions.length > 0) && (
-          <AssignedSubscriptionsSection
-            loading={assignedSubsLoading}
-            subscriptions={assignedSubscriptions}
-            onOpen={(sub) => navigate(`/driver/subscriptions/${sub._id}`)}
-          />
-        )}
-
-        {!hasActiveBooking && cancellationChances && (
-          <CancellationChancesCard chance={cancellationChances} />
-        )}
-
-        <Card className="animate-fade-in-up">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-text-muted">Today's Earnings</p>
-            <button
-              type="button"
-              onClick={() => navigate('/driver/earnings')}
-              className="text-[11px] font-semibold text-primary inline-flex items-center gap-0.5"
-            >
-              View all <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-          <p className="text-3xl font-bold text-text mt-1">
-            {summaryLoading && !summary ? '—' : formatCurrency(todayEarnings)}
-          </p>
-          <div className="flex items-center gap-6 mt-3">
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-success" />
-              <span className="text-sm">
-                <strong>{todayTrips}</strong>{' '}
-                <span className="text-text-muted">
-                  Trip{todayTrips === 1 ? '' : 's'}
-                </span>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Star className="w-4 h-4 text-primary fill-primary" />
-              <span className="text-sm">
-                <strong>{driverRating ? driverRating.toFixed(1) : '—'}</strong>{' '}
-                <span className="text-text-muted">
-                  {ratingCount ? `(${ratingCount})` : 'No ratings yet'}
-                </span>
-              </span>
-            </div>
-          </div>
-        </Card>
+        <OutstationOptInCard
+          initial={!!driverProfile?.availableForOutstation}
+          initialZones={driverProfile?.preferredOutstationZones || []}
+          preferencesCompleted={!!driverProfile?.outstationPreferencesCompletedAt}
+          initialAllIndiaOk={!!driverProfile?.outstationAllIndiaOk}
+          initialMaxHours={driverProfile?.outstationMaxDrivingHoursPerDay || 10}
+        />
 
         {isOnline && (
           <Card className="animate-fade-in-up border-l-4 border-l-success">
@@ -291,12 +325,19 @@ const DriverHomePage = () => {
           </Card>
         )}
 
-        <OutstationOptInCard
-          initial={!!driverProfile?.availableForOutstation}
-          initialZones={driverProfile?.preferredOutstationZones || []}
-          preferencesCompleted={!!driverProfile?.outstationPreferencesCompletedAt}
-          initialAllIndiaOk={!!driverProfile?.outstationAllIndiaOk}
-          initialMaxHours={driverProfile?.outstationMaxDrivingHoursPerDay || 10}
+        {(assignedSubsLoading || assignedSubscriptions.length > 0) && (
+          <AssignedSubscriptionsSection
+            loading={assignedSubsLoading}
+            subscriptions={assignedSubscriptions}
+            onOpen={(sub) => navigate(`/driver/subscriptions/${sub._id}`)}
+          />
+        )}
+
+        <ActiveTripsSection
+          bookings={activeBookings}
+          loading={summaryLoading && !summary}
+          onOpen={(trip) => navigate(`/driver/trip/${trip._id}`)}
+          onViewAll={() => navigate('/driver/trips?tab=ongoing')}
         />
 
         {isOnline && location.error && location.permission === 'denied' && (
@@ -331,9 +372,105 @@ const DriverHomePage = () => {
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* Sub-components                                                      */
-/* ------------------------------------------------------------------ */
+function buildCancelChip(chance) {
+  const dailyLimit = Number(chance?.dailyLimit) || 0;
+  if (dailyLimit <= 0) return null;
+  const chancesLeft = Math.max(0, Number(chance?.chancesLeft) || 0);
+  const exhausted = chancesLeft <= 0;
+  const lowAlert = !exhausted && chancesLeft === 1;
+
+  if (exhausted) {
+    return {
+      Icon: Flag,
+      label: '0 cancels left',
+      title: 'No free cancellations left today',
+      className: 'bg-rose-50 text-rose-700 border border-rose-200',
+    };
+  }
+  if (lowAlert) {
+    return {
+      Icon: ShieldCheck,
+      label: '1 cancel left',
+      title: `${chancesLeft} of ${dailyLimit} free cancellations left today`,
+      className: 'bg-amber-50 text-amber-800 border border-amber-200',
+    };
+  }
+  return {
+    Icon: ShieldCheck,
+    label: `${chancesLeft} cancels left`,
+    title: `${chancesLeft} of ${dailyLimit} free cancellations left today`,
+    className: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+  };
+}
+
+function ActiveTripsSection({ bookings, loading, onOpen, onViewAll }) {
+  if (loading) {
+    return (
+      <section className="animate-fade-in-up">
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="text-base font-bold text-text">Active trips</h2>
+        </div>
+        <Card className="flex items-center justify-center py-8">
+          <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
+        </Card>
+      </section>
+    );
+  }
+
+  if (!bookings.length) {
+    return (
+      <section className="animate-fade-in-up">
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="text-base font-bold text-text">Active trips</h2>
+        </div>
+        <Card className="border border-dashed border-border">
+          <div className="flex items-center gap-3 py-1">
+            <div className="w-10 h-10 rounded-full bg-bg flex items-center justify-center shrink-0">
+              <Car className="w-5 h-5 text-text-muted" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-text">No active trips</p>
+              <p className="text-xs text-text-muted mt-0.5">
+                Accepted rides will show up here
+              </p>
+            </div>
+          </div>
+        </Card>
+      </section>
+    );
+  }
+
+  return (
+    <section className="animate-fade-in-up space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-text">Active trips</h2>
+          <p className="text-[11px] text-text-muted">
+            {bookings.length} ongoing · tap to resume
+          </p>
+        </div>
+        {bookings.length > 1 ? (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-[11px] font-semibold text-primary inline-flex items-center gap-0.5"
+          >
+            View all <ChevronRight className="w-3 h-3" />
+          </button>
+        ) : null}
+      </div>
+
+      {bookings.map((trip) => (
+        <div key={trip._id} className="space-y-1">
+          <p className="text-[11px] font-medium text-primary px-0.5">
+            {ACTIVE_STATUS_COPY[trip.status] || 'Trip in progress'}
+          </p>
+          <DriverTripCard trip={trip} onClick={() => onOpen(trip)} />
+        </div>
+      ))}
+    </section>
+  );
+}
 
 function AssignedSubscriptionsSection({ loading, subscriptions, onOpen }) {
   if (loading && !subscriptions.length) {
@@ -384,113 +521,6 @@ function AssignedSubscriptionsSection({ loading, subscriptions, onOpen }) {
           </button>
         );
       })}
-    </Card>
-  );
-}
-
-/**
- * Compact "You have an active trip" banner shown on the driver home.
- *
- * We deliberately don't render the full ride card here anymore. The
- * driver gets a one-line summary + tap-target that bounces them to
- * `/driver/trips?tab=ongoing` where every active/assigned trip is
- * listed with the full hero card. This avoids two sources of truth
- * (home tile vs trips list) drifting and keeps the home screen
- * focused on "go online / take new offers".
- */
-function ActiveTripsBanner({ booking, onOpen }) {
-  const status = booking?.status;
-  const subtitle = ACTIVE_STATUS_COPY[status] || 'Trip in progress';
-  const bookingNumber = booking?.bookingNumber || null;
-
-  return (
-    <Card
-      hoverable
-      onClick={onOpen}
-      className="animate-fade-in-up border-l-4 border-l-primary"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-          <Car className="w-5 h-5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-text truncate">
-            You have an active trip
-          </p>
-          <p className="text-[11px] text-text-muted truncate mt-0.5">
-            {subtitle}
-            {bookingNumber && (
-              <>
-                {' '}
-                {'\u00B7'}{' '}
-                <span className="font-mono">{bookingNumber}</span>
-              </>
-            )}
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-primary shrink-0">
-          Open <ChevronRight className="w-3.5 h-3.5" />
-        </span>
-      </div>
-    </Card>
-  );
-}
-
-/**
- * Standalone cancellation-chances tile rendered when the driver has
- * NO active trip — gives them a daily-budget summary at a glance so
- * they don't have to enter a ride to discover how many cancels they
- * have left.
- */
-function CancellationChancesCard({ chance }) {
-  const dailyLimit = Number(chance?.dailyLimit) || 0;
-  const chancesLeft = Math.max(0, Number(chance?.chancesLeft) || 0);
-  const used = Number(chance?.usedToday) || 0;
-  const grace = Number(chance?.graceMinutes) || 0;
-  if (dailyLimit <= 0) return null;
-
-  const exhausted = chancesLeft <= 0;
-  const lowAlert = !exhausted && chancesLeft === 1;
-  const tone = exhausted
-    ? 'border-l-rose-500 bg-rose-50/40'
-    : lowAlert
-      ? 'border-l-amber-500 bg-amber-50/40'
-      : 'border-l-success bg-success/5';
-  const icon = exhausted ? Flag : ShieldCheck;
-  const Icon = icon;
-  const iconTone = exhausted
-    ? 'text-rose-700 bg-rose-100'
-    : lowAlert
-      ? 'text-amber-700 bg-amber-100'
-      : 'text-emerald-700 bg-emerald-100';
-
-  return (
-    <Card className={`animate-fade-in-up border-l-4 ${tone}`}>
-      <div className="flex items-start gap-3">
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconTone}`}
-        >
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-text">
-            {exhausted
-              ? 'No free cancellations left today'
-              : `${chancesLeft} of ${dailyLimit} free cancellation${
-                  dailyLimit === 1 ? '' : 's'
-                } left today`}
-          </p>
-          <p className="text-[11px] text-text-muted mt-0.5 leading-snug">
-            {exhausted
-              ? 'Cancelling now will deduct the configured penalty from your wallet. Counter resets at midnight.'
-              : grace > 0
-                ? `Cancel within ${grace} min of accepting to skip the penalty. ${
-                    used > 0 ? `Used ${used} today.` : ''
-                  }`
-                : 'Cancellations may attract a penalty.'}
-          </p>
-        </div>
-      </div>
     </Card>
   );
 }

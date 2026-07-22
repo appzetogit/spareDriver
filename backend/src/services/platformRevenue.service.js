@@ -2,6 +2,7 @@ import PlatformRevenue, {
   PLATFORM_REVENUE_SOURCE,
 } from '../models/platformRevenue.model.js';
 import { ApiError } from '../utils/apiError.js';
+import { buildCommissionRevenueMeta } from './bookingExtension.service.js';
 
 /**
  * Platform revenue service.
@@ -14,6 +15,106 @@ import { ApiError } from '../utils/apiError.js';
  */
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+/**
+ * Net platform take on a completed booking from its fare snapshot.
+ *
+ *   commission (pre-coupon) + platform fee − admin-absorbed coupon
+ *
+ * Drivers are paid on the pre-coupon subtotal; admin-created coupons
+ * are a platform cost, not a driver haircut.
+ */
+export function netPlatformRevenueFromFareSnapshot(fareSnapshot = {}) {
+  const snap = fareSnapshot || {};
+  const bd = snap.breakdown || {};
+  const commission = Number(bd.platformCommission ?? snap.platformCommission) || 0;
+  const platformFee =
+    Number(bd.platformFee ?? bd.serviceCharge ?? snap.platformFee ?? snap.serviceCharge) || 0;
+  const couponDiscount = Number(bd.couponDiscount ?? snap.couponDiscount) || 0;
+  return {
+    commission: round2(commission),
+    platformFee: round2(platformFee),
+    couponDiscount: round2(couponDiscount),
+    gross: round2(commission + platformFee),
+    net: round2(commission + platformFee - couponDiscount),
+  };
+}
+
+/**
+ * Book commission + platform fee + coupon absorption for a completed trip.
+ * Used by normal completion and no-show auto-complete so every path
+ * writes the same ledger shape. Best-effort — never throws to callers.
+ */
+export async function recordCompletedTripPlatformRevenue(booking, extraMeta = {}) {
+  if (!booking?._id) return;
+
+  const snap = booking.fareSnapshot || {};
+  const bd = snap.breakdown || {};
+  const { commission, platformFee, couponDiscount } =
+    netPlatformRevenueFromFareSnapshot(snap);
+  const revenueMeta = {
+    ...buildCommissionRevenueMeta(booking),
+    ...extraMeta,
+  };
+
+  const base = {
+    bookingId: booking._id,
+    bookingNumber: booking.bookingNumber || '',
+    serviceType: booking.serviceType || '',
+    userId: booking.userId,
+    driverId: booking.driverId || null,
+  };
+
+  const writes = [];
+
+  if (commission > 0) {
+    writes.push(
+      recordPlatformRevenue({
+        ...base,
+        source: PLATFORM_REVENUE_SOURCE.COMMISSION,
+        amountRupees: commission,
+        meta: revenueMeta,
+      }),
+    );
+  }
+
+  if (platformFee > 0) {
+    writes.push(
+      recordPlatformRevenue({
+        ...base,
+        source: PLATFORM_REVENUE_SOURCE.PLATFORM_FEE,
+        amountRupees: platformFee,
+        meta: {
+          ...revenueMeta,
+          platformFeeType: bd.platformFeeType || null,
+          platformFeeAmount: bd.platformFeeAmount ?? bd.serviceChargePercent ?? null,
+        },
+      }),
+    );
+  }
+
+  if (couponDiscount > 0) {
+    writes.push(
+      recordPlatformRevenue({
+        ...base,
+        source: PLATFORM_REVENUE_SOURCE.COUPON_DISCOUNT,
+        amountRupees: -round2(couponDiscount),
+        meta: {
+          ...revenueMeta,
+          couponCode: snap.couponCode || bd.couponCode || null,
+          couponId: snap.couponId ? String(snap.couponId) : null,
+          couponDiscount,
+          subtotal: round2(bd.subtotal || 0),
+          netSubtotal: round2(bd.netSubtotal || 0),
+          totalPayable: round2(bd.totalPayable || snap.total || 0),
+          driverEarning: round2(bd.driverEarning || 0),
+        },
+      }),
+    );
+  }
+
+  await Promise.allSettled(writes);
+}
 
 /**
  * Persist a single revenue line. Returns the inserted document.

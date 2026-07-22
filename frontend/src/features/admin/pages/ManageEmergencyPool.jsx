@@ -18,6 +18,7 @@ import {
   Navigation,
   Eye,
   UserPlus,
+  User as UserIcon,
 } from 'lucide-react';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';

@@ -24,7 +24,6 @@ import { useUserNotificationStore } from '../../../../store/useNotificationStore
 
 const NEARBY_RADIUS_METERS = 2000;
 const NEARBY_LIMIT = 8;
-const NEARBY_REFRESH_MS = 30_000;
 
 const UserHomePage = () => {
   const navigate = useNavigate();
@@ -74,7 +73,6 @@ const UserHomePage = () => {
     radiusMeters: NEARBY_RADIUS_METERS,
     limit: NEARBY_LIMIT,
     enabled: !!center,
-    refetchMs: NEARBY_REFRESH_MS,
   });
 
   const locationLine = currentLocation?.city
@@ -163,9 +161,7 @@ const UserHomePage = () => {
       {/* ====== Scrollable Content ====== */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-5">
-          <BookDriverSection />
-
-          <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <div className="animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="text-base font-bold text-text">Nearby drivers</h2>
@@ -235,10 +231,11 @@ const UserHomePage = () => {
                 ? `View ${driversCount} nearby driver${driversCount === 1 ? '' : 's'}`
                 : 'View nearby drivers'}
             </button>
-            <div className="w-full mt-3 p-3 flex items-center justify-center">
-              <AdsCarousel />
-            </div>
           </div>
+
+          <BookDriverSection />
+
+          <AdsCarousel />
         </div>
       </div>
 

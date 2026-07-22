@@ -42,8 +42,8 @@ import RideStartOtpCard from '../components/RideStartOtpCard';
 import ExtendRideModal from '../components/ExtendRideModal';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import {
-  OUTSTATION_USER_CANCEL_TIER,
   previewUserCancellation,
+  buildUserCancelConfirmMessage,
 } from '../utils/cancellationPreview';
 import SosEmergencyButton from '../../tracking/components/SosEmergencyButton';
 
@@ -525,17 +525,47 @@ const DriverAssignedPage = () => {
     const fee = Number(cancelPreview.feeCharged) || 0;
     setCancelling(true);
     try {
-      await cancelBooking(
+      const result = await cancelBooking(
         tripStarted ? 'cancelled_by_user_after_start' : 'cancelled_by_user',
       );
-      if (fee > 0) {
+      fetchWallet().catch(() => {});
+      setCancelConfirmOpen(false);
+
+      const status = result?.status;
+      if (status === BOOKING_STATUS.NO_DRIVERS_FOUND) {
+        // Status effect / searching page will route to retry.
+        navigate('/user/book/searching', { replace: true });
+        return;
+      }
+      if (fee > 0 && status === BOOKING_STATUS.CANCELLED) {
         toast(`Cancellation fee \u20B9${fee} applied.`, { icon: '\u26A0\uFE0F' });
       }
       draftReset();
-      setCancelConfirmOpen(false);
       navigate('/user/home', { replace: true });
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Could not cancel');
+      setCancelConfirmOpen(false);
+      if (err?.alreadyTerminal || err?.code === 'BOOKING_ALREADY_TERMINAL') {
+        fetchWallet().catch(() => {});
+        draftReset();
+        navigate('/user/home', { replace: true });
+        return;
+      }
+      const status = useUserActiveBookingStore.getState().booking?.status;
+      if (status === BOOKING_STATUS.CANCELLED) {
+        fetchWallet().catch(() => {});
+        draftReset();
+        navigate('/user/home', { replace: true });
+        return;
+      }
+      if (
+        status === BOOKING_STATUS.SEARCHING &&
+        useUserActiveBookingStore.getState().booking?.cancellation?.reason ===
+          'driver_cancelled_reassigning'
+      ) {
+        navigate('/user/book/searching', { replace: true });
+        return;
+      }
+      toast.error(err?.response?.data?.message || err?.message || 'Could not cancel');
     } finally {
       setCancelling(false);
     }
@@ -1008,7 +1038,7 @@ const DriverAssignedPage = () => {
         onClose={() => !cancelling && setCancelConfirmOpen(false)}
         onConfirm={handleCancelConfirm}
         title={cancelPreview.tripStarted ? 'Cancel this trip?' : 'Cancel this booking?'}
-        description={cancelPreviewMessage(cancelPreview)}
+        description={buildUserCancelConfirmMessage(cancelPreview)}
         confirmLabel="Yes, cancel"
         cancelLabel="Keep booking"
         variant="danger"
@@ -1204,109 +1234,6 @@ function DetailTile({ icon, label, value, full }) {
       <p className="text-sm font-semibold text-text break-words">{value}</p>
     </div>
   );
-}
-
-/**
- * Build the body copy for the cancel-confirmation dialog. Branches on
- * the live preview so the user always sees the up-to-date deduction
- * even after a status transition.
- */
-function cancelPreviewMessage(preview) {
-  if (!preview) return 'Are you sure you want to cancel?';
-  const fee = Number(preview.feeCharged) || 0;
-  const refund = Number(preview.refundAmount) || 0;
-
-  // Outstation runs on a TIME-driven policy — surface the tier copy
-  // directly so the user sees WHY the deduction is what it is (e.g.
-  // "within 24h window", "after driver arrived"). The hourly STATUS-
-  // driven copy below stays untouched.
-  if (preview.tier && String(preview.tier).startsWith('outstation_')) {
-    return outstationCancelMessage(preview);
-  }
-
-  // Trip already started — override everything.
-  if (preview.tripStarted) {
-    if (fee > 0) {
-      const parts = [`This trip is in progress. A cancellation fee of \u20B9${fee} will be deducted.`];
-      if (refund > 0) parts.push(`You\u2019ll be refunded \u20B9${refund}.`);
-      return parts.join(' ');
-    }
-    return 'This trip is in progress. Cancelling now will end the ride.';
-  }
-
-  // Driver has reached pickup.
-  if (preview.driverArrived) {
-    if (fee > 0) {
-      const parts = [`The driver has arrived at the pickup location. A cancellation fee of \u20B9${fee} will be deducted.`];
-      if (refund > 0) parts.push(`You\u2019ll be refunded \u20B9${refund}.`);
-      return parts.join(' ');
-    }
-    return 'The driver has arrived at the pickup. You can cancel, but a fee may apply once processed.';
-  }
-
-  // Driver assigned / en route (pre-arrival).
-  if (fee > 0) {
-    const parts = [`The driver is already assigned and on the way. A cancellation fee of \u20B9${fee} will be deducted.`];
-    if (refund > 0) parts.push(`You\u2019ll be refunded \u20B9${refund}.`);
-    return parts.join(' ');
-  }
-
-  return 'No cancellation fee will be charged. The driver will be released.';
-}
-
-/**
- * Build the cancel-confirm copy for outstation bookings. Branches on
- * the tier so the user sees the exact policy line the engine matched
- * (rather than a generic "fee may apply"). All numbers come from the
- * live preview so the dialog stays honest even as the booking moves
- * across tiers (e.g. crossing the 24h mark while the dialog is open).
- */
-function outstationCancelMessage(preview) {
-  const fee = Number(preview.feeCharged) || 0;
-  const refund = Number(preview.refundAmount) || 0;
-  const policy = preview.policy || {};
-  const freeHours = Number(policy.freeCancellationHoursBeforePickup ?? 24);
-  const tier = preview.tier;
-  const tripStarted = !!preview.tripStarted;
-  const hoursUntilPickup =
-    typeof preview.hoursUntilPickup === 'number' ? preview.hoursUntilPickup : null;
-  const refundLine =
-    refund > 0 ? ` You\u2019ll be refunded \u20B9${refund} to your wallet.` : '';
-
-  const describeFee = (type, amount) => {
-    const value = Number(amount) || 0;
-    if (value <= 0) return null;
-    return type === 'percentage' ? `${value}% of the fare` : `\u20B9${value}`;
-  };
-
-  if (tier === OUTSTATION_USER_CANCEL_TIER.DRIVER_ARRIVED) {
-    if (tripStarted) {
-      return `This trip is in progress. \u20B9${fee} will be deducted as the cancellation fee.${refundLine}`;
-    }
-    const arrivedFee = describeFee(policy.arrivedFeeType, policy.arrivedFeeAmount);
-    const floorDays = Number(policy.arrivedFeeMinDays) || 0;
-    const floorLine = floorDays > 0
-      ? ` (the higher of ${arrivedFee || 'the configured fee'} or ${floorDays === 1 ? "one day\u2019s" : `${floorDays} days\u2019`} fare)`
-      : arrivedFee
-        ? ` (${arrivedFee})`
-        : '';
-    return `The driver has reached the pickup location. \u20B9${fee} will be deducted${floorLine}.${refundLine}`;
-  }
-  if (tier === OUTSTATION_USER_CANCEL_TIER.BEFORE_FREE_WINDOW) {
-    if (fee <= 0) {
-      return `You\u2019re cancelling more than ${freeHours}h before pickup\u2014${refund > 0 ? `\u20B9${refund} will be refunded to your wallet in full.` : 'no cancellation fee applies.'}`;
-    }
-    const beforeFee = describeFee(policy.beforeWindowFeeType, policy.beforeWindowFeeAmount);
-    return `You\u2019re cancelling more than ${freeHours}h before pickup. ${beforeFee || `\u20B9${fee}`} (\u20B9${fee}) will be deducted.${refundLine}`;
-  }
-  if (tier === OUTSTATION_USER_CANCEL_TIER.WITHIN_FREE_WINDOW_PRE_ARRIVAL) {
-    const left = hoursUntilPickup != null
-      ? ` (~${Math.max(0, Math.round(hoursUntilPickup))}h until pickup)`
-      : '';
-    const preFee = describeFee(policy.preArrivalFeeType, policy.preArrivalFeeAmount);
-    return `You\u2019re cancelling inside the ${freeHours}h window${left}. ${preFee || `\u20B9${fee}`} (\u20B9${fee}) will be deducted.${refundLine}`;
-  }
-  return `\u20B9${fee} will be deducted.${refundLine}`;
 }
 
 function paymentSummary({ isPaid, isAwaitingPayment, total, payNowAmount }) {

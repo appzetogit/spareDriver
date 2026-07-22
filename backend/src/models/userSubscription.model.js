@@ -4,6 +4,7 @@ import {
   SUBSCRIPTION_STATUS,
   SUBSCRIPTION_ASSIGNMENT_STATUS,
 } from '../constants/serviceTypes.js';
+import { generateSubscriptionNumber } from '../utils/orderNumber.util.js';
 
 const subscriptionPlaceSchema = new mongoose.Schema(
   {
@@ -17,6 +18,8 @@ const subscriptionPlaceSchema = new mongoose.Schema(
 
 const userSubscriptionSchema = new mongoose.Schema(
   {
+    /** Human-readable subscription ID shown to users/admins (e.g. SUB-20260721-48213). */
+    subscriptionNumber: { type: String, unique: true, sparse: true, index: true },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -120,6 +123,14 @@ const userSubscriptionSchema = new mongoose.Schema(
     assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     releasedAt: { type: Date, default: null },
     releaseReason: { type: String, default: '' },
+    cancellationSettlement: {
+      confirmedAt: { type: Date, default: null },
+      confirmedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+    },
     /** History of previously-assigned drivers (when reassignment happens). */
     previousAssignments: {
       type: [
@@ -187,6 +198,13 @@ const userSubscriptionSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+userSubscriptionSchema.pre('validate', function assignSubscriptionNumber(next) {
+  if (!this.subscriptionNumber) {
+    this.subscriptionNumber = generateSubscriptionNumber();
+  }
+  next();
+});
 
 userSubscriptionSchema.index({ userId: 1, status: 1 });
 userSubscriptionSchema.index({ userId: 1, carId: 1, status: 1 });

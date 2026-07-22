@@ -1,21 +1,12 @@
-import { useEffect, useState } from 'react';
+import useAuthSessionStore from '../store/useAuthSessionStore';
 
 /**
- * Wait for a Zustand persist store to finish rehydrating from localStorage.
- * Without this, auth guards see the default `isAuthenticated: false` on the
- * first paint and bounce the user to login even though a session exists.
+ * True once JWT-based session restore has finished (logged in or not).
+ * Guards/auth pages must wait for this so they don't bounce to login
+ * before tokens are checked.
+ *
+ * The unused `store` arg is kept so existing call sites keep working.
  */
-export function useStoreHydration(store) {
-  const [hydrated, setHydrated] = useState(() => store.persist?.hasHydrated?.() ?? true);
-
-  useEffect(() => {
-    if (!store.persist?.onFinishHydration) {
-      setHydrated(true);
-      return undefined;
-    }
-    setHydrated(store.persist.hasHydrated());
-    return store.persist.onFinishHydration(() => setHydrated(true));
-  }, [store]);
-
-  return hydrated;
+export function useStoreHydration(_store) {
+  return useAuthSessionStore((s) => s.status === 'ready');
 }

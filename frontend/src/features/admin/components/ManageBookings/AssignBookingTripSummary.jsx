@@ -385,6 +385,16 @@ const AssignBookingTripSummary = ({
                 <span>₹{Number(fare.extras).toLocaleString('en-IN')}</span>
               </div>
             ) : null}
+            {(Number(fare.couponDiscount) > 0 || fare.couponCode) && (
+              <div className="flex justify-between text-amber-700">
+                <span>
+                  Coupon{fare.couponCode ? ` (${fare.couponCode})` : ''}
+                </span>
+                <span>
+                  −₹{Number(fare.couponDiscount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            )}
             {fare.gst != null && fare.gst > 0 ? (
               <div className="flex justify-between">
                 <span className="text-slate-500">GST</span>

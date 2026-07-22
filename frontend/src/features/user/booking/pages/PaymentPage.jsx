@@ -150,7 +150,19 @@ const PaymentPage = () => {
       toast.success('Ride cancelled — no amount charged.');
       navigate('/user/home', { replace: true });
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Could not cancel');
+      if (err?.alreadyTerminal || err?.code === 'BOOKING_ALREADY_TERMINAL') {
+        navigate('/user/home', { replace: true });
+        return;
+      }
+      const status = useUserActiveBookingStore.getState().booking?.status;
+      if (
+        status === BOOKING_STATUS.CANCELLED ||
+        status === BOOKING_STATUS.NO_DRIVERS_FOUND
+      ) {
+        navigate('/user/home', { replace: true });
+        return;
+      }
+      toast.error(err?.response?.data?.message || err?.message || 'Could not cancel');
     } finally {
       setCancelling(false);
       setConfirmCancel(false);

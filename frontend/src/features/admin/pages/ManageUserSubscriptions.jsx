@@ -23,6 +23,7 @@ import {
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
 import Badge from '../../../components/Badge';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import Drawer from '../../../components/Drawer';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import RowActionsMenu from '../components/RowActionsMenu';
@@ -102,6 +103,15 @@ const ManageUserSubscriptions = () => {
   );
 
   const columns = useMemo(() => [
+    {
+      key: 'subscriptionNumber',
+      label: 'Subscription ID',
+      render: (_, row) => (
+        <span className="text-xs font-mono font-medium text-slate-700 whitespace-nowrap">
+          {row.subscriptionNumber || '—'}
+        </span>
+      ),
+    },
     {
       key: 'customer',
       label: 'Customer',
@@ -385,6 +395,8 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [releaseLastWorkingDate, setReleaseLastWorkingDate] = useState(() => todayInputValue());
   const [subscriptionStatusDraft, setSubscriptionStatusDraft] = useState(subscription.status || '');
   const [subscriptionStatusReason, setSubscriptionStatusReason] = useState('');
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [settlementConfirmed, setSettlementConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const searchRef = useRef(null);
 
@@ -506,6 +518,10 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
       toast.error('Pick a different status');
       return;
     }
+    if (subscriptionStatusDraft === SUBSCRIPTION_STATUS.CANCELLED) {
+      setCancelConfirmOpen(true);
+      return;
+    }
     setSubmitting(true);
     try {
       await api.patch(`/admin/subscriptions/users/${subscription._id}/status`, {
@@ -520,6 +536,39 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
       setSubmitting(false);
     }
   };
+
+  const handleCancelSubscription = async () => {
+    if (!settlementConfirmed) return;
+    setSubmitting(true);
+    try {
+      await api.patch(`/admin/subscriptions/users/${subscription._id}/status`, {
+        status: SUBSCRIPTION_STATUS.CANCELLED,
+        reason: subscriptionStatusReason.trim() || 'Cancelled by admin',
+        settlementConfirmed: true,
+      });
+      toast.success('Subscription cancelled');
+      setCancelConfirmOpen(false);
+      setSettlementConfirmed(false);
+      onUpdated();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not cancel subscription');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const driverSharePool = Number(subscription.driverShareRupees) || 0;
+  const recordedDriverPayouts = Array.isArray(subscription.driverPayouts)
+    ? subscription.driverPayouts.reduce(
+        (sum, payout) => sum + (Number(payout.amountRupees) || 0),
+        0,
+      )
+    : 0;
+  const paidToDrivers =
+    recordedDriverPayouts > 0 || !subscription.driverSharePaidAt
+      ? recordedDriverPayouts
+      : driverSharePool;
+  const remainingDriverShare = Math.max(0, driverSharePool - paidToDrivers);
 
   const handleRelease = async () => {
     if (!subscription.assignedDriverId) return;
@@ -545,7 +594,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   return (
     <Drawer
       isOpen
-      onClose={() => !submitting && onClose()}
+      onClose={() => !submitting && !cancelConfirmOpen && onClose()}
       header={(
         <div className="px-5 py-4 border-b border-slate-100">
           <h2 className="text-lg font-bold text-slate-900">Assign dedicated driver</h2>
@@ -559,6 +608,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         <div className="rounded-2xl bg-slate-50 p-4 text-sm space-y-3">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Subscription details</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+            <DetailLine label="Subscription ID" value={subscription.subscriptionNumber || '—'} />
             <DetailLine label="Customer" value={subscription.userId?.name || '—'} />
             <DetailLine label="Plan" value={subscription.planNameSnapshot || subscription.planId?.name || '—'} />
             <DetailLine label="Zone" value={`${subscription.zoneId?.name || '—'}${subscription.zoneId?.city ? ` · ${subscription.zoneId.city}` : ''}`} />
@@ -603,7 +653,11 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               onChange={(e) => setSubscriptionStatusDraft(e.target.value)}
               className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
             >
-              {Object.values(SUBSCRIPTION_STATUS).map((s) => (
+              {[
+                SUBSCRIPTION_STATUS.ACTIVE,
+                SUBSCRIPTION_STATUS.EXPIRED,
+                SUBSCRIPTION_STATUS.CANCELLED,
+              ].map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, ' ')}
                 </option>
@@ -865,6 +919,51 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         open={Boolean(detailDriver)}
         onClose={() => setDetailDriver(null)}
       />
+      <ConfirmDialog
+        open={cancelConfirmOpen}
+        onClose={() => {
+          if (!submitting) {
+            setCancelConfirmOpen(false);
+            setSettlementConfirmed(false);
+          }
+        }}
+        onConfirm={handleCancelSubscription}
+        title="Cancel this subscription?"
+        description="Cancellation releases the assigned driver and cannot be undone."
+        confirmLabel="Cancel subscription"
+        variant="danger"
+        loading={submitting}
+        confirmDisabled={!settlementConfirmed}
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+            <div className="flex justify-between gap-3">
+              <span>Driver payout pool</span>
+              <span className="font-semibold">₹{driverSharePool.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Recorded paid</span>
+              <span className="font-semibold">₹{paidToDrivers.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="flex justify-between gap-3 text-amber-700">
+              <span>Remaining pool</span>
+              <span className="font-semibold">₹{remainingDriverShare.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+          <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-900">
+            <input
+              type="checkbox"
+              checked={settlementConfirmed}
+              onChange={(e) => setSettlementConfirmed(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              I confirm all customer payments, driver payouts, refunds, working-day
+              obligations, and other settlement items have been completed.
+            </span>
+          </label>
+        </div>
+      </ConfirmDialog>
     </Drawer>
   );
 }

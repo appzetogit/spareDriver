@@ -300,3 +300,94 @@ export function previewDriverCancellation(booking) {
     chance,
   };
 }
+
+/**
+ * Confirm-dialog body for a user cancellation. Uses the live preview so
+ * fee / refund copy matches admin policy for this trip type + status.
+ */
+export function buildUserCancelConfirmMessage(preview) {
+  if (!preview) return 'Are you sure you want to cancel?';
+  const fee = Number(preview.feeCharged) || 0;
+  const refund = Number(preview.refundAmount) || 0;
+
+  if (preview.tier && String(preview.tier).startsWith('outstation_')) {
+    return buildOutstationCancelConfirmMessage(preview);
+  }
+
+  if (preview.tripStarted) {
+    if (fee > 0) {
+      const parts = [`This trip is in progress. A cancellation fee of \u20B9${fee} will be deducted.`];
+      if (refund > 0) parts.push(`You\u2019ll be refunded \u20B9${refund}.`);
+      return parts.join(' ');
+    }
+    return 'This trip is in progress. Cancelling now will end the ride.';
+  }
+
+  if (preview.driverArrived) {
+    if (fee > 0) {
+      const parts = [`The driver has arrived at the pickup location. A cancellation fee of \u20B9${fee} will be deducted.`];
+      if (refund > 0) parts.push(`You\u2019ll be refunded \u20B9${refund}.`);
+      return parts.join(' ');
+    }
+    return 'The driver has arrived at the pickup. You can cancel, but a fee may apply once processed.';
+  }
+
+  if (fee > 0) {
+    const parts = [`A cancellation fee of \u20B9${fee} will be deducted.`];
+    if (refund > 0) parts.push(`You\u2019ll be refunded \u20B9${refund}.`);
+    return parts.join(' ');
+  }
+
+  if (refund > 0) {
+    return `No cancellation fee will be charged. \u20B9${refund} will be refunded to your wallet.`;
+  }
+  return 'No cancellation fee will be charged.';
+}
+
+function buildOutstationCancelConfirmMessage(preview) {
+  const fee = Number(preview.feeCharged) || 0;
+  const refund = Number(preview.refundAmount) || 0;
+  const policy = preview.policy || {};
+  const freeHours = Number(policy.freeCancellationHoursBeforePickup ?? 24);
+  const tier = preview.tier;
+  const tripStarted = !!preview.tripStarted;
+  const hoursUntilPickup =
+    typeof preview.hoursUntilPickup === 'number' ? preview.hoursUntilPickup : null;
+  const refundLine =
+    refund > 0 ? ` You\u2019ll be refunded \u20B9${refund} to your wallet.` : '';
+
+  const describeFee = (type, amount) => {
+    const value = Number(amount) || 0;
+    if (value <= 0) return null;
+    return type === 'percentage' ? `${value}% of the fare` : `\u20B9${value}`;
+  };
+
+  if (tier === OUTSTATION_USER_CANCEL_TIER.DRIVER_ARRIVED) {
+    if (tripStarted) {
+      return `This trip is in progress. \u20B9${fee} will be deducted as the cancellation fee.${refundLine}`;
+    }
+    const arrivedFee = describeFee(policy.arrivedFeeType, policy.arrivedFeeAmount);
+    const floorDays = Number(policy.arrivedFeeMinDays) || 0;
+    const floorLine = floorDays > 0
+      ? ` (the higher of ${arrivedFee || 'the configured fee'} or ${floorDays === 1 ? "one day\u2019s" : `${floorDays} days\u2019`} fare)`
+      : arrivedFee
+        ? ` (${arrivedFee})`
+        : '';
+    return `The driver has reached the pickup location. \u20B9${fee} will be deducted${floorLine}.${refundLine}`;
+  }
+  if (tier === OUTSTATION_USER_CANCEL_TIER.BEFORE_FREE_WINDOW) {
+    if (fee <= 0) {
+      return `You\u2019re cancelling more than ${freeHours}h before pickup\u2014${refund > 0 ? `\u20B9${refund} will be refunded to your wallet in full.` : 'no cancellation fee applies.'}`;
+    }
+    const beforeFee = describeFee(policy.beforeWindowFeeType, policy.beforeWindowFeeAmount);
+    return `You\u2019re cancelling more than ${freeHours}h before pickup. ${beforeFee || `\u20B9${fee}`} (\u20B9${fee}) will be deducted.${refundLine}`;
+  }
+  if (tier === OUTSTATION_USER_CANCEL_TIER.WITHIN_FREE_WINDOW_PRE_ARRIVAL) {
+    const left = hoursUntilPickup != null
+      ? ` (~${Math.max(0, Math.round(hoursUntilPickup))}h until pickup)`
+      : '';
+    const preFee = describeFee(policy.preArrivalFeeType, policy.preArrivalFeeAmount);
+    return `You\u2019re cancelling inside the ${freeHours}h window${left}. ${preFee || `\u20B9${fee}`} (\u20B9${fee}) will be deducted.${refundLine}`;
+  }
+  return `\u20B9${fee} will be deducted.${refundLine}`;
+}

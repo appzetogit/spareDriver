@@ -6,13 +6,17 @@ import { BOOKING_STATUS, PAYMENT_POLICY } from '../../../../constants/bookingSta
  * it returns:
  *
  *   - `startedAt`          when the ride actually started (timeline)
- *   - `scheduledEndAt`     startedAt + (booked + extensions) hours
+ *   - `scheduledEndAt`     startedAt + (booked + accepted extensions) hours
  *   - `remainingSeconds`   negative once we've crossed `scheduledEndAt`
  *   - `elapsedSeconds`     seconds since startedAt
  *   - `isStarted`          true while the booking status === STARTED
  *   - `shouldPromptExtension`  fires when remaining drops below the
  *                              configured lead time AND the booking hasn't
  *                              been extended in the last 5 minutes.
+ *
+ * Only `accepted` (paid) extensions add to the clock. Pending OTP /
+ * pending-payment rows are ignored so the timer never jumps before the
+ * handshake completes.
  *
  * The hook is pure timer + derived state — surfacing the prompt is left
  * to the page so the same data can drive other UI (progress bars, badges).
@@ -27,8 +31,15 @@ export function useRideTimer(booking) {
 
   const totalHours = useMemo(() => {
     const base = booking?.hourly?.durationHours || 0;
-    const extra =
-      (booking?.extensions || []).reduce((sum, ext) => sum + (ext?.additionalHours || 0), 0);
+    // Only paid (`accepted`) extensions extend the clock. Counting
+    // `pending_otp` / `pending_payment` here made the timer jump as soon
+    // as the customer tapped Extend — before OTP verify + wallet pay —
+    // while the invoice correctly ignored those unpaid rows.
+    const extra = (booking?.extensions || []).reduce(
+      (sum, ext) =>
+        sum + (ext?.status === 'accepted' ? Number(ext.additionalHours) || 0 : 0),
+      0,
+    );
     return base + extra;
   }, [booking?.hourly?.durationHours, booking?.extensions]);
 

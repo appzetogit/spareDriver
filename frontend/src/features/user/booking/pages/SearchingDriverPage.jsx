@@ -173,20 +173,50 @@ const SearchingDriverPage = () => {
     if (cancelling) return;
     setCancelling(true);
     try {
-      await cancelBooking('cancelled_by_user');
-      // The cancellation refund (if any) hits the wallet atomically on
-      // the backend — pull the fresh balance now.
+      const result = await cancelBooking('cancelled_by_user');
       fetchWallet().catch(() => {});
-      draftReset();
       setCancelConfirmOpen(false);
+
+      // cancelBooking may re-sync a booking the server already closed
+      // (driver cancel / no drivers). Leave routing to the status effect
+      // so no-drivers still lands on the slab retry screen.
+      const status = result?.status;
+      if (
+        status === BOOKING_STATUS.NO_DRIVERS_FOUND ||
+        status === BOOKING_STATUS.CANCELLED
+      ) {
+        if (status === BOOKING_STATUS.CANCELLED) {
+          draftReset();
+          clearActiveBooking();
+          navigate('/user/home', { replace: true });
+        }
+        // NO_DRIVERS_FOUND: keep booking in store; useEffect redirects to slab.
+        return;
+      }
+
+      draftReset();
+      clearActiveBooking();
       navigate('/user/home', { replace: true });
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Could not cancel');
       setCancelConfirmOpen(false);
+      if (err?.alreadyTerminal || err?.code === 'BOOKING_ALREADY_TERMINAL') {
+        fetchWallet().catch(() => {});
+        clearActiveBooking();
+        draftReset();
+        navigate('/user/home', { replace: true });
+        return;
+      }
+      toast.error(err?.response?.data?.message || err?.message || 'Could not cancel');
     } finally {
       setCancelling(false);
     }
   };
+
+  const canCancel =
+    !!booking &&
+    bookingStatus !== BOOKING_STATUS.NO_DRIVERS_FOUND &&
+    bookingStatus !== BOOKING_STATUS.CANCELLED &&
+    bookingStatus !== BOOKING_STATUS.COMPLETED;
 
   const attempt = booking?.dispatch?.attemptsCount || 0;
   const maxAttempts = booking?.dispatch?.maxAttempts || 5;
@@ -235,15 +265,17 @@ const SearchingDriverPage = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={cancelling}
-            onClick={() => setCancelConfirmOpen(true)}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-red-600 font-semibold py-3 text-sm disabled:opacity-60 hover:bg-red-100 transition"
-          >
-            <X className="w-4 h-4" />
-            {cancelling ? 'Cancelling…' : 'Cancel booking'}
-          </button>
+          {canCancel && (
+            <button
+              type="button"
+              disabled={cancelling}
+              onClick={() => setCancelConfirmOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-red-600 font-semibold py-3 text-sm disabled:opacity-60 hover:bg-red-100 transition"
+            >
+              <X className="w-4 h-4" />
+              {cancelling ? 'Cancelling…' : 'Cancel booking'}
+            </button>
+          )}
         </div>
       </div>
 

@@ -28,13 +28,17 @@ const OutstationSettingsSheet = ({
   const [allIndiaOk, setAllIndiaOk] = useState(!!initialAllIndiaOk);
   const [hours, setHours] = useState(initialHours || 10);
 
+  // Reset drafts only when the sheet transitions to open — the initial* props
+  // get new identities on every parent render, so keying the effect on them
+  // would wipe the user's in-progress selection.
   useEffect(() => {
     if (!isOpen) return;
     setSelected(new Set(initialZoneIds.map(String)));
     setAllIndiaOk(!!initialAllIndiaOk);
     setHours(initialHours || 10);
     setSearch('');
-  }, [isOpen, initialZoneIds, initialAllIndiaOk, initialHours]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return undefined;

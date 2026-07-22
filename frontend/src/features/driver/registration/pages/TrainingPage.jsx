@@ -11,6 +11,7 @@ import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 
 const TrainingPage = () => {
   const navigate = useNavigate();
+  const driver = useDriverAuthStore((s) => s.driver);
   const updateDriver = useDriverAuthStore((s) => s.updateDriver);
   const [videos, setVideos] = useState([]);
   const [allRequiredComplete, setAllRequiredComplete] = useState(false);
@@ -18,6 +19,7 @@ const TrainingPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [savingId, setSavingId] = useState(null);
   const [activeId, setActiveId] = useState(null);
+  const isApproved = driver?.approvalStatus === 'approved';
 
   const fetchTraining = useCallback(async () => {
     setLoading(true);
@@ -69,9 +71,15 @@ const TrainingPage = () => {
 
   const handleSubmit = async () => {
     if (!allRequiredComplete) {
-      alert('Please complete all required training videos before submitting.');
+      alert('Please complete all required training videos.');
       return;
     }
+
+    if (isApproved) {
+      navigate('/driver/account', { replace: true });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await api.post('/driver/onboarding/submit');
@@ -105,12 +113,16 @@ const TrainingPage = () => {
       <div className="px-6 pt-2 pb-4">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-bold">Training & Certification</h1>
-          <span className="text-xs text-text-muted bg-bg px-2 py-1 rounded-full">6/6</span>
+          {!isApproved && (
+            <span className="text-xs text-text-muted bg-bg px-2 py-1 rounded-full">6/6</span>
+          )}
         </div>
-        <StepIndicator steps={DRIVER_ONBOARDING_STEPS} currentStep={6} />
+        {!isApproved && <StepIndicator steps={DRIVER_ONBOARDING_STEPS} currentStep={6} />}
         <p className="text-xs text-text-muted mt-3 flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5" />
-          Watch all required videos to complete registration. This step cannot be skipped.
+          {isApproved
+            ? 'Complete new training without changing your approved status.'
+            : 'Watch all required videos to complete registration. This step cannot be skipped.'}
         </p>
         <p className="text-xs font-semibold text-slate-600 mt-2">
           {completedCount}/{videos.length} completed
@@ -138,15 +150,19 @@ const TrainingPage = () => {
           <Button
             fullWidth
             loading={submitting}
-            disabled={!allRequiredComplete || submitting || videos.length === 0}
+            disabled={
+              !allRequiredComplete ||
+              submitting ||
+              (!isApproved && videos.length === 0)
+            }
             onClick={handleSubmit}
             className="rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20"
           >
-            SUBMIT APPLICATION
+            {isApproved ? 'TRAINING COMPLETE' : 'SUBMIT APPLICATION'}
           </Button>
           {!allRequiredComplete && (
             <p className="text-xs text-center text-amber-700 mt-2 font-medium">
-              Complete all required videos to submit
+              Complete all required videos
             </p>
           )}
         </div>

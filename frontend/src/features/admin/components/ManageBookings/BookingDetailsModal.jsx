@@ -3,9 +3,11 @@ import toast from 'react-hot-toast';
 import AdminDetailModal from '../AdminDetailModal';
 import Badge from '../../../../components/Badge';
 import Button from '../../../../components/Button';
+import ConfirmDialog from '../../../../components/ConfirmDialog';
 import api from '../../../../utils/api';
 import { BOOKING_STATUS_LIST } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
+import useAdminAuthStore from '../../../../store/useAdminAuthStore';
 import {
   CalendarClock,
   Car,
@@ -318,6 +320,9 @@ const BookingDetailsModal = ({
   const [statusDraft, setStatusDraft] = useState('');
   const [statusReason, setStatusReason] = useState('');
   const [statusSaving, setStatusSaving] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const admin = useAdminAuthStore((s) => s.admin);
 
   if (!booking) return null;
 
@@ -369,6 +374,18 @@ const BookingDetailsModal = ({
   const netPlatformRevenue = Math.round((grossPlatformRevenue - couponDiscount) * 100) / 100;
 
   const statusVariant = STATUS_VARIANTS[booking.status] || 'default';
+  const canCancel =
+    ['admin', 'sub_admin'].includes(admin?.role) &&
+    [
+      'pending_assignment',
+      'searching',
+      'driver_assigned',
+      'awaiting_payment',
+      'en_route',
+      'arrived',
+      'started',
+      'in_emergency_pool',
+    ].includes(booking.status);
 
   const saveStatus = async () => {
     if (!currentStatus || currentStatus === booking.status) {
@@ -388,6 +405,29 @@ const BookingDetailsModal = ({
       onStatusUpdated?.(updated || { ...booking, status: currentStatus });
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Could not update status');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const cancelBooking = async () => {
+    setStatusSaving(true);
+    try {
+      const res = await api.patch(`/admin/bookings/${booking._id}/status`, {
+        status: 'cancelled',
+        reason: cancelReason.trim() || 'Cancelled by admin',
+      });
+      const updated = res?.data?.data?.booking;
+      toast.success('Trip cancelled. Any paid fare was sent for a full refund.');
+      setCancelOpen(false);
+      setCancelReason('');
+      if (onStatusUpdated) {
+        onStatusUpdated(updated || { ...booking, status: 'cancelled' });
+      } else {
+        onClose();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not cancel trip');
     } finally {
       setStatusSaving(false);
     }
@@ -433,6 +473,20 @@ const BookingDetailsModal = ({
       }
     >
       <div className="space-y-4">
+        {canCancel && (
+          <Section title="Cancel trip" icon={AlertCircle}>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <p className="text-xs text-slate-500 flex-1">
+                Cancelling releases the driver and active timers. Paid fares receive a full
+                refund with no cancellation fee.
+              </p>
+              <Button type="button" variant="danger" onClick={() => setCancelOpen(true)}>
+                Cancel trip
+              </Button>
+            </div>
+          </Section>
+        )}
+
         {canEditStatus && (
           <Section title="Admin status override" icon={AlertCircle}>
             <p className="text-xs text-slate-500 mb-3">
@@ -444,7 +498,7 @@ const BookingDetailsModal = ({
                 onChange={(e) => setStatusDraft(e.target.value)}
                 className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
               >
-                {BOOKING_STATUS_LIST.map((s) => (
+                {BOOKING_STATUS_LIST.filter((s) => s !== 'cancelled').map((s) => (
                   <option key={s} value={s}>
                     {s.replace(/_/g, ' ')}
                   </option>
@@ -1000,6 +1054,33 @@ const BookingDetailsModal = ({
           </Section>
         )}
       </div>
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => {
+          if (!statusSaving) {
+            setCancelOpen(false);
+            setCancelReason('');
+          }
+        }}
+        onConfirm={cancelBooking}
+        title="Cancel this trip?"
+        description="This cannot be undone. The driver will be released and any paid fare will be fully refunded."
+        confirmLabel="Cancel trip"
+        variant="danger"
+        loading={statusSaving}
+      >
+        <label className="block">
+          <span className="font-semibold text-slate-700">Reason (optional)</span>
+          <textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={3}
+            maxLength={500}
+            placeholder="Why is the admin cancelling this trip?"
+            className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          />
+        </label>
+      </ConfirmDialog>
     </AdminDetailModal>
   );
 };

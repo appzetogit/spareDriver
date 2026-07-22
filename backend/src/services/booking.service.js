@@ -1180,7 +1180,12 @@ export async function createBookingService(userId, body) {
 /* Cancel                                                              */
 /* ------------------------------------------------------------------ */
 
-export async function cancelBookingByUserService(userId, bookingId, reason = '') {
+export async function cancelBookingByUserService(
+  userId,
+  bookingId,
+  reason = '',
+  { cancelledBy = 'user', waiveCancellationFee = false } = {},
+) {
   const booking = await Booking.findOne({ _id: bookingId, userId, isDeleted: false });
   if (!booking) throw new ApiError(404, 'Booking not found');
   if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
@@ -1190,7 +1195,20 @@ export async function cancelBookingByUserService(userId, bookingId, reason = '')
   // is then split into a driver share + company share per the
   // `driverSharePercent` knob on the same policy.
   const policy = await loadCancellationPolicy(booking.serviceType);
-  const breakdown = computeUserCancellation(booking, policy);
+  const paidAmount = Math.round(
+    (Number(booking?.payment?.amountPaidRupees) || 0) * 100,
+  ) / 100;
+  const breakdown = waiveCancellationFee
+    ? {
+        feeCharged: 0,
+        refundAmount: paidAmount,
+        driverShare: 0,
+        companyShare: 0,
+        tripStarted: booking.status === BOOKING_STATUS.STARTED,
+        tier: 'admin_full_refund',
+        hoursUntilPickup: null,
+      }
+    : computeUserCancellation(booking, policy);
   const {
     feeCharged,
     refundAmount,
@@ -1210,8 +1228,12 @@ export async function cancelBookingByUserService(userId, bookingId, reason = '')
   booking.cancellation = {
     reason:
       reason ||
-      (tripStarted ? 'cancelled_by_user_after_start' : 'cancelled_by_user'),
-    cancelledBy: 'user',
+      (cancelledBy === 'admin'
+        ? 'cancelled_by_admin'
+        : tripStarted
+          ? 'cancelled_by_user_after_start'
+          : 'cancelled_by_user'),
+    cancelledBy,
     feeCharged,
     refundAmount,
     driverShare,
@@ -1273,7 +1295,10 @@ export async function cancelBookingByUserService(userId, bookingId, reason = '')
     } else {
       // Legacy Razorpay path — admin processes manually.
       refundRecord = await issueBookingRefundService(booking, {
-        initiatedBy: REFUND_INITIATED_BY.USER,
+        initiatedBy:
+          cancelledBy === 'admin'
+            ? REFUND_INITIATED_BY.ADMIN
+            : REFUND_INITIATED_BY.USER,
         reason: booking.cancellation.reason,
         breakdown: {
           amountRupees: refundAmount,
@@ -1362,6 +1387,18 @@ export async function cancelBookingByUserService(userId, bookingId, reason = '')
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
 
   return booking.toObject();
+}
+
+export async function cancelBookingByAdminService(bookingId, reason = '') {
+  const booking = await Booking.findOne({ _id: bookingId, isDeleted: false })
+    .select('userId')
+    .lean();
+  if (!booking) throw new ApiError(404, 'Booking not found');
+
+  return cancelBookingByUserService(booking.userId, bookingId, reason, {
+    cancelledBy: 'admin',
+    waiveCancellationFee: true,
+  });
 }
 
 export async function adminMarkNoDriversFoundService(bookingId) {

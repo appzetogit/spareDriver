@@ -49,12 +49,14 @@ const RatePayPage = () => {
   const driverObj = typeof booking?.driverId === 'object' ? booking?.driverId : null;
   const driverName = driverObj?.name || 'Your driver';
   const totalFare = useMemo(() => {
-    const base = booking?.fareSnapshot?.total || 0;
+    const base = Number(booking?.fareSnapshot?.total) || 0;
+    const waiting = Number(booking?.waiting?.chargeRupees) || 0;
     const extensions = (booking?.extensions || []).reduce(
-      (sum, ext) => sum + (ext?.fareDelta || 0),
+      (sum, ext) =>
+        sum + (ext?.status === 'accepted' ? Number(ext.fareDelta) || 0 : 0),
       0,
     );
-    return base + extensions || null;
+    return base + waiting + extensions || null;
   }, [booking]);
 
   const handleSubmit = async () => {

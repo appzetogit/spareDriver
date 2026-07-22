@@ -13,6 +13,8 @@ import {
 import Button from '../../../../components/Button';
 import TopupSheet from '../../wallet/components/TopupSheet';
 
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 /**
  * Extend-your-ride modal — 3-step handshake with mid-flow recovery.
  *
@@ -173,12 +175,16 @@ const ExtendRideModal = ({
   // Preview cost during step 1. After initiate we use the server's
   // fareDelta (canonical — includes service charge + GST).
   const previewCost = useMemo(
-    () => Math.max(0, hours) * unitRate,
+    () => round2(Math.max(0, hours) * unitRate),
     [hours, unitRate],
   );
 
-  const lockedFareDelta = Number(extension?.fareDelta || 0);
-  const walletShortBy = Math.max(0, lockedFareDelta - Number(walletBalance || 0));
+  const lockedFareDelta = round2(extension?.fareDelta || 0);
+  // Round after subtract — raw float math yields noise like
+  // ₹201.85000000000008 when fareDelta − walletBalance isn't exact in binary.
+  const walletShortBy = round2(
+    Math.max(0, lockedFareDelta - Number(walletBalance || 0)),
+  );
   const canPay = walletShortBy <= 0 && lockedFareDelta > 0;
 
   // Helpers --------------------------------------------------------

@@ -1,12 +1,23 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { driverNeedsPhone } from '../features/auth/utils/authNavigation';
 import { isApplicationSubmitted } from '../utils/driverOnboarding';
+import { useStoreHydration } from '../hooks/useStoreHydration';
 
 const OnboardingGuard = () => {
+  const hydrated = useStoreHydration(useDriverAuthStore);
   const { isAuthenticated, driver } = useDriverAuthStore();
   const location = useLocation();
   const path = location.pathname;
+
+  if (!hydrated) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/driver/login" replace />;
@@ -18,6 +29,13 @@ const OnboardingGuard = () => {
 
   const step = driver?.onboardingStep ?? 0;
   const submitted = isApplicationSubmitted(driver);
+
+  if (
+    driver?.approvalStatus === 'approved' &&
+    path.includes('/register/training')
+  ) {
+    return <Outlet />;
+  }
 
   if (driver?.approvalStatus === 'approved' && (step >= 6 || submitted)) {
     return <Navigate to="/driver/home" replace />;

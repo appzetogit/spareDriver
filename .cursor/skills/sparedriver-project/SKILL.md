@@ -15,7 +15,7 @@ Use the map below first; only `Glob`/`Grep`/`Read` for things not covered here.
 ## Stack
 
 - Monorepo, two apps: `backend/` (Node 18+, Express 4, ESM, Mongoose 8) and `frontend/` (Vite 8, React 19, Tailwind 4, Zustand 5, Socket.IO client).
-- Auth: JWT in cookies + Google OAuth + Firebase Phone OTP. Realtime: Socket.IO. Payments: Razorpay. Storage: Cloudinary. Email: Resend.
+- Auth: JWT in cookies + localStorage (source of truth). Zustand auth stores are in-memory only; `useAuthSessionStore` restores session from JWT on boot. Google OAuth + Firebase Phone OTP. Realtime: Socket.IO. Payments: Razorpay. Storage: Cloudinary. Email: Resend.
 - Validation: Zod (backend). Both apps use ESM (`"type": "module"`).
 
 ## Why Firebase (Realtime Database)
@@ -58,8 +58,9 @@ frontend/src/
               landing pages use AppSettings + LegalDocument (privacy/terms/refund/pricing)
   components/             # shared UI primitives (Button, Modal, BottomSheet, maps/, dialogs/, ...)
   store/                  # zustand stores
-    useUserAuthStore.js, useDriverAuthStore.js, useAdminAuthStore.js, useSocketStore.js
-    user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore
+    useUserAuthStore.js, useDriverAuthStore.js, useAdminAuthStore.js, useAuthSessionStore.js, useSocketStore.js
+    # Auth stores are in-memory; useAuthSessionStore bootstraps them from JWT (cookie/localStorage)
+    user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore, useAdsStore, useNearbyDriversStore
     driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverIncomingScheduledStore (scheduled + outstation + subscription inbox), useDriverSubscriptionsStore (assigned dedicated-driver plans), useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
     admin/  — useAdmin{Drivers,Users,KitOrders,Kits,Refunds,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool}Store
   hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...

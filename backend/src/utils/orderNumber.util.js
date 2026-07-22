@@ -15,3 +15,7 @@ export function generateKitOrderNumber() {
 export function generateBookingNumber() {
   return `BK-${dateStamp()}-${randSuffix(6)}`;
 }
+
+export function generateSubscriptionNumber() {
+  return `SUB-${dateStamp()}-${randSuffix(5)}`;
+}

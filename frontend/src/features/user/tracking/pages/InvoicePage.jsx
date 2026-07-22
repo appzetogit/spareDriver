@@ -65,17 +65,16 @@ const InvoicePage = () => {
       }
     }
 
-    // Mirror the same total math as the TripCompleted screen so the two
-    // pages can never disagree on what the user owes/paid.
-    const base = booking.fareSnapshot?.total || 0;
-    // Invoices only include extensions the customer actually paid for.
-    // Pending / declined / expired intents must not inflate the bill.
+    // Same effective total as TripDetails / backend amountDue math:
+    // fareSnapshot.total + accepted extensions + settled waiting.
+    const base = Number(booking.fareSnapshot?.total) || 0;
+    const waiting = Number(booking.waiting?.chargeRupees) || 0;
     const extensions = (booking.extensions || []).reduce(
       (sum, ext) =>
         sum + (ext?.status === 'accepted' ? Number(ext.fareDelta) || 0 : 0),
       0,
     );
-    const total = base + extensions || null;
+    const total = base + waiting + extensions || null;
 
     return { id, date, service, distance, duration, total };
   }, [booking]);

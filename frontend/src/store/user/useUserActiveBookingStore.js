@@ -226,10 +226,35 @@ const useUserActiveBookingStore = create((set, get) => ({
   async cancelBooking(reason = 'cancelled_by_user') {
     const id = get().booking?._id;
     if (!id) return null;
-    const res = await api.post(`/auth/bookings/${id}/cancel`, { reason });
-    const booking = res?.data?.data?.booking || null;
-    set({ booking });
-    return booking;
+    try {
+      const res = await api.post(`/auth/bookings/${id}/cancel`, { reason });
+      const booking = res?.data?.data?.booking || null;
+      set({ booking });
+      return booking;
+    } catch (err) {
+      // Driver cancel / no-drivers / payment timeout may have already
+      // closed the booking. Re-fetch so the UI can redirect instead of
+      // stranding the user on a cancel error toast.
+      const msg = err?.response?.data?.message || '';
+      if (err?.response?.status === 400 && /no longer cancellable/i.test(msg)) {
+        try {
+          const res = await api.get(`/auth/bookings/${id}`);
+          const booking = res?.data?.data?.booking || null;
+          if (booking) {
+            set({ booking });
+            return booking;
+          }
+        } catch {
+          /* fall through */
+        }
+        set({ booking: null });
+        const syncErr = new Error(msg || 'This booking is no longer cancellable');
+        syncErr.code = 'BOOKING_ALREADY_TERMINAL';
+        syncErr.alreadyTerminal = true;
+        throw syncErr;
+      }
+      throw err;
+    }
   },
 
   async createPaymentOrder() {

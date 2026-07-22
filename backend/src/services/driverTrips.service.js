@@ -250,19 +250,22 @@ export async function getDriverHomeSummaryService(driverId) {
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
 
-  const [today, driver, activeBookingRaw] = await Promise.all([
+  const [today, driver, activeBookingsRaw] = await Promise.all([
     aggregateEarnings(driverId, todayStart, todayEnd),
     Driver.findById(driverId)
       .select('rating ratingCount cancellationChances')
       .lean(),
-    Booking.findOne({
+    Booking.find({
       driverId,
       status: { $in: ACTIVE_BOOKING_STATUSES },
       isDeleted: false,
     })
+      .sort({ createdAt: -1 })
       .populate('userId', 'name phone phone_no profilePicture')
       .lean(),
   ]);
+
+  const activeBookingRaw = activeBookingsRaw[0] || null;
 
   // Cancellation budget for today. We hand the driver-side UI a
   // structured snapshot so it can render "2/3 free cancels left today"
@@ -294,13 +297,19 @@ export async function getDriverHomeSummaryService(driverId) {
     );
   }
 
+  const activeBookings = activeBookingsRaw
+    .map((b) => sanitizeBookingForDriver(b))
+    .filter(Boolean);
+
   return {
     today,
     rating: {
       value: Number(driver?.rating || 0),
       count: Number(driver?.ratingCount || 0),
     },
-    activeBooking: sanitizeBookingForDriver(activeBookingRaw),
+    // Keep singular field for older clients; prefer `activeBookings`.
+    activeBooking: activeBookings[0] || null,
+    activeBookings,
     cancellationChances,
   };
 }

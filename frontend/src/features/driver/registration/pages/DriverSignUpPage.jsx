@@ -1,18 +1,28 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import Button from '../../../../components/Button';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
+import { useStoreHydration } from '../../../../hooks/useStoreHydration';
 
 const DriverSignUpPage = () => {
   const navigate = useNavigate();
+  const hydrated = useStoreHydration(useDriverAuthStore);
   const { isAuthenticated, driver } = useDriverAuthStore();
 
   useEffect(() => {
-    if (isAuthenticated && driver) {
-      navigateDriverAfterAuth(navigate, driver);
-    }
-  }, [isAuthenticated, driver, navigate]);
+    if (!hydrated || !isAuthenticated || !driver) return;
+    navigateDriverAfterAuth(navigate, driver);
+  }, [hydrated, isAuthenticated, driver, navigate]);
+
+  if (!hydrated || (isAuthenticated && driver)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh relative">

@@ -34,15 +34,27 @@ const HourlySlabSelectionPage = () => {
   // when the dispatcher exhausts every wave without an accept. We surface
   // it as a dismissible banner so the user can retune the duration and
   // submit again — the draft itself is preserved on purpose.
-  const [noDriversBanner, setNoDriversBanner] = useState(
-    !!location.state?.noDriversFound,
-  );
+  //
+  // `fromNoDriversFound` stays true for the lifetime of this mount so
+  // Back goes to home (not into the abandoned search / confirm stack).
+  // Dismissing the banner must NOT clear that — only a normal entry
+  // from trip-details should keep history back behavior.
+  const [fromNoDriversFound] = useState(!!location.state?.noDriversFound);
+  const [noDriversBanner, setNoDriversBanner] = useState(fromNoDriversFound);
   useEffect(() => {
     if (!location.state?.noDriversFound) return;
     // Strip the flag off the history entry so a refresh / back-nav doesn't
-    // resurrect the banner.
+    // resurrect the banner via location.state — component state still holds it.
     navigate(location.pathname, { replace: true, state: {} });
   }, [location.state, location.pathname, navigate]);
+
+  const handleBack = () => {
+    if (fromNoDriversFound) {
+      navigate('/user/home', { replace: true });
+      return;
+    }
+    navigate(-1);
+  };
 
   const { data: pricingList } = useCachedQuery(
     useUserServicePricingsStore,
@@ -189,6 +201,7 @@ const HourlySlabSelectionPage = () => {
     <PageShell
       title="Pick a duration"
       subtitle="Hourly bookings — choose a slab or set custom hours."
+      onBack={handleBack}
       footer={
         <Button
           fullWidth
