@@ -473,14 +473,14 @@ const ManageOutstationAssignments = () => {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           {canAssign && (
             <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
               <select
                 value={filters.zoneId}
                 onChange={(e) => { setFilters((f) => ({ ...f, zoneId: e.target.value })); setPage(1); }}
-                className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none transition-all"
+                className="w-full h-10 pl-9.5 pr-8 text-sm leading-normal rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none transition-all flex items-center"
               >
                 <option value="">All zones</option>
                 {zones.map((z) => (
@@ -489,30 +489,30 @@ const ManageOutstationAssignments = () => {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
             </div>
           )}
           <div className="relative">
-            <ListTree className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <ListTree className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
             <select
               value={filters.status}
               onChange={(e) => { setFilters((f) => ({ ...f, status: e.target.value })); setPage(1); }}
-              className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none transition-all"
+              className="w-full h-10 pl-9.5 pr-8 text-sm leading-normal rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none transition-all flex items-center"
             >
               {STATUS_FILTER_OPTIONS.map((opt) => (
                 <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
           </div>
           <div className="relative">
-            <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
             <input
               type="text"
               placeholder="Pickup city"
               value={filters.city}
               onChange={(e) => { setFilters((f) => ({ ...f, city: e.target.value })); setPage(1); }}
-              className="w-full h-10 pl-9 pr-4 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              className="w-full h-10 pl-9.5 pr-4 text-sm leading-normal rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all flex items-center"
             />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -522,7 +522,7 @@ const ManageOutstationAssignments = () => {
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) => { setFilters((f) => ({ ...f, dateFrom: e.target.value })); setPage(1); }}
-                className="w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                className="w-full h-10 px-3 text-sm leading-normal rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all flex items-center"
               />
             </div>
             <div>
@@ -531,7 +531,7 @@ const ManageOutstationAssignments = () => {
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) => { setFilters((f) => ({ ...f, dateTo: e.target.value })); setPage(1); }}
-                className="w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                className="w-full h-10 px-3 text-sm leading-normal rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all flex items-center"
               />
             </div>
           </div>

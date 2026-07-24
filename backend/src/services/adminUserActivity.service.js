@@ -139,14 +139,29 @@ export async function listAdminUserSubscriptionsService(userId, query = {}) {
   const filter = { userId };
   if (status) filter.status = status;
 
-  const paidRange = buildDateRangeFilter(from, to);
-  if (paidRange) filter.paidAt = paidRange;
-
   if (search) {
     const q = String(search).trim();
     filter.$or = [
       { planNameSnapshot: { $regex: q, $options: 'i' } },
     ];
+  }
+
+  const dateRange = buildDateRangeFilter(from, to);
+  if (dateRange) {
+    const dateConditions = [
+      { paidAt: dateRange },
+      { createdAt: dateRange },
+      { startDate: dateRange },
+    ];
+    if (filter.$or) {
+      filter.$and = [
+        { $or: filter.$or },
+        { $or: dateConditions },
+      ];
+      delete filter.$or;
+    } else {
+      filter.$or = dateConditions;
+    }
   }
 
   const userObjectId = new mongoose.Types.ObjectId(userId);

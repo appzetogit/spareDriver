@@ -38,6 +38,15 @@ const BOOKING_STATUS_VARIANTS = {
   no_drivers_found: 'danger',
 };
 
+const FORMATTED_STATUS_NAMES = {
+  in_emergency_pool: 'Emergency Pool',
+  pending_assignment: 'Pending Assignment',
+  driver_assigned: 'Driver Assigned',
+  awaiting_payment: 'Awaiting Payment',
+  no_drivers_found: 'No Drivers Found',
+  en_route: 'En Route',
+};
+
 function formatCompactCurrency(amount) {
   const n = Number(amount) || 0;
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
@@ -126,12 +135,18 @@ const AdminDashboard = () => {
       {
         key: 'status',
         label: 'Status',
-        render: (val) => (
-          <Badge
-            variant={BOOKING_STATUS_VARIANTS[val] || 'default'}
-            text={val?.replace(/_/g, ' ') || '—'}
-          />
-        ),
+        render: (val, row) => {
+          const statusVal = val || row?.status;
+          const label = FORMATTED_STATUS_NAMES[statusVal] || (statusVal ? statusVal.replace(/_/g, ' ') : '—');
+          return (
+            <Badge
+              variant={BOOKING_STATUS_VARIANTS[statusVal] || 'default'}
+              className="capitalize"
+            >
+              {label}
+            </Badge>
+          );
+        },
       },
       {
         key: 'fare',

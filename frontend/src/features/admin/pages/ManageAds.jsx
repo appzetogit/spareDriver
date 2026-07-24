@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   Plus,
@@ -19,6 +19,7 @@ import Input from '../../../components/Input';
 import Drawer from '../../../components/Drawer';
 import api from '../../../utils/api';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import { useAdsStore } from '../../../store/user/useAdsStore';
 
 /**
  * Admin → Manage Ads.
@@ -38,6 +39,15 @@ const ManageAds = () => {
   const [showForm, setShowForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const sortedAds = useMemo(() => {
+    return [...ads].sort((a, b) => {
+      const orderA = Number(a.sortOrder ?? 0);
+      const orderB = Number(b.sortOrder ?? 0);
+      if (orderA !== orderB) return orderA - orderB;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
+  }, [ads]);
 
   /**
    * Manual refresh — runs from the toolbar button and after CRUD
@@ -94,6 +104,7 @@ const ManageAds = () => {
   const handleSaved = () => {
     setShowForm(false);
     setEditingAd(null);
+    useAdsStore.getState().invalidate();
     fetchAds();
   };
 
@@ -104,6 +115,7 @@ const ManageAds = () => {
       await api.delete(`/admin/ads/${confirmDelete._id}`);
       toast.success('Ad deleted');
       setConfirmDelete(null);
+      useAdsStore.getState().invalidate();
       fetchAds();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Could not delete ad');
@@ -154,7 +166,7 @@ const ManageAds = () => {
         <Card className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
         </Card>
-      ) : ads.length === 0 ? (
+      ) : sortedAds.length === 0 ? (
         <Card className="py-16 text-center">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
             <Megaphone className="w-7 h-7" />
@@ -170,7 +182,7 @@ const ManageAds = () => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {ads.map((ad) => (
+          {sortedAds.map((ad) => (
             <AdRowCard
               key={ad._id}
               ad={ad}

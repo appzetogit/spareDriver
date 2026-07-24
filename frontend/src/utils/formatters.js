@@ -38,13 +38,14 @@ export const formatPhone = (phone) => {
 /**
  * Format date
  */
-export const formatDate = (dateStr) => {
+export const formatDate = (dateStr, fallback = '—') => {
+  if (!dateStr) return fallback;
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  if (isNaN(date.getTime())) return fallback;
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 /**

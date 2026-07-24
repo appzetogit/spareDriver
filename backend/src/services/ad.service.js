@@ -16,6 +16,11 @@ function sanitizeLink(url) {
   throw new ApiError(400, 'Link URL must start with http(s):// or be a valid domain');
 }
 
+function parseSortOrder(val) {
+  const n = Number(val);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 function buildCreatePayload(body, file, createdBy) {
   if (!file) throw new ApiError(400, 'Ad media file is required');
   if (!body?.mediaType || !ALLOWED_MEDIA_TYPES.has(body.mediaType)) {
@@ -31,7 +36,7 @@ function buildCreatePayload(body, file, createdBy) {
     mediaPublicId: body.mediaPublicId,
     linkUrl: sanitizeLink(body.linkUrl),
     isActive: body.isActive === undefined ? true : Boolean(body.isActive),
-    sortOrder: Number(body.sortOrder) || 0,
+    sortOrder: parseSortOrder(body.sortOrder),
     createdBy: createdBy || null,
   };
 }
@@ -53,7 +58,7 @@ export async function createAdService(body, createdBy) {
     mediaPublicId: body.mediaPublicId,
     linkUrl: sanitizeLink(body.linkUrl),
     isActive: body.isActive === undefined ? true : Boolean(body.isActive),
-    sortOrder: Number(body.sortOrder) || 0,
+    sortOrder: parseSortOrder(body.sortOrder),
     createdBy: createdBy || null,
   });
 }
@@ -90,7 +95,7 @@ export async function updateAdService(id, body) {
   if (body.title !== undefined) ad.title = String(body.title || '').trim();
   if (body.linkUrl !== undefined) ad.linkUrl = sanitizeLink(body.linkUrl);
   if (body.isActive !== undefined) ad.isActive = Boolean(body.isActive);
-  if (body.sortOrder !== undefined) ad.sortOrder = Number(body.sortOrder) || 0;
+  if (body.sortOrder !== undefined) ad.sortOrder = parseSortOrder(body.sortOrder);
 
   await ad.save();
   return ad.toObject();

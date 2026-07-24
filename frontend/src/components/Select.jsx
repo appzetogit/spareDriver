@@ -71,9 +71,9 @@ const Select = ({
             ${Icon ? 'pl-9' : 'pl-4'}
           `}
         >
-          {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />}
-          <span className="truncate">{displayLabel}</span>
-          <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted shrink-0 pointer-events-none" />}
+          <span className="truncate leading-none block my-auto">{displayLabel}</span>
+          <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted shrink-0 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isOpen && (

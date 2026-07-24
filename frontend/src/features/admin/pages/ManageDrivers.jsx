@@ -132,7 +132,7 @@ const ManageDrivers = () => {
         className: 'hidden lg:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
-            {val ? new Date(val).toLocaleDateString() : '—'}
+            {val ? new Date(val).toLocaleDateString('en-GB') : '—'}
           </span>
         ),
       },
@@ -172,7 +172,7 @@ const ManageDrivers = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up">
+    <div className="min-h-screen bg-slate-50 space-y-4 animate-fade-in-up">
       <DriverFilters
         search={search}
         onSearchChange={(val) => {
