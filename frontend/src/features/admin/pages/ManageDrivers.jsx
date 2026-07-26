@@ -139,13 +139,15 @@ const ManageDrivers = () => {
       {
         key: 'actions',
         label: 'Actions',
-        width: '14%',
+        width: '220px',
+        unclamp: true,
+        align: 'right',
         render: (_val, row) => (
-          <div className="flex items-center gap-1" data-row-action onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap min-w-max" data-row-action onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={() => navigate(`/admin/drivers/${row._id}/analytics`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors shrink-0"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Analytics
@@ -212,6 +214,7 @@ const ManageDrivers = () => {
         onRowClick={(row) => navigate(`/admin/drivers/${row._id}/profile`)}
         entityLabel="drivers"
         emptyMessage="No drivers found"
+        minWidth="min-w-[1050px]"
       />
     </div>
   );

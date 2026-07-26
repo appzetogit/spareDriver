@@ -116,9 +116,10 @@ const ManageUsers = () => {
       {
         key: 'actions',
         label: 'Actions',
-        width: '60px',
+        width: '80px',
+        align: 'right',
         render: (_, row) => (
-          <div className="flex items-center justify-end" data-row-action onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end w-full" data-row-action onClick={(e) => e.stopPropagation()}>
             <RowActionsMenu items={buildRowActions(row)} />
           </div>
         ),

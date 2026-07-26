@@ -52,6 +52,17 @@ app.get('/', (_req, res) => {
 });
 
 app.use((err, req, res, _next) => {
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'field';
+    const fieldName = field === 'phone_no' ? 'phone number' : field;
+    const value = err.keyValue ? err.keyValue[field] : '';
+    const cleanMessage = `A record with this ${fieldName}${value ? ` (${value})` : ''} already exists.`;
+    return res.status(400).json({
+      status: 400,
+      message: cleanMessage,
+    });
+  }
+
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
   console.error(`[ERROR] ${req.method} ${req.url} - ${err.stack}`);

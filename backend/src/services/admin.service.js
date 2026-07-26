@@ -344,9 +344,16 @@ export const addAdminMemberService = async (data) => {
 
   await assertSingleSuperAdmin(role);
 
-  const adminExists = await User.findOne({ email });
-  if (adminExists) {
-    throw new ApiError(400, 'Admin with this email already exists');
+  const existingUser = await User.findOne({
+    $or: [{ email: email.toLowerCase() }, { phone_no }],
+  });
+  if (existingUser) {
+    if (existingUser.email?.toLowerCase() === email.toLowerCase()) {
+      throw new ApiError(400, 'A team member with this email already exists');
+    }
+    if (existingUser.phone_no === phone_no) {
+      throw new ApiError(400, 'A user with this phone number already exists');
+    }
   }
 
   const salt = await bcrypt.genSalt(10);
@@ -408,6 +415,27 @@ export const updateAdminMemberService = async (id, data) => {
   
   if (!staff || !STAFF_ROLES.includes(staff.role)) {
     throw new ApiError(404, 'Staff member not found');
+  }
+
+  if (email || phone_no) {
+    const orConditions = [];
+    if (email) orConditions.push({ email: email.toLowerCase() });
+    if (phone_no) orConditions.push({ phone_no });
+
+    if (orConditions.length > 0) {
+      const existingUser = await User.findOne({
+        _id: { $ne: id },
+        $or: orConditions,
+      });
+      if (existingUser) {
+        if (email && existingUser.email?.toLowerCase() === email.toLowerCase()) {
+          throw new ApiError(400, 'A team member with this email already exists');
+        }
+        if (phone_no && existingUser.phone_no === phone_no) {
+          throw new ApiError(400, 'A user with this phone number already exists');
+        }
+      }
+    }
   }
 
   if (name) staff.name = name;

@@ -26,6 +26,7 @@ const DataTable = ({
   showToolbar = true,
   embedded = false,
   bodyMaxHeight = '28rem',
+  minWidth = 'min-w-[960px]',
 }) => {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
@@ -102,30 +103,34 @@ const DataTable = ({
         }
       >
         <div className="overflow-auto" style={{ maxHeight: bodyMaxHeight }}>
-          <table className="w-full min-w-[640px] table-fixed">
+          <table className={`w-full ${minWidth} table-fixed`}>
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-100">
               <tr>
-                {columns.map((col) => (
-                  <th
-                    key={col.key}
-                    className={`
-                      px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider
-                      ${col.sortable !== false ? 'cursor-pointer select-none hover:text-slate-700 transition-colors' : ''}
-                      ${col.className || ''}
-                    `}
-                    style={col.width ? { width: col.width } : undefined}
-                    onClick={() => col.sortable !== false && handleSort(col.key)}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="truncate">{col.label}</span>
-                      {sortKey === col.key && (
-                        <span className="text-slate-400 text-xs shrink-0">
-                          {sortDir === 'asc' ? '↑' : '↓'}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                ))}
+                {columns.map((col) => {
+                  const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+                  const justifyClass = col.align === 'center' ? 'justify-center' : col.align === 'right' ? 'justify-end' : 'justify-start';
+                  return (
+                    <th
+                      key={col.key}
+                      className={`
+                        px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider ${alignClass}
+                        ${col.sortable !== false ? 'cursor-pointer select-none hover:text-slate-700 transition-colors' : ''}
+                        ${col.className || ''}
+                      `}
+                      style={col.width ? { width: col.width } : undefined}
+                      onClick={() => col.sortable !== false && handleSort(col.key)}
+                    >
+                      <div className={`flex items-center gap-1.5 min-w-0 ${justifyClass}`}>
+                        <span className="truncate">{col.label}</span>
+                        {sortKey === col.key && (
+                          <span className="text-slate-400 text-xs shrink-0">
+                            {sortDir === 'asc' ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -160,6 +165,7 @@ const DataTable = ({
                     `}
                   >
                     {columns.map((col) => {
+                      const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
                       const cell = col.render ? (
                         col.render(row[col.key], row)
                       ) : (
@@ -171,9 +177,7 @@ const DataTable = ({
                       return (
                         <td
                           key={col.key}
-                          className={`px-4 py-3 text-sm text-slate-700 align-top max-w-0 ${
-                            col.unclamp ? 'overflow-visible' : ''
-                          } ${col.className || ''}`}
+                          className={`px-4 py-3 text-sm text-slate-700 align-top ${col.unclamp ? 'overflow-visible' : 'max-w-0'} ${alignClass} ${col.className || ''}`}
                         >
                           {col.unclamp ? cell : <CellContent>{cell}</CellContent>}
                         </td>
