@@ -53,9 +53,7 @@ const DriverSignUpPage = () => {
           disabled={googleLoading}
         />
         */}
-        <p className="text-center text-xs text-text-muted mt-4">
-          Already have an account? <button type="button" onClick={() => navigate('/driver/login')} className="text-primary font-semibold hover:underline">Sign in</button>
-        </p>
+
       </div>
     </div>
   );

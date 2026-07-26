@@ -130,7 +130,7 @@ const EarningsPage = () => {
             {(lifetimeEarnings > 0 || totalWithdrawn > 0) && (
               <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/10 text-[11px] text-white/80">
                 <span>
-                  Lifetime{' '}
+                  Net earnings{' '}
                   <span className="font-semibold text-white">
                     {formatCurrency(lifetimeEarnings)}
                   </span>

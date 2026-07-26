@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  User,
   FileText,
   Building2,
   Car,
@@ -48,7 +47,6 @@ const MENU_GROUPS = [
   {
     title: 'Account',
     items: [
-      { icon: User, label: 'My Profile', path: '/driver/account/profile' },
       { icon: FileText, label: 'Profile & Documents', path: '/driver/account/documents' },
       { icon: Building2, label: 'Bank Details', path: '/driver/account/bank' },
       { icon: GraduationCap, label: 'Training & Certification', path: '/driver/register/training' },
@@ -106,6 +104,10 @@ const DriverAccountPage = () => {
     variant: 'default',
     label: '—',
   };
+  const avatarSrc =
+    driver?.profilePicture ||
+    driver?.documents?.find((d) => d.type === 'selfie')?.fileUrl ||
+    undefined;
 
   const handleLogout = () => {
     logout();
@@ -118,7 +120,7 @@ const DriverAccountPage = () => {
         <header className="bg-dark px-4 pt-5 pb-5 rounded-b-3xl">
           <div className="flex items-center gap-3">
             <Avatar
-              src={driver?.profilePicture || undefined}
+              src={avatarSrc}
               name={displayName}
               size="lg"
               online={driver?.isOnline}

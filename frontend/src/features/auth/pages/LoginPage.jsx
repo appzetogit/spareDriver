@@ -109,25 +109,32 @@ const LoginPage = () => {
           {mode === 'phone' ? (
             <div>
               <label className="text-sm font-medium text-text mb-1.5 block">Phone Number</label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+              <div
+                className={`flex items-center h-12 bg-white border rounded-xl px-3 gap-2 transition-all duration-200 ${
+                  errors.identifier
+                    ? 'border-danger ring-2 ring-danger/30'
+                    : 'border-border focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 pr-2 border-r border-border shrink-0 text-sm font-semibold text-text-secondary pointer-events-none">
                   <Phone className="w-4 h-4 text-text-muted" />
                   <span>+91</span>
                 </div>
-                <Input
+                <input
                   type="tel"
                   placeholder="10-digit number"
                   value={phone}
+                  maxLength={10}
                   onChange={(e) => {
                     setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
                     if (errors.identifier) setErrors((prev) => ({ ...prev, identifier: '' }));
                   }}
-                  error={errors.identifier}
-                  maxLength={10}
-                  className="pl-[4.5rem]"
-                  containerClassName="w-full"
+                  className="flex-1 h-full bg-transparent text-sm text-text placeholder:text-text-muted focus:outline-none"
                 />
               </div>
+              {errors.identifier && (
+                <p className="text-xs text-danger mt-1">{errors.identifier}</p>
+              )}
             </div>
           ) : (
             <Input

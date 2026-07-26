@@ -326,7 +326,7 @@ export const loginUserService = async ({ phone, email, password, fcmToken, token
   }
 
   if (!user || user.isDeleted) {
-    throw new ApiError(401, 'Invalid credentials');
+    throw new ApiError(401, 'Phone number not registered. Please sign up.');
   }
 
   if (user.role !== USER_ROLES.USER) {

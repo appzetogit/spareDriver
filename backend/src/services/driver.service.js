@@ -113,7 +113,7 @@ export const loginDriverService = async ({ phone, password, fcmToken, token, pla
 
   const driver = await Driver.findOne({ phone }).select('+password');
   if (!driver || driver.isDeleted) {
-    throw new ApiError(401, 'Invalid credentials');
+    throw new ApiError(401, 'Phone number not registered. Please sign up.');
   }
 
   if (driver.authProvider === 'google') {

@@ -107,6 +107,10 @@ const DriverKitPurchaseSection = ({ onPurchaseComplete, compact = false }) => {
       toast.error('Please fill delivery address');
       return;
     }
+    if (!/^[0-9]{6}$/.test(address.pincode)) {
+      toast.error('PIN code must be exactly 6 digits');
+      return;
+    }
     const selectionError = validateSelections(kitItems, selections);
     if (selectionError) {
       toast.error(selectionError);
@@ -353,8 +357,19 @@ const DriverKitPurchaseSection = ({ onPurchaseComplete, compact = false }) => {
                 />
                 <Input
                   label="PIN code"
+                  type="tel"
                   value={address.pincode}
-                  onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
+                  maxLength={6}
+                  placeholder="6-digit PIN"
+                  onKeyDown={(e) => {
+                    const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+                    if (!allowed.includes(e.key) && !/^[0-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onChange={(e) =>
+                    setAddress({ ...address, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })
+                  }
                 />
               </div>
               <Input
