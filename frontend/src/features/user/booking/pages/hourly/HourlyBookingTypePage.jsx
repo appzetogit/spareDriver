@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, CalendarClock, ChevronRight, Check } from 'lucide-react';
+import { Zap, CalendarClock, Check } from 'lucide-react';
 import Button from '../../../../../components/Button';
 import DateTimePickerField from '../../../../../components/inputs/DateTimePickerField';
 import PageShell from '../../components/PageShell';
@@ -148,10 +148,12 @@ function Option({ icon: Icon, accent, active, title, description, onClick, child
   const accentBg = accent === 'amber' ? 'bg-amber-100' : 'bg-indigo-100';
   const accentColor = accent === 'amber' ? 'text-amber-700' : 'text-indigo-700';
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`w-full text-left rounded-2xl border p-4 transition ${ring}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+      className={`w-full text-left rounded-2xl border p-4 transition cursor-pointer ${ring}`}
     >
       <div className="flex items-start gap-3">
         <div
@@ -170,11 +172,11 @@ function Option({ icon: Icon, accent, active, title, description, onClick, child
             active ? 'border-primary bg-primary' : 'border-gray-300'
           }`}
         >
-          {active ? <Check className="w-3 h-3 text-white" /> : <ChevronRight className="w-3 h-3 text-transparent" />}
+          {active && <Check className="w-3 h-3 text-white" />}
         </div>
       </div>
       {children}
-    </button>
+    </div>
   );
 }
 
