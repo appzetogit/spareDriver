@@ -16,6 +16,7 @@ const ServerPaginatedTable = ({
   onRowClick,
   entityLabel = 'items',
   emptyMessage = 'No results found',
+  minWidth,
 }) => {
   // Calculate display range
   const startItem = pagination.total === 0 ? 0 : Math.min((page - 1) * limit + 1, pagination.total);
@@ -38,6 +39,7 @@ const ServerPaginatedTable = ({
               embedded
               pageSize={limit}
               bodyMaxHeight="28rem"
+              minWidth={minWidth}
             />
           )}
         </div>

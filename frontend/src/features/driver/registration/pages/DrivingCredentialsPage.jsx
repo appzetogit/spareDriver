@@ -265,7 +265,7 @@ const DrivingCredentialsPage = () => {
         <div className="flex-1 space-y-5 animate-fade-in-up">
           <Input
             label="License number"
-            placeholder="DL-XXXX-XXXX"
+            placeholder="MH-01-2021-1234567"
             value={form.license}
             onChange={handleLicenseChange}
             error={licenseError}

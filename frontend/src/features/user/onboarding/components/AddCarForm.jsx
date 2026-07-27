@@ -144,7 +144,15 @@ const AddCarForm = ({
     if (!formData.brandId) next.brandId = 'Select car brand';
     if (!formData.carTypeId) next.carTypeId = 'Select car category';
     if (!formData.modelId) next.modelId = 'Select car model';
-    if (!formData.vehicleNumber?.trim()) next.vehicleNumber = 'Enter vehicle number';
+    const rawNum = formData.vehicleNumber?.trim() || '';
+    const cleanNum = rawNum.replace(/[\s-]/g, '').toUpperCase();
+    const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+
+    if (!rawNum) {
+      next.vehicleNumber = 'Enter vehicle number';
+    } else if (!vehicleRegex.test(cleanNum)) {
+      next.vehicleNumber = 'Enter valid vehicle number (e.g., MP09 AB 1234 or 22BH1234AB)';
+    }
     if (!formData.fuelTypeId) next.fuelTypeId = 'Select fuel type';
     if (!formData.transmission) next.transmission = 'Select transmission';
     if (!formData.insuranceExpiry) next.insuranceExpiry = 'Select insurance expiry date';
@@ -237,7 +245,26 @@ const AddCarForm = ({
 
       <VehicleDetailsForm
         values={formData}
-        onChange={setFormData}
+        onChange={(next) => {
+          setFormData(next);
+          if (next.vehicleNumber !== formData.vehicleNumber) {
+            const rawNum = next.vehicleNumber?.trim() || '';
+            const cleanNum = rawNum.replace(/[\s-]/g, '').toUpperCase();
+            const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+
+            setErrors((prev) => {
+              const updated = { ...prev };
+              if (!rawNum) {
+                delete updated.vehicleNumber;
+              } else if (!vehicleRegex.test(cleanNum)) {
+                updated.vehicleNumber = 'Enter valid vehicle number (e.g., MP09 AB 1234 or 22BH1234AB)';
+              } else {
+                delete updated.vehicleNumber;
+              }
+              return updated;
+            });
+          }
+        }}
         errors={errors}
         disabled={fieldsDisabled}
         editLabels={editLabels}

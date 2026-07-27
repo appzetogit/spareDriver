@@ -109,24 +109,17 @@ const ManageUsers = () => {
         className: 'hidden md:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
-            {val ? new Date(val).toLocaleDateString() : '—'}
+            {val ? new Date(val).toLocaleDateString('en-GB') : '—'}
           </span>
         ),
       },
       {
         key: 'actions',
         label: 'Actions',
-        width: '120px',
+        width: '80px',
+        align: 'right',
         render: (_, row) => (
-          <div className="flex items-center justify-end gap-1" data-row-action onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => navigate(`/admin/users/${row._id}/analytics`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              Analytics
-            </button>
+          <div className="flex items-center justify-end w-full" data-row-action onClick={(e) => e.stopPropagation()}>
             <RowActionsMenu items={buildRowActions(row)} />
           </div>
         ),

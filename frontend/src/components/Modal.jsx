@@ -40,18 +40,18 @@ const Modal = ({
         onClick={onClose}
       />
       {/* Content */}
-      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} animate-bounce-in overflow-hidden ${className}`}>
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} max-h-[88vh] flex flex-col animate-bounce-in overflow-hidden ${className}`}>
         {(title || showClose) && (
-          <div className="flex items-center justify-between p-4 border-b border-gray-50">
-            {title && <h3 className="text-lg font-semibold text-text">{title}</h3>}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+            {title && <h3 className="text-lg font-semibold text-slate-900">{title}</h3>}
             {showClose && (
-              <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-text-secondary transition-colors">
+              <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             )}
           </div>
         )}
-        <div className="overflow-y-auto max-h-[calc(90vh-100px)]">
+        <div className="overflow-y-auto flex-1 p-5 md:p-6">
           {children}
         </div>
       </div>

@@ -36,6 +36,11 @@ const RowActionsMenu = ({ items = [], align = 'right' }) => {
             window.innerWidth - MENU_WIDTH - VIEWPORT_GAP,
             Math.max(VIEWPORT_GAP, rect.right - MENU_WIDTH),
           )
+        : align === 'center'
+        ? Math.min(
+            window.innerWidth - MENU_WIDTH - VIEWPORT_GAP,
+            Math.max(VIEWPORT_GAP, rect.left + rect.width / 2 - MENU_WIDTH / 2),
+          )
         : Math.min(
             window.innerWidth - MENU_WIDTH - VIEWPORT_GAP,
             Math.max(VIEWPORT_GAP, rect.left),
@@ -128,8 +133,15 @@ const RowActionsMenu = ({ items = [], align = 'right' }) => {
       document.body,
     );
 
+  const justifyClass =
+    align === 'center'
+      ? 'justify-center'
+      : align === 'left'
+      ? 'justify-start'
+      : 'justify-end';
+
   return (
-    <div className="relative flex justify-end" data-row-action onClick={(e) => e.stopPropagation()}>
+    <div className={`relative flex ${justifyClass}`} data-row-action onClick={(e) => e.stopPropagation()}>
       <button
         ref={triggerRef}
         type="button"

@@ -206,7 +206,7 @@ const ManageBookings = () => {
         render: (val, row) => (
           <div>
             <p className="text-xs text-slate-700">
-              {new Date(row.createdAt).toLocaleDateString()}
+              {new Date(row.createdAt).toLocaleDateString('en-GB')}
             </p>
             <p className="text-[10px] text-slate-400">
               {new Date(row.createdAt).toLocaleTimeString([], {

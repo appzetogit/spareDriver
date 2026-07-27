@@ -212,7 +212,7 @@ const ManageTasks = () => {
         className: 'hidden md:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
-            {val ? new Date(val).toLocaleDateString() : '—'}
+            {val ? new Date(val).toLocaleDateString('en-GB') : '—'}
           </span>
         ),
       },

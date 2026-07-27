@@ -25,7 +25,7 @@ const navItems = [
   },
   { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
   { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
-  { path: '/admin/drivers', label: 'Drivers', icon: Car },
+  { path: '/admin/drivers', label: 'Drivers', icon: Car, end: true },
   { path: '/admin/drivers/live', label: 'Live Map', icon: Navigation },
   { path: '/admin/sos', label: 'SOS Alerts', icon: ShieldAlert, roles: ['admin', 'sub_admin', 'team_member'] },
   { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
@@ -306,13 +306,14 @@ const Sidebar = ({ isOpen, onClose }) => {
       >
         <div className="flex items-center justify-between px-5 h-16 shrink-0 border-b border-white/10">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Car className="w-4.5 h-4.5 text-dark" />
-            </div>
-            <div>
-              <h1 className="text-white text-sm font-bold leading-tight">{APP_NAME}</h1>
-              <p className="text-white/40 text-[10px]">Admin Panel</p>
-            </div>
+            <img
+              src="/images/logo-white.png"
+              alt="SpareDriver Logo"
+              className="h-8 w-auto object-contain"
+            />
+            <span className="text-white/50 text-xs font-semibold px-2 py-0.5 rounded bg-white/10">
+              Admin
+            </span>
           </div>
           <button
             onClick={onClose}

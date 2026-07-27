@@ -326,7 +326,7 @@ export const loginUserService = async ({ phone, email, password, fcmToken, token
   }
 
   if (!user || user.isDeleted) {
-    throw new ApiError(401, 'Invalid credentials');
+    throw new ApiError(401, 'Phone number not registered. Please sign up.');
   }
 
   if (user.role !== USER_ROLES.USER) {
@@ -605,6 +605,12 @@ export const addCarService = async (userId, carData) => {
   if (!carTypeId || !brandId || !modelId || !fuelTypeId || !vehicleNumber || !transmission) {
     throw new ApiError(400, 'All vehicle details are required');
   }
+
+  const cleanNum = String(vehicleNumber).trim().replace(/[\s-]/g, '').toUpperCase();
+  const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+  if (!vehicleRegex.test(cleanNum)) {
+    throw new ApiError(400, 'Invalid vehicle number format. Please enter a valid registration number (e.g. MP09 AB 1234)');
+  }
   if (!insuranceExpiry || !pucExpiry) {
     throw new ApiError(400, 'Insurance expiry and PUC expiry dates are required');
   }
@@ -735,6 +741,12 @@ export const updateCarService = async (userId, carId, carData) => {
 
   if (!carTypeId || !brandId || !modelId || !fuelTypeId || !vehicleNumber || !transmission) {
     throw new ApiError(400, 'All vehicle details are required');
+  }
+
+  const cleanNum = String(vehicleNumber).trim().replace(/[\s-]/g, '').toUpperCase();
+  const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+  if (!vehicleRegex.test(cleanNum)) {
+    throw new ApiError(400, 'Invalid vehicle number format. Please enter a valid registration number (e.g. MP09 AB 1234)');
   }
   if (!insuranceExpiry || !pucExpiry) {
     throw new ApiError(400, 'Insurance expiry and PUC expiry dates are required');

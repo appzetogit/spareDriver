@@ -23,7 +23,7 @@ import { REFUND_PAYOUT_METHOD_LABELS } from '../../../constants/refund';
 
 function formatCurrency(amount) {
   const n = Number(amount) || 0;
-  return `\u20b9${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
 const STEPS = { SELECT: 'select', REFUND: 'refund' };
@@ -484,7 +484,7 @@ const CreateAdminRefundModal = ({ open, onClose, onCreated }) => {
                   >
                     <ChevronDown className="w-4 h-4" />
                     Load {nextBatch} more
-                    <span className="text-xs opacity-60">\u00b7 {remaining} remaining</span>
+                    <span className="text-xs opacity-60">· {remaining} remaining</span>
                   </button>
                 )}
               </>
@@ -534,7 +534,7 @@ const CreateAdminRefundModal = ({ open, onClose, onCreated }) => {
           {/* Held warning */}
           {Number(wallet?.heldRupees) > 0 && (
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-100">
-              <span className="text-amber-500 text-sm">\u26a0</span>
+              <span className="text-amber-500 text-sm">⚠️</span>
               <p className="text-xs text-amber-700 font-medium">
                 {formatCurrency(wallet.heldRupees)} is held against active bookings.
               </p>
@@ -544,10 +544,10 @@ const CreateAdminRefundModal = ({ open, onClose, onCreated }) => {
           {/* Amount */}
           <div>
             <label className="block text-xs font-semibold text-text-secondary mb-1.5">
-              Refund amount (\u20b9) <span className="text-danger">*</span>
+              Refund amount (₹) <span className="text-danger">*</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-text-muted">\u20b9</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-text-muted">₹</span>
               <input
                 type="number"
                 min="1"

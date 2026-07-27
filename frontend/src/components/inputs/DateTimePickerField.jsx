@@ -318,17 +318,17 @@ function DateTimeSheetBody({
   }, [maxMs]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Day chips */}
       <section>
-        <div className="flex items-center gap-2 mb-2">
-          <CalendarDays className="w-4 h-4 text-text-muted" />
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <CalendarDays className="w-3.5 h-3.5 text-text-muted" />
+          <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
             Choose a day
           </h4>
         </div>
         <div className="-mx-5 px-5 overflow-x-auto">
-          <div className="flex gap-2 pb-1">
+          <div className="flex gap-2 pb-1 pr-5">
             {days.map((day) => {
               const enabled = dayHasAnyValidSlot(day);
               const selected =
@@ -349,7 +349,7 @@ function DateTimeSheetBody({
                     }
                   }}
                   disabled={!enabled}
-                  className={`shrink-0 min-w-[88px] rounded-2xl border px-3 py-2 text-left transition ${
+                  className={`shrink-0 min-w-[72px] rounded-xl border px-2 py-1.5 text-left transition ${
                     selected
                       ? 'border-primary bg-primary/10 ring-1 ring-primary'
                       : enabled
@@ -357,13 +357,13 @@ function DateTimeSheetBody({
                         : 'border-border bg-gray-50 text-text-muted/70 cursor-not-allowed opacity-60'
                   }`}
                 >
-                  <p className="text-[11px] font-semibold text-text-muted">
+                  <p className="text-[10px] font-semibold text-text-muted leading-none">
                     {dayChipTopLabel(day, todayMidnight)}
                   </p>
-                  <p className="text-sm font-bold text-text">
+                  <p className="text-sm font-bold text-text leading-snug">
                     {dayChipDateLabel(day)}
                   </p>
-                  <p className="text-[10px] text-text-muted">
+                  <p className="text-[9px] text-text-muted leading-none">
                     {dayChipMonthLabel(day)}
                   </p>
                 </button>
@@ -375,14 +375,14 @@ function DateTimeSheetBody({
 
       {/* Time slots */}
       <section>
-        <div className="flex items-center gap-2 mb-2">
-          <Clock3 className="w-4 h-4 text-text-muted" />
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Clock3 className="w-3.5 h-3.5 text-text-muted" />
+          <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
             Choose a time
           </h4>
         </div>
         {draftDay ? (
-          <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto pr-1">
+          <div className="grid grid-cols-4 gap-1.5 max-h-56 overflow-y-auto pr-1">
             {timeSlots.map((slot) => {
               const slotDisabled = isSlotDisabled(slot);
               const isSelected =
@@ -393,7 +393,7 @@ function DateTimeSheetBody({
                   type="button"
                   disabled={slotDisabled}
                   onClick={() => setDraftTime({ h: slot.h, m: slot.m })}
-                  className={`relative h-10 rounded-xl border text-[12px] font-semibold transition ${
+                  className={`relative h-8 rounded-xl border text-[11px] font-semibold transition ${
                     isSelected
                       ? 'border-primary bg-primary text-slate-900'
                       : slotDisabled
@@ -403,7 +403,7 @@ function DateTimeSheetBody({
                 >
                   {formatHourMinute(slot.h, slot.m)}
                   {isSelected && (
-                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-900 text-primary flex items-center justify-center">
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-slate-900 text-primary flex items-center justify-center">
                       <Check className="w-2.5 h-2.5" />
                     </span>
                   )}

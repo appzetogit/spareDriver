@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import {
   User, Mail, Phone, Lock, Edit2, Trash2, MapPin, Check,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ const ManageTeam = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState('');
@@ -86,6 +88,7 @@ const ManageTeam = () => {
 
   const handleEdit = (member) => {
     setSelectedMember(member);
+    setFormError(null);
     setFormData({
       name: member.name,
       email: member.email,
@@ -109,11 +112,13 @@ const ManageTeam = () => {
     try {
       setSubmitting(true);
       await api.delete(`/admin/team/${selectedMember._id}`);
+      toast.success('Team member removed successfully');
       fetchTeam();
       setShowDeleteModal(false);
       setSelectedMember(null);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete member');
+      const msg = err.response?.data?.message || 'Failed to delete member';
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -122,6 +127,7 @@ const ManageTeam = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setFormError(null);
     try {
       // Only team_members carry zone assignments — backend already
       // wipes them for other roles, but be tidy and don't send noise.
@@ -136,8 +142,10 @@ const ManageTeam = () => {
           isActive: formData.isActive,
           assignedZones: zonesForPayload,
         });
+        toast.success('Team member updated successfully');
       } else {
         await api.post('/admin/team', { ...formData, assignedZones: zonesForPayload });
+        toast.success('Team member created successfully');
       }
       fetchTeam();
       setShowAddModal(false);
@@ -152,7 +160,9 @@ const ManageTeam = () => {
         assignedZones: [],
       });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save member');
+      const msg = err.response?.data?.message || 'Failed to save member';
+      setFormError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -189,8 +199,9 @@ const ManageTeam = () => {
       render: (val) => (
         <Badge
           variant={val === 'admin' ? 'warning' : val === 'sub_admin' ? 'success' : 'info'}
-          text={STAFF_ROLE_LABELS[val] || val}
-        />
+        >
+          {STAFF_ROLE_LABELS[val] || val}
+        </Badge>
       ),
     },
     {
@@ -217,9 +228,11 @@ const ManageTeam = () => {
       label: 'Action',
       sortable: false,
       unclamp: true,
+      align: 'center',
       width: '15%',
       render: (_, row) => (
         <RowActionsMenu
+          align="center"
           items={[
             {
               label: 'Update',
@@ -254,6 +267,7 @@ const ManageTeam = () => {
         }}
         onAddMember={() => {
           setSelectedMember(null);
+          setFormError(null);
           setFormData({
             name: '',
             email: '',
@@ -285,9 +299,21 @@ const ManageTeam = () => {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         title={selectedMember ? 'Update Team Member' : 'Onboard New Member'}
-        className='p-2'
+        size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
+          {formError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 animate-fade-in flex items-center justify-between gap-2">
+              <span>{formError}</span>
+              <button
+                type="button"
+                onClick={() => setFormError(null)}
+                className="text-rose-400 hover:text-rose-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <Input
             label="Full Name"
             placeholder="e.g. John Doe"
@@ -412,7 +438,7 @@ const ManageTeam = () => {
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         title="Confirm Removal"
-        className='p-2'
+        size="md"
       >
         <div className="space-y-4">
           <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl">

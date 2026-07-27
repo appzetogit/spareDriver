@@ -52,14 +52,19 @@ export function formatPickupDateTime(input, fallback = '—') {
  *
  *   "3 Jun 2026, 4:30 PM"
  */
+export function formatDateDDMMYYYY(input, fallback = '—') {
+  const d = toDate(input);
+  if (!d) return fallback;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 export function formatDateTime12(input, fallback = '—') {
   const d = toDate(input);
   if (!d) return fallback;
-  const date = d.toLocaleDateString(LOCALE, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  const date = formatDateDDMMYYYY(d);
   const time = d.toLocaleTimeString(LOCALE, {
     hour: 'numeric',
     minute: '2-digit',

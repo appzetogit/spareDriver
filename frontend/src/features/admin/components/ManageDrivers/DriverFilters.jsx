@@ -13,11 +13,11 @@ const DriverFilters = ({
   refreshing = false,
 }) => {
   return (
-    <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md pb-2">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+    <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md pt-4 pb-2">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Manage Drivers</h1>
-          <p className="text-sm text-slate-500 mt-1">Review, approve and manage driver applications</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Manage Drivers</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Review, approve and manage driver applications</p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">

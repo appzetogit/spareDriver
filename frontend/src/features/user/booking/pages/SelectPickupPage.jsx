@@ -484,7 +484,7 @@ function LocationField({
         <div className="relative">
           <input
             ref={inputRef}
-            type="search"
+            type="text"
             value={value}
             placeholder={placeholder}
             onChange={(e) => onChange(e.target.value)}

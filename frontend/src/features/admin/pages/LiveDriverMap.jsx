@@ -260,7 +260,7 @@ const LiveDriverMap = () => {
         <label className="relative block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
-            type="search"
+            type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, phone, booking #, customer…"

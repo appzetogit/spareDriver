@@ -208,7 +208,7 @@ const ManageCoupons = () => {
                     </td>
                     <td className="px-4 py-3 text-text-secondary">
                       {coupon.expiresAt
-                        ? new Date(coupon.expiresAt).toLocaleDateString()
+                        ? new Date(coupon.expiresAt).toLocaleDateString('en-GB')
                         : '—'}
                     </td>
                     <td className="px-4 py-3">

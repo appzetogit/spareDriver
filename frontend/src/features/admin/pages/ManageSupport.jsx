@@ -39,13 +39,13 @@ const STATUS_OPTIONS = [
 
 function formatDate(value) {
   if (!value) return '—';
-  return new Date(value).toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${day}/${month}/${year}, ${time}`;
 }
 
 function userDisplayName(ticket) {
