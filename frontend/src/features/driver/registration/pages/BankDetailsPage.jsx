@@ -103,8 +103,10 @@ const BankDetailsPage = () => {
 
   const handleChange = (f) => (e) => {
     let val = e.target.value;
-    if (f === 'ifsc') {
-      val = val.toUpperCase();
+    if (f === 'account') {
+      val = val.replace(/[^0-9]/g, '').slice(0, 18);
+    } else if (f === 'ifsc') {
+      val = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11);
     }
     setForm((p) => ({ ...p, [f]: val }));
     const error = validateField(f, val);
@@ -176,6 +178,7 @@ const BankDetailsPage = () => {
             placeholder="Bank account number" 
             value={form.account} 
             onChange={handleChange('account')} 
+            maxLength={18}
             error={errors.account}
             icon={Hash} 
           />
@@ -184,6 +187,7 @@ const BankDetailsPage = () => {
             placeholder="HDFC0001234" 
             value={form.ifsc} 
             onChange={handleChange('ifsc')} 
+            maxLength={11}
             error={errors.ifsc}
             icon={Building2} 
           />

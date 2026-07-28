@@ -355,7 +355,7 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
   doc.font('Helvetica').fontSize(10).fillColor('#CBD5F5');
   const subLine = [
     driver.phone ? `+91 ${driver.phone}` : null,
-    driver.email || null,
+    driver.email ? driver.email : null,
     `Joined ${fmtDate(driver.createdAt)}`,
   ]
     .filter(Boolean)
@@ -387,16 +387,19 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
   /* ───── Identity ──────────────────────────────────────────────── */
 
   sectionHeading(doc, 'Identity');
-  infoGrid(doc, [
+  const identityRows = [
     { label: 'Full name', value: driver.name },
     { label: 'Phone', value: driver.phone ? `+91 ${driver.phone}` : null },
-    { label: 'Email', value: driver.email || null },
-    { label: 'Gender', value: driver.gender || null },
-    { label: 'Date of birth', value: driver.dateOfBirth ? fmtDate(driver.dateOfBirth) : null },
-    { label: 'Auth provider', value: driver.authProvider || null },
-    { label: 'City', value: driver.city || null },
-    { label: 'Referral code', value: driver.referralCode || null },
-  ]);
+  ];
+  if (driver.email) identityRows.push({ label: 'Email', value: driver.email });
+  if (driver.gender) identityRows.push({ label: 'Gender', value: driver.gender });
+  if (driver.dateOfBirth)
+    identityRows.push({ label: 'Date of birth', value: fmtDate(driver.dateOfBirth) });
+  if (driver.authProvider) identityRows.push({ label: 'Auth provider', value: driver.authProvider });
+  if (driver.city) identityRows.push({ label: 'City', value: driver.city });
+  if (driver.referralCode) identityRows.push({ label: 'Referral code', value: driver.referralCode });
+
+  infoGrid(doc, identityRows);
 
   /* ───── Driving credentials ───────────────────────────────────── */
 
