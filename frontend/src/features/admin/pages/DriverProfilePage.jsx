@@ -187,11 +187,13 @@ const DriverProfilePage = () => {
         </div>
       </div>
 
-      <DriverProfileActions
-        driver={driver}
-        onSuccess={handleStatusUpdated}
-        onReviewComplete={invalidateAfterReview}
-      />
+      {['pending', 'under_review'].includes(driver.approvalStatus) && (
+        <DriverProfileActions
+          driver={driver}
+          onSuccess={handleStatusUpdated}
+          onReviewComplete={invalidateAfterReview}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard title="Driver information">
@@ -333,6 +335,14 @@ const DriverProfilePage = () => {
       <SectionCard title="Documents">
         <DocumentGallery documents={driver.documents} />
       </SectionCard>
+
+      {!['pending', 'under_review'].includes(driver.approvalStatus) && (
+        <DriverProfileActions
+          driver={driver}
+          onSuccess={handleStatusUpdated}
+          onReviewComplete={invalidateAfterReview}
+        />
+      )}
     </div>
   );
 };

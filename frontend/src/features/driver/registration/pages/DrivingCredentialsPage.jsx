@@ -110,7 +110,8 @@ const DrivingCredentialsPage = () => {
   const handleLicenseChange = (e) => {
     const rawVal = e.target.value;
     const hasHyphen = rawVal.includes('-');
-    const cleanedVal = rawVal.replace(/-/g, '');
+    // Clean to alphanumeric uppercase only, maximum 15 chars
+    const cleanedVal = rawVal.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
 
     setForm((p) => ({ ...p, license: cleanedVal }));
 
@@ -121,6 +122,11 @@ const DrivingCredentialsPage = () => {
     } else {
       setLicenseError('');
     }
+  };
+
+  const handleExperienceChange = (e) => {
+    const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 2);
+    setForm((p) => ({ ...p, experience: val }));
   };
 
   const handleContinue = async () => {
@@ -265,9 +271,10 @@ const DrivingCredentialsPage = () => {
         <div className="flex-1 space-y-5 animate-fade-in-up">
           <Input
             label="License number"
-            placeholder="MH-01-2021-1234567"
+            placeholder="MH0120211234567"
             value={form.license}
             onChange={handleLicenseChange}
+            maxLength={15}
             error={licenseError}
             icon={FileText}
           />
@@ -283,7 +290,7 @@ const DrivingCredentialsPage = () => {
             type="number"
             placeholder="Years of driving"
             value={form.experience}
-            onChange={handleChange('experience')}
+            onChange={handleExperienceChange}
             icon={Briefcase}
           />
           <Select
