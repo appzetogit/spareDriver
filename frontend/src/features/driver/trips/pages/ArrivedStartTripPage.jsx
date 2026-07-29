@@ -7,6 +7,7 @@ import Avatar from '../../../../components/Avatar';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
+import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 
 /**
  * "You've arrived at pickup" — driver-side companion of the customer's
@@ -49,6 +50,7 @@ const ArrivedStartTripPage = () => {
             height={192}
             showRoute={false}
             emphasis="pickup"
+            bookingStatus={BOOKING_STATUS.ARRIVED}
           />
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-success/90 backdrop-blur-sm px-5 py-2.5 rounded-2xl shadow-md">
             <div className="flex items-center gap-2">

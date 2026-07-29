@@ -640,7 +640,8 @@ async function failBookingNoDrivers(bookingId) {
     return { ok: false, reason: 'scheduled_awaiting_emergency_pool' };
   }
 
-  // Instant bookings follow the legacy path: NO_DRIVERS_FOUND + refund.
+  // Instant: soft-park as NO_DRIVERS_FOUND (payment held; user can
+  // search again or cancel for a refund). No auto-refund here.
   const booking = await adminMarkNoDriversFoundService(bookingId);
   const escalated = booking.status === BOOKING_STATUS.IN_EMERGENCY_POOL;
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, {

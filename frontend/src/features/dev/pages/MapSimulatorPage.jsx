@@ -127,6 +127,7 @@ const MapSimulatorPage = () => {
           // showOutline={showOutline}
           followDriver={!isApproach}
           emphasis="driver"
+          bookingStatus={isApproach ? 'en_route' : 'started'}
         />
       </div>
 

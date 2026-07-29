@@ -104,6 +104,7 @@ const TripInProgressPage = () => {
           showRoute
           followDriver
           emphasis="driver"
+          bookingStatus={booking?.status || BOOKING_STATUS.STARTED}
         />
       ) : (
         <div className="h-56 bg-[#f4efe6] flex items-center justify-center">

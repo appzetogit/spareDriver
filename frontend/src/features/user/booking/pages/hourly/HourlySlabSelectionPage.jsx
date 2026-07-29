@@ -460,18 +460,12 @@ function CustomRow({ active, label, rate, maxHours, hours, onSelect, onHoursChan
           <label className="block text-xs font-semibold text-text-secondary mb-1.5">
             How many hours?
           </label>
-          <div className="flex items-center gap-2">
-            <Stepper
-              value={hours}
-              min={1}
-              max={maxHours > 0 ? maxHours : 24}
-              onChange={onHoursChange}
-            />
-            <p className="text-xs text-text-muted ml-2">
-              ≈ ₹{Math.round((rate || 0) * (Number(hours) || 1))}{' '}
-              <span className="text-[10px]">(before taxes & charges)</span>
-            </p>
-          </div>
+          <Stepper
+            value={hours}
+            min={1}
+            max={maxHours > 0 ? maxHours : 24}
+            onChange={onHoursChange}
+          />
         </div>
       )}
     </div>

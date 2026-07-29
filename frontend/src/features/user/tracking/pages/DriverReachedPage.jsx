@@ -83,6 +83,7 @@ const DriverReachedPage = () => {
             height={256}
             showRoute={false}
             emphasis="driver"
+            bookingStatus={booking?.status || BOOKING_STATUS.ARRIVED}
           />
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-success/95 backdrop-blur-sm px-4 py-2 rounded-full shadow-md">
             <div className="flex items-center gap-2">

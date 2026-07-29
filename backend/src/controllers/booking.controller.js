@@ -9,6 +9,8 @@ import {
   getActiveBookingForDriverService,
   getBookingByIdService,
   cancelBookingByUserService,
+  searchAgainBookingService,
+  rescheduleBookingService,
   sanitizeBookingForDriver,
   listAdminBookingsService,
 } from '../services/booking.service.js';
@@ -140,6 +142,24 @@ export const cancelBooking = asyncHandler(async (req, res) => {
   await withdrawCurrentOfferService(req.params.id, 'cancelled_by_user');
   const booking = await cancelBookingByUserService(req.user._id, req.params.id, req.body?.reason);
   return res.status(200).json(new ApiResponse(200, { booking }, 'Booking cancelled'));
+});
+
+export const searchAgainBooking = asyncHandler(async (req, res) => {
+  const booking = await searchAgainBookingService(req.user._id, req.params.id);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { booking }, 'Searching for a driver again'));
+});
+
+export const rescheduleBooking = asyncHandler(async (req, res) => {
+  const booking = await rescheduleBookingService(
+    req.user._id,
+    req.params.id,
+    req.body || {},
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { booking }, 'Booking rescheduled'));
 });
 
 export const createBookingPayment = asyncHandler(async (req, res) => {

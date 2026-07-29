@@ -9,6 +9,7 @@ import {
   Headphones,
   Loader2,
   MapPin,
+  Pencil,
   Phone,
   Sparkles,
 } from 'lucide-react';
@@ -28,6 +29,9 @@ import {
   buildUserCancelConfirmMessage,
   previewUserCancellation,
 } from '../utils/cancellationPreview';
+import RescheduleBookingSheet, {
+  canRescheduleBooking,
+} from '../components/RescheduleBookingSheet';
 
 function formatWhen(iso) {
   if (!iso) return null;
@@ -69,6 +73,7 @@ const ScheduledConfirmedPage = () => {
 
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchActive = useUserActiveBookingStore((s) => s.fetchActive);
+  const setBooking = useUserActiveBookingStore((s) => s.setBooking);
   const cancelBooking = useUserActiveBookingStore((s) => s.cancelBooking);
   const clearActiveBooking = useUserActiveBookingStore((s) => s.clear);
   const draftReset = useBookingDraftStore((s) => s.reset);
@@ -78,6 +83,7 @@ const ScheduledConfirmedPage = () => {
   const [hydrating, setHydrating] = useState(kind === 'booking' && !booking);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
   useEffect(() => {
     draftReset();
@@ -144,6 +150,8 @@ const ScheduledConfirmedPage = () => {
     kind === 'booking'
     && !!bookingId
     && ACTIVE_BOOKING_STATUSES.includes(booking?.status);
+
+  const canReschedule = kind === 'booking' && canRescheduleBooking(booking);
 
   const cancelPreview = useMemo(
     () => (canCancel ? previewUserCancellation(booking) : null),
@@ -268,7 +276,7 @@ const ScheduledConfirmedPage = () => {
                   <div className="w-8 h-8 rounded-xl bg-white text-slate-700 border border-slate-200 flex items-center justify-center shrink-0">
                     <CalendarClock className="w-3.5 h-3.5" />
                   </div>
-                  <div className="min-w-0 text-left">
+                  <div className="min-w-0 flex-1 text-left">
                     <p className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">
                       Pickup time
                     </p>
@@ -276,6 +284,16 @@ const ScheduledConfirmedPage = () => {
                       {whenLabel}
                     </p>
                   </div>
+                  {canReschedule && (
+                    <button
+                      type="button"
+                      onClick={() => setRescheduleOpen(true)}
+                      className="shrink-0 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Edit
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -356,6 +374,15 @@ const ScheduledConfirmedPage = () => {
         cancelLabel="Keep booking"
         variant="danger"
         loading={cancelling}
+      />
+
+      <RescheduleBookingSheet
+        open={rescheduleOpen}
+        booking={booking}
+        onClose={() => setRescheduleOpen(false)}
+        onSaved={(next) => {
+          if (next) setBooking(next);
+        }}
       />
     </div>
   );

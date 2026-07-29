@@ -60,6 +60,7 @@ const SelectDurationPage = lazy(() => import('./features/user/booking/pages/Sele
 const ConfirmAndPayPage = lazy(() => import('./features/user/booking/pages/ConfirmAndPayPage'));
 const PaymentPage = lazy(() => import('./features/user/booking/pages/PaymentPage'));
 const SearchingDriverPage = lazy(() => import('./features/user/booking/pages/SearchingDriverPage'));
+const NoDriversFoundPage = lazy(() => import('./features/user/booking/pages/NoDriversFoundPage'));
 const DriverAssignedPage = lazy(() => import('./features/user/booking/pages/DriverAssignedPage'));
 const ScheduledConfirmedPage = lazy(
   () => import('./features/user/booking/pages/ScheduledConfirmedPage'),
@@ -171,6 +172,7 @@ const ManageRevenue = lazy(() => import('./features/admin/pages/ManageRevenue'))
 const ManageSubscriptions = lazy(() => import('./features/admin/pages/ManageSubscriptions'));
 const ManageCoupons = lazy(() => import('./features/admin/pages/ManageCoupons'));
 const ManageSubscriptionRevenue = lazy(() => import('./features/admin/pages/ManageSubscriptionRevenue'));
+const ManageKitRevenue = lazy(() => import('./features/admin/pages/ManageKitRevenue'));
 const LiveDriverMap = lazy(() => import('./features/admin/pages/LiveDriverMap'));
 const ManageKitOrders = lazy(() => import('./features/admin/pages/ManageKitOrders'));
 const KitOrderDetailPage = lazy(() => import('./features/admin/pages/KitOrderDetailPage'));
@@ -280,6 +282,7 @@ function App() {
 
           {/* Shared post-creation screens (used by both flows) */}
           <Route path="/user/book/searching" element={<SearchingDriverPage />} />
+          <Route path="/user/book/no-drivers" element={<NoDriversFoundPage />} />
           <Route path="/user/book/assigned" element={<DriverAssignedPage />} />
           {/* Id-scoped variant so a hard refresh stays on the same
               booking — without the id, the page falls back to
@@ -435,6 +438,7 @@ function App() {
             {/* <Route path="/admin/account/deletions" element={<ManageAccountDeletions />} /> */}
             <Route path="/admin/account/revenue" element={<ManageRevenue />} />
             <Route path="/admin/account/subscription-revenue" element={<ManageSubscriptionRevenue />} />
+            <Route path="/admin/account/kit-revenue" element={<ManageKitRevenue />} />
           </Route>
         </Route>
       </Routes>

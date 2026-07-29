@@ -155,7 +155,7 @@ import {
   getAdminSubscriptionDispatch,
   updateAdminSubscriptionDispatch,
 } from '../controllers/appSettings.controller.js';
-import { listPlatformRevenue } from '../controllers/revenue.controller.js';
+import { listPlatformRevenue, listKitRevenue } from '../controllers/revenue.controller.js';
 import {
   getAdminBookings,
   getAdminBookingById,
@@ -668,6 +668,7 @@ router.post('/failed-jobs/:id/resolve', protectStaff, restrictTo(...SUPER_ADMIN)
 // commission, company share of a cancellation fee, etc.) — writes are
 // done by the booking pipelines, not here.
 router.get('/revenue', protectStaff, restrictTo(...SUPER_ADMIN), listPlatformRevenue);
+router.get('/kit-revenue', protectStaff, restrictTo(...SUPER_ADMIN), listKitRevenue);
 
 router.get('/sos', protectStaff, restrictTo(...ALL_STAFF), listAdminSos);
 router.get('/sos/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminSosDetail);

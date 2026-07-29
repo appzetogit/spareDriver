@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useSocket } from './useSocket';
 import { C2S_EVENTS } from '../constants/socketEvents';
 
@@ -10,9 +10,39 @@ import { C2S_EVENTS } from '../constants/socketEvents';
  *   2. We throttle emits to the backend to one every `MIN_EMIT_INTERVAL_MS`.
  *   3. Each accepted emit travels over Socket.IO to the backend, which writes
  *      to Firebase + (throttled) Mongo.
+ *
+ * Shared status (permission / error / coords) is published so Home can still
+ * surface a permission banner while `DriverLocationBridge` owns the watch.
  */
 
 const MIN_EMIT_INTERVAL_MS = 5_000;
+
+const locationStatusListeners = new Set();
+let locationStatusSnapshot = {
+  permission: 'unknown',
+  error: null,
+  coords: null,
+  isSharing: false,
+};
+
+function emitLocationStatus(patch) {
+  locationStatusSnapshot = { ...locationStatusSnapshot, ...patch };
+  locationStatusListeners.forEach((fn) => fn());
+}
+
+function subscribeLocationStatus(fn) {
+  locationStatusListeners.add(fn);
+  return () => locationStatusListeners.delete(fn);
+}
+
+function getLocationStatusSnapshot() {
+  return locationStatusSnapshot;
+}
+
+/** Read-only shared GPS stream status (safe from any driver screen). */
+export function useDriverLocationStatus() {
+  return useSyncExternalStore(subscribeLocationStatus, getLocationStatusSnapshot, getLocationStatusSnapshot);
+}
 
 const GEO_OPTIONS = Object.freeze({
   enableHighAccuracy: true,
@@ -192,6 +222,15 @@ export function useDriverLocation({ enabled }) {
   }, [socket]);
 
   const isSharing = enabled && permission === PERMISSION.GRANTED && coords != null;
+
+  useEffect(() => {
+    emitLocationStatus({
+      permission,
+      error,
+      coords,
+      isSharing,
+    });
+  }, [permission, error, coords, isSharing]);
 
   return {
     isSharing,

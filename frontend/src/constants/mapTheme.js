@@ -19,14 +19,40 @@
  * data-dense default Google styling intact.
  */
 
+import { BOOKING_STATUS } from './bookingStatus';
+
 export const PIN_ASSETS = Object.freeze({
   /** Where the user themself is right now. Green pin with a person. */
   CURRENT_LOCATION: '/images/pin/location.png',
   /** Each nearby/online driver. Coral pin with a person silhouette. */
   DRIVER: '/images/pin/user.png',
+  /** Driver heading to pickup (en route). Direction arrow. */
+  DRIVER_EN_ROUTE: '/images/pin/right-arrow.png',
+  /** Driver on an active trip (after start). Car icon. */
+  DRIVER_IN_TRIP: '/images/pin/car.png',
   /** The pickup location for a booking. Coral pin with a car. */
   PICKUP: '/images/pin/gps.png',
 });
+
+/**
+ * Live-trip driver pin: arrow while heading to pickup, car once the
+ * trip has started. Falls back to the generic nearby-driver pin.
+ *
+ * @param {string|null|undefined} status  Booking status enum value
+ * @returns {string} Public image path
+ */
+export function driverPinForStatus(status) {
+  if (status === BOOKING_STATUS.STARTED) return PIN_ASSETS.DRIVER_IN_TRIP;
+  if (
+    status === BOOKING_STATUS.EN_ROUTE ||
+    status === BOOKING_STATUS.DRIVER_ASSIGNED ||
+    status === BOOKING_STATUS.AWAITING_PAYMENT ||
+    status === BOOKING_STATUS.ARRIVED
+  ) {
+    return PIN_ASSETS.DRIVER_EN_ROUTE;
+  }
+  return PIN_ASSETS.DRIVER;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Polyline theme                                                             */

@@ -23,7 +23,7 @@ import { useDriverHomeSummaryStore } from '../../../../store/driver/useDriverTri
 import useDriverIncomingScheduledStore from '../../../../store/driver/useDriverIncomingScheduledStore';
 import useDriverSubscriptionsStore from '../../../../store/driver/useDriverSubscriptionsStore';
 import { useDriverOnlineToggle } from '../../../../hooks/useDriverOnlineToggle';
-import { useDriverLocation } from '../../../../hooks/useDriverLocation';
+import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
 import { reverseGeocode } from '../../../../utils/geocoding';
@@ -103,7 +103,7 @@ const DriverHomePage = () => {
   const hasOtherBlocker = Boolean(blocker) && !needsKitAction;
   const primaryReason = blocker?.reasons?.[0] || null;
 
-  const location = useDriverLocation({ enabled: isOnline });
+  const location = useDriverLocationStatus();
 
   // Display location in the sticky header (independent of online GPS stream).
   const { maps, ready: mapsReady } = useGoogleMaps();

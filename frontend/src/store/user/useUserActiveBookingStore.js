@@ -11,6 +11,7 @@ import api from '../../utils/api';
  * Writes (helpers that page components call):
  *   - createBooking      → POST /auth/bookings + replace local state
  *   - cancelBooking      → POST /auth/bookings/:id/cancel
+ *   - searchAgain        → POST /auth/bookings/:id/search-again
  *   - createPaymentOrder → POST /auth/bookings/:id/pay
  *   - verifyPayment      → POST /auth/bookings/:id/verify-payment
  *
@@ -86,6 +87,12 @@ const useUserActiveBookingStore = create((set, get) => ({
     }
     if (patch.timeline) {
       merged.timeline = { ...(current.timeline || {}), ...patch.timeline };
+    }
+    if (patch.hourly) {
+      merged.hourly = { ...(current.hourly || {}), ...patch.hourly };
+    }
+    if (patch.outstation) {
+      merged.outstation = { ...(current.outstation || {}), ...patch.outstation };
     }
     // Same null-handling rule for `cancellation`. The re-dispatch flow
     // sends `cancellation: null` once a new driver accepts so the
@@ -255,6 +262,15 @@ const useUserActiveBookingStore = create((set, get) => ({
       }
       throw err;
     }
+  },
+
+  async searchAgain() {
+    const id = get().booking?._id;
+    if (!id) throw new Error('No active booking');
+    const res = await api.post(`/auth/bookings/${id}/search-again`);
+    const booking = res?.data?.data?.booking || null;
+    set({ booking });
+    return booking;
   },
 
   async createPaymentOrder() {

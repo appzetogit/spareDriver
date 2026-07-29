@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { MapPin, Loader2, X, AlertTriangle } from 'lucide-react';
-import Button from '../../../../components/Button';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
+import AdsCarousel from '../../../../components/AdsCarousel';
 import { useSocketEvent } from '../../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../../constants/socketEvents';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
@@ -91,27 +91,9 @@ const SearchingDriverPage = () => {
         navigate('/user/book/scheduled', { replace: true });
         break;
       case BOOKING_STATUS.NO_DRIVERS_FOUND: {
-        // Drop the failed booking from the local store but keep the booking
-        // draft intact so the user can tweak their selection and retry
-        // without re-entering pickup / car / time. The wallet was auto-
-        // refunded server-side; pull a fresh snapshot so the next
-        // retry's "balance" line reflects it.
-        clearActiveBooking();
-        fetchWallet().catch(() => {});
-        if (serviceType === SERVICE_TYPES.HOURLY) {
-          navigate('/user/book/hourly/slab', {
-            replace: true,
-            state: { noDriversFound: true },
-          });
-        } else {
-          // Other service types don't (yet) have a tailored re-entry point;
-          // bouncing to the service picker is the safe default.
-          draftReset();
-          navigate('/user/book/service', {
-            replace: true,
-            state: { noDriversFound: true },
-          });
-        }
+        // Soft-park: payment still held. Dedicated page offers Search
+        // again or Cancel (refund only on cancel).
+        navigate('/user/book/no-drivers', { replace: true });
         break;
       }
       case BOOKING_STATUS.CANCELLED:
@@ -130,9 +112,6 @@ const SearchingDriverPage = () => {
     bookingType,
     paymentMethod,
     navigate,
-    draftReset,
-    clearActiveBooking,
-    fetchWallet,
   ]);
 
   // Live patches from the dispatcher.
@@ -177,9 +156,9 @@ const SearchingDriverPage = () => {
       fetchWallet().catch(() => {});
       setCancelConfirmOpen(false);
 
-      // cancelBooking may re-sync a booking the server already closed
-      // (driver cancel / no drivers). Leave routing to the status effect
-      // so no-drivers still lands on the slab retry screen.
+      // cancelBooking may re-sync a booking the server already closed.
+      // Leave routing to the status effect for no-drivers; handle cancel
+      // redirect here.
       const status = result?.status;
       if (
         status === BOOKING_STATUS.NO_DRIVERS_FOUND ||
@@ -190,7 +169,7 @@ const SearchingDriverPage = () => {
           clearActiveBooking();
           navigate('/user/home', { replace: true });
         }
-        // NO_DRIVERS_FOUND: keep booking in store; useEffect redirects to slab.
+        // NO_DRIVERS_FOUND: keep booking; useEffect → /user/book/no-drivers.
         return;
       }
 
@@ -251,19 +230,8 @@ const SearchingDriverPage = () => {
           <span className="text-xs">{booking?.bookingNumber || 'Preparing booking…'}</span>
         </div>
 
-        <div className="mt-10 w-full max-w-xs space-y-4">
-          {/* Ad Banner Space */}
-          <div className="w-full h-28 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
-            <span className="absolute top-2 right-3 text-[9px] font-bold tracking-widest uppercase text-slate-400">
-              Sponsored
-            </span>
-            <div className="flex flex-col items-center opacity-60 mt-2">
-              <div className="w-10 h-10 bg-slate-200 rounded-xl mb-1 flex items-center justify-center">
-                <span className="text-lg">🎉</span>
-              </div>
-              <p className="text-[11px] font-medium text-slate-500">Promotional Banner</p>
-            </div>
-          </div>
+        <div className="mt-10 w-full max-w-sm space-y-4">
+          <AdsCarousel />
 
           {canCancel && (
             <button
@@ -317,8 +285,8 @@ function DriverReassigningModal({ onClose }) {
             <p className="text-xs text-text-muted mt-1">
               No worries — we&apos;re assigning a new driver right now.
               Your payment is safe and will be applied to the new ride.
-              If we can&apos;t find a driver, we&apos;ll automatically
-              refund you (minus the platform charge).
+              If we can&apos;t find a driver, you can search again or
+              cancel for a full refund.
             </p>
           </div>
         </div>

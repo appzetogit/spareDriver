@@ -15,6 +15,7 @@ import {
   Mountain,
   Moon,
   Navigation,
+  Pencil,
   Phone,
   ReceiptText,
   ShieldCheck,
@@ -41,6 +42,9 @@ import { C2S_EVENTS, S2C_EVENTS } from '../../../../constants/socketEvents';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import { formatPickupDateTime } from '../../../../utils/datetime';
+import RescheduleBookingSheet, {
+  canRescheduleBooking,
+} from '../../booking/components/RescheduleBookingSheet';
 
 /**
  * Per-booking detail screen, reachable from any card on /user/activity.
@@ -177,6 +181,8 @@ const liveRouteForStatus = (status, bookingId) => {
       return '/user/book/scheduled';
     case BOOKING_STATUS.SEARCHING:
       return '/user/book/searching';
+    case BOOKING_STATUS.NO_DRIVERS_FOUND:
+      return '/user/book/no-drivers';
     case BOOKING_STATUS.AWAITING_PAYMENT:
     case BOOKING_STATUS.DRIVER_ASSIGNED:
     case BOOKING_STATUS.EN_ROUTE:
@@ -206,6 +212,7 @@ const TripDetailsPage = () => {
   });
   const [loading, setLoading] = useState(!booking);
   const [error, setError] = useState(null);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
   const fetchBooking = useCallback(async () => {
     if (!id) return;
@@ -410,6 +417,8 @@ const TripDetailsPage = () => {
           completedAt={completedAt}
           scheduledAt={scheduledAt}
           expectedReturnAt={expectedReturnAt}
+          canReschedule={canRescheduleBooking(booking)}
+          onReschedule={() => setRescheduleOpen(true)}
         />
 
         {/* Pickup OTP — only visible during the driver-en-route window
@@ -494,8 +503,8 @@ const TripDetailsPage = () => {
                   No drivers were available
                 </p>
                 <p className="text-xs text-rose-800 mt-0.5">
-                  Your booking was closed without anyone being dispatched. Any
-                  amount you paid has been refunded to your wallet.
+                  Your payment is still held. Search again from the booking
+                  screen, or cancel to get a full refund to your wallet.
                 </p>
               </div>
             </div>
@@ -561,6 +570,25 @@ const TripDetailsPage = () => {
           </Button>
         )}
       </div>
+
+      <RescheduleBookingSheet
+        open={rescheduleOpen}
+        booking={booking}
+        onClose={() => setRescheduleOpen(false)}
+        onSaved={(next) => {
+          if (next) {
+            setBooking(next);
+            if (
+              useUserActiveBookingStore.getState().booking
+              && String(useUserActiveBookingStore.getState().booking._id) === String(next._id)
+            ) {
+              setActiveBooking(next);
+            }
+          } else {
+            fetchBooking();
+          }
+        }}
+      />
     </div>
   );
 };
@@ -592,6 +620,8 @@ function TripRouteCard({
   completedAt,
   scheduledAt,
   expectedReturnAt,
+  canReschedule = false,
+  onReschedule,
 }) {
   const isHourly = booking.serviceType === SERVICE_TYPES.HOURLY;
   const isOutstation = booking.serviceType === SERVICE_TYPES.OUTSTATION;
@@ -710,6 +740,17 @@ function TripRouteCard({
           />
         )}
       </div>
+
+      {canReschedule && (
+        <button
+          type="button"
+          onClick={onReschedule}
+          className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 text-primary font-semibold text-sm py-2.5 hover:bg-primary/10 transition"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          Change pickup time
+        </button>
+      )}
     </Card>
   );
 }

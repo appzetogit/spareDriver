@@ -167,6 +167,17 @@ export const getMySubscription = asyncHandler(async (req, res) => {
   );
 });
 
+export const rescheduleMySubscription = asyncHandler(async (req, res) => {
+  const subscription = await pricingService.rescheduleUserSubscriptionService(
+    req.user._id,
+    req.params.id,
+    req.body || {},
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, subscription, 'Subscription start date updated'));
+});
+
 export const adminListSubscriptionRevenue = asyncHandler(async (req, res) => {
   const result = await pricingService.listSubscriptionRevenueService({
     page: Number(req.query.page) || 1,

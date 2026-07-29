@@ -8,7 +8,7 @@ import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../../../utils/geo';
-import { isBookingContactRevealed } from '../../../../constants/bookingStatus';
+import { BOOKING_STATUS, isBookingContactRevealed } from '../../../../constants/bookingStatus';
 
 /**
  * Driver-side "navigate to customer" screen — replaces the static mock
@@ -71,6 +71,7 @@ const NavigateToCustomerPage = () => {
           height={240}
           showRoute
           emphasis="pickup"
+          bookingStatus={BOOKING_STATUS.EN_ROUTE}
         />
       ) : (
         <div className="h-56 bg-[#f4efe6] flex items-center justify-center">

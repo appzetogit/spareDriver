@@ -58,6 +58,7 @@ import {
   BOOKING_TYPE,
   BOOKING_TYPE_LIST,
   SCHEDULED_BOOKING,
+  DISPATCH,
   isBookingContactRevealed,
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES, SERVICE_TYPE_LIST } from '../constants/serviceTypes.js';
@@ -446,9 +447,10 @@ const ACTIVE_STATUS_PRIORITY = Object.freeze({
   [BOOKING_STATUS.EN_ROUTE]: 2,
   [BOOKING_STATUS.AWAITING_PAYMENT]: 3,
   [BOOKING_STATUS.DRIVER_ASSIGNED]: 4,
-  [BOOKING_STATUS.IN_EMERGENCY_POOL]: 5,
-  [BOOKING_STATUS.SEARCHING]: 6,
-  [BOOKING_STATUS.PENDING_ASSIGNMENT]: 7,
+  [BOOKING_STATUS.NO_DRIVERS_FOUND]: 5,
+  [BOOKING_STATUS.IN_EMERGENCY_POOL]: 6,
+  [BOOKING_STATUS.SEARCHING]: 7,
+  [BOOKING_STATUS.PENDING_ASSIGNMENT]: 8,
 });
 
 function rankActiveBooking(b) {
@@ -789,7 +791,7 @@ function windowFromExistingBooking(b) {
  * frontend can pop a specific toast and deep-link to the conflicting
  * booking if it wants to.
  */
-async function assertCarAvailableForWindow({ userId, carId, body }) {
+async function assertCarAvailableForWindow({ userId, carId, body, excludeBookingId = null }) {
   if (!carId) return;
   const newWindow = windowFromCreatePayload(body);
   // Without a bounded window we can't safely compare — fall back to a
@@ -799,6 +801,7 @@ async function assertCarAvailableForWindow({ userId, carId, body }) {
     carId,
     status: { $in: ACTIVE_BOOKING_STATUSES },
     isDeleted: false,
+    ...(excludeBookingId ? { _id: { $ne: excludeBookingId } } : {}),
   })
     .select(
       'serviceType hourly outstation timeline createdAt bookingNumber userId status',
@@ -1223,6 +1226,7 @@ export async function cancelBookingByUserService(
   const previouslyAssignedDriver = booking.driverId;
   const wasPaid = booking.paymentStatus === BOOKING_PAYMENT_STATUS.PAID;
   const paidViaWallet = booking.paymentMethod === BOOKING_PAYMENT_METHOD.WALLET;
+  const wasNoDriversFound = booking.status === BOOKING_STATUS.NO_DRIVERS_FOUND;
 
   booking.status = BOOKING_STATUS.CANCELLED;
   booking.cancellation = {
@@ -1230,9 +1234,11 @@ export async function cancelBookingByUserService(
       reason ||
       (cancelledBy === 'admin'
         ? 'cancelled_by_admin'
-        : tripStarted
-          ? 'cancelled_by_user_after_start'
-          : 'cancelled_by_user'),
+        : wasNoDriversFound
+          ? 'cancelled_by_user_after_no_drivers'
+          : tripStarted
+            ? 'cancelled_by_user_after_start'
+            : 'cancelled_by_user'),
     cancelledBy,
     feeCharged,
     refundAmount,
@@ -1280,8 +1286,12 @@ export async function cancelBookingByUserService(
         await creditWalletService({
           userId: booking.userId,
           amount: refundAmount,
-          source: WALLET_TXN_SOURCE.BOOKING_REFUND,
-          description: `Refund \u2014 booking ${booking.bookingNumber} cancelled (fee \u20B9${feeCharged})`,
+          source: wasNoDriversFound
+            ? WALLET_TXN_SOURCE.BOOKING_NO_DRIVERS_REFUND
+            : WALLET_TXN_SOURCE.BOOKING_REFUND,
+          description: wasNoDriversFound
+            ? `Refund \u2014 no drivers available for ${booking.bookingNumber}`
+            : `Refund \u2014 booking ${booking.bookingNumber} cancelled (fee \u20B9${feeCharged})`,
           refType: 'Booking',
           refId: String(booking._id),
         });
@@ -1404,13 +1414,9 @@ export async function cancelBookingByAdminService(bookingId, reason = '') {
 export async function adminMarkNoDriversFoundService(bookingId) {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw new ApiError(404, 'Booking not found');
-  const wasPaid = booking.paymentStatus === BOOKING_PAYMENT_STATUS.PAID;
-  const paidViaWallet = booking.paymentMethod === BOOKING_PAYMENT_METHOD.WALLET;
 
   // Scheduled rides never auto-cancel into NO_DRIVERS_FOUND — they get
   // routed to the emergency pool instead so a human can assign someone.
-  // Refund + cleanup only runs for instant bookings (which the user
-  // would otherwise be left waiting on indefinitely).
   if (booking.bookingType === BOOKING_TYPE.SCHEDULED) {
     const { escalateToEmergencyPool } = await import('./bookingEmergencyPool.service.js');
     await escalateToEmergencyPool(booking._id);
@@ -1418,68 +1424,277 @@ export async function adminMarkNoDriversFoundService(bookingId) {
   }
   cancelScheduledBookingJobs(bookingId).catch(() => {});
 
-  // When no driver was found (typical after a driver bailed mid-flight),
-  // we don't apply a cancellation fee — the customer didn't choose to
-  // cancel. Full refund of whatever they paid.
-  const refundAmount = wasPaid
-    ? Math.max(0, Math.round((Number(booking.payment?.amountPaidRupees) || 0) * 100) / 100)
-    : 0;
-
+  // Soft-park after dispatch waves: payment + buffer hold stay put so
+  // the user can Search again (same paid fare) or Cancel for a refund.
+  // Do NOT auto-refund here.
   booking.status = BOOKING_STATUS.NO_DRIVERS_FOUND;
-  booking.timeline.cancelledAt = new Date();
   booking.dispatch.pendingOfferIds = [];
   booking.dispatch.currentExpiresAt = null;
   booking.cancellation = {
     reason: 'no_drivers_available',
     cancelledBy: 'system',
     feeCharged: 0,
-    refundAmount,
+    refundAmount: 0,
   };
-  if (wasPaid && paidViaWallet && refundAmount > 0) {
-    booking.paymentStatus = BOOKING_PAYMENT_STATUS.REFUNDED;
-  }
-  // No-driver-found terminates the booking — release any reserved
-  // waiting buffer back into the user's spendable wallet.
-  await releaseBookingBufferHold(booking);
-  // (Defensive — extensions only exist post-STARTED, but the
-  // earlier-stage helper is idempotent and protects us against
-  // future flow changes.)
-  await clearPendingExtensionsOnTerminate(booking, 'no_drivers_found');
   await booking.save();
 
-  if (wasPaid && refundAmount > 0) {
-    if (paidViaWallet) {
-      try {
-        await creditWalletService({
-          userId: booking.userId,
-          amount: refundAmount,
-          source: WALLET_TXN_SOURCE.BOOKING_NO_DRIVERS_REFUND,
-          description: `Refund \u2014 no drivers available for ${booking.bookingNumber}`,
-          refType: 'Booking',
-          refId: String(booking._id),
-        });
-      } catch (refundErr) {
-        console.error(
-          '[booking] failed to credit wallet for no-drivers refund',
-          String(booking._id),
-          refundErr?.message,
-        );
-      }
-    } else {
-      // Legacy Razorpay refund — recorded for admin to process by hand.
-      await issueBookingRefundService(booking, {
-        initiatedBy: REFUND_INITIATED_BY.SYSTEM,
-        reason: 'no_drivers_available',
-        breakdown: {
-          amountRupees: refundAmount,
-          cancellationFeeRupees: 0,
-          grossPaidRupees: refundAmount,
-        },
-      });
-    }
+  return booking.toObject();
+}
+
+/**
+ * User chose "Search again" after waves exhausted with no accept.
+ * Resets dispatch and kicks off a fresh wave; payment stays as-is.
+ */
+export async function searchAgainBookingService(userId, bookingId) {
+  const booking = await Booking.findOne({ _id: bookingId, userId, isDeleted: false });
+  if (!booking) throw new ApiError(404, 'Booking not found');
+  if (booking.status !== BOOKING_STATUS.NO_DRIVERS_FOUND) {
+    throw new ApiError(400, 'This booking is not waiting for a new driver search');
   }
 
+  if (booking.dispatch) {
+    booking.dispatch.pendingOfferIds = [];
+    booking.dispatch.currentExpiresAt = null;
+    booking.dispatch.currentRadiusMeters = DISPATCH.SEARCH_RADIUS_START_METERS;
+    booking.dispatch.attemptsCount = 0;
+  }
+  booking.status = BOOKING_STATUS.SEARCHING;
+  booking.driverId = null;
+  booking.timeline.driverAssignedAt = null;
+  booking.cancellation = null;
+
+  await booking.save();
+
+  emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, {
+    bookingId: String(booking._id),
+    status: booking.status,
+    cancellation: null,
+    dispatch: {
+      attemptsCount: booking.dispatch?.attemptsCount || 0,
+      maxAttempts: booking.dispatch?.maxAttempts,
+      currentRadiusMeters: booking.dispatch?.currentRadiusMeters,
+    },
+  });
+
+  const { dispatchNextDriverService } = await import('./bookingDispatch.service.js');
+  dispatchNextDriverService(booking._id).catch((err) =>
+    console.warn(
+      '[booking] search-again dispatch failed for',
+      String(booking._id),
+      ':',
+      err?.message,
+    ),
+  );
+
+  notifyUserDriverSearching(booking.userId, booking).catch(() => null);
+
   return booking.toObject();
+}
+
+/**
+ * Statuses where the customer may still change pickup time — no driver
+ * has been assigned yet. Instant bookings are not editable.
+ */
+const RESCHEDULABLE_STATUSES = Object.freeze([
+  BOOKING_STATUS.PENDING_ASSIGNMENT,
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.IN_EMERGENCY_POOL,
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
+]);
+
+/**
+ * Change pickup time on a scheduled hourly or outstation booking before
+ * a driver is assigned. Fare is unchanged (duration window is preserved).
+ *
+ * Body:
+ *   - scheduled: `{ scheduledStartAt }`
+ *   - outstation: `{ pickupAt }` (expected return shifts by the same delta)
+ */
+export async function rescheduleBookingService(userId, bookingId, body = {}) {
+  const booking = await Booking.findOne({ _id: bookingId, userId, isDeleted: false });
+  if (!booking) throw new ApiError(404, 'Booking not found');
+
+  if (booking.driverId) {
+    throw new ApiError(400, 'Pickup time cannot be changed after a driver is assigned');
+  }
+  if (!RESCHEDULABLE_STATUSES.includes(booking.status)) {
+    throw new ApiError(400, 'This booking can no longer be rescheduled');
+  }
+
+  const isOutstation =
+    booking.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking.bookingType === BOOKING_TYPE.OUTSTATION;
+  const isScheduledHourly =
+    booking.serviceType === SERVICE_TYPES.HOURLY
+    && booking.bookingType === BOOKING_TYPE.SCHEDULED;
+
+  if (!isOutstation && !isScheduledHourly) {
+    throw new ApiError(400, 'Only scheduled and outstation bookings can be rescheduled');
+  }
+
+  const cfg = await loadScheduledDispatchConfig(booking.serviceType);
+  const minLeadHours =
+    cfg.MIN_SCHEDULED_LEAD_HOURS ?? SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS;
+  const minLeadMs = minLeadHours * 60 * 60 * 1000;
+
+  let nextStartIso = null;
+  let nextPickupIso = null;
+  let nextReturnIso = null;
+  let outstationDays = null;
+
+  if (isScheduledHourly) {
+    const nextStart = new Date(body.scheduledStartAt);
+    if (!Number.isFinite(nextStart.getTime())) {
+      throw new ApiError(400, 'scheduledStartAt is required');
+    }
+    if (nextStart.getTime() - Date.now() < minLeadMs) {
+      throw new ApiError(
+        422,
+        `Scheduled rides must start at least ${minLeadHours} hours from now.`,
+      );
+    }
+    await assertCarAvailableForWindow({
+      userId,
+      carId: booking.carId,
+      excludeBookingId: booking._id,
+      body: {
+        serviceType: SERVICE_TYPES.HOURLY,
+        bookingType: BOOKING_TYPE.SCHEDULED,
+        hourly: {
+          scheduledStartAt: nextStart.toISOString(),
+          durationHours: booking.hourly?.durationHours,
+        },
+      },
+    });
+    nextStartIso = nextStart.toISOString();
+  } else {
+    const nextPickup = new Date(body.pickupAt);
+    if (!Number.isFinite(nextPickup.getTime())) {
+      throw new ApiError(400, 'pickupAt is required');
+    }
+    if (nextPickup.getTime() - Date.now() < minLeadMs) {
+      throw new ApiError(
+        422,
+        `Outstation bookings must start at least ${minLeadHours} hours from now.`,
+      );
+    }
+
+    const prevPickup = new Date(
+      booking.outstation?.pickupAt || booking.outstation?.startDate,
+    );
+    const prevReturn = new Date(
+      booking.outstation?.expectedReturnAt || booking.outstation?.endDate,
+    );
+    let nextReturn = prevReturn;
+    if (
+      Number.isFinite(prevPickup.getTime())
+      && Number.isFinite(prevReturn.getTime())
+    ) {
+      nextReturn = new Date(
+        nextPickup.getTime() + (prevReturn.getTime() - prevPickup.getTime()),
+      );
+    } else if (body.expectedReturnAt) {
+      nextReturn = new Date(body.expectedReturnAt);
+    }
+    if (!Number.isFinite(nextReturn.getTime()) || nextReturn <= nextPickup) {
+      throw new ApiError(400, 'Expected return must be after the new pickup time');
+    }
+
+    const duration = computeOutstationDuration(nextPickup, nextReturn);
+    await assertCarAvailableForWindow({
+      userId,
+      carId: booking.carId,
+      excludeBookingId: booking._id,
+      body: {
+        serviceType: SERVICE_TYPES.OUTSTATION,
+        bookingType: BOOKING_TYPE.OUTSTATION,
+        outstation: {
+          pickupAt: nextPickup.toISOString(),
+          expectedReturnAt: nextReturn.toISOString(),
+          days: duration.days,
+        },
+      },
+    });
+    nextPickupIso = nextPickup.toISOString();
+    nextReturnIso = nextReturn.toISOString();
+    outstationDays = duration;
+  }
+
+  const { withdrawCurrentOfferService, broadcastScheduledInboxService } =
+    await import('./bookingDispatch.service.js');
+  await withdrawCurrentOfferService(booking._id, 'rescheduled_by_user');
+  cancelScheduledBookingJobs(booking._id).catch(() => {});
+
+  // Re-load after withdraw so we don't race a stale document save.
+  const freshBooking = await Booking.findOne({
+    _id: bookingId,
+    userId,
+    isDeleted: false,
+  });
+  if (!freshBooking) throw new ApiError(404, 'Booking not found');
+  if (freshBooking.driverId) {
+    throw new ApiError(400, 'Pickup time cannot be changed after a driver is assigned');
+  }
+  if (!RESCHEDULABLE_STATUSES.includes(freshBooking.status)) {
+    throw new ApiError(400, 'This booking can no longer be rescheduled');
+  }
+
+  if (isScheduledHourly) {
+    freshBooking.hourly.scheduledStartAt = new Date(nextStartIso);
+  } else {
+    freshBooking.outstation.pickupAt = new Date(nextPickupIso);
+    freshBooking.outstation.expectedReturnAt = new Date(nextReturnIso);
+    freshBooking.outstation.startDate = new Date(nextPickupIso);
+    freshBooking.outstation.endDate = new Date(nextReturnIso);
+    freshBooking.outstation.days = outstationDays.days;
+    freshBooking.outstation.nights = outstationDays.nights;
+  }
+
+  if (freshBooking.dispatch) {
+    freshBooking.dispatch.pendingOfferIds = [];
+    freshBooking.dispatch.currentExpiresAt = null;
+    freshBooking.dispatch.offers = [];
+    freshBooking.dispatch.attemptsCount = 0;
+  }
+  freshBooking.cancellation = null;
+
+  await setupScheduledBooking(freshBooking);
+
+  emitToUser(freshBooking.userId, S2C_EVENTS.BOOKING_UPDATED, {
+    bookingId: String(freshBooking._id),
+    status: freshBooking.status,
+    hourly: freshBooking.hourly
+      ? { scheduledStartAt: freshBooking.hourly.scheduledStartAt }
+      : undefined,
+    outstation: freshBooking.outstation
+      ? {
+          pickupAt: freshBooking.outstation.pickupAt,
+          expectedReturnAt: freshBooking.outstation.expectedReturnAt,
+          startDate: freshBooking.outstation.startDate,
+          endDate: freshBooking.outstation.endDate,
+          days: freshBooking.outstation.days,
+          nights: freshBooking.outstation.nights,
+        }
+      : undefined,
+    cancellation: null,
+  });
+
+  if (freshBooking.status === BOOKING_STATUS.SEARCHING) {
+    broadcastScheduledInboxService(freshBooking._id).catch((err) =>
+      console.warn(
+        '[booking] reschedule inbox broadcast failed for',
+        String(freshBooking._id),
+        ':',
+        err?.message,
+      ),
+    );
+    notifyUserDriverSearching(freshBooking.userId, freshBooking).catch(() => null);
+  }
+
+  const lean = await Booking.findById(freshBooking._id)
+    .populate('driverId', DRIVER_USER_FIELDS)
+    .lean();
+  return attachCancellationPreview(sanitizeBookingForUser(lean), 'user');
 }
 
 /* ------------------------------------------------------------------ */

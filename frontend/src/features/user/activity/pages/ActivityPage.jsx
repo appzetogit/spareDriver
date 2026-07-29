@@ -80,8 +80,7 @@ const ActivityPage = () => {
         applyActiveUpdate(payload);
         if (
           payload.status === BOOKING_STATUS.COMPLETED ||
-          payload.status === BOOKING_STATUS.CANCELLED ||
-          payload.status === BOOKING_STATUS.NO_DRIVERS_FOUND
+          payload.status === BOOKING_STATUS.CANCELLED
         ) {
           clearActiveBooking();
         }
@@ -106,10 +105,7 @@ const ActivityPage = () => {
     return (mergedBookings || []).filter((b) => {
       if (activeTab === 'Completed') return b.status === BOOKING_STATUS.COMPLETED;
       if (activeTab === 'Cancelled') {
-        return (
-          b.status === BOOKING_STATUS.CANCELLED ||
-          b.status === BOOKING_STATUS.NO_DRIVERS_FOUND
-        );
+        return b.status === BOOKING_STATUS.CANCELLED;
       }
       return ACTIVE_BOOKING_STATUSES.includes(b.status);
     });

@@ -9,7 +9,7 @@
  *   searching → driver_assigned → awaiting_payment? → en_route → arrived
  *             → started → completed
  *             ↘ cancelled
- *             ↘ no_drivers_found
+ *             ↘ no_drivers_found → (search again → searching) | (cancel → refund)
  *
  * `awaiting_payment` only appears for `pre_ride` payment mode. Phase 4 ends
  * the flow at `driver_assigned` (post-pay) or once `awaiting_payment` is
@@ -56,12 +56,16 @@ export const ACTIVE_BOOKING_STATUSES = Object.freeze([
   BOOKING_STATUS.ARRIVED,
   BOOKING_STATUS.STARTED,
   BOOKING_STATUS.IN_EMERGENCY_POOL,
+  /**
+   * Soft-active: dispatch exhausted its waves but payment is still held.
+   * User can Search again or Cancel (refund only on cancel).
+   */
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
 ]);
 
 export const TERMINAL_BOOKING_STATUSES = Object.freeze([
   BOOKING_STATUS.COMPLETED,
   BOOKING_STATUS.CANCELLED,
-  BOOKING_STATUS.NO_DRIVERS_FOUND,
 ]);
 
 /** When does the customer's card get charged. */

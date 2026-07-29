@@ -152,6 +152,12 @@ const navItems = [
         roles: ['admin'],
       },
       {
+        path: '/admin/account/kit-revenue',
+        label: 'Kit Revenue',
+        icon: Package,
+        roles: ['admin'],
+      },
+      {
         path: '/admin/account/refunds',
         label: 'Refunds',
         icon: Banknote,

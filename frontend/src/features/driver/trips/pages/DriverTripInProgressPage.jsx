@@ -109,6 +109,7 @@ const DriverTripInProgressPage = () => {
           followDriver
           emphasis="driver"
           className="mx-3 mt-3"
+          bookingStatus={booking?.status || BOOKING_STATUS.STARTED}
         />
       ) : (
         <div className="h-48 bg-[#f4efe6] mx-3 mt-3 rounded-2xl flex items-center justify-center">

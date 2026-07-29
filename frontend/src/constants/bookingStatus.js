@@ -25,12 +25,13 @@ export const ACTIVE_BOOKING_STATUSES = Object.freeze([
   BOOKING_STATUS.ARRIVED,
   BOOKING_STATUS.STARTED,
   BOOKING_STATUS.IN_EMERGENCY_POOL,
+  /** Soft-active until user cancels (refund) or searches again. */
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
 ]);
 
 export const TERMINAL_BOOKING_STATUSES = Object.freeze([
   BOOKING_STATUS.COMPLETED,
   BOOKING_STATUS.CANCELLED,
-  BOOKING_STATUS.NO_DRIVERS_FOUND,
 ]);
 
 export const PAYMENT_MODE = Object.freeze({

@@ -427,6 +427,59 @@ export const listActiveUserSubscriptionsService = async (userId) => {
   return subs.map((s) => serializeSubscriptionForUser(s));
 };
 
+/**
+ * Move subscription start (and matching expiry) while no dedicated
+ * driver has been assigned yet. Duration months stay the same.
+ */
+export async function rescheduleUserSubscriptionService(userId, subscriptionId, body = {}) {
+  const subscription = await UserSubscription.findOne({
+    _id: subscriptionId,
+    userId,
+  });
+  if (!subscription) throw new ApiError(404, 'Subscription not found');
+  if (subscription.status !== SUBSCRIPTION_STATUS.ACTIVE) {
+    throw new ApiError(400, 'Only active subscriptions can be rescheduled');
+  }
+  if (subscription.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED) {
+    throw new ApiError(400, 'Start date cannot be changed after a driver is assigned');
+  }
+  if (subscription.assignmentStatus !== SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING) {
+    throw new ApiError(400, 'This subscription can no longer be rescheduled');
+  }
+
+  const nextStart = new Date(body.startDate);
+  if (!Number.isFinite(nextStart.getTime())) {
+    throw new ApiError(400, 'startDate is required');
+  }
+  // Date-only floor: start of local day, not in the past.
+  nextStart.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (nextStart.getTime() < today.getTime()) {
+    throw new ApiError(422, 'Start date cannot be in the past');
+  }
+
+  subscription.startDate = nextStart;
+  subscription.expiryDate = addMonths(nextStart, subscription.durationMonths);
+  await subscription.save();
+
+  const populated = await UserSubscription.findById(subscription._id)
+    .populate('planId', 'name')
+    .populate('zoneId', 'name city')
+    .populate({
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId image',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    })
+    .populate('assignedDriverId', 'name phone profilePicture rating');
+
+  return serializeSubscriptionForUser(populated);
+}
+
 function addMonths(date, months) {
   const next = new Date(date);
   next.setMonth(next.getMonth() + Math.max(1, Number(months) || 1));

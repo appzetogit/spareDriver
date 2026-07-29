@@ -856,7 +856,8 @@ async function spendDriverCancelChance(driverId, dateKey) {
  *
  * If the dispatcher can't find anyone in the next wave,
  * `dispatchNextDriverService` will eventually call
- * `adminMarkNoDriversFoundService`, which fires the refund.
+ * `adminMarkNoDriversFoundService`, which soft-parks the booking
+ * (no auto-refund — user searches again or cancels).
  */
 async function redispatchAfterDriverCancel(booking, driverId, policy, chance) {
   const { driverPenalty } = computeDriverCancellation(booking, policy, chance);
@@ -923,7 +924,7 @@ async function redispatchAfterDriverCancel(booking, driverId, policy, chance) {
 
   // Kick off a fresh dispatch wave. Errors here are non-fatal — the
   // dispatch service has its own retry path and ultimately calls
-  // adminMarkNoDriversFoundService (which issues a refund).
+  // adminMarkNoDriversFoundService (soft-park; user cancels for refund).
   dispatchNextDriverService(booking._id).catch((err) =>
     console.warn(
       '[bookingTrip] redispatch failed for booking',

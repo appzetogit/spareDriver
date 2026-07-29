@@ -7,7 +7,7 @@ import RoutePolyline from './RoutePolyline';
 import { useGoogleMap } from '../../hooks/useGoogleMap';
 import { useDirectionsRoute } from '../../hooks/useDirectionsRoute';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../utils/geo';
-import { ROUTE_POLYLINE } from '../../constants/mapTheme';
+import { ROUTE_POLYLINE, driverPinForStatus } from '../../constants/mapTheme';
 
 /**
  * <TripTrackingMap /> — the live ride map used by both the customer and
@@ -41,6 +41,8 @@ import { ROUTE_POLYLINE } from '../../constants/mapTheme';
  *                    (e.g. brand colour on a specific screen). Falls back
  *                    to `ROUTE_POLYLINE.STROKE` otherwise.
  *   - outlineOptions per-instance overrides for the outline halo.
+ *   - bookingStatus  booking status → picks en-route arrow vs in-trip car
+ *   - driverImageSrc optional explicit pin override (wins over status)
  *
  * Camera behaviour:
  *   - First mount + every endpoint change → `fitBounds` so both pins are
@@ -65,11 +67,15 @@ function TripTrackingMap({
   showOutline = ROUTE_POLYLINE.OUTLINE_DEFAULT,
   strokeOptions,
   outlineOptions,
+  bookingStatus = null,
+  driverImageSrc = null,
 }) {
   const { isLoaded, loadError, maps } = useGoogleMap();
   const viewRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const fittedKeyRef = useRef(null);
+
+  const driverPinSrc = driverImageSrc || driverPinForStatus(bookingStatus);
 
   /* ------------------------------------------------------------------ */
   /* Directions: road-following polyline                                 */
@@ -228,6 +234,7 @@ function TripTrackingMap({
           <DriverMarker
             position={driver}
             heading={typeof driver.heading === 'number' ? driver.heading : undefined}
+            imageSrc={driverPinSrc}
             size={emphasis === 'driver' ? 52 : 44}
             animateMs={1200}
           />

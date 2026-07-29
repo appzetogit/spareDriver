@@ -68,8 +68,7 @@ const PaymentPage = () => {
     ) {
       navigate(`/user/book/assigned/${booking._id}`, { replace: true });
     } else if (
-      booking.status === BOOKING_STATUS.CANCELLED ||
-      booking.status === BOOKING_STATUS.NO_DRIVERS_FOUND
+      booking.status === BOOKING_STATUS.CANCELLED
     ) {
       const reason = booking.cancellation?.reason;
       if (reason === 'payment_timeout') {
@@ -80,6 +79,8 @@ const PaymentPage = () => {
         toast('Driver cancelled the ride.', { icon: 'ℹ️' });
       }
       navigate('/user/home', { replace: true });
+    } else if (booking.status === BOOKING_STATUS.NO_DRIVERS_FOUND) {
+      navigate('/user/book/no-drivers', { replace: true });
     } else if (booking.status === BOOKING_STATUS.SEARCHING) {
       // Re-dispatch path: driver bailed, we're searching again. The
       // "we're finding another driver" popup itself lives on the
@@ -155,11 +156,12 @@ const PaymentPage = () => {
         return;
       }
       const status = useUserActiveBookingStore.getState().booking?.status;
-      if (
-        status === BOOKING_STATUS.CANCELLED ||
-        status === BOOKING_STATUS.NO_DRIVERS_FOUND
-      ) {
+      if (status === BOOKING_STATUS.CANCELLED) {
         navigate('/user/home', { replace: true });
+        return;
+      }
+      if (status === BOOKING_STATUS.NO_DRIVERS_FOUND) {
+        navigate('/user/book/no-drivers', { replace: true });
         return;
       }
       toast.error(err?.response?.data?.message || err?.message || 'Could not cancel');

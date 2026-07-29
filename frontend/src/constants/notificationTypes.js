@@ -45,6 +45,9 @@ const USER_LIVE_KINDS = new Set([
 ]);
 
 function userLiveRoute(kind, bookingId, status) {
+  if (status === BOOKING_STATUS.NO_DRIVERS_FOUND) {
+    return '/user/book/no-drivers';
+  }
   if (status === BOOKING_STATUS.SEARCHING || kind === USER_NOTIFICATION.DRIVER_SEARCHING) {
     return '/user/book/searching';
   }
@@ -67,6 +70,7 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
     if (bookingId) {
       if (USER_LIVE_KINDS.has(kind) || (status && [
         BOOKING_STATUS.SEARCHING,
+        BOOKING_STATUS.NO_DRIVERS_FOUND,
         BOOKING_STATUS.DRIVER_ASSIGNED,
         BOOKING_STATUS.AWAITING_PAYMENT,
         BOOKING_STATUS.EN_ROUTE,

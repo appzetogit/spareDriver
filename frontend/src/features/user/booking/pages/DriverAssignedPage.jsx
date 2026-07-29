@@ -343,6 +343,9 @@ const DriverAssignedPage = () => {
       // reason.
       navigate('/user/book/searching', { replace: true });
     }
+    if (bookingStatus === BOOKING_STATUS.NO_DRIVERS_FOUND) {
+      navigate('/user/book/no-drivers', { replace: true });
+    }
   }, [bookingStatus, cancellationReason, refundSummary, navigate, draftReset, fetchWallet]);
 
   const driver = booking?.driverId;
@@ -370,7 +373,11 @@ const DriverAssignedPage = () => {
 
   const driverPoint = useMemo(() => {
     if (!liveDriver) return null;
-    return { lat: liveDriver.lat, lng: liveDriver.lng };
+    return {
+      lat: liveDriver.lat,
+      lng: liveDriver.lng,
+      heading: typeof liveDriver.heading === 'number' ? liveDriver.heading : undefined,
+    };
   }, [liveDriver]);
 
   const distanceMeters = useMemo(() => {
@@ -533,8 +540,7 @@ const DriverAssignedPage = () => {
 
       const status = result?.status;
       if (status === BOOKING_STATUS.NO_DRIVERS_FOUND) {
-        // Status effect / searching page will route to retry.
-        navigate('/user/book/searching', { replace: true });
+        navigate('/user/book/no-drivers', { replace: true });
         return;
       }
       if (fee > 0 && status === BOOKING_STATUS.CANCELLED) {
@@ -676,6 +682,7 @@ const DriverAssignedPage = () => {
             // hides it (the driver is on top of the pin).
             showRoute={booking.status !== BOOKING_STATUS.ARRIVED}
             followDriver={isTripStarted}
+            bookingStatus={booking.status}
           />
         </div>
       ) : (

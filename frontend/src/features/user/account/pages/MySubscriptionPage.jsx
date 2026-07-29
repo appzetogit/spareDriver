@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
   Loader2,
   MapPin,
+  Pencil,
   Sparkles,
   UserCheck,
   IndianRupee,
@@ -19,6 +20,7 @@ import { useUserSubscriptionStore } from '../../../../store/user/useUserPricingS
 import { SUBSCRIPTION_ASSIGNMENT_STATUS } from '../../../../constants/serviceTypes';
 import { formatCurrency } from '../../../../utils/fareCalculator';
 import { formatCarLabel } from '../../../admin/components/DriverCarExperienceChips';
+import RescheduleSubscriptionSheet from '../components/RescheduleSubscriptionSheet';
 
 const MySubscriptionPage = () => {
   const navigate = useNavigate();
@@ -61,7 +63,11 @@ const MySubscriptionPage = () => {
 
       <div className="flex-1 p-4 space-y-4 pb-8">
         {mySubscriptions.map((sub) => (
-          <SubscriptionDetailCard key={sub._id} sub={sub} />
+          <SubscriptionDetailCard
+            key={sub._id}
+            sub={sub}
+            onUpdated={() => fetchMySubscription().catch(() => {})}
+          />
         ))}
 
         <Button variant="outline" fullWidth onClick={() => navigate('/user/subscriptions')}>
@@ -72,8 +78,10 @@ const MySubscriptionPage = () => {
   );
 };
 
-function SubscriptionDetailCard({ sub }) {
+function SubscriptionDetailCard({ sub, onUpdated }) {
   const assigned = sub.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED;
+  const canReschedule = sub.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING;
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const isFullTime = sub.includedHoursPerDay === 0;
   const fmt = (d) =>
     d
@@ -125,6 +133,17 @@ function SubscriptionDetailCard({ sub }) {
         <InfoTile icon={IndianRupee} label="Paid" value={formatCurrency(sub.amount)} />
       </div>
 
+      {canReschedule && (
+        <button
+          type="button"
+          onClick={() => setRescheduleOpen(true)}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 text-primary font-semibold text-sm py-2.5 hover:bg-primary/10 transition"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          Change start date
+        </button>
+      )}
+
       {(sub.bookingDiscountValue > 0) && (
         <div className="rounded-xl bg-white/80 px-3 py-2.5 text-sm text-text-secondary">
           <p className="font-semibold text-text flex items-center gap-1.5 mb-1">
@@ -162,6 +181,13 @@ function SubscriptionDetailCard({ sub }) {
           </p>
         )}
       </div>
+
+      <RescheduleSubscriptionSheet
+        open={rescheduleOpen}
+        subscription={sub}
+        onClose={() => setRescheduleOpen(false)}
+        onSaved={() => onUpdated?.()}
+      />
     </Card>
   );
 }

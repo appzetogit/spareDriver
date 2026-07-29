@@ -36,6 +36,7 @@ import {
   purchaseSubscription,
   verifySubscriptionPayment,
   getMySubscription,
+  rescheduleMySubscription,
 } from '../controllers/pricing.controller.js';
 import { validateCoupon } from '../controllers/coupon.controller.js';
 import { getSubscriptionTerms } from '../controllers/legalDocument.controller.js';
@@ -54,6 +55,8 @@ import {
   getMyActiveBookings,
   getBookingById,
   cancelBooking,
+  searchAgainBooking,
+  rescheduleBooking,
   createBookingPayment,
   verifyBookingPayment,
   initiateBookingExtension,
@@ -119,6 +122,7 @@ router.post('/coupons/validate', validateCoupon);
 
 // Subscriptions — purchase + active subscription read
 router.get('/subscriptions/me', getMySubscription);
+router.post('/subscriptions/:id/reschedule', rescheduleMySubscription);
 router.post('/subscriptions/purchase', purchaseSubscription);
 router.post('/subscriptions/verify-payment', verifySubscriptionPayment);
 
@@ -138,6 +142,8 @@ router.get('/bookings/active-list', getMyActiveBookings);
 router.get('/bookings/:id', getBookingById);
 router.get('/bookings/:id/invoice/pdf', downloadBookingInvoicePdf);
 router.post('/bookings/:id/cancel', cancelBooking);
+router.post('/bookings/:id/search-again', searchAgainBooking);
+router.post('/bookings/:id/reschedule', rescheduleBooking);
 router.post('/bookings/:id/pay', createBookingPayment);
 router.post('/bookings/:id/verify-payment', verifyBookingPayment);
 // Extension flow is a 3-step handshake (initiate → driver OTP →

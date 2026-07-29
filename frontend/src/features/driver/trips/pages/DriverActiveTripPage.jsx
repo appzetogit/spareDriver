@@ -624,6 +624,7 @@ const DriverActiveTripPage = () => {
             emphasis="pickup"
             height={240}
             showRoute={booking.status !== BOOKING_STATUS.ARRIVED}
+            bookingStatus={booking.status}
           />
         )}
 

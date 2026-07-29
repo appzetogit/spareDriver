@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { isApplicationSubmitted } from '../utils/driverOnboarding';
 import { useStoreHydration } from '../hooks/useStoreHydration';
+import { DriverLocationBridge } from '../components/DriverLocationBridge';
 
 const DriverGuard = () => {
   const hydrated = useStoreHydration(useDriverAuthStore);
@@ -41,7 +42,12 @@ const DriverGuard = () => {
     return <Navigate to="/driver/register/approval" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <DriverLocationBridge />
+      <Outlet />
+    </>
+  );
 };
 
 export default DriverGuard;
