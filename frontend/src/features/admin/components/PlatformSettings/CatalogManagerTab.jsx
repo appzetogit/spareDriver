@@ -6,7 +6,9 @@ import Toggle from '../../../../components/Toggle';
 import Modal from '../../../../components/Modal';
 import Select from '../../../../components/Select';
 import api from '../../../../utils/api';
+import { uploadImage } from '../../../../utils/upload';
 import { toSelectOptions } from '../../../../utils/vehicleCatalog';
+import { resolveCarBrandLogoUrl } from '../../../../utils/carBrandLogo';
 import {
   CatalogSectionHeader,
   CatalogToolbar,
@@ -20,7 +22,7 @@ import {
   CatalogAddButton,
 } from './catalogUi';
 
-const emptyForm = { name: '', sortOrder: 0, isActive: true, brandId: '', carTypeId: '' };
+const emptyForm = { name: '', logo: '', sortOrder: 0, isActive: true, brandId: '', carTypeId: '' };
 
 const CatalogManagerTab = ({
   resource,
@@ -42,7 +44,9 @@ const CatalogManagerTab = ({
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
 
+  const isBrandResource = resource === 'car-brands';
   const basePath = `/admin/settings/${resource}`;
 
   const fetchItems = useCallback(async () => {
@@ -86,12 +90,37 @@ const CatalogManagerTab = ({
     setEditing(item);
     setForm({
       name: item.name,
+      logo: item.logo || '',
       sortOrder: item.sortOrder || 0,
       isActive: item.isActive !== false,
       brandId: item.brandId?._id || item.brandId || '',
       carTypeId: item.carTypeId?._id || item.carTypeId || '',
     });
     setShowModal(true);
+  };
+
+  const handleLogoUpload = async (file) => {
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const result = await uploadImage(file);
+      setForm((p) => ({ ...p, logo: result.url || '' }));
+      toast.success('Logo uploaded');
+    } catch (err) {
+      toast.error(err.message || 'Logo upload failed');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleUseCdnLogo = () => {
+    const url = resolveCarBrandLogoUrl(form.name);
+    if (!url) {
+      toast.error('Enter a brand name first');
+      return;
+    }
+    setForm((p) => ({ ...p, logo: url }));
+    toast.success('CDN logo applied');
   };
 
   const handleSubmit = async (e) => {
@@ -109,6 +138,9 @@ const CatalogManagerTab = ({
         sortOrder: Number(form.sortOrder) || 0,
         isActive: form.isActive,
       };
+      if (isBrandResource) {
+        payload.logo = form.logo?.trim() || resolveCarBrandLogoUrl(form.name.trim());
+      }
       if (formType === 'model') {
         payload.brandId = form.brandId;
         payload.carTypeId = form.carTypeId || null;
@@ -152,12 +184,19 @@ const CatalogManagerTab = ({
           { key: 'status', label: 'Status', className: 'w-28' },
           { key: 'actions', label: '', className: 'w-24 text-right' },
         ]
-      : [
-          { key: 'name', label: 'Name' },
-          { key: 'order', label: 'Order', className: 'w-20' },
-          { key: 'status', label: 'Status', className: 'w-28' },
-          { key: 'actions', label: '', className: 'w-24 text-right' },
-        ];
+      : isBrandResource
+        ? [
+            { key: 'name', label: 'Brand' },
+            { key: 'order', label: 'Order', className: 'w-20' },
+            { key: 'status', label: 'Status', className: 'w-28' },
+            { key: 'actions', label: '', className: 'w-24 text-right' },
+          ]
+        : [
+            { key: 'name', label: 'Name' },
+            { key: 'order', label: 'Order', className: 'w-20' },
+            { key: 'status', label: 'Status', className: 'w-28' },
+            { key: 'actions', label: '', className: 'w-24 text-right' },
+          ];
 
   return (
     <>
@@ -204,7 +243,25 @@ const CatalogManagerTab = ({
           {filtered.map((item) => (
             <CatalogRow key={item._id} muted={!item.isActive}>
               <CatalogCell>
-                <span className="font-semibold text-slate-900 capitalize">{item.name}</span>
+                <div className="flex items-center gap-3">
+                  {isBrandResource && (
+                    <span className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
+                      {item.logo ? (
+                        <img
+                          src={item.logo}
+                          alt=""
+                          className="w-7 h-7 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">—</span>
+                      )}
+                    </span>
+                  )}
+                  <span className="font-semibold text-slate-900 capitalize">{item.name}</span>
+                </div>
               </CatalogCell>
               {formType === 'model' && (
                 <>
@@ -270,6 +327,64 @@ const CatalogManagerTab = ({
             onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
             required
           />
+          {isBrandResource && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Brand logo</label>
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <span className="w-14 h-14 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                  {form.logo ? (
+                    <img src={form.logo} alt="" className="w-12 h-12 object-contain" />
+                  ) : (
+                    <span className="text-[10px] text-slate-400 px-1 text-center">No logo</span>
+                  )}
+                </span>
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex">
+                      <span className="sr-only">Upload logo</span>
+                      <input
+                        type="file"
+                        accept="image/*,.svg"
+                        className="hidden"
+                        disabled={logoUploading || submitting}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          handleLogoUpload(file);
+                        }}
+                      />
+                      <span className="inline-flex items-center justify-center h-9 px-3 rounded-lg bg-slate-900 text-white text-xs font-semibold cursor-pointer hover:bg-slate-800">
+                        {logoUploading ? 'Uploading…' : 'Upload'}
+                      </span>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 px-3 text-xs"
+                      onClick={handleUseCdnLogo}
+                      disabled={submitting || !form.name.trim()}
+                    >
+                      Use CDN logo
+                    </Button>
+                    {form.logo && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9 px-3 text-xs text-rose-600 border-rose-200"
+                        onClick={() => setForm((p) => ({ ...p, logo: '' }))}
+                        disabled={submitting}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Defaults to jsDelivr brand logos when empty. Upload to override.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <Input
             label="Sort order"
             type="number"
@@ -290,7 +405,7 @@ const CatalogManagerTab = ({
             <Button variant="outline" fullWidth type="button" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
-            <Button variant="admin" fullWidth type="submit" loading={submitting}>
+            <Button variant="admin" fullWidth type="submit" loading={submitting || logoUploading}>
               {editing ? 'Save changes' : 'Create'}
             </Button>
           </div>

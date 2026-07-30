@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../utils/api';
 import { toSelectOptions } from '../utils/vehicleCatalog';
 
@@ -51,14 +51,15 @@ async function fetchBaseCatalog(activeQuery) {
 /**
  * Fetches vehicle catalog data (categories, fuel, brands, models, conditions).
  * Base catalog is cached module-wide — only fetched once per page session.
- * Models refetch when brandId or carTypeId changes.
+ * Brand models refetch when brandId changes; category options are limited to
+ * categories that have at least one model for the selected brand.
  */
 export function useVehicleCatalog({ activeOnly = true, brandId = '', carTypeId = '' } = {}) {
   const [categories, setCategories] = useState(BASE_CACHE.categories || []);
   const [fuelTypes, setFuelTypes] = useState(BASE_CACHE.fuelTypes || []);
   const [brands, setBrands] = useState(BASE_CACHE.brands || []);
   const [conditions, setConditions] = useState(BASE_CACHE.conditions || []);
-  const [models, setModels] = useState([]);
+  const [brandModels, setBrandModels] = useState([]);
   const [loading, setLoading] = useState(!BASE_CACHE.categories);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -89,9 +90,11 @@ export function useVehicleCatalog({ activeOnly = true, brandId = '', carTypeId =
     }
   }, [activeQuery]);
 
-  const loadModels = useCallback(async () => {
+  // All models for the selected brand (not filtered by category) — used to
+  // drive both category options and the model list.
+  const loadBrandModels = useCallback(async () => {
     if (!brandId) {
-      setModels([]);
+      setBrandModels([]);
       return;
     }
     setModelsLoading(true);
@@ -99,32 +102,51 @@ export function useVehicleCatalog({ activeOnly = true, brandId = '', carTypeId =
       const params = new URLSearchParams();
       if (activeOnly) params.set('active', 'true');
       params.set('brandId', brandId);
-      if (carTypeId) params.set('carTypeId', carTypeId);
       const res = await api.get(`/common/car-models?${params.toString()}`);
-      setModels(res.data.data || []);
+      setBrandModels(res.data.data || []);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load car models');
-      setModels([]);
+      setBrandModels([]);
     } finally {
       setModelsLoading(false);
     }
-  }, [activeOnly, brandId, carTypeId]);
+  }, [activeOnly, brandId]);
 
   useEffect(() => {
     loadBaseCatalog();
   }, [loadBaseCatalog]);
 
   useEffect(() => {
-    loadModels();
-  }, [loadModels]);
+    loadBrandModels();
+  }, [loadBrandModels]);
+
+  const availableCategories = useMemo(() => {
+    if (!brandId) return [];
+    const typeIds = new Set(
+      brandModels
+        .map((m) => String(m.carTypeId?._id || m.carTypeId || ''))
+        .filter(Boolean),
+    );
+    return categories.filter((c) => typeIds.has(String(c._id)));
+  }, [brandId, brandModels, categories]);
+
+  const models = useMemo(() => {
+    if (!carTypeId) return brandModels;
+    const selected = String(carTypeId);
+    return brandModels.filter((m) => {
+      const id = String(m.carTypeId?._id || m.carTypeId || '');
+      // null/empty carTypeId = model available for any category
+      return !id || id === selected;
+    });
+  }, [brandModels, carTypeId]);
 
   return {
-    categories,
+    categories: availableCategories,
     fuelTypes,
     brands,
     models,
     conditions,
-    categoryOptions: toSelectOptions(categories),
+    categoryOptions: toSelectOptions(availableCategories),
     fuelOptions: toSelectOptions(fuelTypes),
     brandOptions: toSelectOptions(brands),
     modelOptions: toSelectOptions(models),

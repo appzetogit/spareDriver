@@ -4,6 +4,7 @@ import CarBrand from '../models/carBrand.model.js';
 import CarModel from '../models/carModel.model.js';
 import CarType from '../models/carType.model.js';
 import { ApiError } from '../utils/apiError.js';
+import { resolveCarBrandLogoUrl } from '../utils/carBrandLogo.js';
 
 const normalizeName = (name) => String(name || '').trim();
 
@@ -54,8 +55,13 @@ export const createCarBrandService = async (data) => {
   const name = normalizeName(data.name);
   if (!name) throw new ApiError(400, 'Name is required');
   await assertUniqueName(CarBrand, name);
+  const logo =
+    typeof data.logo === 'string' && data.logo.trim()
+      ? data.logo.trim()
+      : resolveCarBrandLogoUrl(name);
   return CarBrand.create({
     name,
+    logo,
     sortOrder: data.sortOrder ?? 0,
     isActive: data.isActive !== false,
   });
@@ -67,11 +73,27 @@ export const getCarBrandsService = async (onlyActive = false) => {
 };
 
 export const updateCarBrandService = async (id, data) => {
-  if (data.name) {
-    await assertUniqueName(CarBrand, data.name, id);
-    data.name = normalizeName(data.name);
+  const patch = { ...data };
+  if (patch.name) {
+    await assertUniqueName(CarBrand, patch.name, id);
+    patch.name = normalizeName(patch.name);
   }
-  const item = await CarBrand.findByIdAndUpdate(id, data, { new: true });
+  if (typeof patch.logo === 'string') {
+    patch.logo = patch.logo.trim();
+  }
+  // If name changed and logo was not explicitly sent, refresh CDN logo only
+  // when the current logo is empty or still a jsDelivr brand-logos URL.
+  if (patch.name && patch.logo === undefined) {
+    const existing = await CarBrand.findById(id).select('logo');
+    if (!existing) throw new ApiError(404, 'Car brand not found');
+    const current = existing.logo || '';
+    const isCdnOrEmpty =
+      !current || current.includes('vehiclespecs/brand-logos');
+    if (isCdnOrEmpty) {
+      patch.logo = resolveCarBrandLogoUrl(patch.name);
+    }
+  }
+  const item = await CarBrand.findByIdAndUpdate(id, patch, { new: true });
   if (!item) throw new ApiError(404, 'Car brand not found');
   return item;
 };

@@ -88,6 +88,12 @@ const CarPickerSheet = ({
         <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
           {selected?.image ? (
             <img src={selected.image} alt="" className="w-full h-full object-cover" />
+          ) : selected?.brandId?.logo ? (
+            <img
+              src={selected.brandId.logo}
+              alt=""
+              className="w-8 h-8 object-contain"
+            />
           ) : (
             <CarIcon className="w-6 h-6 text-text-muted" />
           )}
@@ -150,11 +156,26 @@ const CarPickerSheet = ({
                         : 'border-border bg-white hover:border-text-muted/40'
                     }`}
                   >
-                    <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0 relative">
                       {car.image ? (
                         <img src={car.image} alt="" className="w-full h-full object-cover" />
+                      ) : car.brandId?.logo ? (
+                        <img
+                          src={car.brandId.logo}
+                          alt=""
+                          className="w-9 h-9 object-contain"
+                        />
                       ) : (
                         <CarIcon className="w-6 h-6 text-text-muted" />
+                      )}
+                      {car.image && car.brandId?.logo && (
+                        <span className="absolute bottom-0.5 right-0.5 w-6 h-6 rounded-md bg-white border border-border/70 flex items-center justify-center overflow-hidden shadow-sm">
+                          <img
+                            src={car.brandId.logo}
+                            alt=""
+                            className="w-4 h-4 object-contain"
+                          />
+                        </span>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

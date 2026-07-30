@@ -38,7 +38,8 @@ const TAB_COPY = {
   },
   brands: {
     title: 'Car brands',
-    description: 'Manufacturers available during vehicle registration.',
+    description:
+      'Manufacturers available during vehicle registration. Each brand can use a jsDelivr logo or a custom upload.',
   },
   models: {
     title: 'Car models',

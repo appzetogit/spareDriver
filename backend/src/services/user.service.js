@@ -425,7 +425,7 @@ async function migrateUserConditionsToCars(user, cars) {
 
   return Car.find({ userId: user._id, isActive: true })
     .populate('carTypeId', 'name')
-    .populate('brandId', 'name')
+    .populate('brandId', 'name logo')
     .populate('modelId', 'name')
     .populate('fuelTypeId', 'name')
     .sort({ createdAt: -1 });
@@ -459,7 +459,7 @@ export const getUserProfileService = async (userId, { includeInactiveCars = fals
 
   let cars = await Car.find(carFilter)
     .populate('carTypeId', 'name')
-    .populate('brandId', 'name')
+    .populate('brandId', 'name logo')
     .populate('modelId', 'name')
     .populate('fuelTypeId', 'name')
     .populate('conditions.conditionId')
@@ -655,7 +655,7 @@ export const addCarService = async (userId, carData) => {
 
   const populated = await Car.findById(car._id)
     .populate('carTypeId', 'name')
-    .populate('brandId', 'name')
+    .populate('brandId', 'name logo')
     .populate('modelId', 'name')
     .populate('fuelTypeId', 'name');
 
@@ -678,7 +678,7 @@ export const getUserCarsService = async (userId) => {
 
   const populated = await Car.find({ userId, isActive: true })
     .populate('carTypeId', 'name')
-    .populate('brandId', 'name')
+    .populate('brandId', 'name logo')
     .populate('modelId', 'name')
     .populate('fuelTypeId', 'name')
     .populate('conditions.conditionId', 'question description isRequired')
@@ -793,7 +793,7 @@ export const updateCarService = async (userId, carId, carData) => {
 
   const populated = await Car.findById(car._id)
     .populate('carTypeId', 'name')
-    .populate('brandId', 'name')
+    .populate('brandId', 'name logo')
     .populate('modelId', 'name')
     .populate('fuelTypeId', 'name');
 

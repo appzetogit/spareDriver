@@ -24,6 +24,11 @@ const Select = ({
     return String(optVal) === String(value);
   });
 
+  const selectedImage =
+    selectedOption && typeof selectedOption !== 'string'
+      ? selectedOption.image
+      : '';
+
   // If catalog options haven't loaded yet but we have a prefilled label from
   // the parent (e.g. populated API data), show that immediately so the user
   // sees the field is populated rather than blank.
@@ -47,9 +52,14 @@ const Select = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const dropdownClasses = openDirection === 'top' 
-    ? 'bottom-full mb-2' 
+  const dropdownClasses = openDirection === 'top'
+    ? 'bottom-full mb-2'
     : 'top-full mt-2';
+
+  const hasLeadingVisual = Boolean(Icon || selectedImage);
+  const optionsHaveImages = options.some(
+    (opt) => typeof opt !== 'string' && opt.image,
+  );
 
   return (
     <div className={`flex flex-col gap-1.5 ${containerClassName}`} ref={dropdownRef}>
@@ -63,16 +73,27 @@ const Select = ({
           disabled={disabled}
           className={`
             w-full h-10 bg-white border rounded-xl pr-10 text-sm text-left
-            transition-all duration-200 flex items-center
+            transition-all duration-200 flex items-center gap-2
             ${disabled ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}
             ${isOpen ? 'border-primary ring-2 ring-primary/20' : 'border-border'}
             ${error ? 'border-danger' : ''}
             ${(!selectedOption && !(value && prefilledLabel)) ? 'text-text-muted' : 'text-text'}
-            ${Icon ? 'pl-9' : 'pl-4'}
+            ${hasLeadingVisual ? 'pl-2.5' : 'pl-4'}
           `}
         >
-          {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted shrink-0 pointer-events-none" />}
-          <span className="truncate leading-none block my-auto">{displayLabel}</span>
+          {selectedImage ? (
+            <img
+              src={selectedImage}
+              alt=""
+              className="w-6 h-6 rounded object-contain bg-white shrink-0"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : Icon ? (
+            <Icon className="w-4 h-4 text-text-muted shrink-0" />
+          ) : null}
+          <span className="truncate leading-none block my-auto flex-1">{displayLabel}</span>
           <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted shrink-0 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
@@ -100,6 +121,7 @@ const Select = ({
                 filteredOptions.map((opt) => {
                   const optValue = typeof opt === 'string' ? opt : opt.value;
                   const optLabel = typeof opt === 'string' ? opt : opt.label;
+                  const optImage = typeof opt === 'string' ? '' : opt.image;
                   const isSelected = String(optValue) === String(value);
 
                   return (
@@ -112,12 +134,26 @@ const Select = ({
                         setSearchTerm('');
                       }}
                       className={`
-                        w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors
+                        w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors
                         ${isSelected ? 'bg-primary/5 text-primary-dark font-medium' : 'text-text hover:bg-gray-50'}
                       `}
                     >
-                      {optLabel}
-                      {isSelected && <Check className="w-4 h-4 text-primary" />}
+                      {optionsHaveImages && (
+                        optImage ? (
+                          <img
+                            src={optImage}
+                            alt=""
+                            className="w-7 h-7 rounded object-contain bg-white border border-border/60 shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.style.visibility = 'hidden';
+                            }}
+                          />
+                        ) : (
+                          <span className="w-7 h-7 shrink-0" />
+                        )
+                      )}
+                      <span className="flex-1 truncate">{optLabel}</span>
+                      {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
                     </button>
                   );
                 })

@@ -15,6 +15,7 @@ import CarType from '../src/models/carType.model.js';
 import PlatformCondition from '../src/models/platformCondition.model.js';
 import { BRAND_MODELS, CATEGORIES, FUEL_TYPES } from './data/vehicleCatalog.data.js';
 import { REGISTRATION_CONDITIONS } from './data/platformConditions.data.js';
+import { resolveCarBrandLogoUrl } from '../src/utils/carBrandLogo.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '../.env') });
@@ -67,9 +68,10 @@ async function seedVehicleCatalog() {
 
   for (let i = 0; i < brandNames.length; i += 1) {
     const brandName = brandNames[i];
+    const logo = resolveCarBrandLogoUrl(brandName);
     const brand = await CarBrand.findOneAndUpdate(
       { name: brandName },
-      { name: brandName, sortOrder: i, isActive: true },
+      { name: brandName, logo, sortOrder: i, isActive: true },
       { upsert: true, new: true },
     );
     brandCount += 1;

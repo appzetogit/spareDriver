@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Select from '../Select';
 import Input from '../Input';
 import { Car } from 'lucide-react';
@@ -28,6 +29,7 @@ const emptyValues = {
 /**
  * Reusable vehicle detail fields for user car registration.
  * Order: brand → category → model → number → fuel/transmission → expiry dates.
+ * Categories are limited to those that have models for the selected brand.
  */
 const VehicleDetailsForm = ({
   values = emptyValues,
@@ -51,12 +53,26 @@ const VehicleDetailsForm = ({
     carTypeId: values.carTypeId,
   });
 
+  // Drop a stale category when the brand changes and that category has no
+  // models for the new brand.
+  useEffect(() => {
+    if (!values.brandId || !values.carTypeId || modelsLoading) return;
+    const stillValid = categoryOptions.some(
+      (opt) => String(opt.value) === String(values.carTypeId),
+    );
+    if (!stillValid) {
+      onChange({ ...values, carTypeId: '', modelId: '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to catalog/brand changes
+  }, [values.brandId, values.carTypeId, categoryOptions, modelsLoading]);
+
   const setField = (field) => (val) => {
     const next = { ...values, [field]: val };
     if (field === 'carTypeId') {
       next.modelId = '';
     }
     if (field === 'brandId') {
+      next.carTypeId = '';
       next.modelId = '';
     }
     onChange(next);
@@ -87,10 +103,18 @@ const VehicleDetailsForm = ({
         options={categoryOptions}
         value={values.carTypeId}
         onChange={setField('carTypeId')}
-        placeholder={loading ? 'Loading...' : 'Select category'}
+        placeholder={
+          !values.brandId
+            ? 'Select brand first'
+            : modelsLoading
+              ? 'Loading...'
+              : categoryOptions.length
+                ? 'Select category'
+                : 'No categories for this brand'
+        }
         error={errors.carTypeId}
         searchable
-        disabled={disabled || loading}
+        disabled={disabled || loading || !values.brandId || modelsLoading}
         prefilledLabel={editLabels?.carType}
       />
 
@@ -102,15 +126,17 @@ const VehicleDetailsForm = ({
         placeholder={
           !values.brandId
             ? 'Select brand first'
-            : modelsLoading
-              ? 'Loading models...'
-              : modelOptions.length
-                ? 'Select model'
-                : 'No models for this brand'
+            : !values.carTypeId
+              ? 'Select category first'
+              : modelsLoading
+                ? 'Loading models...'
+                : modelOptions.length
+                  ? 'Select model'
+                  : 'No models for this category'
         }
         error={errors.modelId}
         searchable
-        disabled={disabled || !values.brandId || modelsLoading}
+        disabled={disabled || !values.brandId || !values.carTypeId || modelsLoading}
         prefilledLabel={editLabels?.model}
       />
 

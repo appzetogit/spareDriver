@@ -197,10 +197,10 @@ const UserHomePage = () => {
                   radiusMeters={NEARBY_RADIUS_METERS}
                   selectedDriverId={selectedDriverId}
                   onDriverClick={handleDriverPick}
-                  height={256}
+                  height={192}
                 />
               ) : (
-                <div className="h-64 flex items-center justify-center text-text-muted">
+                <div className="h-48 flex items-center justify-center text-text-muted">
                   {geoError ? (
                     <div className="px-4 text-center">
                       <p className="text-sm">{geoError}</p>

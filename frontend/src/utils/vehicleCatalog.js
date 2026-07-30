@@ -3,6 +3,7 @@ export function toSelectOptions(items = [], labelKey = 'name') {
   const options = items.map((item) => ({
     value: String(item._id),
     label: item[labelKey] || item.name,
+    image: item.logo || item.image || '',
   }));
   return options.sort((a, b) =>
     (a.label || '').localeCompare(b.label || '', undefined, { sensitivity: 'base' })
