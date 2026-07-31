@@ -36,6 +36,7 @@ import {
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { haversineMeters, formatDistance } from '../../../../utils/geo';
+import { maskPersonName } from '../../../../utils/formatters';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import PaymentChoiceSheet from '../components/PaymentChoiceSheet';
 import RideStartOtpCard from '../components/RideStartOtpCard';
@@ -639,6 +640,10 @@ const DriverAssignedPage = () => {
 
   const view = STATUS_VIEW[booking.status] || STATUS_VIEW[BOOKING_STATUS.DRIVER_ASSIGNED];
   const isTripStarted = booking.status === BOOKING_STATUS.STARTED;
+  const rawDriverName = driver?.name || 'Driver';
+  const displayDriverName = isTripStarted
+    ? rawDriverName
+    : maskPersonName(rawDriverName) || 'Driver';
   // Map is shown for every post-acceptance phase, including STARTED.
   // The destination/route during STARTED is determined below by
   // `mapAnchor` (driver→dropoff if we have a dropoff, otherwise the
@@ -882,13 +887,13 @@ const DriverAssignedPage = () => {
                     <div className="bg-gradient-to-br from-primary/10 to-primary/5 px-5 pt-5 pb-4 flex items-center gap-4">
                       <Avatar
                         src={driverPhotoUrl}
-                        name={driver?.name || 'Driver'}
+                        name={rawDriverName}
                         size="xl"
                         online={!!liveDriver}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-[11px] text-primary-dark font-semibold uppercase tracking-wider mb-0.5">Your Driver</p>
-                        <h3 className="text-lg font-extrabold text-gray-900 truncate">{driver?.name || 'Driver'}</h3>
+                        <h3 className="text-lg font-extrabold text-gray-900 truncate">{displayDriverName}</h3>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {driver?.rating ? (
                             <span className="inline-flex items-center gap-1 text-sm font-semibold text-gray-700">

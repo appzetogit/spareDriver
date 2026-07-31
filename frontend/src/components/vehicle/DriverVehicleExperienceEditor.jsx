@@ -74,6 +74,7 @@ const DriverVehicleExperienceEditor = ({
             disabled={disabled}
             showVehicleNumber={false}
             showExpiryDates={false}
+            editLabels={vehicle._labels || null}
           />
         </div>
       ))}

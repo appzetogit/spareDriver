@@ -1,6 +1,7 @@
 import { Star, Car } from 'lucide-react';
 import Avatar from '../Avatar';
 import { formatDistance, estimateEtaMinutes } from '../../utils/geo';
+import { maskPersonName } from '../../utils/formatters';
 
 /**
  * Reusable list of driver rows used inside the home-page bottom sheet and any
@@ -50,6 +51,8 @@ const NearbyDriversList = ({
       {drivers.map((driver) => {
         const isSelected = String(selectedId) === String(driver._id);
         const eta = estimateEtaMinutes(driver.distanceMeters);
+        const displayName =
+          maskPersonName(driver.name) || `Driver ${String(driver._id).slice(-4)}`;
         return (
           <li key={driver._id}>
             <button
@@ -70,7 +73,7 @@ const NearbyDriversList = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <h3 className="font-semibold text-text text-sm truncate">
-                    {driver.name || `Driver ${String(driver._id).slice(-4)}`}
+                    {displayName}
                   </h3>
                   {driver.live && (
                     <span className="text-[9px] uppercase tracking-wide font-semibold text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5">

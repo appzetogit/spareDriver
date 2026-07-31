@@ -38,6 +38,12 @@ const mapVehicleFromApi = (v) => ({
   modelId: String(v.modelId?._id || v.modelId || ''),
   fuelTypeId: String(v.fuelTypeId?._id || v.fuelTypeId || ''),
   transmission: v.transmission || 'manual',
+  _labels: {
+    brand: v.brandId?.name || '',
+    carType: v.carTypeId?.name || '',
+    model: v.modelId?.name || '',
+    fuelType: v.fuelTypeId?.name || '',
+  },
 });
 
 const validateVehicles = (vehicles) => {

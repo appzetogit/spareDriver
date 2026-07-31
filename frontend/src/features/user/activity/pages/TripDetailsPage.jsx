@@ -4,10 +4,12 @@ import {
   AlertCircle,
   ArrowLeft,
   Calendar,
+  CalendarCheck2,
   CalendarClock,
   Car as CarIcon,
   CheckCircle2,
   Clock,
+  Flag,
   HandCoins,
   KeyRound,
   Loader2,
@@ -17,11 +19,13 @@ import {
   Navigation,
   Pencil,
   Phone,
+  Play,
   ReceiptText,
   ShieldCheck,
   Sparkles,
   Star,
   Sun,
+  UserRound,
   Wallet as WalletIcon,
   XCircle,
 } from 'lucide-react';
@@ -511,42 +515,22 @@ const TripDetailsPage = () => {
           </Card>
         )}
 
-        <Card>
-          <p className="text-[11px] uppercase tracking-wide text-text-muted font-semibold mb-2">
-            Booking ledger
-          </p>
-          <LedgerRow label="Booked" value={formatDateTime(createdAt)} />
-          {scheduledAt && (
-            <LedgerRow label="Scheduled for" value={formatDateTime(scheduledAt)} />
-          )}
-          {expectedReturnAt && (
-            <LedgerRow
-              label="Expected return"
-              value={formatDateTime(expectedReturnAt)}
-            />
-          )}
-          {driverAssignedAt && (
-            <LedgerRow
-              label="Driver assigned"
-              value={formatDateTime(driverAssignedAt)}
-            />
-          )}
-          {enRouteAt && (
-            <LedgerRow label="Driver en route" value={formatDateTime(enRouteAt)} />
-          )}
-          {arrivedAt && (
-            <LedgerRow label="Driver arrived" value={formatDateTime(arrivedAt)} />
-          )}
-          {startedAt && (
-            <LedgerRow label="Started" value={formatDateTime(startedAt)} />
-          )}
-          {completedAt && (
-            <LedgerRow label="Completed" value={formatDateTime(completedAt)} />
-          )}
-          {cancelledAt && (
-            <LedgerRow label="Cancelled" value={formatDateTime(cancelledAt)} />
-          )}
-        </Card>
+        <BookingTimeline
+          status={status}
+          createdAt={createdAt}
+          driverAssignedAt={driverAssignedAt}
+          enRouteAt={enRouteAt}
+          arrivedAt={arrivedAt}
+          startedAt={startedAt}
+          completedAt={completedAt}
+          cancelledAt={cancelledAt}
+          paymentReceivedAt={booking?.timeline?.paymentReceivedAt}
+          paymentStatus={booking?.paymentStatus}
+          amountPaid={amountPaid}
+          amountDue={amountDue}
+          scheduledAt={scheduledAt}
+          expectedReturnAt={expectedReturnAt}
+        />
       </div>
 
       {/* Fixed footer actions */}
@@ -1047,12 +1031,368 @@ function CancellationCard({ cancellation, refund, cancelledAt }) {
   );
 }
 
-function LedgerRow({ label, value }) {
+function BookingTimeline({
+  status,
+  createdAt,
+  driverAssignedAt,
+  enRouteAt,
+  arrivedAt,
+  startedAt,
+  completedAt,
+  cancelledAt,
+  paymentReceivedAt,
+  paymentStatus,
+  amountPaid = 0,
+  amountDue = 0,
+  scheduledAt,
+  expectedReturnAt,
+}) {
+  const isCancelled = status === BOOKING_STATUS.CANCELLED || !!cancelledAt;
+  const paymentDone =
+    !!paymentReceivedAt ||
+    paymentStatus === 'paid' ||
+    (amountDue <= 0 && amountPaid > 0 && status === BOOKING_STATUS.COMPLETED);
+
+  const steps = buildTimelineSteps({
+    status,
+    isCancelled,
+    createdAt,
+    driverAssignedAt,
+    enRouteAt,
+    arrivedAt,
+    startedAt,
+    completedAt,
+    cancelledAt,
+    paymentReceivedAt,
+    paymentDone,
+  });
+
+  const completedCount = steps.filter((s) => s.state === 'completed').length;
+  const hasInProgress = steps.some((s) => s.state === 'current');
+  const allDone = steps.every((s) => s.state === 'completed');
+
+  let headerBadge;
+  if (isCancelled) {
+    headerBadge = {
+      label: 'Cancelled',
+      className: 'bg-rose-50 text-rose-700',
+    };
+  } else if (allDone) {
+    headerBadge = {
+      label: 'All completed',
+      className: 'bg-emerald-50 text-emerald-700',
+    };
+  } else if (completedCount > 0 || hasInProgress) {
+    headerBadge = {
+      label: 'Completed till now',
+      className: 'bg-emerald-50 text-emerald-700',
+    };
+  } else {
+    headerBadge = {
+      label: 'Upcoming',
+      className: 'bg-slate-100 text-slate-600',
+    };
+  }
+
   return (
-    <div className="flex items-center justify-between py-1 text-xs">
-      <span className="text-text-muted">{label}</span>
-      <span className="text-text font-medium">{value}</span>
-    </div>
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+            <CalendarClock className="w-4 h-4 text-amber-700" />
+          </span>
+          <h3 className="text-[11px] uppercase tracking-wide font-bold text-text">
+            Booking Timeline
+          </h3>
+        </div>
+        <span
+          className={`inline-flex items-center gap-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${headerBadge.className}`}
+        >
+          <Clock className="w-3 h-3" />
+          {headerBadge.label}
+        </span>
+      </div>
+
+      {(scheduledAt || expectedReturnAt) && (
+        <div className="mt-3 mb-1 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2 space-y-1">
+          {scheduledAt && (
+            <p className="text-[11px] text-text-muted">
+              Scheduled for{' '}
+              <span className="font-semibold text-text">{formatDateTime(scheduledAt)}</span>
+            </p>
+          )}
+          {expectedReturnAt && (
+            <p className="text-[11px] text-text-muted">
+              Expected return{' '}
+              <span className="font-semibold text-text">{formatDateTime(expectedReturnAt)}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      <ol className="mt-2">
+        {steps.map((step, index) => {
+          const isLast = index === steps.length - 1;
+          const next = steps[index + 1];
+          return (
+            <TimelineStepRow
+              key={step.id}
+              step={step}
+              isLast={isLast}
+              nextState={next?.state}
+            />
+          );
+        })}
+      </ol>
+    </Card>
+  );
+}
+
+function buildTimelineSteps({
+  status,
+  isCancelled,
+  createdAt,
+  driverAssignedAt,
+  enRouteAt,
+  arrivedAt,
+  startedAt,
+  completedAt,
+  cancelledAt,
+  paymentReceivedAt,
+  paymentDone,
+}) {
+  const reached = {
+    created: true,
+    assigned:
+      !!driverAssignedAt ||
+      [
+        BOOKING_STATUS.DRIVER_ASSIGNED,
+        BOOKING_STATUS.AWAITING_PAYMENT,
+        BOOKING_STATUS.EN_ROUTE,
+        BOOKING_STATUS.ARRIVED,
+        BOOKING_STATUS.STARTED,
+        BOOKING_STATUS.COMPLETED,
+      ].includes(status),
+    enRoute:
+      !!enRouteAt ||
+      [
+        BOOKING_STATUS.EN_ROUTE,
+        BOOKING_STATUS.ARRIVED,
+        BOOKING_STATUS.STARTED,
+        BOOKING_STATUS.COMPLETED,
+      ].includes(status),
+    arrived:
+      !!arrivedAt ||
+      [BOOKING_STATUS.ARRIVED, BOOKING_STATUS.STARTED, BOOKING_STATUS.COMPLETED].includes(
+        status,
+      ),
+    started:
+      !!startedAt ||
+      [BOOKING_STATUS.STARTED, BOOKING_STATUS.COMPLETED].includes(status),
+    completed: !!completedAt || status === BOOKING_STATUS.COMPLETED,
+    payment: paymentDone,
+  };
+
+  // Active booking status → which step is "In Progress"
+  let currentId = null;
+  if (!isCancelled) {
+    if (status === BOOKING_STATUS.STARTED) currentId = 'started';
+    else if (status === BOOKING_STATUS.ARRIVED) currentId = 'arrived';
+    else if (status === BOOKING_STATUS.EN_ROUTE) currentId = 'enRoute';
+    else if (
+      status === BOOKING_STATUS.DRIVER_ASSIGNED ||
+      status === BOOKING_STATUS.AWAITING_PAYMENT
+    ) {
+      currentId = 'assigned';
+    } else if (!reached.assigned) currentId = 'assigned';
+    else if (!reached.enRoute) currentId = 'enRoute';
+    else if (!reached.arrived) currentId = 'arrived';
+    else if (!reached.started) currentId = 'started';
+    else if (!reached.completed) currentId = 'completed';
+    else if (!reached.payment) currentId = 'payment';
+  }
+
+  const stateFor = (id, done) => {
+    if (id === currentId) return 'current';
+    if (done) return 'completed';
+    return 'pending';
+  };
+
+  const steps = [
+    {
+      id: 'created',
+      title: 'Booking Created',
+      at: createdAt,
+      accent: 'green',
+      Icon: CalendarCheck2,
+      state: 'completed',
+    },
+    {
+      id: 'assigned',
+      title: 'Driver Assigned',
+      at: driverAssignedAt,
+      accent: 'green',
+      Icon: UserRound,
+      state: stateFor('assigned', reached.assigned),
+    },
+    {
+      id: 'enRoute',
+      title: 'Driver En Route',
+      at: enRouteAt,
+      accent: 'amber',
+      Icon: CarIcon,
+      state: stateFor('enRoute', reached.enRoute),
+    },
+    {
+      id: 'arrived',
+      title: 'Driver Arrived',
+      at: arrivedAt,
+      accent: 'green',
+      Icon: MapPin,
+      state: stateFor('arrived', reached.arrived),
+    },
+    {
+      id: 'started',
+      title: 'Trip Started',
+      at: startedAt,
+      accent: 'blue',
+      Icon: Play,
+      state: stateFor('started', reached.started),
+    },
+  ];
+
+  if (isCancelled) {
+    steps.push({
+      id: 'cancelled',
+      title: 'Trip Cancelled',
+      at: cancelledAt,
+      accent: 'rose',
+      Icon: XCircle,
+      state: 'completed',
+    });
+    return steps;
+  }
+
+  steps.push(
+    {
+      id: 'completed',
+      title: 'Trip Completed',
+      at: completedAt,
+      accent: 'green',
+      Icon: Flag,
+      state: stateFor('completed', reached.completed),
+    },
+    {
+      id: 'payment',
+      title: 'Payment Completed',
+      at: paymentReceivedAt,
+      accent: 'green',
+      Icon: WalletIcon,
+      state: stateFor('payment', reached.payment),
+    },
+  );
+
+  return steps;
+}
+
+const TIMELINE_ACCENT = {
+  green: {
+    iconBg: 'bg-emerald-500',
+    iconText: 'text-white',
+    line: 'bg-emerald-500',
+  },
+  amber: {
+    iconBg: 'bg-amber-400',
+    iconText: 'text-white',
+    line: 'bg-amber-400',
+  },
+  blue: {
+    iconBg: 'bg-sky-500',
+    iconText: 'text-white',
+    line: 'bg-sky-400',
+  },
+  rose: {
+    iconBg: 'bg-rose-500',
+    iconText: 'text-white',
+    line: 'bg-rose-400',
+  },
+  gray: {
+    iconBg: 'bg-slate-200',
+    iconText: 'text-slate-500',
+    line: 'bg-slate-200',
+  },
+};
+
+function TimelineStepRow({ step, isLast, nextState }) {
+  const accent =
+    step.state === 'pending'
+      ? TIMELINE_ACCENT.gray
+      : TIMELINE_ACCENT[step.accent] || TIMELINE_ACCENT.green;
+  const Icon = step.Icon;
+
+  const badge =
+    step.state === 'completed'
+      ? { label: 'Completed', className: 'bg-emerald-50 text-emerald-700' }
+      : step.state === 'current'
+        ? { label: 'In Progress', className: 'bg-sky-50 text-sky-700' }
+        : { label: 'Pending', className: 'bg-slate-100 text-slate-500' };
+
+  // Solid green/amber when both this and next are done; dashed after current / pending.
+  let connectorClass = 'border-l-2 border-dashed border-slate-200';
+  if (step.state === 'completed' && nextState === 'completed') {
+    connectorClass = `${accent.line} w-0.5 border-0`;
+  } else if (
+    step.state === 'current' ||
+    (step.state === 'completed' && nextState === 'current')
+  ) {
+    connectorClass = 'border-l-2 border-dashed border-sky-300';
+  }
+
+  const subtext = step.at
+    ? formatDateTime(step.at)
+    : step.state === 'pending'
+      ? 'Pending'
+      : step.state === 'current'
+        ? 'In progress'
+        : '';
+
+  return (
+    <li className="relative flex gap-3 py-3 border-b border-slate-100 last:border-b-0">
+      <div className="relative flex flex-col items-center shrink-0 w-9">
+        <span
+          className={`relative z-[1] w-9 h-9 rounded-full flex items-center justify-center ${accent.iconBg} ${accent.iconText} shadow-sm`}
+        >
+          <Icon
+            className="w-4 h-4"
+            fill={step.id === 'started' && step.state !== 'pending' ? 'currentColor' : 'none'}
+          />
+        </span>
+        {!isLast && (
+          <span
+            className={`absolute top-9 bottom-[-12px] left-1/2 -translate-x-1/2 w-0 ${connectorClass}`}
+            aria-hidden
+          />
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0 flex items-start justify-between gap-2 pt-1">
+        <div className="min-w-0">
+          <p
+            className={`text-sm font-bold truncate ${
+              step.state === 'pending' ? 'text-slate-400' : 'text-text'
+            }`}
+          >
+            {step.title}
+          </p>
+          <p className="text-[11px] text-text-muted mt-0.5 truncate">{subtext}</p>
+        </div>
+        <span
+          className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${badge.className}`}
+        >
+          {badge.label}
+        </span>
+      </div>
+    </li>
   );
 }
 

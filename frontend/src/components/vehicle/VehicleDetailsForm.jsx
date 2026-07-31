@@ -53,8 +53,8 @@ const VehicleDetailsForm = ({
     carTypeId: values.carTypeId,
   });
 
-  // Drop a stale category when the brand changes and that category has no
-  // models for the new brand.
+  // Drop a stale category only after brand models have loaded. Clearing while
+  // modelsLoading would wipe edit/preferences values on open.
   useEffect(() => {
     if (!values.brandId || !values.carTypeId || modelsLoading) return;
     const stillValid = categoryOptions.some(
@@ -63,8 +63,8 @@ const VehicleDetailsForm = ({
     if (!stillValid) {
       onChange({ ...values, carTypeId: '', modelId: '' });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to catalog/brand changes
-  }, [values.brandId, values.carTypeId, categoryOptions, modelsLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only after brand model fetch settles
+  }, [values.brandId, modelsLoading]);
 
   const setField = (field) => (val) => {
     const next = { ...values, [field]: val };

@@ -8,6 +8,7 @@ import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
 import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverLocations';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
+import { maskPersonName } from '../../../../utils/formatters';
 
 /**
  * "Driver has arrived" screen — same layout as `DriverOnWayPage`, but
@@ -55,6 +56,7 @@ const DriverReachedPage = () => {
   }, [booking?.status, booking?._id, navigate]);
 
   const driverName = driverObj?.name || 'Your driver';
+  const displayDriverName = maskPersonName(driverName) || 'Your driver';
   const driverRating = driverObj?.rating;
   const otpCode = booking?.rideStartOtp?.code;
   const driverPhone = driverObj?.phone_no || driverObj?.phone || null;
@@ -103,7 +105,7 @@ const DriverReachedPage = () => {
           <div className="flex items-center gap-3 mb-4">
             <Avatar name={driverName} size="lg" online={!!liveDriver} />
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-text truncate">{driverName}</h3>
+              <h3 className="font-bold text-text truncate">{displayDriverName}</h3>
               {driverRating ? (
                 <div className="flex items-center gap-1 mt-0.5">
                   <Star className="w-3.5 h-3.5 text-primary fill-primary" />

@@ -61,7 +61,9 @@ export function useVehicleCatalog({ activeOnly = true, brandId = '', carTypeId =
   const [conditions, setConditions] = useState(BASE_CACHE.conditions || []);
   const [brandModels, setBrandModels] = useState([]);
   const [loading, setLoading] = useState(!BASE_CACHE.categories);
-  const [modelsLoading, setModelsLoading] = useState(false);
+  // Start loading when a brand is already selected (edit / preferences hydrate)
+  // so callers don't treat empty category lists as "invalid" before fetch.
+  const [modelsLoading, setModelsLoading] = useState(() => Boolean(brandId));
   const [error, setError] = useState('');
 
   const activeQuery = activeOnly ? '?active=true' : '';
@@ -95,9 +97,11 @@ export function useVehicleCatalog({ activeOnly = true, brandId = '', carTypeId =
   const loadBrandModels = useCallback(async () => {
     if (!brandId) {
       setBrandModels([]);
+      setModelsLoading(false);
       return;
     }
     setModelsLoading(true);
+    setBrandModels([]);
     try {
       const params = new URLSearchParams();
       if (activeOnly) params.set('active', 'true');

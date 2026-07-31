@@ -36,6 +36,19 @@ export const formatPhone = (phone) => {
 };
 
 /**
+ * Mask a person name for privacy (nearby drivers / pre-ride).
+ * Uses the first word only: "Rajesh Kumar" → "Ra**h", "raj" → "ra**j".
+ */
+export const maskPersonName = (name) => {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const first = raw.split(/\s+/)[0];
+  if (first.length <= 1) return '*';
+  if (first.length === 2) return `${first[0]}*`;
+  return `${first.slice(0, 2)}**${first.slice(-1)}`;
+};
+
+/**
  * Format date
  */
 export const formatDate = (dateStr, fallback = '—') => {
