@@ -1,7 +1,10 @@
 /**
  * Seeds all platform data used in /admin/settings/platform and driver onboarding.
  *
- * Run from backend/: npm run seed
+ * Run from backend/:
+ *   npm run seed           — upsert; keeps existing catalog docs
+ *   npm run seed:fresh     — delete catalog data first, then seed
+ *   node scripts/seed.js --fresh
  */
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -20,6 +23,12 @@ import { resolveCarBrandLogoUrl } from '../src/utils/carBrandLogo.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '../.env') });
 
+const CLEAR_FLAGS = new Set(['--fresh', '--clear', '--reset']);
+
+function wantsClearOldData(argv = process.argv.slice(2)) {
+  return argv.some((arg) => CLEAR_FLAGS.has(arg));
+}
+
 async function connectDb() {
   const uri = process.env.MONGO_URI;
   const dbName = process.env.DB_NAME;
@@ -34,6 +43,29 @@ async function connectDb() {
 
 async function disconnectDb() {
   await mongoose.disconnect();
+}
+
+/**
+ * Removes previously seeded vehicle-catalog + registration-checklist docs.
+ * Call this only when you want a clean slate before seeding.
+ * Order matters: models first (they ref brands / categories).
+ */
+async function clearOldData() {
+  const [models, brands, categories, fuels, conditions] = await Promise.all([
+    CarModel.deleteMany({}),
+    CarBrand.deleteMany({}),
+    CarType.deleteMany({}),
+    FuelType.deleteMany({}),
+    PlatformCondition.deleteMany({}),
+  ]);
+
+  return {
+    models: models.deletedCount || 0,
+    brands: brands.deletedCount || 0,
+    categories: categories.deletedCount || 0,
+    fuelTypes: fuels.deletedCount || 0,
+    conditions: conditions.deletedCount || 0,
+  };
 }
 
 async function upsertCategory({ name, description, image }) {
@@ -118,7 +150,20 @@ async function seedRegistrationConditions() {
 }
 
 async function main() {
+  const clearFirst = wantsClearOldData();
   await connectDb();
+
+  if (clearFirst) {
+    console.log('\n▶ Clearing old seed data');
+    const cleared = await clearOldData();
+    console.log(`  Models: ${cleared.models}`);
+    console.log(`  Brands: ${cleared.brands}`);
+    console.log(`  Categories: ${cleared.categories}`);
+    console.log(`  Fuel types: ${cleared.fuelTypes}`);
+    console.log(`  Conditions: ${cleared.conditions}`);
+  } else {
+    console.log('\n▶ Keeping existing data (upsert mode)');
+  }
 
   console.log('\n▶ Vehicle catalog');
   const catalog = await seedVehicleCatalog();

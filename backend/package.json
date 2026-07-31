@@ -9,7 +9,8 @@
     "dev": "nodemon src/server.js",
     "fix:payment-index": "node scripts/fixPaymentIndex.js",
     "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "seed:fresh": "node scripts/seed.js --fresh"
   },
   "keywords": [],
   "author": "",

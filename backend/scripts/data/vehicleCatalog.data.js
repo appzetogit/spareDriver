@@ -298,53 +298,43 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "SUV / Compact SUV",
-      "category": "sedan"
-    },
-    {
       "name": "Fronx",
-      "category": "sedan"
+      "category": "suv / compact suv"
     },
     {
       "name": "Brezza",
-      "category": "sedan"
+      "category": "suv / compact suv"
     },
     {
       "name": "Grand Vitara",
-      "category": "sedan"
+      "category": "suv / compact suv"
     },
     {
       "name": "Jimny",
-      "category": "sedan"
+      "category": "suv / compact suv"
     },
     {
       "name": "Ertiga",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "XL6",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Invicto",
-      "category": "muv"
-    },
-    {
-      "name": "Vans",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Eeco",
-      "category": "muv"
+      "category": "vans"
     },
     {
       "name": "Super Carry",
-      "category": "muv"
-    },
-    {
-      "name": "2. Tata Motors",
-      "category": "muv"
-    },
+      "category": "vans"
+    }
+  ],
+  "Tata Motors": [
     {
       "name": "Tiago",
       "category": "hatchback"
@@ -358,12 +348,8 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Compact SUV",
-      "category": "sedan"
-    },
-    {
       "name": "Punch",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Nexon",
@@ -382,53 +368,43 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Electric Vehicles",
-      "category": "suv"
-    },
-    {
       "name": "Tiago EV",
-      "category": "suv"
+      "category": "electric vehicles"
     },
     {
       "name": "Tigor EV",
-      "category": "suv"
+      "category": "electric vehicles"
     },
     {
       "name": "Punch EV",
-      "category": "suv"
+      "category": "electric vehicles"
     },
     {
       "name": "Nexon EV",
-      "category": "suv"
+      "category": "electric vehicles"
     },
     {
       "name": "Curvv EV",
-      "category": "suv"
+      "category": "electric vehicles"
     },
     {
       "name": "Harrier EV",
-      "category": "suv"
-    },
-    {
-      "name": "Pickup / Commercial",
-      "category": "suv"
+      "category": "electric vehicles"
     },
     {
       "name": "Yodha",
-      "category": "suv"
+      "category": "pickup / commercial"
     },
     {
       "name": "Ace",
-      "category": "suv"
+      "category": "pickup / commercial"
     },
     {
       "name": "Intra",
-      "category": "suv"
-    },
-    {
-      "name": "3. Mahindra",
-      "category": "suv"
-    },
+      "category": "pickup / commercial"
+    }
+  ],
+  "Mahindra": [
     {
       "name": "Bolero",
       "category": "suv"
@@ -471,52 +447,48 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Bolero Pickup",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Bolero Camper",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Jeeto",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Supro",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Imperio",
-      "category": "suv"
-    },
-    {
-      "name": "Electric",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "XUV400 EV",
-      "category": "suv"
+      "category": "electric"
     },
     {
-      "name": "4. Hindustan Motors",
-      "category": "suv"
+      "name": "BE 6",
+      "category": "electric"
     },
+    {
+      "name": "XEV 9e",
+      "category": "electric"
+    }
+  ],
+  "Hindustan Motors": [
     {
       "name": "Ambassador",
       "category": "sedan"
     },
     {
-      "name": "Utility Vehicle",
-      "category": "sedan"
-    },
-    {
       "name": "Trekker",
-      "category": "sedan"
-    },
-    {
-      "name": "5. Force Motors",
-      "category": "sedan"
-    },
+      "category": "utility vehicle"
+    }
+  ],
+  "Force Motors": [
     {
       "name": "Gurkha",
       "category": "suv"
@@ -526,41 +498,27 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Van",
-      "category": "suv"
-    },
-    {
       "name": "Traveller",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Urbania",
-      "category": "suv"
-    },
-    {
-      "name": "Ambulance",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Force Ambulance",
-      "category": "suv"
-    },
-    {
-      "name": "Commercial",
-      "category": "suv"
+      "category": "ambulance"
     },
     {
       "name": "Trax",
-      "category": "suv"
+      "category": "commercial"
     },
     {
       "name": "Trump",
-      "category": "suv"
-    },
-    {
-      "name": "6. Premier Automobiles",
-      "category": "suv"
-    },
+      "category": "commercial"
+    }
+  ],
+  "Premier Automobiles": [
     {
       "name": "Rio",
       "category": "hatchback"
@@ -570,104 +528,66 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Classic",
-      "category": "sedan"
-    },
-    {
       "name": "Premier Padmini",
-      "category": "sedan"
-    },
-    {
-      "name": "7. Ashok Leyland (Passenger Vehicles)",
-      "category": "sedan"
-    },
-    {
-      "name": "Bus",
-      "category": "sedan"
-    },
+      "category": "classic"
+    }
+  ],
+  "Ashok Leyland (Passenger Vehicles)": [
     {
       "name": "Lynx",
-      "category": "sedan"
+      "category": "bus"
     },
     {
       "name": "Oyster",
-      "category": "sedan"
+      "category": "bus"
     },
     {
       "name": "Sunshine",
-      "category": "sedan"
+      "category": "bus"
     },
     {
       "name": "Falcon",
-      "category": "sedan"
+      "category": "bus"
     },
     {
       "name": "Viking",
-      "category": "sedan"
-    },
-    {
-      "name": "Staff Bus",
-      "category": "sedan"
+      "category": "bus"
     },
     {
       "name": "MiTR Bus",
-      "category": "sedan"
-    },
-    {
-      "name": "School Bus",
-      "category": "sedan"
+      "category": "staff bus"
     },
     {
       "name": "Sunshine School Bus",
-      "category": "sedan"
-    },
-    {
-      "name": "Commercial Passenger",
-      "category": "sedan"
+      "category": "school bus"
     },
     {
       "name": "Dost Van",
-      "category": "sedan"
-    },
-    {
-      "name": "8. EKA Mobility",
-      "category": "sedan"
-    },
-    {
-      "name": "Electric Bus",
-      "category": "sedan"
-    },
+      "category": "commercial passenger"
+    }
+  ],
+  "EKA Mobility": [
     {
       "name": "E9 Bus",
-      "category": "sedan"
+      "category": "electric bus"
     },
     {
       "name": "E12 Bus",
-      "category": "sedan"
-    },
-    {
-      "name": "Electric Truck",
-      "category": "sedan"
+      "category": "electric bus"
     },
     {
       "name": "Light Commercial EV",
-      "category": "sedan"
+      "category": "electric truck"
     },
     {
       "name": "Medium Commercial EV",
-      "category": "sedan"
-    },
-    {
-      "name": "9. Pravaig",
-      "category": "sedan"
-    },
-    {
-      "name": "Luxury Electric Sedan",
-      "category": "sedan"
-    },
+      "category": "electric truck"
+    }
+  ],
+  "Pravaig": [
     {
       "name": "DEFY",
-      "category": "sedan"
+      "category": "luxury electric sedan"
     }
   ],
   "Hyundai": [
@@ -716,24 +636,20 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Compact SUV",
-      "category": "sedan"
-    },
-    {
       "name": "Exter",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Venue",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Kona",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Bayon",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Creta",
@@ -760,93 +676,79 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "MPV / MUV",
-      "category": "suv"
-    },
-    {
       "name": "Stargazer",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Staria",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "H-1",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Creta Electric",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Kona Electric",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Ioniq 5",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Ioniq 6",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Ioniq 9",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Inster",
-      "category": "suv"
-    },
-    {
-      "name": "Hybrid",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Tucson Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Santa Fe Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Sonata Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "Pickup Truck",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Santa Cruz",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
-      "name": "Performance (N Series)",
-      "category": "suv"
+      "name": "i20 N",
+      "category": "performance (n series)"
     },
     {
       "name": "i30 N",
-      "category": "suv"
+      "category": "performance (n series)"
     },
     {
       "name": "Elantra N",
-      "category": "suv"
+      "category": "performance (n series)"
     },
     {
       "name": "Kona N",
-      "category": "suv"
+      "category": "performance (n series)"
     },
     {
       "name": "Ioniq 5 N",
-      "category": "suv"
-    },
-    {
-      "name": "2. Kia",
-      "category": "suv"
-    },
+      "category": "performance (n series)"
+    }
+  ],
+  "Kia": [
     {
       "name": "Picanto",
       "category": "hatchback"
@@ -877,15 +779,15 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Sonet",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Seltos",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Niro",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Carens Clavis",
@@ -909,100 +811,100 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Carens",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Carnival",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "EV3",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EV4",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EV5",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EV6",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "EV9",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Niro EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Niro Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Sportage Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Sorento Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Tasman",
-      "category": "suv"
-    },
-    {
-      "name": "3. Genesis (Luxury Division of Hyundai)",
-      "category": "suv"
-    },
+      "category": "pickup truck"
+    }
+  ],
+  "Genesis (Luxury Division of Hyundai)": [
     {
       "name": "G70",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "G80",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "G90",
-      "category": "luxury"
-    },
-    {
-      "name": "Luxury Wagon",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "G70 Shooting Brake",
-      "category": "luxury"
+      "category": "luxury wagon"
     },
     {
       "name": "GV60",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "GV70",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "GV80",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Genesis X Concept",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Electrified G80",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Electrified GV70",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "4. SsangYong (Now KGM)",
-      "category": "luxury"
-    },
+      "name": "GV60",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "SsangYong (Now KGM)": [
     {
       "name": "Tivoli",
       "category": "suv"
@@ -1021,19 +923,19 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Musso",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Musso Grand",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Torres EVX",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Rodius (Stavic)",
-      "category": "muv"
+      "category": "mpv"
     }
   ],
   "Toyota": [
@@ -1078,20 +980,16 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Compact SUV",
-      "category": "sedan"
-    },
-    {
       "name": "Raize",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Urban Cruiser",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Corolla Cross",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Hyryder",
@@ -1122,109 +1020,87 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "MPV / MUV",
-      "category": "suv"
-    },
-    {
       "name": "Rumion",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Innova Crysta",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Innova Hycross",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Alphard",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Vellfire",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Sienna",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "HiAce",
-      "category": "suv"
-    },
-    {
-      "name": "Pickup Truck",
-      "category": "suv"
+      "category": "mpv / muv"
     },
     {
       "name": "Hilux",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Tacoma",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Tundra",
-      "category": "suv"
-    },
-    {
-      "name": "Sports Car",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "GR86",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "GR Supra",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "GR Yaris",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "GR Corolla",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "bZ4X",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Urban Cruiser EV",
-      "category": "suv"
-    },
-    {
-      "name": "Hybrid",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Prius",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Camry Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Corolla Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Hycross Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "2. Honda",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Honda": [
     {
       "name": "Brio",
       "category": "hatchback"
@@ -1283,56 +1159,46 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Mobilio",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Odyssey",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "StepWGN",
-      "category": "muv"
-    },
-    {
-      "name": "Sports",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Civic Type R",
-      "category": "muv"
+      "category": "sports"
     },
     {
       "name": "NSX",
-      "category": "muv"
-    },
-    {
-      "name": "Electric",
-      "category": "muv"
+      "category": "sports"
     },
     {
       "name": "Honda e",
-      "category": "muv"
+      "category": "electric"
     },
     {
       "name": "Prologue",
-      "category": "muv"
+      "category": "electric"
     },
     {
       "name": "City e:HEV",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "Accord Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "CR-V Hybrid",
-      "category": "muv"
-    },
-    {
-      "name": "3. Nissan",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Nissan": [
     {
       "name": "Micra",
       "category": "hatchback"
@@ -1395,32 +1261,34 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Navara",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Frontier",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Titan",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "GT-R",
-      "category": "suv"
+      "category": "sports"
     },
     {
       "name": "Z",
-      "category": "suv"
+      "category": "sports"
+    },
+    {
+      "name": "Leaf",
+      "category": "electric"
     },
     {
       "name": "Ariya",
-      "category": "suv"
-    },
-    {
-      "name": "4. Mitsubishi",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "Mitsubishi": [
     {
       "name": "Mirage",
       "category": "hatchback"
@@ -1455,24 +1323,18 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Triton (L200)",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Xpander",
-      "category": "muv"
-    },
-    {
-      "name": "Electric / Hybrid",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Outlander PHEV",
-      "category": "muv"
-    },
-    {
-      "name": "5. Mazda",
-      "category": "muv"
-    },
+      "category": "electric / hybrid"
+    }
+  ],
+  "Mazda": [
     {
       "name": "Mazda2",
       "category": "hatchback"
@@ -1523,24 +1385,22 @@ export const BRAND_MODELS = {
     },
     {
       "name": "MX-5 Miata",
-      "category": "suv"
+      "category": "sports"
     },
     {
       "name": "RX-8",
-      "category": "suv"
+      "category": "sports"
     },
     {
       "name": "BT-50",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "MX-30 EV",
-      "category": "suv"
-    },
-    {
-      "name": "6. Suzuki",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "Suzuki": [
     {
       "name": "Alto",
       "category": "hatchback"
@@ -1599,40 +1459,34 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Ertiga",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "XL6",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Invicto",
-      "category": "muv"
-    },
-    {
-      "name": "Van",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Eeco",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Super Carry",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "Grand Vitara Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Invicto Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "7. Subaru",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Subaru": [
     {
       "name": "Legacy",
       "category": "sedan"
@@ -1667,12 +1521,14 @@ export const BRAND_MODELS = {
     },
     {
       "name": "BRZ",
-      "category": "suv"
+      "category": "sports"
     },
     {
-      "name": "8. Lexus",
-      "category": "suv"
-    },
+      "name": "Solterra",
+      "category": "electric"
+    }
+  ],
+  "Lexus": [
     {
       "name": "ES",
       "category": "sedan"
@@ -1711,40 +1567,38 @@ export const BRAND_MODELS = {
     },
     {
       "name": "RC",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "LC",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "LM",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "RZ",
-      "category": "muv"
+      "category": "electric"
     },
     {
       "name": "ES Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "NX Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "RX Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "LS Hybrid",
-      "category": "muv"
-    },
-    {
-      "name": "9. Infiniti",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Infiniti": [
     {
       "name": "Q50",
       "category": "sedan"
@@ -1755,7 +1609,7 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Q60",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "QX50",
@@ -1775,12 +1629,10 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Upcoming EV lineup",
-      "category": "suv"
-    },
-    {
-      "name": "10. Daihatsu",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "Daihatsu": [
     {
       "name": "Ayla",
       "category": "hatchback"
@@ -1803,60 +1655,48 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Sigra",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Luxio",
-      "category": "muv"
-    },
-    {
-      "name": "Mini Truck",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Hijet",
-      "category": "muv"
+      "category": "mini truck"
     },
     {
       "name": "Gran Max",
-      "category": "muv"
-    },
-    {
-      "name": "11. Isuzu",
-      "category": "muv"
-    },
+      "category": "van"
+    }
+  ],
+  "Isuzu": [
     {
       "name": "MU-X",
       "category": "suv"
     },
     {
       "name": "D-Max",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "V-Cross",
-      "category": "suv"
-    },
-    {
-      "name": "Commercial",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "N-Series",
-      "category": "suv"
+      "category": "commercial"
     },
     {
       "name": "F-Series",
-      "category": "suv"
+      "category": "commercial"
     },
     {
       "name": "ELF Trucks",
-      "category": "suv"
-    },
-    {
-      "name": "12. Acura",
-      "category": "suv"
-    },
+      "category": "commercial"
+    }
+  ],
+  "Acura": [
     {
       "name": "Integra",
       "category": "sedan"
@@ -1878,8 +1718,12 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
+      "name": "NSX",
+      "category": "sports"
+    },
+    {
       "name": "ZDX EV",
-      "category": "suv"
+      "category": "electric"
     }
   ],
   "Mercedes-Benz": [
@@ -1921,27 +1765,23 @@ export const BRAND_MODELS = {
     },
     {
       "name": "CLA Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "CLE Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "AMG GT Coupe",
-      "category": "luxury"
-    },
-    {
-      "name": "Convertible / Cabriolet",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "CLE Cabriolet",
-      "category": "luxury"
+      "category": "convertible / cabriolet"
     },
     {
       "name": "AMG SL Roadster",
-      "category": "luxury"
+      "category": "convertible / cabriolet"
     },
     {
       "name": "GLA",
@@ -1968,89 +1808,75 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Coupe SUV",
-      "category": "suv"
-    },
-    {
       "name": "GLC Coupe",
-      "category": "suv"
+      "category": "coupe suv"
     },
     {
       "name": "GLE Coupe",
-      "category": "suv"
-    },
-    {
-      "name": "MPV / Van",
-      "category": "suv"
+      "category": "coupe suv"
     },
     {
       "name": "V-Class",
-      "category": "suv"
+      "category": "mpv / van"
     },
     {
       "name": "EQV",
-      "category": "suv"
+      "category": "mpv / van"
     },
     {
       "name": "Sprinter",
-      "category": "suv"
+      "category": "mpv / van"
     },
     {
       "name": "Vito",
-      "category": "suv"
+      "category": "mpv / van"
     },
     {
       "name": "X-Class",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "suv"
+      "category": "pickup"
     },
     {
       "name": "EQA",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EQB",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EQE SUV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EQS SUV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "Performance (AMG)",
-      "category": "suv"
+      "name": "EQV",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "AMG A45",
-      "category": "suv"
+      "category": "performance (amg)"
     },
     {
       "name": "AMG C63",
-      "category": "suv"
+      "category": "performance (amg)"
     },
     {
       "name": "AMG E53",
-      "category": "suv"
+      "category": "performance (amg)"
     },
     {
       "name": "AMG GT",
-      "category": "suv"
+      "category": "performance (amg)"
     },
     {
       "name": "AMG G63",
-      "category": "suv"
-    },
-    {
-      "name": "2. BMW",
-      "category": "suv"
-    },
+      "category": "performance (amg)"
+    }
+  ],
+  "BMW": [
     {
       "name": "1 Series",
       "category": "hatchback"
@@ -2085,39 +1911,39 @@ export const BRAND_MODELS = {
     },
     {
       "name": "2 Series Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "4 Series Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "8 Series Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "M2",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "M4",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "M8",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Z4 Roadster",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "4 Series Convertible",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "8 Series Convertible",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "X1",
@@ -2148,57 +1974,51 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Electric SUV",
-      "category": "suv"
-    },
-    {
       "name": "iX1",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "iX2",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "iX3",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "iX",
-      "category": "suv"
-    },
-    {
-      "name": "Wagon / Touring",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "3 Series Touring",
-      "category": "suv"
+      "category": "wagon / touring"
     },
     {
       "name": "5 Series Touring",
-      "category": "suv"
+      "category": "wagon / touring"
     },
     {
-      "name": "Performance (M)",
-      "category": "suv"
+      "name": "M2",
+      "category": "performance (m)"
     },
     {
       "name": "M3",
-      "category": "suv"
+      "category": "performance (m)"
+    },
+    {
+      "name": "M4",
+      "category": "performance (m)"
     },
     {
       "name": "M5",
-      "category": "suv"
+      "category": "performance (m)"
     },
     {
       "name": "XM",
-      "category": "suv"
-    },
-    {
-      "name": "3. Audi",
-      "category": "suv"
-    },
+      "category": "performance (m)"
+    }
+  ],
+  "Audi": [
     {
       "name": "A1",
       "category": "hatchback"
@@ -2237,23 +2057,23 @@ export const BRAND_MODELS = {
     },
     {
       "name": "TT Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "R8 Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "A5 Cabriolet",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "TT Roadster",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "R8 Spyder",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "Q2",
@@ -2277,64 +2097,54 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Q4 e-tron",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "Q6 e-tron",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "Q8 e-tron",
-      "category": "suv"
-    },
-    {
-      "name": "Wagon",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "A4 Avant",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "A6 Avant",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "RS6 Avant",
-      "category": "suv"
-    },
-    {
-      "name": "Performance (RS)",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "RS3",
-      "category": "suv"
+      "category": "performance (rs)"
     },
     {
       "name": "RS4",
-      "category": "suv"
+      "category": "performance (rs)"
     },
     {
       "name": "RS5",
-      "category": "suv"
+      "category": "performance (rs)"
     },
     {
       "name": "RS6",
-      "category": "suv"
+      "category": "performance (rs)"
     },
     {
       "name": "RS7",
-      "category": "suv"
+      "category": "performance (rs)"
     },
     {
       "name": "RS Q8",
-      "category": "suv"
-    },
-    {
-      "name": "4. Volkswagen",
-      "category": "suv"
-    },
+      "category": "performance (rs)"
+    }
+  ],
+  "Volkswagen": [
     {
       "name": "Polo",
       "category": "hatchback"
@@ -2389,83 +2199,73 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Touran",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Multivan",
-      "category": "muv"
-    },
-    {
-      "name": "Van",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Transporter",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Caddy",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Crafter",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Amarok",
-      "category": "suv"
+      "category": "pickup"
     },
     {
-      "name": "Electric",
-      "category": "suv"
+      "name": "ID.3",
+      "category": "electric"
     },
     {
       "name": "ID.4",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "ID.5",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "ID.7",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "ID.Buzz",
-      "category": "suv"
-    },
-    {
-      "name": "Performance (GTI/R)",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Golf GTI",
-      "category": "suv"
+      "category": "performance (gti/r)"
     },
     {
       "name": "Golf R",
-      "category": "suv"
-    },
-    {
-      "name": "5. Porsche",
-      "category": "suv"
-    },
+      "category": "performance (gti/r)"
+    }
+  ],
+  "Porsche": [
     {
       "name": "718 Cayman",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "911",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "718 Boxster",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "911 Cabriolet",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "Panamera",
@@ -2484,13 +2284,15 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Macan Electric",
-      "category": "suv"
+      "name": "Taycan",
+      "category": "electric"
     },
     {
-      "name": "6. Opel",
-      "category": "suv"
-    },
+      "name": "Macan Electric",
+      "category": "electric"
+    }
+  ],
+  "Opel": [
     {
       "name": "Corsa",
       "category": "hatchback"
@@ -2521,40 +2323,38 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Astra Sports Tourer",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "Insignia Sports Tourer",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "Combo",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Vivaro",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Movano",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Corsa Electric",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Astra Electric",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Mokka Electric",
-      "category": "suv"
-    },
-    {
-      "name": "7. MINI",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "MINI": [
     {
       "name": "Cooper 3 Door",
       "category": "hatchback"
@@ -2565,7 +2365,7 @@ export const BRAND_MODELS = {
     },
     {
       "name": "MINI Convertible",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "Countryman",
@@ -2577,32 +2377,66 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Cooper Electric",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Countryman Electric",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Aceman Electric",
-      "category": "suv"
-    },
-    {
-      "name": "Performance (John Cooper Works)",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "JCW Hatch",
-      "category": "suv"
+      "category": "performance (john cooper works)"
     },
     {
       "name": "JCW Countryman",
-      "category": "suv"
+      "category": "performance (john cooper works)"
     },
     {
-      "name": "8. Smart",
-      "category": "suv"
+      "name": "Cooper 3 Door",
+      "category": "hatchback"
     },
+    {
+      "name": "Cooper 5 Door",
+      "category": "hatchback"
+    },
+    {
+      "name": "MINI Convertible",
+      "category": "convertible"
+    },
+    {
+      "name": "Countryman",
+      "category": "suv / crossover"
+    },
+    {
+      "name": "Aceman",
+      "category": "suv / crossover"
+    },
+    {
+      "name": "Cooper Electric",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Countryman Electric",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Aceman Electric",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "JCW Hatch",
+      "category": "performance (john cooper works)"
+    },
+    {
+      "name": "JCW Countryman",
+      "category": "performance (john cooper works)"
+    }
+  ],
+  "Smart": [
     {
       "name": "Fortwo",
       "category": "hatchback"
@@ -2621,136 +2455,112 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Fortwo Electric",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "#1",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "#3",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "#5",
-      "category": "suv"
-    },
-    {
-      "name": "9. Maybach",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "Maybach": [
     {
       "name": "Mercedes-Maybach S-Class",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Mercedes-Maybach GLS",
-      "category": "luxury"
-    },
-    {
-      "name": "Electric Luxury",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Mercedes-Maybach EQS SUV",
-      "category": "luxury"
-    },
-    {
-      "name": "10. Alpina",
-      "category": "luxury"
-    },
+      "category": "electric luxury"
+    }
+  ],
+  "Alpina": [
     {
       "name": "B3",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "B5",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "B7",
-      "category": "luxury"
-    },
-    {
-      "name": "Luxury Wagon",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "B3 Touring",
-      "category": "luxury"
+      "category": "luxury wagon"
     },
     {
       "name": "D3 Touring",
-      "category": "luxury"
+      "category": "luxury wagon"
     },
     {
       "name": "XB7",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "XD3",
-      "category": "luxury"
-    },
-    {
-      "name": "11. MAN",
-      "category": "luxury"
-    },
+      "category": "luxury suv"
+    }
+  ],
+  "MAN": [
     {
       "name": "MAN TGE",
-      "category": "luxury"
+      "category": "van"
     },
     {
       "name": "TGL",
-      "category": "suv"
+      "category": "truck"
     },
     {
       "name": "TGM",
-      "category": "suv"
+      "category": "truck"
     },
     {
       "name": "TGS",
-      "category": "suv"
+      "category": "truck"
     },
     {
       "name": "TGX",
-      "category": "suv"
-    },
-    {
-      "name": "Bus",
-      "category": "suv"
+      "category": "truck"
     },
     {
       "name": "Lion's Coach",
-      "category": "suv"
+      "category": "bus"
     },
     {
       "name": "Lion's City",
-      "category": "suv"
+      "category": "bus"
     },
     {
       "name": "Lion's Intercity",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Commercial",
-      "category": "suv"
+      "category": "bus"
     },
     {
       "name": "eTGE",
-      "category": "suv"
+      "category": "electric commercial"
     },
     {
       "name": "eTruck",
-      "category": "suv"
+      "category": "electric commercial"
     },
     {
       "name": "Electric Bus",
-      "category": "suv"
-    },
-    {
-      "name": "12. Borgward",
-      "category": "suv"
-    },
+      "category": "electric commercial"
+    }
+  ],
+  "Borgward": [
     {
       "name": "BX3",
       "category": "suv"
@@ -2765,7 +2575,7 @@ export const BRAND_MODELS = {
     },
     {
       "name": "BXi7",
-      "category": "suv"
+      "category": "electric suv"
     }
   ],
   "Ford": [
@@ -2818,101 +2628,79 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Pickup Truck",
-      "category": "suv"
-    },
-    {
       "name": "Maverick",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Ranger",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "F-150",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "F-250",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "F-350",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "F-450",
-      "category": "suv"
-    },
-    {
-      "name": "Sports Car",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Mustang",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "Mustang Dark Horse",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "GT",
-      "category": "suv"
-    },
-    {
-      "name": "Van",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "Transit",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Transit Connect",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "E-Series",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Mustang Mach-E",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "F-150 Lightning",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "E-Transit",
-      "category": "suv"
-    },
-    {
-      "name": "Hybrid",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Escape Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Maverick Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "F-150 Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "2. Chevrolet",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Chevrolet": [
     {
       "name": "Spark",
       "category": "hatchback"
@@ -2963,51 +2751,77 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Colorado",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Silverado 1500",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Silverado HD",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Camaro",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "Corvette",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "Express Cargo",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Express Passenger",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Bolt EUV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Equinox EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Blazer EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Silverado EV",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Tesla": [
+    {
+      "name": "Model 3",
+      "category": "sedan"
+    },
+    {
+      "name": "Model S",
+      "category": "sedan"
+    },
+    {
+      "name": "Model Y",
       "category": "suv"
     },
     {
-      "name": "3. Tesla",
+      "name": "Model X",
       "category": "suv"
+    },
+    {
+      "name": "Cybertruck",
+      "category": "pickup truck"
+    },
+    {
+      "name": "Roadster (Upcoming)",
+      "category": "sports car"
+    },
+    {
+      "name": "Entire Tesla lineup",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Model 3",
@@ -3027,31 +2841,25 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Cybertruck",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Roadster (Upcoming)",
-      "category": "suv"
+      "category": "sports car"
     },
     {
       "name": "Entire Tesla lineup",
-      "category": "suv"
-    },
-    {
-      "name": "4. Jeep",
-      "category": "suv"
-    },
-    {
-      "name": "Compact SUV",
-      "category": "suv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Jeep": [
     {
       "name": "Renegade",
-      "category": "suv"
+      "category": "compact suv"
     },
     {
       "name": "Compass",
-      "category": "suv"
+      "category": "compact suv"
     },
     {
       "name": "Cherokee",
@@ -3079,35 +2887,29 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Gladiator",
-      "category": "suv"
-    },
-    {
-      "name": "Electric / Hybrid",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Wrangler 4xe",
-      "category": "suv"
+      "category": "electric / hybrid"
     },
     {
       "name": "Grand Cherokee 4xe",
-      "category": "suv"
+      "category": "electric / hybrid"
     },
     {
       "name": "Wagoneer S EV",
-      "category": "suv"
-    },
-    {
-      "name": "5. Dodge",
-      "category": "suv"
-    },
+      "category": "electric / hybrid"
+    }
+  ],
+  "Dodge": [
     {
       "name": "Charger",
       "category": "sedan"
     },
     {
       "name": "Challenger",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Durango",
@@ -3118,53 +2920,37 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Muscle Car",
-      "category": "suv"
-    },
-    {
       "name": "Challenger SRT",
-      "category": "suv"
+      "category": "muscle car"
     },
     {
       "name": "Charger SRT",
-      "category": "suv"
-    },
-    {
-      "name": "Electric",
-      "category": "suv"
+      "category": "muscle car"
     },
     {
       "name": "Charger Daytona EV",
-      "category": "suv"
-    },
-    {
-      "name": "6. Chrysler",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "Chrysler": [
     {
       "name": "300",
       "category": "sedan"
     },
     {
-      "name": "MPV / Minivan",
-      "category": "sedan"
-    },
-    {
       "name": "Pacifica",
-      "category": "sedan"
+      "category": "mpv / minivan"
     },
     {
       "name": "Voyager",
-      "category": "sedan"
+      "category": "mpv / minivan"
     },
     {
       "name": "Pacifica Plug-in Hybrid",
-      "category": "sedan"
-    },
-    {
-      "name": "7. Cadillac",
-      "category": "sedan"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Cadillac": [
     {
       "name": "CT4",
       "category": "sedan"
@@ -3199,32 +2985,34 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Lyriq",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Optiq",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Vistiq",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "Performance",
-      "category": "suv"
+      "name": "Escalade IQ",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Celestiq",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "CT4-V",
-      "category": "suv"
+      "category": "performance"
     },
     {
       "name": "CT5-V Blackwing",
-      "category": "suv"
-    },
-    {
-      "name": "8. GMC",
-      "category": "suv"
-    },
+      "category": "performance"
+    }
+  ],
+  "GMC": [
     {
       "name": "Terrain",
       "category": "suv"
@@ -3239,36 +3027,34 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Canyon",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Sierra 1500",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Sierra HD",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Savana",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Sierra EV",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Hummer EV SUV",
-      "category": "suv"
+      "category": "electric"
     },
     {
       "name": "Hummer EV Pickup",
-      "category": "suv"
-    },
-    {
-      "name": "9. Lincoln",
-      "category": "suv"
-    },
+      "category": "electric"
+    }
+  ],
+  "Lincoln": [
     {
       "name": "Continental",
       "category": "sedan"
@@ -3291,12 +3077,10 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Corsair Grand Touring",
-      "category": "suv"
-    },
-    {
-      "name": "10. Buick",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Buick": [
     {
       "name": "LaCrosse",
       "category": "sedan"
@@ -3322,48 +3106,56 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Wagon",
-      "category": "suv"
-    },
-    {
       "name": "Regal TourX",
-      "category": "suv"
-    },
-    {
-      "name": "11. RAM",
-      "category": "suv"
-    },
+      "category": "wagon"
+    }
+  ],
+  "RAM": [
     {
       "name": "RAM 1500",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "RAM 2500",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "RAM 3500",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "RAM Chassis Cab",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "ProMaster",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "ProMaster City",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "RAM 1500 REV",
+      "category": "electric"
+    }
+  ],
+  "Rivian": [
+    {
+      "name": "R1S",
       "category": "suv"
     },
     {
-      "name": "12. Rivian",
-      "category": "suv"
+      "name": "R1T",
+      "category": "pickup truck"
+    },
+    {
+      "name": "Entire Rivian lineup",
+      "category": "electric vehicle"
+    },
+    {
+      "name": "EDV (Electric Delivery Van)",
+      "category": "commercial van"
     },
     {
       "name": "R1S",
@@ -3371,44 +3163,32 @@ export const BRAND_MODELS = {
     },
     {
       "name": "R1T",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
-      "name": "Electric Vehicle",
-      "category": "suv"
+      "name": "Electric Delivery Van (EDV)",
+      "category": "commercial van"
     },
     {
       "name": "Entire Rivian lineup",
-      "category": "suv"
-    },
-    {
-      "name": "Commercial Van",
-      "category": "suv"
-    },
-    {
-      "name": "EDV (Electric Delivery Van)",
-      "category": "suv"
-    },
-    {
-      "name": "13. Lucid Motors",
-      "category": "suv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Lucid Motors": [
     {
       "name": "Lucid Air",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Lucid Gravity",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Entire Lucid lineup",
-      "category": "luxury"
-    },
-    {
-      "name": "14. Fisker",
-      "category": "luxury"
-    },
+      "category": "electric vehicle"
+    }
+  ],
+  "Fisker": [
     {
       "name": "Fisker Ocean",
       "category": "suv"
@@ -3423,24 +3203,44 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Alaska",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Entire Fisker lineup",
+      "category": "electric vehicle"
+    },
+    {
+      "name": "Ocean",
       "category": "suv"
     },
     {
-      "name": "15. Hummer",
+      "name": "Pear",
       "category": "suv"
+    },
+    {
+      "name": "Alaska",
+      "category": "pickup truck"
+    },
+    {
+      "name": "Entire Fisker lineup",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Hummer": [
+    {
+      "name": "Hummer EV SUV",
+      "category": "suv"
+    },
+    {
+      "name": "Hummer EV Pickup",
+      "category": "pickup truck"
     },
     {
       "name": "Entire Hummer EV lineup",
-      "category": "suv"
-    },
-    {
-      "name": "16. Pontiac",
-      "category": "suv"
-    },
+      "category": "electric vehicle"
+    }
+  ],
+  "Pontiac": [
     {
       "name": "Vibe",
       "category": "hatchback"
@@ -3455,24 +3255,22 @@ export const BRAND_MODELS = {
     },
     {
       "name": "GTO",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Firebird",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "Solstice",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "Torrent",
       "category": "suv"
-    },
-    {
-      "name": "17. Saturn",
-      "category": "suv"
-    },
+    }
+  ],
+  "Saturn": [
     {
       "name": "Aura",
       "category": "sedan"
@@ -3495,12 +3293,10 @@ export const BRAND_MODELS = {
     },
     {
       "name": "SC",
-      "category": "luxury"
-    },
-    {
-      "name": "18. Mercury",
-      "category": "luxury"
-    },
+      "category": "coupe"
+    }
+  ],
+  "Mercury": [
     {
       "name": "Milan",
       "category": "sedan"
@@ -3523,11 +3319,11 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Cougar",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Villager",
-      "category": "luxury"
+      "category": "wagon"
     }
   ],
   "Jaguar": [
@@ -3545,19 +3341,19 @@ export const BRAND_MODELS = {
     },
     {
       "name": "XFR",
-      "category": "luxury"
+      "category": "sports sedan"
     },
     {
       "name": "XJR",
-      "category": "luxury"
+      "category": "sports sedan"
     },
     {
       "name": "F-Type Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "F-Type Convertible",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "E-PACE",
@@ -3572,28 +3368,18 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Electric Vehicle (EV)",
-      "category": "suv"
-    },
-    {
-      "name": "Sports Car",
-      "category": "suv"
+      "name": "I-PACE",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "F-Type R",
-      "category": "suv"
-    },
-    {
-      "name": "2. Land Rover",
-      "category": "suv"
-    },
-    {
-      "name": "Compact SUV",
-      "category": "suv"
-    },
+      "category": "sports car"
+    }
+  ],
+  "Land Rover": [
     {
       "name": "Discovery Sport",
-      "category": "suv"
+      "category": "compact suv"
     },
     {
       "name": "Defender 90",
@@ -3613,340 +3399,258 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Range Rover Velar",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Range Rover Sport",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Range Rover",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Range Rover SV",
-      "category": "luxury"
-    },
-    {
-      "name": "Commercial SUV",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Defender Hard Top",
-      "category": "luxury"
-    },
-    {
-      "name": "Hybrid",
-      "category": "luxury"
+      "category": "commercial suv"
     },
     {
       "name": "Defender PHEV",
-      "category": "luxury"
+      "category": "hybrid"
     },
     {
       "name": "Discovery PHEV",
-      "category": "luxury"
+      "category": "hybrid"
+    }
+  ],
+  "Range Rover": [
+    {
+      "name": "Range Rover",
+      "category": "luxury suv"
     },
     {
-      "name": "3. Range Rover",
-      "category": "luxury"
+      "name": "Range Rover Sport",
+      "category": "luxury suv"
+    },
+    {
+      "name": "Range Rover Velar",
+      "category": "luxury suv"
     },
     {
       "name": "Range Rover Evoque",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
-      "name": "Performance SUV",
-      "category": "luxury"
+      "name": "Range Rover SV",
+      "category": "performance suv"
     },
     {
       "name": "Sport SV",
-      "category": "luxury"
+      "category": "performance suv"
     },
     {
       "name": "Range Rover PHEV",
-      "category": "luxury"
+      "category": "hybrid"
     },
     {
       "name": "Sport PHEV",
-      "category": "luxury"
-    },
-    {
-      "name": "Electric Vehicle (Upcoming)",
-      "category": "luxury"
+      "category": "hybrid"
     },
     {
       "name": "Range Rover Electric",
-      "category": "luxury"
-    },
-    {
-      "name": "4. Rolls-Royce",
-      "category": "luxury"
-    },
+      "category": "electric vehicle (upcoming)"
+    }
+  ],
+  "Rolls-Royce": [
     {
       "name": "Ghost",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Phantom",
-      "category": "luxury"
-    },
-    {
-      "name": "Luxury Coupe",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Wraith",
-      "category": "luxury"
+      "category": "luxury coupe"
     },
     {
       "name": "Spectre",
-      "category": "luxury"
-    },
-    {
-      "name": "Luxury Convertible",
-      "category": "luxury"
+      "category": "luxury coupe"
     },
     {
       "name": "Dawn",
-      "category": "luxury"
+      "category": "luxury convertible"
     },
     {
       "name": "Cullinan",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
-      "name": "5. Bentley",
-      "category": "luxury"
-    },
+      "name": "Spectre",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Bentley": [
     {
       "name": "Flying Spur",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Continental GT",
-      "category": "luxury"
+      "category": "luxury coupe"
     },
     {
       "name": "Continental GTC",
-      "category": "luxury"
+      "category": "luxury convertible"
     },
     {
       "name": "Bentayga",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Bentayga Hybrid",
-      "category": "luxury"
+      "category": "hybrid"
     },
     {
       "name": "Flying Spur Hybrid",
-      "category": "luxury"
-    },
-    {
-      "name": "6. Aston Martin",
-      "category": "luxury"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Aston Martin": [
     {
       "name": "Vantage Coupe",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "DB12 Coupe",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "DBS Coupe",
-      "category": "luxury"
-    },
-    {
-      "name": "Sports Convertible",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "Vantage Roadster",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "DB12 Volante",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "DBX",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "DBX707",
-      "category": "luxury"
-    },
-    {
-      "name": "Hypercar",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Valkyrie",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Valhalla",
-      "category": "luxury"
-    },
-    {
-      "name": "7. Lotus",
-      "category": "luxury"
-    },
+      "category": "hypercar"
+    }
+  ],
+  "Lotus": [
     {
       "name": "Emira",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "Elise",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "Exige",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "Evora",
-      "category": "luxury"
-    },
-    {
-      "name": "Electric SUV",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "Eletre",
-      "category": "luxury"
-    },
-    {
-      "name": "Electric Sedan",
-      "category": "luxury"
+      "category": "electric suv"
     },
     {
       "name": "Emeya",
-      "category": "luxury"
+      "category": "electric sedan"
     },
     {
       "name": "Evija",
-      "category": "luxury"
-    },
-    {
-      "name": "8. McLaren",
-      "category": "luxury"
-    },
+      "category": "hypercar"
+    }
+  ],
+  "McLaren": [
     {
       "name": "GT",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "570S",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "720S",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "750S",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "570S Spider",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "750S Spider",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "Artura Spider",
-      "category": "luxury"
-    },
-    {
-      "name": "Supercar",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "Artura",
-      "category": "luxury"
+      "category": "supercar"
     },
     {
       "name": "765LT",
-      "category": "luxury"
+      "category": "supercar"
     },
     {
       "name": "P1",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Senna",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Speedtail",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "W1",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
-      "name": "9. MINI",
-      "category": "luxury"
+      "name": "Artura",
+      "category": "hybrid"
     },
     {
-      "name": "Cooper 3 Door",
-      "category": "hatchback"
-    },
-    {
-      "name": "Cooper 5 Door",
-      "category": "hatchback"
-    },
-    {
-      "name": "MINI Convertible",
-      "category": "luxury"
-    },
-    {
-      "name": "SUV / Crossover",
-      "category": "luxury"
-    },
-    {
-      "name": "Countryman",
-      "category": "luxury"
-    },
-    {
-      "name": "Aceman",
-      "category": "luxury"
-    },
-    {
-      "name": "Cooper Electric",
-      "category": "luxury"
-    },
-    {
-      "name": "Countryman Electric",
-      "category": "luxury"
-    },
-    {
-      "name": "Aceman Electric",
-      "category": "luxury"
-    },
-    {
-      "name": "Performance (John Cooper Works)",
-      "category": "luxury"
-    },
-    {
-      "name": "JCW Hatch",
-      "category": "luxury"
-    },
-    {
-      "name": "JCW Countryman",
-      "category": "luxury"
-    },
-    {
-      "name": "10. MG (Morris Garages)",
-      "category": "luxury"
-    },
+      "name": "P1",
+      "category": "hybrid"
+    }
+  ],
+  "MG (Morris Garages)": [
     {
       "name": "MG3",
       "category": "hatchback"
@@ -3961,11 +3665,11 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Astor",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "ZS",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Hector",
@@ -3984,21 +3688,27 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
+      "name": "Comet EV",
+      "category": "electric vehicle (ev)"
+    },
+    {
       "name": "ZS EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "MG4 EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Cyberster",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "11. Vauxhall",
-      "category": "suv"
-    },
+      "name": "Cyberster",
+      "category": "sports car"
+    }
+  ],
+  "Vauxhall": [
     {
       "name": "Corsa",
       "category": "hatchback"
@@ -4024,150 +3734,140 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Wagon",
-      "category": "suv"
-    },
-    {
       "name": "Astra Sports Tourer",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "Insignia Sports Tourer",
-      "category": "suv"
-    },
-    {
-      "name": "Van",
-      "category": "suv"
+      "category": "wagon"
     },
     {
       "name": "Combo",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Vivaro",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Movano",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "Corsa Electric",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Mokka Electric",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Astra Electric",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Vivaro Electric",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     }
   ],
   "Ferrari": [
     {
       "name": "Roma",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "296 GTB",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "F8 Tributo",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "SF90 Stradale",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "12Cilindri Coupe",
-      "category": "luxury"
-    },
-    {
-      "name": "Sports Convertible",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "Roma Spider",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "296 GTS",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "SF90 Spider",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "12Cilindri Spider",
-      "category": "luxury"
-    },
-    {
-      "name": "Grand Tourer (GT)",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "GTC4Lusso",
-      "category": "luxury"
+      "category": "grand tourer (gt)"
     },
     {
       "name": "Purosangue",
       "category": "suv"
     },
     {
-      "name": "Hypercar",
-      "category": "suv"
-    },
-    {
       "name": "LaFerrari",
-      "category": "suv"
+      "category": "hypercar"
     },
     {
       "name": "F80",
-      "category": "suv"
+      "category": "hypercar"
     },
     {
-      "name": "Hybrid",
-      "category": "suv"
+      "name": "SF90 Stradale",
+      "category": "hybrid"
     },
     {
-      "name": "2. Lamborghini",
-      "category": "suv"
+      "name": "SF90 Spider",
+      "category": "hybrid"
     },
     {
-      "name": "Hurac\u00e1n",
-      "category": "luxury"
+      "name": "296 GTB",
+      "category": "hybrid"
+    },
+    {
+      "name": "296 GTS",
+      "category": "hybrid"
+    }
+  ],
+  "Lamborghini": [
+    {
+      "name": "Huracán",
+      "category": "sports coupe"
     },
     {
       "name": "Temerario",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "Revuelto",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
-      "name": "Hurac\u00e1n Spyder",
-      "category": "luxury"
+      "name": "Huracán Spyder",
+      "category": "sports convertible"
     },
     {
       "name": "Revuelto Roadster (Upcoming)",
-      "category": "luxury"
-    },
-    {
-      "name": "Supercar",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "Aventador",
-      "category": "luxury"
+      "category": "supercar"
+    },
+    {
+      "name": "Revuelto",
+      "category": "supercar"
     },
     {
       "name": "Urus",
@@ -4182,81 +3882,81 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Si\u00e1n",
-      "category": "suv"
+      "name": "Sián",
+      "category": "hypercar"
     },
     {
       "name": "Centenario",
-      "category": "suv"
+      "category": "hypercar"
     },
     {
       "name": "Veneno",
-      "category": "suv"
+      "category": "hypercar"
     },
     {
-      "name": "3. Maserati",
-      "category": "suv"
+      "name": "Revuelto",
+      "category": "hybrid"
     },
+    {
+      "name": "Urus SE",
+      "category": "hybrid"
+    }
+  ],
+  "Maserati": [
     {
       "name": "Ghibli",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Quattroporte",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Grecale",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "Levante",
-      "category": "luxury"
+      "category": "luxury suv"
     },
     {
       "name": "GranTurismo",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "GranCabrio",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "MC20",
-      "category": "luxury"
+      "category": "supercar"
     },
     {
       "name": "MC20 Cielo",
-      "category": "luxury"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "luxury"
+      "category": "supercar"
     },
     {
       "name": "GranTurismo Folgore",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "GranCabrio Folgore",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Grecale Folgore",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Ghibli Hybrid",
-      "category": "luxury"
+      "category": "hybrid"
     },
     {
       "name": "Grecale Hybrid",
-      "category": "luxury"
-    },
-    {
-      "name": "4. Fiat",
-      "category": "luxury"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Fiat": [
     {
       "name": "Panda",
       "category": "hatchback"
@@ -4286,12 +3986,8 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Wagon",
-      "category": "sedan"
-    },
-    {
       "name": "Tipo Station Wagon",
-      "category": "sedan"
+      "category": "wagon"
     },
     {
       "name": "Pulse",
@@ -4311,56 +4007,46 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Doblo",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Ulysse",
-      "category": "muv"
-    },
-    {
-      "name": "Van",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Fiorino",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Ducato",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Scudo",
-      "category": "muv"
-    },
-    {
-      "name": "Pickup Truck",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Strada",
-      "category": "muv"
+      "category": "pickup truck"
     },
     {
       "name": "Toro",
-      "category": "muv"
+      "category": "pickup truck"
     },
     {
       "name": "500e",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "E-Ducato",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Topolino",
-      "category": "muv"
-    },
-    {
-      "name": "5. Alfa Romeo",
-      "category": "muv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Alfa Romeo": [
     {
       "name": "Giulia",
       "category": "sedan"
@@ -4375,36 +4061,34 @@ export const BRAND_MODELS = {
     },
     {
       "name": "4C Coupe",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "8C Competizione",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "4C Spider",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "8C Spider",
-      "category": "luxury"
+      "category": "sports convertible"
     },
     {
       "name": "33 Stradale",
-      "category": "luxury"
+      "category": "supercar"
     },
     {
       "name": "Junior Elettrica",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Tonale Hybrid",
-      "category": "luxury"
-    },
-    {
-      "name": "6. Lancia",
-      "category": "luxury"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Lancia": [
     {
       "name": "Ypsilon",
       "category": "hatchback"
@@ -4415,56 +4099,48 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Delta",
-      "category": "sedan"
+      "category": "wagon"
     },
     {
       "name": "New Ypsilon EV",
-      "category": "sedan"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Ypsilon Hybrid",
-      "category": "sedan"
-    },
-    {
-      "name": "7. Pagani",
-      "category": "sedan"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Pagani": [
     {
       "name": "Zonda",
-      "category": "sedan"
+      "category": "hypercar"
     },
     {
       "name": "Huayra",
-      "category": "sedan"
+      "category": "hypercar"
     },
     {
       "name": "Utopia",
-      "category": "sedan"
-    },
-    {
-      "name": "Roadster",
-      "category": "sedan"
+      "category": "hypercar"
     },
     {
       "name": "Huayra Roadster",
-      "category": "sedan"
+      "category": "roadster"
     },
     {
       "name": "Zonda Roadster",
-      "category": "sedan"
+      "category": "roadster"
     },
     {
       "name": "Huayra Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Utopia Coupe",
-      "category": "luxury"
-    },
-    {
-      "name": "8. Abarth",
-      "category": "luxury"
-    },
+      "category": "coupe"
+    }
+  ],
+  "Abarth": [
     {
       "name": "Abarth 500",
       "category": "hatchback"
@@ -4478,24 +4154,16 @@ export const BRAND_MODELS = {
       "category": "hatchback"
     },
     {
-      "name": "Sports Hatchback",
-      "category": "hatchback"
-    },
-    {
       "name": "Abarth Punto",
-      "category": "hatchback"
-    },
-    {
-      "name": "Electric Hatchback",
-      "category": "hatchback"
+      "category": "sports hatchback"
     },
     {
       "name": "Abarth 500e",
-      "category": "hatchback"
+      "category": "electric hatchback"
     },
     {
       "name": "Abarth 600e",
-      "category": "hatchback"
+      "category": "electric hatchback"
     }
   ],
   "Renault": [
@@ -4532,16 +4200,12 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Compact SUV",
-      "category": "sedan"
-    },
-    {
       "name": "Kiger",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Captur",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Duster",
@@ -4569,84 +4233,70 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Triber",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Scenic",
-      "category": "muv"
-    },
-    {
-      "name": "Van",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Kangoo",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Trafic",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Master",
-      "category": "muv"
-    },
-    {
-      "name": "Pickup Truck",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Alaskan",
-      "category": "muv"
+      "category": "pickup truck"
     },
     {
       "name": "Oroch",
-      "category": "muv"
+      "category": "pickup truck"
     },
     {
-      "name": "Electric Vehicle (EV)",
-      "category": "muv"
+      "name": "Zoe",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Megane E-Tech",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Scenic E-Tech",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Renault 5 E-Tech",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Kangoo E-Tech",
-      "category": "muv"
-    },
-    {
-      "name": "Hybrid",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Clio E-Tech",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "Captur E-Tech",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "Austral E-Tech",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "Rafale E-Tech",
-      "category": "muv"
-    },
-    {
-      "name": "2. Peugeot",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Peugeot": [
     {
       "name": "108",
       "category": "hatchback"
@@ -4672,20 +4322,16 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Wagon",
-      "category": "sedan"
-    },
-    {
       "name": "308 SW",
-      "category": "sedan"
+      "category": "wagon"
     },
     {
       "name": "508 SW",
-      "category": "sedan"
+      "category": "wagon"
     },
     {
       "name": "2008",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "3008",
@@ -4701,64 +4347,62 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Rifter",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Traveller",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Partner",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Expert",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Boxer",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Landtrek",
-      "category": "muv"
+      "category": "pickup truck"
     },
     {
       "name": "e-208",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-2008",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-3008",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-308",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-5008",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "3008 Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "408 Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "508 Hybrid",
-      "category": "muv"
-    },
-    {
-      "name": "3. Citro\u00ebn",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Citroën": [
     {
       "name": "C1",
       "category": "hatchback"
@@ -4772,7 +4416,7 @@ export const BRAND_MODELS = {
       "category": "hatchback"
     },
     {
-      "name": "C-Elys\u00e9e",
+      "name": "C-Elysée",
       "category": "sedan"
     },
     {
@@ -4781,7 +4425,7 @@ export const BRAND_MODELS = {
     },
     {
       "name": "C3 Aircross",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "C5 Aircross",
@@ -4789,96 +4433,80 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Berlingo",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "SpaceTourer",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Berlingo Van",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Jumpy",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "Jumper",
-      "category": "muv"
+      "category": "van"
     },
     {
       "name": "e-C3",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-C4",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-Berlingo",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "e-SpaceTourer",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "C5 Aircross Hybrid",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "C5 X Hybrid",
-      "category": "muv"
-    },
-    {
-      "name": "4. Bugatti",
-      "category": "muv"
-    },
-    {
-      "name": "Hypercar",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Bugatti": [
     {
       "name": "Veyron",
-      "category": "muv"
+      "category": "hypercar"
     },
     {
       "name": "Chiron",
-      "category": "muv"
+      "category": "hypercar"
     },
     {
       "name": "Tourbillon",
-      "category": "muv"
+      "category": "hypercar"
     },
     {
       "name": "Chiron Coupe",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Tourbillon Coupe",
-      "category": "luxury"
-    },
-    {
-      "name": "Roadster",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "W16 Mistral",
-      "category": "luxury"
-    },
-    {
-      "name": "Super Sport",
-      "category": "luxury"
+      "category": "roadster"
     },
     {
       "name": "Chiron Super Sport",
-      "category": "luxury"
-    },
-    {
-      "name": "5. DS Automobiles",
-      "category": "luxury"
-    },
+      "category": "super sport"
+    }
+  ],
+  "DS Automobiles": [
     {
       "name": "DS 3",
       "category": "hatchback"
@@ -4893,75 +4521,65 @@ export const BRAND_MODELS = {
     },
     {
       "name": "DS 3 Crossback",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "DS 7",
       "category": "suv"
     },
     {
-      "name": "DS N\u00b08",
+      "name": "DS N°8",
       "category": "suv"
     },
     {
       "name": "DS 3 E-Tense",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "Plug-in Hybrid (PHEV)",
-      "category": "suv"
+      "name": "DS N°8",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "DS 4 Plug-in Hybrid",
-      "category": "suv"
+      "category": "plug-in hybrid (phev)"
     },
     {
       "name": "DS 7 Plug-in Hybrid",
-      "category": "suv"
+      "category": "plug-in hybrid (phev)"
     },
     {
       "name": "DS 9 Plug-in Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "6. Alpine",
-      "category": "suv"
-    },
+      "category": "plug-in hybrid (phev)"
+    }
+  ],
+  "Alpine": [
     {
       "name": "A110",
-      "category": "luxury"
+      "category": "sports coupe"
     },
     {
       "name": "A110 Roadster (limited editions)",
-      "category": "luxury"
-    },
-    {
-      "name": "Sports Car",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "A110 GT",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "A110 R",
-      "category": "luxury"
+      "category": "sports car"
     },
     {
       "name": "A290",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "A390 (Upcoming)",
-      "category": "luxury"
-    },
-    {
-      "name": "Performance EV",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Alpine A290",
-      "category": "luxury"
+      "category": "performance ev"
     }
   ],
   "Volvo": [
@@ -4982,28 +4600,20 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Wagon / Estate",
-      "category": "sedan"
-    },
-    {
       "name": "V60",
-      "category": "sedan"
+      "category": "wagon / estate"
     },
     {
       "name": "V90",
-      "category": "sedan"
-    },
-    {
-      "name": "Compact SUV",
-      "category": "sedan"
+      "category": "wagon / estate"
     },
     {
       "name": "EX30",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "XC40",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "XC60",
@@ -5014,77 +4624,63 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Electric SUV",
-      "category": "suv"
+      "name": "EX30",
+      "category": "electric suv"
     },
     {
       "name": "EX40",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "EC40",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "EX90",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Sedan",
-      "category": "suv"
+      "category": "electric suv"
     },
     {
       "name": "ES90",
-      "category": "suv"
+      "category": "electric sedan"
     },
     {
       "name": "EM90",
-      "category": "muv"
-    },
-    {
-      "name": "Hybrid",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "XC60 Recharge",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "XC90 Recharge",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "S60 Recharge",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "S90 Recharge",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "V60 Recharge",
-      "category": "muv"
-    },
-    {
-      "name": "Performance (Polestar Engineered)",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "S60 Polestar Engineered",
-      "category": "muv"
+      "category": "performance (polestar engineered)"
     },
     {
       "name": "V60 Polestar Engineered",
-      "category": "muv"
+      "category": "performance (polestar engineered)"
     },
     {
       "name": "XC60 Polestar Engineered",
-      "category": "muv"
-    },
-    {
-      "name": "2. Polestar",
-      "category": "muv"
-    },
+      "category": "performance (polestar engineered)"
+    }
+  ],
+  "Polestar": [
     {
       "name": "Polestar 2",
       "category": "sedan"
@@ -5102,77 +4698,97 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Grand Tourer (GT)",
-      "category": "suv"
-    },
-    {
       "name": "Polestar 1",
-      "category": "suv"
+      "category": "grand tourer (gt)"
     },
     {
       "name": "Polestar 5 (Upcoming)",
-      "category": "luxury"
-    },
-    {
-      "name": "Roadster",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "Polestar 6 (Upcoming)",
-      "category": "luxury"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "luxury"
+      "category": "roadster"
     },
     {
       "name": "Entire Polestar lineup",
-      "category": "luxury"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "3. Koenigsegg",
-      "category": "luxury"
+      "name": "Polestar 1",
+      "category": "grand tourer (gt)"
     },
     {
-      "name": "Hypercar",
-      "category": "luxury"
+      "name": "Polestar 2",
+      "category": "sedan"
     },
+    {
+      "name": "Polestar 5 (Upcoming)",
+      "category": "sedan"
+    },
+    {
+      "name": "Polestar 3",
+      "category": "suv"
+    },
+    {
+      "name": "Polestar 4",
+      "category": "suv"
+    },
+    {
+      "name": "Polestar 7 (Upcoming)",
+      "category": "suv"
+    },
+    {
+      "name": "Polestar 6 (Upcoming)",
+      "category": "roadster"
+    },
+    {
+      "name": "Entire Polestar lineup",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Koenigsegg": [
     {
       "name": "Jesko",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Gemera",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Regera",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Agera",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "CC850",
-      "category": "luxury"
+      "category": "hypercar"
     },
     {
       "name": "Jesko Absolut",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
       "name": "Agera RS",
-      "category": "luxury"
+      "category": "coupe"
     },
     {
-      "name": "Hybrid Hypercar",
-      "category": "luxury"
+      "name": "Gemera",
+      "category": "grand tourer (gt)"
     },
     {
-      "name": "4. Saab",
-      "category": "luxury"
+      "name": "Regera",
+      "category": "hybrid hypercar"
     },
+    {
+      "name": "Gemera",
+      "category": "hybrid hypercar"
+    }
+  ],
+  "Saab": [
     {
       "name": "9-3 Hatchback",
       "category": "hatchback"
@@ -5191,15 +4807,15 @@ export const BRAND_MODELS = {
     },
     {
       "name": "9-3 SportCombi",
-      "category": "sedan"
+      "category": "wagon / estate"
     },
     {
       "name": "9-5 SportCombi",
-      "category": "sedan"
+      "category": "wagon / estate"
     },
     {
       "name": "9-3 Convertible",
-      "category": "luxury"
+      "category": "convertible"
     },
     {
       "name": "9-4X",
@@ -5236,16 +4852,12 @@ export const BRAND_MODELS = {
       "category": "sedan"
     },
     {
-      "name": "Compact SUV",
-      "category": "sedan"
-    },
-    {
       "name": "Atto 2",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Yuan Plus (Atto 3)",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Atto 3",
@@ -5269,48 +4881,118 @@ export const BRAND_MODELS = {
     },
     {
       "name": "D9",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "M6",
-      "category": "muv"
-    },
-    {
-      "name": "Pickup Truck",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Shark",
-      "category": "muv"
+      "category": "pickup truck"
     },
     {
-      "name": "Electric Vehicle (EV)",
-      "category": "muv"
+      "name": "Dolphin",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Seal",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Atto 3",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Seagull",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Sea Lion",
-      "category": "muv"
-    },
-    {
-      "name": "Plug-in Hybrid (PHEV)",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Song DM-i",
-      "category": "muv"
+      "category": "plug-in hybrid (phev)"
     },
     {
       "name": "Qin Plus DM-i",
-      "category": "muv"
+      "category": "plug-in hybrid (phev)"
     },
     {
       "name": "Tang DM-i",
-      "category": "muv"
+      "category": "plug-in hybrid (phev)"
     },
     {
-      "name": "2. MG Motor",
-      "category": "muv"
+      "name": "Dolphin",
+      "category": "hatchback"
     },
+    {
+      "name": "Seagull",
+      "category": "hatchback"
+    },
+    {
+      "name": "Seal",
+      "category": "sedan"
+    },
+    {
+      "name": "Han",
+      "category": "sedan"
+    },
+    {
+      "name": "Qin",
+      "category": "sedan"
+    },
+    {
+      "name": "Atto 2",
+      "category": "compact suv"
+    },
+    {
+      "name": "Atto 3 (Yuan Plus)",
+      "category": "compact suv"
+    },
+    {
+      "name": "Song",
+      "category": "suv"
+    },
+    {
+      "name": "Tang",
+      "category": "suv"
+    },
+    {
+      "name": "Sea Lion",
+      "category": "suv"
+    },
+    {
+      "name": "D9",
+      "category": "mpv"
+    },
+    {
+      "name": "M6",
+      "category": "mpv"
+    },
+    {
+      "name": "Shark",
+      "category": "pickup truck"
+    },
+    {
+      "name": "Entire EV lineup",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Song DM-i",
+      "category": "plug-in hybrid (phev)"
+    },
+    {
+      "name": "Qin DM-i",
+      "category": "plug-in hybrid (phev)"
+    },
+    {
+      "name": "Tang DM-i",
+      "category": "plug-in hybrid (phev)"
+    }
+  ],
+  "MG Motor": [
     {
       "name": "MG3",
       "category": "hatchback"
@@ -5325,11 +5007,11 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Astor",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "ZS",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Hector",
@@ -5348,25 +5030,27 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
+      "name": "Comet EV",
+      "category": "electric vehicle (ev)"
+    },
+    {
       "name": "ZS EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "MG4 EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Cyberster",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "Sports Car",
-      "category": "suv"
-    },
-    {
-      "name": "3. Chery",
-      "category": "suv"
-    },
+      "name": "Cyberster",
+      "category": "sports car"
+    }
+  ],
+  "Chery": [
     {
       "name": "QQ",
       "category": "hatchback"
@@ -5385,11 +5069,11 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Tiggo 2",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Tiggo 4",
-      "category": "sedan"
+      "category": "compact suv"
     },
     {
       "name": "Tiggo 7",
@@ -5405,24 +5089,18 @@ export const BRAND_MODELS = {
     },
     {
       "name": "eQ1",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "eQ7",
-      "category": "suv"
-    },
-    {
-      "name": "Hybrid",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Tiggo Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "4. Geely",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Geely": [
     {
       "name": "Emgrand GS",
       "category": "hatchback"
@@ -5457,28 +5135,26 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Jiaji",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Geometry C",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Galaxy E8",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Galaxy L7",
-      "category": "muv"
+      "category": "hybrid"
     },
     {
       "name": "Monjaro Hybrid",
-      "category": "muv"
-    },
-    {
-      "name": "5. Great Wall Motors (GWM)",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Great Wall Motors (GWM)": [
     {
       "name": "Tank 300",
       "category": "suv"
@@ -5489,27 +5165,25 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Poer",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Cannon",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Ora lineup (sub-brand)",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Tank Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "6. Haval",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Haval": [
     {
       "name": "Jolion",
-      "category": "suv"
+      "category": "compact suv"
     },
     {
       "name": "H6",
@@ -5529,16 +5203,14 @@ export const BRAND_MODELS = {
     },
     {
       "name": "H6 Hybrid",
-      "category": "suv"
+      "category": "hybrid"
     },
     {
       "name": "Jolion Hybrid",
-      "category": "suv"
-    },
-    {
-      "name": "7. NIO",
-      "category": "suv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "NIO": [
     {
       "name": "ET5",
       "category": "sedan"
@@ -5564,20 +5236,78 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Wagon",
-      "category": "suv"
+      "name": "ET5 Touring",
+      "category": "wagon"
+    },
+    {
+      "name": "Entire NIO lineup",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "ET5",
+      "category": "sedan"
+    },
+    {
+      "name": "ET7",
+      "category": "sedan"
     },
     {
       "name": "ET5 Touring",
+      "category": "wagon"
+    },
+    {
+      "name": "ES6",
+      "category": "suv"
+    },
+    {
+      "name": "ES7",
+      "category": "suv"
+    },
+    {
+      "name": "ES8",
+      "category": "suv"
+    },
+    {
+      "name": "EC6",
       "category": "suv"
     },
     {
       "name": "Entire NIO lineup",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "XPeng": [
+    {
+      "name": "P5",
+      "category": "sedan"
+    },
+    {
+      "name": "P7",
+      "category": "sedan"
+    },
+    {
+      "name": "P7+",
+      "category": "sedan"
+    },
+    {
+      "name": "G3",
       "category": "suv"
     },
     {
-      "name": "8. XPeng",
+      "name": "G6",
       "category": "suv"
+    },
+    {
+      "name": "G9",
+      "category": "suv"
+    },
+    {
+      "name": "X9",
+      "category": "mpv"
+    },
+    {
+      "name": "Entire XPeng lineup",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "P5",
@@ -5605,16 +5335,14 @@ export const BRAND_MODELS = {
     },
     {
       "name": "X9",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Entire XPeng lineup",
-      "category": "muv"
-    },
-    {
-      "name": "9. Li Auto",
-      "category": "muv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Li Auto": [
     {
       "name": "L6",
       "category": "suv"
@@ -5633,20 +5361,14 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Mega",
-      "category": "muv"
-    },
-    {
-      "name": "Extended-Range Electric Vehicle (EREV)",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Entire Li Auto lineup",
-      "category": "muv"
-    },
-    {
-      "name": "10. Zeekr",
-      "category": "muv"
-    },
+      "category": "extended-range electric vehicle (erev)"
+    }
+  ],
+  "Zeekr": [
     {
       "name": "001 Shooting Brake",
       "category": "hatchback"
@@ -5665,23 +5387,49 @@ export const BRAND_MODELS = {
     },
     {
       "name": "9",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Entire Zeekr lineup",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "11. Hongqi",
-      "category": "muv"
+      "name": "Zeekr 001",
+      "category": "hatchback / shooting brake"
     },
+    {
+      "name": "Zeekr 007",
+      "category": "sedan"
+    },
+    {
+      "name": "Zeekr X",
+      "category": "suv"
+    },
+    {
+      "name": "Zeekr 7X",
+      "category": "suv"
+    },
+    {
+      "name": "Zeekr 009",
+      "category": "mpv"
+    },
+    {
+      "name": "Entire Zeekr lineup",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Hongqi": [
     {
       "name": "H5",
       "category": "sedan"
     },
     {
+      "name": "H9",
+      "category": "sedan"
+    },
+    {
       "name": "L5",
-      "category": "luxury"
+      "category": "luxury sedan"
     },
     {
       "name": "HS3",
@@ -5701,16 +5449,18 @@ export const BRAND_MODELS = {
     },
     {
       "name": "HQ9",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "E-QM5",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
-      "name": "12. JAC Motors",
-      "category": "muv"
-    },
+      "name": "E-HS9",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "JAC Motors": [
     {
       "name": "J2",
       "category": "hatchback"
@@ -5737,32 +5487,26 @@ export const BRAND_MODELS = {
     },
     {
       "name": "T6",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "T8",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "T9",
-      "category": "suv"
-    },
-    {
-      "name": "Van",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Sunray",
-      "category": "suv"
+      "category": "van"
     },
     {
       "name": "iEV Series",
-      "category": "suv"
-    },
-    {
-      "name": "13. BAIC",
-      "category": "suv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "BAIC": [
     {
       "name": "U5",
       "category": "sedan"
@@ -5785,20 +5529,18 @@ export const BRAND_MODELS = {
     },
     {
       "name": "F40",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "EU5",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "EX5",
-      "category": "suv"
-    },
-    {
-      "name": "14. Dongfeng",
-      "category": "suv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Dongfeng": [
     {
       "name": "Nammi",
       "category": "hatchback"
@@ -5817,20 +5559,18 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Rich",
-      "category": "suv"
+      "category": "pickup truck"
     },
     {
       "name": "Forthing",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Nammi EV",
-      "category": "muv"
-    },
-    {
-      "name": "15. FAW",
-      "category": "muv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "FAW": [
     {
       "name": "Bestune B70",
       "category": "sedan"
@@ -5845,16 +5585,14 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Bestune M9",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Bestune Pony",
-      "category": "muv"
-    },
-    {
-      "name": "16. GAC",
-      "category": "muv"
-    },
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "GAC": [
     {
       "name": "Empow",
       "category": "sedan"
@@ -5873,28 +5611,26 @@ export const BRAND_MODELS = {
     },
     {
       "name": "M8",
-      "category": "muv"
+      "category": "mpv"
     },
     {
       "name": "Aion S",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Aion Y",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "Hyper GT",
-      "category": "muv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "GS8 Hybrid",
-      "category": "muv"
-    },
-    {
-      "name": "17. Leapmotor",
-      "category": "muv"
-    },
+      "category": "hybrid"
+    }
+  ],
+  "Leapmotor": [
     {
       "name": "T03",
       "category": "hatchback"
@@ -5917,413 +5653,15 @@ export const BRAND_MODELS = {
     },
     {
       "name": "Entire Leapmotor lineup",
-      "category": "suv"
-    },
-    {
-      "name": "Extended-Range EV",
-      "category": "suv"
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "C10 EREV",
-      "category": "suv"
+      "category": "extended-range ev"
     },
     {
       "name": "C11 EREV",
-      "category": "suv"
-    },
-    {
-      "name": "18. Ora",
-      "category": "suv"
-    },
-    {
-      "name": "Good Cat",
-      "category": "hatchback"
-    },
-    {
-      "name": "Ballet Cat",
-      "category": "hatchback"
-    },
-    {
-      "name": "Lightning Cat",
-      "category": "sedan"
-    },
-    {
-      "name": "Entire Ora lineup",
-      "category": "sedan"
-    },
-    {
-      "name": "19. Wuling",
-      "category": "sedan"
-    },
-    {
-      "name": "Bingo",
-      "category": "hatchback"
-    },
-    {
-      "name": "Hongguang",
-      "category": "muv"
-    },
-    {
-      "name": "Hongguang Mini EV",
-      "category": "muv"
-    },
-    {
-      "name": "Rongguang",
-      "category": "muv"
-    },
-    {
-      "name": "Zhengtu",
-      "category": "muv"
-    },
-    {
-      "name": "Mini EV",
-      "category": "muv"
-    },
-    {
-      "name": "Bingo EV",
-      "category": "muv"
-    },
-    {
-      "name": "Air EV",
-      "category": "muv"
-    }
-  ],
-  "Tesla": [
-    {
-      "name": "Model 3",
-      "category": "sedan"
-    },
-    {
-      "name": "Model S",
-      "category": "sedan"
-    },
-    {
-      "name": "Model Y",
-      "category": "suv"
-    },
-    {
-      "name": "Model X",
-      "category": "suv"
-    },
-    {
-      "name": "Pickup Truck",
-      "category": "suv"
-    },
-    {
-      "name": "Cybertruck",
-      "category": "suv"
-    },
-    {
-      "name": "Sports Car",
-      "category": "suv"
-    },
-    {
-      "name": "Roadster (Upcoming)",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Vehicle (EV)",
-      "category": "suv"
-    },
-    {
-      "name": "Entire Tesla lineup",
-      "category": "suv"
-    },
-    {
-      "name": "2. BYD",
-      "category": "suv"
-    },
-    {
-      "name": "Dolphin",
-      "category": "hatchback"
-    },
-    {
-      "name": "Seagull",
-      "category": "hatchback"
-    },
-    {
-      "name": "Seal",
-      "category": "sedan"
-    },
-    {
-      "name": "Han",
-      "category": "sedan"
-    },
-    {
-      "name": "Qin",
-      "category": "sedan"
-    },
-    {
-      "name": "Compact SUV",
-      "category": "sedan"
-    },
-    {
-      "name": "Atto 2",
-      "category": "sedan"
-    },
-    {
-      "name": "Atto 3 (Yuan Plus)",
-      "category": "sedan"
-    },
-    {
-      "name": "Song",
-      "category": "suv"
-    },
-    {
-      "name": "Tang",
-      "category": "suv"
-    },
-    {
-      "name": "Sea Lion",
-      "category": "suv"
-    },
-    {
-      "name": "D9",
-      "category": "muv"
-    },
-    {
-      "name": "M6",
-      "category": "muv"
-    },
-    {
-      "name": "Shark",
-      "category": "muv"
-    },
-    {
-      "name": "Entire EV lineup",
-      "category": "muv"
-    },
-    {
-      "name": "Plug-in Hybrid (PHEV)",
-      "category": "muv"
-    },
-    {
-      "name": "Song DM-i",
-      "category": "muv"
-    },
-    {
-      "name": "Qin DM-i",
-      "category": "muv"
-    },
-    {
-      "name": "Tang DM-i",
-      "category": "muv"
-    },
-    {
-      "name": "3. Rivian",
-      "category": "muv"
-    },
-    {
-      "name": "R1S",
-      "category": "suv"
-    },
-    {
-      "name": "R1T",
-      "category": "suv"
-    },
-    {
-      "name": "Commercial Van",
-      "category": "suv"
-    },
-    {
-      "name": "Electric Delivery Van (EDV)",
-      "category": "suv"
-    },
-    {
-      "name": "Entire Rivian lineup",
-      "category": "suv"
-    },
-    {
-      "name": "4. Lucid",
-      "category": "suv"
-    },
-    {
-      "name": "Lucid Air",
-      "category": "luxury"
-    },
-    {
-      "name": "Lucid Gravity",
-      "category": "luxury"
-    },
-    {
-      "name": "Entire Lucid lineup",
-      "category": "luxury"
-    },
-    {
-      "name": "5. VinFast",
-      "category": "luxury"
-    },
-    {
-      "name": "VF e34",
-      "category": "hatchback"
-    },
-    {
-      "name": "VF 6",
-      "category": "hatchback"
-    },
-    {
-      "name": "VF 7",
-      "category": "suv"
-    },
-    {
-      "name": "VF 8",
-      "category": "suv"
-    },
-    {
-      "name": "VF 9",
-      "category": "suv"
-    },
-    {
-      "name": "VF Wild (Concept)",
-      "category": "suv"
-    },
-    {
-      "name": "Entire VinFast lineup",
-      "category": "suv"
-    },
-    {
-      "name": "6. NIO",
-      "category": "suv"
-    },
-    {
-      "name": "ET5",
-      "category": "sedan"
-    },
-    {
-      "name": "ET7",
-      "category": "sedan"
-    },
-    {
-      "name": "Wagon",
-      "category": "sedan"
-    },
-    {
-      "name": "ET5 Touring",
-      "category": "sedan"
-    },
-    {
-      "name": "ES6",
-      "category": "suv"
-    },
-    {
-      "name": "ES7",
-      "category": "suv"
-    },
-    {
-      "name": "ES8",
-      "category": "suv"
-    },
-    {
-      "name": "EC6",
-      "category": "suv"
-    },
-    {
-      "name": "Entire NIO lineup",
-      "category": "suv"
-    },
-    {
-      "name": "7. XPeng",
-      "category": "suv"
-    },
-    {
-      "name": "P5",
-      "category": "sedan"
-    },
-    {
-      "name": "P7",
-      "category": "sedan"
-    },
-    {
-      "name": "P7+",
-      "category": "sedan"
-    },
-    {
-      "name": "G3",
-      "category": "suv"
-    },
-    {
-      "name": "G6",
-      "category": "suv"
-    },
-    {
-      "name": "G9",
-      "category": "suv"
-    },
-    {
-      "name": "X9",
-      "category": "muv"
-    },
-    {
-      "name": "Entire XPeng lineup",
-      "category": "muv"
-    },
-    {
-      "name": "8. Polestar",
-      "category": "muv"
-    },
-    {
-      "name": "Grand Tourer (GT)",
-      "category": "muv"
-    },
-    {
-      "name": "Polestar 1",
-      "category": "muv"
-    },
-    {
-      "name": "Polestar 2",
-      "category": "sedan"
-    },
-    {
-      "name": "Polestar 5 (Upcoming)",
-      "category": "sedan"
-    },
-    {
-      "name": "Polestar 3",
-      "category": "suv"
-    },
-    {
-      "name": "Polestar 4",
-      "category": "suv"
-    },
-    {
-      "name": "Polestar 7 (Upcoming)",
-      "category": "suv"
-    },
-    {
-      "name": "Roadster",
-      "category": "suv"
-    },
-    {
-      "name": "Polestar 6 (Upcoming)",
-      "category": "suv"
-    },
-    {
-      "name": "Entire Polestar lineup",
-      "category": "suv"
-    },
-    {
-      "name": "9. Fisker",
-      "category": "suv"
-    },
-    {
-      "name": "Ocean",
-      "category": "suv"
-    },
-    {
-      "name": "Pear",
-      "category": "suv"
-    },
-    {
-      "name": "Alaska",
-      "category": "suv"
-    },
-    {
-      "name": "Entire Fisker lineup",
-      "category": "suv"
-    },
-    {
-      "name": "10. Leapmotor",
-      "category": "suv"
+      "category": "extended-range ev"
     },
     {
       "name": "T03",
@@ -6346,48 +5684,112 @@ export const BRAND_MODELS = {
       "category": "suv"
     },
     {
-      "name": "Extended-Range Electric Vehicle (EREV)",
-      "category": "suv"
+      "name": "Entire EV lineup",
+      "category": "electric vehicle (ev)"
     },
     {
       "name": "C10 EREV",
-      "category": "suv"
+      "category": "extended-range electric vehicle (erev)"
     },
     {
       "name": "C11 EREV",
-      "category": "suv"
+      "category": "extended-range electric vehicle (erev)"
+    }
+  ],
+  "Ora": [
+    {
+      "name": "Good Cat",
+      "category": "hatchback"
     },
     {
-      "name": "11. Zeekr",
-      "category": "suv"
+      "name": "Ballet Cat",
+      "category": "hatchback"
     },
     {
-      "name": "Hatchback / Shooting Brake",
-      "category": "suv"
-    },
-    {
-      "name": "Zeekr 001",
-      "category": "suv"
-    },
-    {
-      "name": "Zeekr 007",
+      "name": "Lightning Cat",
       "category": "sedan"
     },
     {
-      "name": "Zeekr X",
+      "name": "Entire Ora lineup",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Wuling": [
+    {
+      "name": "Bingo",
+      "category": "hatchback"
+    },
+    {
+      "name": "Hongguang",
+      "category": "mpv"
+    },
+    {
+      "name": "Hongguang Mini EV",
+      "category": "mpv"
+    },
+    {
+      "name": "Rongguang",
+      "category": "van"
+    },
+    {
+      "name": "Zhengtu",
+      "category": "pickup truck"
+    },
+    {
+      "name": "Mini EV",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Bingo EV",
+      "category": "electric vehicle (ev)"
+    },
+    {
+      "name": "Air EV",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "Lucid": [
+    {
+      "name": "Lucid Air",
+      "category": "luxury sedan"
+    },
+    {
+      "name": "Lucid Gravity",
+      "category": "luxury suv"
+    },
+    {
+      "name": "Entire Lucid lineup",
+      "category": "electric vehicle (ev)"
+    }
+  ],
+  "VinFast": [
+    {
+      "name": "VF e34",
+      "category": "hatchback"
+    },
+    {
+      "name": "VF 6",
+      "category": "compact suv"
+    },
+    {
+      "name": "VF 7",
       "category": "suv"
     },
     {
-      "name": "Zeekr 7X",
+      "name": "VF 8",
       "category": "suv"
     },
     {
-      "name": "Zeekr 009",
-      "category": "muv"
+      "name": "VF 9",
+      "category": "suv"
     },
     {
-      "name": "Entire Zeekr lineup",
-      "category": "muv"
+      "name": "VF Wild (Concept)",
+      "category": "pickup truck"
+    },
+    {
+      "name": "Entire VinFast lineup",
+      "category": "electric vehicle (ev)"
     }
   ]
 }
