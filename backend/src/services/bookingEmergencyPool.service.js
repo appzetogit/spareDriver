@@ -24,6 +24,7 @@ import {
   enqueueRemindersAfterAssignment,
 } from './bookingScheduled.service.js';
 import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
+import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
 
 /**
  * Emergency pool — the manual-assignment safety net for scheduled rides.
@@ -113,6 +114,15 @@ export async function escalateToEmergencyPool(bookingId) {
     return { ok: false, reason: 'not_escalatable', status: booking.status };
   }
 
+  // Past pickup → auto-refund instead of parking in the emergency pool.
+  const startAt = resolveBookingSearchStartAt(booking);
+  if (startAt && startAt.getTime() <= Date.now()) {
+    const { expireUnassignedScheduledBooking } = await import(
+      './bookingScheduled.service.js'
+    );
+    return expireUnassignedScheduledBooking(booking._id);
+  }
+
   // Best-effort: withdraw the current wave so we don't keep paging
   // drivers about a booking that an admin is about to assign manually.
   try {
@@ -200,9 +210,52 @@ export async function listEmergencyPoolBookingsService({ staff, query = {} }) {
   const { page = 1, limit = 20, search, zoneId, bookingType, dateFrom, dateTo } = query;
   const skip = (Math.max(1, parseInt(page, 10)) - 1) * parseInt(limit, 10);
 
+  // Past-start pool rows should already be refunded; sweep any leftovers
+  // when admins open the pool so they don't linger until the next cron.
+  const now = new Date();
+  Booking.find({
+    status: BOOKING_STATUS.IN_EMERGENCY_POOL,
+    isDeleted: false,
+    driverId: null,
+    $or: [
+      { 'hourly.scheduledStartAt': { $lte: now } },
+      { 'outstation.pickupAt': { $lte: now } },
+      { 'outstation.startDate': { $lte: now } },
+    ],
+  })
+    .select('_id')
+    .lean()
+    .then(async (stale) => {
+      if (!stale?.length) return;
+      const { expireUnassignedScheduledBooking } = await import(
+        './bookingScheduled.service.js'
+      );
+      for (const row of stale) {
+        expireUnassignedScheduledBooking(row._id).catch(() => {});
+      }
+    })
+    .catch(() => {});
+
   const filter = {
     status: BOOKING_STATUS.IN_EMERGENCY_POOL,
     isDeleted: false,
+    // Hide past-start rows from the pool UI (they are being expired above).
+    $and: [
+      {
+        $or: [
+          { 'hourly.scheduledStartAt': { $gt: now } },
+          {
+            'hourly.scheduledStartAt': { $exists: false },
+            'outstation.pickupAt': { $gt: now },
+          },
+          {
+            'hourly.scheduledStartAt': { $exists: false },
+            'outstation.pickupAt': { $exists: false },
+            'outstation.startDate': { $gt: now },
+          },
+        ],
+      },
+    ],
   };
 
   // Staff scope — team_members only see their assigned zones.
@@ -234,10 +287,12 @@ export async function listEmergencyPoolBookingsService({ staff, query = {} }) {
 
   if (search) {
     const isObjectId = /^[0-9a-fA-F]{24}$/.test(search);
-    filter.$or = [
-      { bookingNumber: { $regex: search, $options: 'i' } },
-      ...(isObjectId ? [{ _id: search }] : []),
-    ];
+    filter.$and.push({
+      $or: [
+        { bookingNumber: { $regex: search, $options: 'i' } },
+        ...(isObjectId ? [{ _id: search }] : []),
+      ],
+    });
   }
 
   if (bookingType) {
@@ -292,9 +347,22 @@ export async function listEmergencyPoolBookingsService({ staff, query = {} }) {
  * Lightweight count for admin sidebar badge. Scoped like the list.
  */
 export async function countEmergencyPoolBookingsService({ staff } = {}) {
+  const now = new Date();
   const filter = {
     status: BOOKING_STATUS.IN_EMERGENCY_POOL,
     isDeleted: false,
+    $or: [
+      { 'hourly.scheduledStartAt': { $gt: now } },
+      {
+        'hourly.scheduledStartAt': { $exists: false },
+        'outstation.pickupAt': { $gt: now },
+      },
+      {
+        'hourly.scheduledStartAt': { $exists: false },
+        'outstation.pickupAt': { $exists: false },
+        'outstation.startDate': { $gt: now },
+      },
+    ],
   };
   const scope = zoneScopeForStaff(staff);
   if (scope !== null) {
@@ -338,6 +406,14 @@ export async function adminAssignDriverToEmergencyPoolService(
     throw new ApiError(
       409,
       `Booking is not in the emergency pool (status: ${booking.status})`,
+    );
+  }
+
+  const startAt = resolveBookingSearchStartAt(booking);
+  if (startAt && startAt.getTime() <= Date.now()) {
+    throw new ApiError(
+      409,
+      'Ride time has passed — this booking will be auto-refunded',
     );
   }
 

@@ -434,9 +434,6 @@ const driverSearchSchema = new mongoose.Schema(
  *                         before pickup, the batch escalate cron moves
  *                         the booking to the admin emergency pool
  *                         (sweep every EMERGENCY_POOL_BATCH_INTERVAL_MINUTES).
- *   RETRY_DELAY_MINUTES — @deprecated Scheduled inbox dispatch no longer
- *                         retries empty rounds. Kept for older pricing
- *                         documents; ignored by the new flow.
  *   MIN_SCHEDULED_LEAD_HOURS — hard floor on how far in advance the
  *                         customer can create a scheduled booking.
  *                         The booking-create endpoint rejects anything
@@ -456,7 +453,6 @@ const scheduledDispatchSchema = new mongoose.Schema(
     LONG_LEAD_HOURS: { type: Number, default: 4, min: 0 },
     LEAD_SCHEDULE_HOUR: { type: Number, default: 18, min: 0, max: 23 },
     EMERGENCY_POOL_MINUTES: { type: Number, default: 120, min: 5 },
-    RETRY_DELAY_MINUTES: { type: Number, default: 5, min: 1 },
     /**
      * Buffer (in minutes) padded around every booking's time window
      * when checking for overlapping rides during dispatch. Drivers
@@ -464,7 +460,7 @@ const scheduledDispatchSchema = new mongoose.Schema(
      * intersects the new request's window are skipped, even if they
      * are otherwise online and idle. Defaults to 30 min.
      */
-    RIDE_BUFFER_MINUTES: { type: Number, default: 30, min: 0 },
+    RIDE_BUFFER_MINUTES: { type: Number, default: 120, min: 0 },
     MIN_SCHEDULED_LEAD_HOURS: { type: Number, default: 2, min: 0 },
     REMINDER_OFFSETS_MINUTES: {
       type: [Number],

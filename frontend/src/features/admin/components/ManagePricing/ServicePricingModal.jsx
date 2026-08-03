@@ -153,8 +153,7 @@ const buildDefaultForm = (serviceType) => ({
     LONG_LEAD_HOURS: 4,
     LEAD_SCHEDULE_HOUR: 18,
     EMERGENCY_POOL_MINUTES: 120,
-    RETRY_DELAY_MINUTES: 5,
-    RIDE_BUFFER_MINUTES: 30,
+    RIDE_BUFFER_MINUTES: 120,
     MIN_SCHEDULED_LEAD_HOURS: 2,
     REMINDER_OFFSETS_MINUTES: [60, 15],
   },
@@ -1165,17 +1164,6 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                     }
                   />
                   <Input
-                    label="Retry delay (minutes, unused)"
-                    type="number"
-                    min={1}
-                    value={form.scheduledDispatch.RETRY_DELAY_MINUTES}
-                    onChange={(e) =>
-                      updateNested('scheduledDispatch', {
-                        RETRY_DELAY_MINUTES: Number(e.target.value),
-                      })
-                    }
-                  />
-                  <Input
                     label="Ride buffer (minutes)"
                     type="number"
                     min={0}
@@ -1188,14 +1176,15 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                   />
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Scheduled rides broadcast once to matching drivers (open
-                  inbox, no offer timer). Past the emergency-pool window a
-                  ~45 min batch sweep parks unmatched bookings for admin
-                  assignment. Retry delay is unused. The ride buffer is
-                  padded around every existing booking so drivers with a
-                  future scheduled ride still receive new offers, as long
-                  as the new ride finishes at least this
-                  many minutes before the next pickup (and vice-versa).
+                  Search starts per the windows above (immediate for
+                  morning/short-window, deferred for long-lead /
+                  morning-lead). Past the emergency-pool window a ~45
+                  min batch sweep parks unmatched bookings for admin
+                  assignment. The ride buffer is padded around every
+                  existing booking so drivers with a future scheduled
+                  ride still receive new offers, as long as the new
+                  ride finishes at least this many minutes before the
+                  next pickup (and vice-versa).
                 </p>
               </div>
 

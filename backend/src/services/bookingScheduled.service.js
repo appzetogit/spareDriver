@@ -130,14 +130,18 @@ export async function loadScheduledDispatchConfig(serviceType) {
 }
 
 /**
- * Pure decision for scheduled rides.
+ * Pure decision for scheduled rides — driven by admin
+ * `ServicePricing.scheduledDispatch` (merged onto SCHEDULED_BOOKING).
  *
- * Tier labels (morning / short_window / morning_lead / long_lead) are kept
- * for analytics and admin UI, but inbox broadcast is ALWAYS immediate —
- * drivers see the request in Incoming well before LONG_LEAD_HOURS.
- * `escalateAt` still drives the emergency-pool batch cutoff.
+ *   morning        → search now (pickup today/tomorrow in morning window)
+ *   morning_lead   → search at LEAD_SCHEDULE_HOUR the evening before pickup
+ *   short_window   → search now (within SHORT_WINDOW_HOURS of pickup)
+ *   long_lead      → search at scheduledStartAt − LONG_LEAD_HOURS
  *
- * Returns `{ tier, immediate: true, assignAt: null, escalateAt }`.
+ * If the computed assignAt is already past, search immediately.
+ * `escalateAt` (= start − EMERGENCY_POOL_MINUTES) drives the emergency pool.
+ *
+ * Returns `{ tier, immediate, assignAt, escalateAt }`.
  */
 export function decideScheduleTier(scheduledStartAt, now, config) {
   const start = new Date(scheduledStartAt);
@@ -164,9 +168,32 @@ export function decideScheduleTier(scheduledStartAt, now, config) {
     tier = 'short_window';
   }
 
-  // Always broadcast immediately — long_lead / morning_lead only used
-  // as labels; assignAt is null so we never park in PENDING_ASSIGNMENT.
-  return { tier, immediate: true, assignAt: null, escalateAt };
+  if (tier === 'morning' || tier === 'short_window') {
+    return { tier, immediate: true, assignAt: null, escalateAt };
+  }
+
+  let assignAt;
+  if (tier === 'morning_lead') {
+    // Evening before pickup at LEAD_SCHEDULE_HOUR (default 18:00).
+    assignAt = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate() - 1,
+      Number(cfg.LEAD_SCHEDULE_HOUR) || 18,
+      0,
+      0,
+      0,
+    );
+  } else {
+    assignAt = new Date(
+      startMs - (Number(cfg.LONG_LEAD_HOURS) || 0) * 3_600_000,
+    );
+  }
+
+  if (assignAt.getTime() <= nowMs) {
+    return { tier, immediate: true, assignAt, escalateAt };
+  }
+  return { tier, immediate: false, assignAt, escalateAt };
 }
 
 /**
@@ -199,10 +226,13 @@ export async function setupScheduledBooking(booking) {
     tier: decision.tier,
     assignAt: decision.assignAt,
     escalateAt: decision.escalateAt,
-    assignmentStartedAt: new Date(),
+    assignmentStartedAt: decision.immediate ? new Date() : null,
   };
-  // Always SEARCHING — inbox broadcast runs at create (immediate).
-  booking.status = BOOKING_STATUS.SEARCHING;
+  // Immediate tiers → SEARCHING (controller dispatches inbox now).
+  // Deferred tiers → PENDING_ASSIGNMENT until the delayed `assign` job.
+  booking.status = decision.immediate
+    ? BOOKING_STATUS.SEARCHING
+    : BOOKING_STATUS.PENDING_ASSIGNMENT;
   await booking.save();
 
   // Fire-and-forget — queue may be a no-op when Redis isn't configured.
@@ -344,12 +374,14 @@ export async function scheduleAssignmentRetryOrEscalate(bookingId) {
 
 /**
  * Recurring 45-min batch for open scheduled bookings:
+ *   0. Auto-cancel + full refund unassigned bookings past ride time
  *   1. Rebroadcast inbox to newly-matching drivers (came online, etc.)
  *   2. Escalate past escalateAt into the emergency pool
  *
  * Workers call this from the escalate-batch (scheduled-batch) job.
  */
 export async function runScheduledInboxBatchJob() {
+  const expired = await expirePastUnassignedScheduledBookings();
   const rebroadcast = await rebroadcastOpenScheduledInboxes();
   const escalate = await runEmergencyPoolBatchEscalate();
   let subscription = { ok: true, skipped: true };
@@ -364,7 +396,115 @@ export async function runScheduledInboxBatchJob() {
   } catch (err) {
     console.warn('[bookingScheduled] subscription batch failed:', err?.message);
   }
-  return { ok: true, rebroadcast, escalate, subscription };
+  return { ok: true, expired, rebroadcast, escalate, subscription };
+}
+
+const UNASSIGNED_EXPIRE_STATUSES = Object.freeze([
+  BOOKING_STATUS.PENDING_ASSIGNMENT,
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.IN_EMERGENCY_POOL,
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
+]);
+
+/**
+ * Cancel + full-refund a scheduled/outstation booking that still has no
+ * driver at (or past) pickup time. Idempotent for assigned/terminal rows.
+ */
+export async function expireUnassignedScheduledBooking(bookingId) {
+  const booking = await Booking.findById(bookingId);
+  if (!booking) return { ok: false, reason: 'not_found' };
+  if (booking.driverId) return { ok: false, reason: 'already_assigned' };
+  if (!UNASSIGNED_EXPIRE_STATUSES.includes(booking.status)) {
+    return { ok: false, reason: 'not_unassigned', status: booking.status };
+  }
+  if (
+    booking.bookingType !== BOOKING_TYPE.SCHEDULED
+    && booking.bookingType !== BOOKING_TYPE.OUTSTATION
+  ) {
+    return { ok: false, reason: 'not_scheduled' };
+  }
+
+  const startAt = resolveBookingSearchStartAt(booking);
+  if (!startAt) return { ok: false, reason: 'no_start_at' };
+  if (startAt.getTime() > Date.now()) {
+    return { ok: false, reason: 'not_yet_due' };
+  }
+
+  try {
+    const { withdrawCurrentOfferService } = await import(
+      './bookingDispatch.service.js'
+    );
+    await withdrawCurrentOfferService(booking._id, 'ride_time_passed');
+  } catch (err) {
+    console.warn(
+      '[bookingScheduled] withdraw before expire failed for',
+      String(booking._id),
+      err?.message,
+    );
+  }
+
+  const { cancelBookingByUserService } = await import('./booking.service.js');
+  await cancelBookingByUserService(
+    booking.userId,
+    booking._id,
+    'no_driver_by_ride_time',
+    { cancelledBy: 'system', waiveCancellationFee: true },
+  );
+
+  return { ok: true, bookingId: String(booking._id) };
+}
+
+/**
+ * Safety-net sweep: any unmatched scheduled/outstation booking whose
+ * pickup time has already passed gets auto-cancelled with a full refund.
+ * Called from escalate-batch; per-booking `expire-unassigned` jobs are
+ * the primary path for on-time refunds.
+ */
+export async function expirePastUnassignedScheduledBookings() {
+  const now = new Date();
+  const candidates = await Booking.find({
+    isDeleted: false,
+    bookingType: { $in: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION] },
+    driverId: null,
+    status: { $in: [...UNASSIGNED_EXPIRE_STATUSES] },
+    $or: [
+      { 'hourly.scheduledStartAt': { $lte: now } },
+      { 'outstation.pickupAt': { $lte: now } },
+      { 'outstation.startDate': { $lte: now } },
+    ],
+  })
+    .select('_id')
+    .lean();
+
+  if (!candidates.length) {
+    return { ok: true, scanned: 0, expired: 0, failed: 0 };
+  }
+
+  let expired = 0;
+  let failed = 0;
+  for (const row of candidates) {
+    try {
+      const result = await expireUnassignedScheduledBooking(row._id);
+      if (result?.ok) expired += 1;
+    } catch (err) {
+      failed += 1;
+      console.warn(
+        '[bookingScheduled] expire failed for',
+        String(row._id),
+        err?.message || err,
+      );
+    }
+  }
+
+  console.log(
+    `[bookingScheduled] expire-past-unassigned scanned=${candidates.length} expired=${expired} failed=${failed}`,
+  );
+  return {
+    ok: true,
+    scanned: candidates.length,
+    expired,
+    failed,
+  };
 }
 
 /**
@@ -381,10 +521,29 @@ export async function rebroadcastOpenScheduledInboxes() {
     status: {
       $in: [BOOKING_STATUS.SEARCHING, BOOKING_STATUS.PENDING_ASSIGNMENT],
     },
-    $or: [
-      { 'scheduled.escalateAt': { $gt: now } },
-      { 'scheduled.escalateAt': { $exists: false } },
-      { 'scheduled.escalateAt': null },
+    $and: [
+      {
+        $or: [
+          { 'scheduled.escalateAt': { $gt: now } },
+          { 'scheduled.escalateAt': { $exists: false } },
+          { 'scheduled.escalateAt': null },
+        ],
+      },
+      // Never rebroadcast after pickup time — those are expired/refunded.
+      {
+        $or: [
+          { 'hourly.scheduledStartAt': { $gt: now } },
+          {
+            'hourly.scheduledStartAt': { $exists: false },
+            'outstation.pickupAt': { $gt: now },
+          },
+          {
+            'hourly.scheduledStartAt': { $exists: false },
+            'outstation.pickupAt': { $exists: false },
+            'outstation.startDate': { $gt: now },
+          },
+        ],
+      },
     ],
   })
     .select('_id')
@@ -402,9 +561,19 @@ export async function rebroadcastOpenScheduledInboxes() {
   let newDrivers = 0;
   for (const row of rows) {
     try {
-      // Kick PENDING leftovers into SEARCHING + first/refresh broadcast.
-      const booking = await Booking.findById(row._id).select('status');
+      // Kick PENDING leftovers into SEARCHING only once assignAt has
+      // arrived (or was never set). Early kickoff would ignore admin
+      // LONG_LEAD / LEAD_SCHEDULE_HOUR deferral.
+      const booking = await Booking.findById(row._id).select(
+        'status scheduled.assignAt',
+      );
       if (booking?.status === BOOKING_STATUS.PENDING_ASSIGNMENT) {
+        const assignAtMs = booking.scheduled?.assignAt
+          ? new Date(booking.scheduled.assignAt).getTime()
+          : 0;
+        if (assignAtMs && assignAtMs > Date.now()) {
+          continue;
+        }
         await kickoffScheduledAssignment(row._id);
         updated += 1;
         continue;
@@ -452,29 +621,49 @@ export async function runEmergencyPoolBatchEscalate() {
         BOOKING_STATUS.NO_DRIVERS_FOUND,
       ],
     },
-    $or: [
-      { 'scheduled.escalateAt': { $lte: now } },
+    // Only escalate still-future pickups — past-start rows are expired
+    // + refunded by expirePastUnassignedScheduledBookings instead.
+    $and: [
       {
-        'scheduled.escalateAt': { $exists: false },
         $or: [
-          { 'hourly.scheduledStartAt': { $lte: cutoffFallback } },
-          { 'outstation.pickupAt': { $lte: cutoffFallback } },
-          { 'outstation.startDate': { $lte: cutoffFallback } },
+          { 'hourly.scheduledStartAt': { $gt: now } },
+          {
+            'hourly.scheduledStartAt': { $exists: false },
+            'outstation.pickupAt': { $gt: now },
+          },
+          {
+            'hourly.scheduledStartAt': { $exists: false },
+            'outstation.pickupAt': { $exists: false },
+            'outstation.startDate': { $gt: now },
+          },
         ],
       },
       {
-        'scheduled.escalateAt': null,
         $or: [
-          { 'hourly.scheduledStartAt': { $lte: cutoffFallback } },
-          { 'outstation.pickupAt': { $lte: cutoffFallback } },
-          { 'outstation.startDate': { $lte: cutoffFallback } },
+          { 'scheduled.escalateAt': { $lte: now } },
+          {
+            'scheduled.escalateAt': { $exists: false },
+            $or: [
+              { 'hourly.scheduledStartAt': { $lte: cutoffFallback } },
+              { 'outstation.pickupAt': { $lte: cutoffFallback } },
+              { 'outstation.startDate': { $lte: cutoffFallback } },
+            ],
+          },
+          {
+            'scheduled.escalateAt': null,
+            $or: [
+              { 'hourly.scheduledStartAt': { $lte: cutoffFallback } },
+              { 'outstation.pickupAt': { $lte: cutoffFallback } },
+              { 'outstation.startDate': { $lte: cutoffFallback } },
+            ],
+          },
         ],
       },
     ],
   };
 
   const candidates = await Booking.find(filter)
-    .select('_id bookingNumber bookingType')
+    .select('_id bookingNumber bookingType status scheduled.assignAt')
     .lean();
   if (!candidates.length) {
     return { ok: true, scanned: 0, escalated: 0, failed: 0 };
@@ -486,8 +675,20 @@ export async function runEmergencyPoolBatchEscalate() {
 
   let escalated = 0;
   let failed = 0;
+  const nowMs = now.getTime();
   for (const row of candidates) {
     try {
+      // Don't escalate deferred bookings that haven't opened search yet
+      // (e.g. LONG_LEAD_HOURS < EMERGENCY_POOL_MINUTES misconfig, or
+      // morning_lead still waiting for LEAD_SCHEDULE_HOUR).
+      if (row.status === BOOKING_STATUS.PENDING_ASSIGNMENT) {
+        const assignAtMs = row.scheduled?.assignAt
+          ? new Date(row.scheduled.assignAt).getTime()
+          : 0;
+        if (assignAtMs && assignAtMs > nowMs) {
+          continue;
+        }
+      }
       // Scheduled hourly + outstation both land in the shared emergency
       // pool when auto-search misses the escalateAt cutoff.
       const result = await escalateToEmergencyPool(row._id);
@@ -724,6 +925,14 @@ export async function adminAssignDriverToScheduledBookingService(
     throw new ApiError(
       409,
       `Cannot assign driver for status: ${booking.status}`,
+    );
+  }
+
+  const startAt = resolveBookingSearchStartAt(booking);
+  if (startAt && startAt.getTime() <= Date.now()) {
+    throw new ApiError(
+      409,
+      'Ride time has passed — this booking will be auto-refunded',
     );
   }
 

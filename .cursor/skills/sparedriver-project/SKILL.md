@@ -71,7 +71,7 @@ frontend/src/
 
 Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
 
-Inbox auto-search (scheduled hourly + outstation bookings + subscription assignment): `bookingScheduled.service` / `bookingDispatch.broadcastScheduledInboxService` / `subscriptionDispatch.service`. Admin knobs: `ServicePricing.scheduledDispatch` (hourly + outstation pricing modal) and `AppSettings.subscriptionDispatch` (Manage Subscriptions). Drivers see offers in My Trips → Incoming via `useDriverIncomingScheduledStore`.
+Inbox auto-search (scheduled hourly + outstation bookings + subscription assignment): `bookingScheduled.service` (`decideScheduleTier` defers via admin `scheduledDispatch` windows) / `bookingDispatch.broadcastScheduledInboxService` / `subscriptionDispatch.service`. Admin knobs: `ServicePricing.scheduledDispatch` (hourly + outstation pricing modal) and `AppSettings.subscriptionDispatch` (Manage Subscriptions). Drivers see offers in My Trips → Incoming via `useDriverIncomingScheduledStore`.
 
 ## Naming Conventions
 

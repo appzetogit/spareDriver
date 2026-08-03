@@ -244,7 +244,13 @@ export const getDriverAssignedSubscriptionById = asyncHandler(async (req, res) =
 export const driverAcceptBooking = asyncHandler(async (req, res) => {
   const result = await acceptBookingService(req.params.id, req.driver._id);
   if (!result.ok) {
-    throw new ApiError(409, result.reason || 'Cannot accept booking');
+    const message =
+      result.reason === 'ride_time_passed'
+        ? 'Ride time has passed — this request is no longer available'
+        : result.reason === 'driver_on_trip'
+          ? 'Finish your current trip before accepting another ride'
+          : result.reason || 'Cannot accept booking';
+    throw new ApiError(409, message);
   }
   return res.status(200).json(new ApiResponse(200, result, 'Booking accepted'));
 });

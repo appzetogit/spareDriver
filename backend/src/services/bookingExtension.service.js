@@ -24,6 +24,7 @@ import {
   debitWalletService,
   releaseWalletHoldService,
 } from './wallet.service.js';
+import { scheduleRideEndTimer } from './bookingRideEndTimeout.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 import { todayKey } from './bookingCancellation.service.js';
 
@@ -1272,6 +1273,9 @@ export async function payExtensionService(userId, bookingId, body = {}) {
   }
 
   await booking.save();
+
+  // Push the hourly auto-complete timer out by the newly accepted hours.
+  scheduleRideEndTimer(booking);
 
   const extensionsForUi = booking.extensions.map((e) => serialiseExtensionForCustomer(e));
   const userPayload = {

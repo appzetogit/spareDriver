@@ -6,15 +6,15 @@ import Button from '../../../../components/Button';
 import Avatar from '../../../../components/Avatar';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
-import { useGeolocation } from '../../../../hooks/useGeolocation';
+import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../../../utils/geo';
 import { BOOKING_STATUS, isBookingContactRevealed } from '../../../../constants/bookingStatus';
 
 /**
  * Driver-side "navigate to customer" screen — replaces the static mock
  * with the production trip-tracking map. Pulls the active trip from
- * `useDriverActiveTripStore`, the driver's own coordinates from
- * `useGeolocation` and the customer's pickup from the booking payload.
+ * `useDriverActiveTripStore`, the driver's own coordinates from the
+ * shared live GPS bridge, and the customer's pickup from the booking.
  */
 const NavigateToCustomerPage = () => {
   const navigate = useNavigate();
@@ -25,7 +25,7 @@ const NavigateToCustomerPage = () => {
     if (!booking) fetchActive().catch(() => {});
   }, [booking, fetchActive]);
 
-  const { coords: driverCoords } = useGeolocation({ enabled: true });
+  const { coords: driverCoords } = useDriverLocationStatus();
   const driverPoint = useMemo(() => {
     if (!driverCoords) return null;
     return { lat: driverCoords.lat, lng: driverCoords.lng };
@@ -93,7 +93,7 @@ const NavigateToCustomerPage = () => {
                 {customerPhone ||
                   (contactRevealed
                     ? booking?.bookingNumber || '—'
-                    : 'Contact unlocks after you arrive')}
+                    : 'Contact unlocks when you start heading to pickup')}
               </p>
             </div>
           </div>

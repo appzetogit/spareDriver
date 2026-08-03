@@ -158,8 +158,8 @@ const DriverAssignedPage = () => {
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     applyUpdate(payload);
-    // Contact details are only returned after the driver arrives — refetch
-    // so phone/call CTAs appear without a manual refresh.
+    // Contact details unlock when the driver starts heading to pickup —
+    // refetch so phone/call CTAs appear without a manual refresh.
     if (payload?.status && isBookingContactRevealed(payload.status)) {
       const current = useUserActiveBookingStore.getState().booking;
       const hasPhone =
@@ -352,9 +352,13 @@ const DriverAssignedPage = () => {
   const driver = booking?.driverId;
   const driverId = typeof driver === 'object' ? driver?._id : driver;
 
-  // Live driver location via Firebase (Phase 3 pipeline).
+  // Live driver location via Firebase — only after "Start to pickup"
+  // (EN_ROUTE+). Matches contact-reveal policy so customers don't track
+  // the driver while the booking is merely assigned.
   const { map: firebaseMap, disabled: firebaseDisabled } = useFirebaseDriverLocations();
-  const liveDriver = driverId ? firebaseMap[String(driverId)] : null;
+  const liveDriverRaw = driverId ? firebaseMap[String(driverId)] : null;
+  const driverLocationRevealed = isBookingContactRevealed(booking);
+  const liveDriver = driverLocationRevealed ? liveDriverRaw : null;
 
   const pickupPoint = useMemo(() => {
     const c = booking?.pickup?.location?.coordinates;
@@ -484,6 +488,9 @@ const DriverAssignedPage = () => {
     if (extensionPromptDismissedAt && Date.now() - extensionPromptDismissedAt < 60_000) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical timer trigger
     setExtensionPromptOpen(true);
+    toast('Your trip is about to end — do you want to extend?', {
+      duration: 5000,
+    });
   }, [rideTimer.shouldPromptExtension, extensionPromptOpen, extensionPromptDismissedAt]);
 
   // Pick the most recent extension still in a handshake state. This is
@@ -644,12 +651,10 @@ const DriverAssignedPage = () => {
   const displayDriverName = isTripStarted
     ? rawDriverName
     : maskPersonName(rawDriverName) || 'Driver';
-  // Map is shown for every post-acceptance phase, including STARTED.
-  // The destination/route during STARTED is determined below by
-  // `mapAnchor` (driver→dropoff if we have a dropoff, otherwise the
-  // pickup so the camera still has a stable anchor for hourly rides).
+  // Map only after "Start to pickup" (EN_ROUTE+). Assigned / awaiting
+  // payment shows the status sheet without a live tracking map.
   const mapAnchor = isTripStarted ? dropoffPoint || pickupPoint : pickupPoint;
-  const showMap = !!mapAnchor;
+  const showMap = driverLocationRevealed && !!mapAnchor;
 
   /* ─── Status pill color helper ─── */
   const statusPillColor = {
@@ -690,8 +695,28 @@ const DriverAssignedPage = () => {
             bookingStatus={booking.status}
           />
         </div>
+      ) : !driverLocationRevealed ? (
+        /* Pre-pickup: message + ads where the live map will appear. */
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-100 via-white to-slate-50 pointer-events-auto">
+          <div className="h-full flex flex-col items-stretch px-4 pt-24 pb-[42dvh] overflow-y-auto">
+            <div className="flex flex-col items-center text-center gap-3 mt-4 mb-5">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary-dark flex items-center justify-center">
+                <MapPin className="w-7 h-7" />
+              </div>
+              <p className="text-base font-bold text-slate-900 max-w-xs leading-snug">
+                Map will show after the driver starts to pickup
+              </p>
+              <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
+                Live tracking unlocks once your driver taps Start to pickup.
+              </p>
+            </div>
+            <div className="w-full max-w-md mx-auto">
+              <AdsCarousel />
+            </div>
+          </div>
+        </div>
       ) : (
-        /* Fallback gradient when coordinates are missing. */
+        /* Fallback when coords are missing after pickup has started. */
         <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900" />
       )}
 
@@ -939,7 +964,7 @@ const DriverAssignedPage = () => {
                     {driver && !isBookingContactRevealed(booking) && (
                       <div className="px-5 py-3 border-t border-gray-100">
                         <p className="text-xs text-center text-gray-500">
-                          Driver contact unlocks after they arrive at pickup
+                          Driver contact unlocks when they start heading to pickup
                         </p>
                       </div>
                     )}
@@ -1033,8 +1058,9 @@ const DriverAssignedPage = () => {
                   </div>
                 ) : null}
 
-                {/* Ads sit below SOS so emergency CTA stays above promos */}
-                <AdsCarousel />
+                {/* Ads in the sheet only once the map is live — before
+                    pickup they already sit in the map placeholder. */}
+                {showMap ? <AdsCarousel /> : null}
 
                 {/* Safe-area bottom padding */}
                 <div className="h-2" />

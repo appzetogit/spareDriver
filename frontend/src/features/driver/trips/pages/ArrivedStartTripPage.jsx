@@ -6,7 +6,7 @@ import Button from '../../../../components/Button';
 import Avatar from '../../../../components/Avatar';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
-import { useGeolocation } from '../../../../hooks/useGeolocation';
+import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 
 /**
@@ -23,7 +23,7 @@ const ArrivedStartTripPage = () => {
     if (!booking) fetchActive().catch(() => {});
   }, [booking, fetchActive]);
 
-  const { coords: driverCoords } = useGeolocation({ enabled: true });
+  const { coords: driverCoords } = useDriverLocationStatus();
   const driverPoint = useMemo(() => {
     if (!driverCoords) return null;
     return { lat: driverCoords.lat, lng: driverCoords.lng };

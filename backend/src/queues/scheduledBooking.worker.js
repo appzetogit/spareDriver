@@ -9,6 +9,7 @@ import {
   runScheduledRetry,
   sendScheduledReminder,
   runScheduledInboxBatchJob,
+  expireUnassignedScheduledBooking,
 } from '../services/bookingScheduled.service.js';
 
 /**
@@ -79,6 +80,13 @@ export async function startScheduledBookingWorker() {
             );
             await escalateToEmergencyPool(bookingId);
             return { ok: true, kind: 'escalate', legacy: true };
+          }
+          case SCHEDULED_JOB_NAMES.EXPIRE_UNASSIGNED: {
+            const { bookingId } = job.data || {};
+            if (!bookingId) {
+              throw new Error('scheduledBooking expire-unassigned missing bookingId');
+            }
+            return expireUnassignedScheduledBooking(bookingId);
           }
           default:
             throw new Error(`Unknown scheduledBooking job name: ${job.name}`);

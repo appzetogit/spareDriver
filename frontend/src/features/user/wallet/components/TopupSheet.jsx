@@ -179,8 +179,7 @@ const TopupSheet = ({
             Min ₹{min} · Max ₹{max.toLocaleString('en-IN')}
           </p>
           <p className="text-[11px] text-text-muted mt-1.5 leading-snug">
-            Razorpay gateway fees are deducted from this amount. Only the
-            remaining net balance is credited to your wallet.
+            The full amount is credited to your wallet.
           </p>
         </div>
 

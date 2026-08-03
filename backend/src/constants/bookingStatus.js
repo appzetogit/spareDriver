@@ -142,13 +142,17 @@ export const DISPATCH = Object.freeze({
  *                                  ride?" prompt. Used purely on the
  *                                  client; lives here so both sides stay
  *                                  in lockstep.
+ *   RIDE_END_EXTENSION_GRACE_SECONDS  After booked duration ends, how long
+ *                                  the customer still has to extend before
+ *                                  the server auto-completes the ride.
  */
 export const PAYMENT_POLICY = Object.freeze({
   PAYMENT_DEADLINE_SECONDS: 60,
   PRE_PAY_WINDOW_SECONDS: 60,
   RIDE_OTP_LENGTH: 4,
   RIDE_OTP_MAX_ATTEMPTS: 5,
-  EXTENSION_PROMPT_LEAD_SECONDS: 5 * 60,
+  EXTENSION_PROMPT_LEAD_SECONDS: 15 * 60,
+  RIDE_END_EXTENSION_GRACE_SECONDS: 5 * 60,
 });
 
 /** Constants for the user-facing "nearby drivers" view (home page). */
@@ -192,8 +196,7 @@ export const DISPATCH_RESPONSE = Object.freeze({
  *
  * Once the assignment window opens, scheduled bookings use a single
  * non-expiring inbox broadcast to every matching driver (no wave
- * timers, no RETRY_DELAY_MINUTES churn). Instant rides keep the timed
- * wave dispatcher.
+ * timers). Instant rides keep the timed wave dispatcher.
  *
  * Escalation into the admin emergency pool is a recurring batch sweep
  * every `EMERGENCY_POOL_BATCH_INTERVAL_MINUTES` (default 45). The
@@ -225,11 +228,6 @@ export const SCHEDULED_BOOKING = Object.freeze({
    */
   EMERGENCY_POOL_BATCH_INTERVAL_MINUTES: 45,
   /**
-   * @deprecated Scheduled dispatch no longer retries empty rounds.
-   * Kept so older ServicePricing overrides / docs still parse.
-   */
-  RETRY_DELAY_MINUTES: 5,
-  /**
    * Buffer (in minutes) padded around every booking's time window when
    * checking for conflicts on the dispatch side. A driver is offered a
    * new booking ONLY if none of their existing active/scheduled
@@ -237,7 +235,7 @@ export const SCHEDULED_BOOKING = Object.freeze({
    * RIDE_BUFFER_MINUTES]`. Lets drivers stack future scheduled
    * bookings safely without back-to-back overlaps.
    */
-  RIDE_BUFFER_MINUTES: 30,
+  RIDE_BUFFER_MINUTES: 120,
   REMINDER_OFFSETS_MINUTES: Object.freeze([60, 15]),
   /**
    * Hard floor on how far in advance a scheduled booking can be created.
@@ -262,9 +260,10 @@ export const DISPATCH_MODE = Object.freeze({
 /**
  * Statuses where the counterparty's phone/email may be shared with
  * the driver or the customer. Hidden until the driver taps
- * "I have arrived" (status → arrived).
+ * "Start to pickup" (status → en_route).
  */
 export const CONTACT_REVEALED_STATUSES = Object.freeze([
+  BOOKING_STATUS.EN_ROUTE,
   BOOKING_STATUS.ARRIVED,
   BOOKING_STATUS.STARTED,
   BOOKING_STATUS.COMPLETED,
@@ -283,7 +282,8 @@ export function isBookingContactRevealed(bookingOrStatus) {
   if (CONTACT_REVEALED_STATUSES.includes(status)) return true;
   if (
     status === BOOKING_STATUS.CANCELLED &&
-    bookingOrStatus?.timeline?.arrivedAt
+    (bookingOrStatus?.timeline?.enRouteAt ||
+      bookingOrStatus?.timeline?.arrivedAt)
   ) {
     return true;
   }

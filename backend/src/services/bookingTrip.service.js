@@ -9,7 +9,12 @@ import {
   cancelNoShowSchedule,
 } from './bookingNoShowTimeout.service.js';
 import {
+  scheduleRideEndTimer,
+  cancelRideEndSchedule,
+} from './bookingRideEndTimeout.service.js';
+import {
   BOOKING_STATUS,
+  BOOKING_TYPE,
   ACTIVE_BOOKING_STATUSES,
   PAYMENT_MODE,
   BOOKING_PAYMENT_STATUS,
@@ -250,26 +255,14 @@ async function resolveEnRouteLeadMinutes(serviceType) {
 }
 
 /**
- * Authoritative "are we close enough to pickup time?" guard, used by
- * every driver-side trip transition (en-route, arrived, start). The
- * caller passes a human verb so the thrown error reads naturally —
- * "head out" for en-route, "mark arrival" for arrived, "start the
- * ride" for start.
- *
- * IMPORTANT: we intentionally do NOT key this off `bookingType`.
- * Earlier versions only blocked when `bookingType === 'scheduled'`,
- * which created a fail-open hole the moment a row's `bookingType`
- * field was missing / mis-tagged / migrated from an older shape. The
- * only fact that matters here is what the customer told us about
- * pickup time — `hourly.scheduledStartAt`. If that's more than
- * `leadMinutes` in the future, the driver has no business being on
- * their way to the pickup yet, full stop.
+ * Authoritative "are we close enough to pickup time?" guard for
+ * **Start to pickup** (en_route). Drivers may head out once pickup is
+ * within `RIDE_BUFFER_MINUTES` (default 2h). Arrival / start use the
+ * stricter `assertScheduledStartReached` instead — billing must not
+ * begin before the customer's booked time.
  *
  * Instant bookings get `scheduledStartAt = now` at creation time, so
- * the guard is a no-op for them in practice (already past the
- * threshold).
- *
- * Returns silently on pass; throws `ApiError(409)` on fail.
+ * the guard is a no-op for them in practice.
  */
 async function assertWithinScheduledLead(booking, verb) {
   const startMs = booking?.hourly?.scheduledStartAt
@@ -290,6 +283,32 @@ async function assertWithinScheduledLead(booking, verb) {
       },
     );
   }
+}
+
+/**
+ * Hard floor for arrival + ride start: the customer's booked
+ * `hourly.scheduledStartAt` must have been reached. Heading out early
+ * is fine; locking ARRIVED / STARTED early would start wait timers and
+ * bill before the trip window the customer paid for.
+ */
+function assertScheduledStartReached(booking, verb) {
+  const startMs = booking?.hourly?.scheduledStartAt
+    ? new Date(booking.hourly.scheduledStartAt).getTime()
+    : NaN;
+  if (!Number.isFinite(startMs)) return;
+  const remainingMs = startMs - Date.now();
+  if (remainingMs <= 0) return;
+  const minutesAway = Math.max(1, Math.ceil(remainingMs / 60_000));
+  const pickupAt = new Date(startMs);
+  throw new ApiError(
+    409,
+    `Pickup is scheduled for ${pickupAt.toLocaleString()} — you can ${verb} at that time (still ${minutesAway} min away).`,
+    {
+      scheduledStartAt: pickupAt.toISOString(),
+      minutesUntilPickup: minutesAway,
+      leadMinutes: 0,
+    },
+  );
 }
 
 /**
@@ -406,13 +425,9 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.EN_ROUTE], 'mark arrival');
 
-  // Defence-in-depth: the en-route gate already ran, but if a driver
-  // somehow ended up in EN_ROUTE outside the lead window (stale FE
-  // state, scripted request, clock skew between save + arrival), don't
-  // let them lock arrival in. Arrival is what starts the no-show
-  // timers and the customer-facing free-wait window, so a too-early
-  // tap would silently start charging.
-  await assertWithinScheduledLead(booking, 'mark arrival');
+  // Arrival may only lock in at/after the booked pickup time — even
+  // though the driver was allowed to head out up to RIDE_BUFFER early.
+  assertScheduledStartReached(booking, 'mark arrival');
 
   const pickupCoords = (() => {
     const c = booking.pickup?.location?.coordinates;
@@ -521,10 +536,8 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.ARRIVED], 'start the ride');
 
-  // Same belt-and-braces guard as `markDriverArrivedService`. The
-  // customer's clock for waiting / billing literally starts ticking
-  // off this transition, so a too-early start would short-charge.
-  await assertWithinScheduledLead(booking, 'start the ride');
+  // Ride start (and billing clock) only after the booked pickup time.
+  assertScheduledStartReached(booking, 'start the ride');
 
   const expected = booking.rideStartOtp?.code;
   if (!expected) {
@@ -570,6 +583,11 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   }
 
   await booking.save();
+
+  // Hourly / scheduled-hourly: auto-complete when the booked window
+  // (plus any later accepted extensions) elapses without a further
+  // extension. Outstation is day-based and is not auto-closed here.
+  scheduleRideEndTimer(booking);
 
   broadcastUpdate(booking);
   notifyUserTripStarted(booking.userId, booking).catch(() => null);
@@ -672,9 +690,52 @@ async function applyWaitingChargeOnStart(booking, startedAt, flags = {}) {
  * booking's payment status to `pending` so the user app knows to surface
  * the post-ride payment flow.
  */
+/**
+ * Booked ride length in ms for hourly trips (base hours + accepted
+ * extensions). Returns 0 when the booking has no hourly duration
+ * (outstation / legacy), so the early-complete guard is a no-op.
+ */
+function bookedDurationMs(booking) {
+  const base = Number(booking?.hourly?.durationHours) || 0;
+  if (base <= 0) return 0;
+  const extra = (booking?.extensions || []).reduce(
+    (sum, ext) =>
+      sum + (ext?.status === 'accepted' ? Number(ext.additionalHours) || 0 : 0),
+    0,
+  );
+  return (base + extra) * 3_600_000;
+}
+
 export async function completeTripService(driverId, bookingId) {
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.STARTED], 'complete the ride');
+
+  // Hourly / scheduled hourly: the ride may only complete once the
+  // booked duration (plus any accepted extensions) has elapsed. Ending
+  // early would short-change the customer who paid for the full window.
+  const startedAtMs = booking.timeline?.startedAt
+    ? new Date(booking.timeline.startedAt).getTime()
+    : NaN;
+  const durationMs = bookedDurationMs(booking);
+  if (Number.isFinite(startedAtMs) && durationMs > 0) {
+    const earliestCompleteMs = startedAtMs + durationMs;
+    const remainingMs = earliestCompleteMs - Date.now();
+    if (remainingMs > 0) {
+      const remainingMin = Math.max(1, Math.ceil(remainingMs / 60_000));
+      throw new ApiError(
+        409,
+        `This ride is booked for ${durationMs / 3_600_000} hour(s) — you can complete it in about ${remainingMin} min.`,
+        {
+          code: 'TRIP_DURATION_NOT_ELAPSED',
+          earliestCompleteAt: new Date(earliestCompleteMs).toISOString(),
+          remainingMinutes: remainingMin,
+        },
+      );
+    }
+  }
+
+  // Stop the auto-complete timer — we're completing manually.
+  cancelRideEndSchedule(booking._id);
 
   booking.status = BOOKING_STATUS.COMPLETED;
   booking.timeline.completedAt = new Date();
@@ -902,6 +963,7 @@ async function redispatchAfterDriverCancel(booking, driverId, policy, chance) {
   // SEARCHING and the payment is already locked in).
   cancelPaymentTimeout(booking._id);
   cancelNoShowSchedule(booking._id);
+  cancelRideEndSchedule(booking._id);
 
   await applyDriverPenalty(driverId, driverPenalty, booking);
 
@@ -983,6 +1045,7 @@ async function terminateBookingByDriver(
 
   cancelPaymentTimeout(booking._id);
   cancelNoShowSchedule(booking._id);
+  cancelRideEndSchedule(booking._id);
   cancelScheduledBookingJobs(booking._id).catch(() => {});
   await applyDriverPenalty(driverId, driverPenalty, booking);
 
@@ -1100,6 +1163,7 @@ async function cancelOutstationByDriver(booking, driverId, reason = '') {
 
     cancelPaymentTimeout(booking._id);
     cancelNoShowSchedule(booking._id);
+    cancelRideEndSchedule(booking._id);
     cancelScheduledBookingJobs(booking._id).catch(() => {});
 
     await applyDriverPenalty(driverId, driverPenalty, booking);
@@ -1196,6 +1260,7 @@ async function cancelOutstationByDriver(booking, driverId, reason = '') {
   await booking.save();
   cancelPaymentTimeout(booking._id);
   cancelNoShowSchedule(booking._id);
+  cancelRideEndSchedule(booking._id);
 
   await applyDriverPenalty(driverId, driverPenalty, booking);
   await applyOutstationDriverCancellationStats(driverId, booking, {
@@ -1332,6 +1397,22 @@ export async function cancelBookingByDriverService(driverId, bookingId, reason =
       400,
       'Trip is already in progress — please contact support to cancel',
     );
+  }
+
+  // Scheduled / outstation: drivers may cancel only before pickup time.
+  // After the ride time they must start/complete the trip (or contact support).
+  if (
+    booking.bookingType === BOOKING_TYPE.SCHEDULED
+    || booking.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    const { resolveBookingSearchStartAt } = await import('../utils/bookingInbox.js');
+    const startAt = resolveBookingSearchStartAt(booking);
+    if (startAt && startAt.getTime() <= Date.now()) {
+      throw new ApiError(
+        400,
+        'Ride time has passed — you can no longer cancel this trip',
+      );
+    }
   }
 
   // Outstation runs on its own time-based policy + emergency-pool

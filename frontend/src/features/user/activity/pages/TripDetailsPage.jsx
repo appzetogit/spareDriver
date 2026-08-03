@@ -46,6 +46,7 @@ import { C2S_EVENTS, S2C_EVENTS } from '../../../../constants/socketEvents';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import { formatPickupDateTime } from '../../../../utils/datetime';
+import { maskPersonName } from '../../../../utils/formatters';
 import RescheduleBookingSheet, {
   canRescheduleBooking,
 } from '../../booking/components/RescheduleBookingSheet';
@@ -277,6 +278,12 @@ const TripDetailsPage = () => {
     ? booking.driverId
     : null;
   const contactRevealed = isBookingContactRevealed(booking);
+  // Same rule as DriverAssignedPage: full name only once the ride has
+  // started (or finished). Pre-start statuses keep the masked form.
+  const displayDriverName =
+    status === BOOKING_STATUS.STARTED || status === BOOKING_STATUS.COMPLETED
+      ? driver?.name || 'Driver'
+      : maskPersonName(driver?.name) || 'Driver';
   const driverPhone = contactRevealed
     ? driver?.phone_no || driver?.phone || null
     : null;
@@ -448,7 +455,7 @@ const TripDetailsPage = () => {
 
         {driver && (
           <DriverCard
-            name={driver.name}
+            name={displayDriverName}
             photo={driverPhotoUrl}
             phone={driverPhone}
             callHref={driverCallHref}
@@ -997,12 +1004,27 @@ function FareCard({
 }
 
 function CancellationCard({ cancellation, refund, cancelledAt }) {
-  const reasonText = cancellation?.reason
-    ? String(cancellation.reason).replace(/_/g, ' ')
-    : 'Cancelled';
-  const byLabel = cancellation?.cancelledBy
-    ? `Cancelled by ${cancellation.cancelledBy}`
-    : 'Cancelled';
+  const reasonKey = cancellation?.reason ? String(cancellation.reason) : '';
+  const REASON_LABELS = {
+    no_driver_by_ride_time:
+      'No driver assigned by ride time — full refund issued',
+    no_drivers_available: 'No drivers available',
+    cancelled_by_user_after_no_drivers: 'Cancelled after no drivers found',
+    cancelled_by_user: 'Cancelled by you',
+    cancelled_by_user_after_start: 'Cancelled after trip started',
+    cancelled_by_admin: 'Cancelled by support',
+    cancelled_by_driver: 'Cancelled by driver',
+    payment_timeout: 'Payment not completed in time',
+  };
+  const reasonText =
+    REASON_LABELS[reasonKey] ||
+    (reasonKey ? reasonKey.replace(/_/g, ' ') : 'Cancelled');
+  const byLabel =
+    cancellation?.cancelledBy === 'system'
+      ? 'Auto-cancelled'
+      : cancellation?.cancelledBy
+        ? `Cancelled by ${cancellation.cancelledBy}`
+        : 'Cancelled';
   return (
     <Card className="bg-rose-50 border border-rose-100">
       <div className="flex items-start gap-3">
@@ -1011,7 +1033,7 @@ function CancellationCard({ cancellation, refund, cancelledAt }) {
           <p className="text-sm font-semibold text-rose-900 capitalize">
             {byLabel}
           </p>
-          <p className="text-xs text-rose-800 mt-0.5 capitalize">{reasonText}</p>
+          <p className="text-xs text-rose-800 mt-0.5">{reasonText}</p>
           {cancelledAt && (
             <p className="text-[11px] text-rose-700/80 mt-1">
               {formatDateTime(cancelledAt)}

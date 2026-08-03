@@ -56,7 +56,7 @@ import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
  *   with the larger `_id` loses and is rolled back to PENDING_ASSIGNMENT.
  *
  *   Buffer:
- *     ServicePricing.scheduledDispatch.RIDE_BUFFER_MINUTES (default 30)
+ *     ServicePricing.scheduledDispatch.RIDE_BUFFER_MINUTES (default 120)
  *     — same knob the wave dispatcher reads, so manual + auto pipelines
  *     stay in lockstep.
  */

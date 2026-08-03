@@ -112,9 +112,9 @@ const WalletPage = () => {
           </p>
           <p className="text-3xl font-bold mt-1">{balanceLabel}</p>
           {heldRupees > 0 && (
-            <p className="text-[11px] text-emerald-200 mt-1">
-              {fmtRupees(heldRupees)} held against active bookings &middot; total
-              balance {fmtRupees(balance)}
+            <p className="text-[11px] text-white/60 mt-1.5 leading-snug">
+              {fmtRupees(heldRupees)} reserved for active bookings
+              (of {fmtRupees(balance)} total)
             </p>
           )}
           <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] text-white/80">
@@ -259,12 +259,7 @@ function TransactionDetailSheet({ tx, onClose }) {
 
   const rzp = tx?.razorpay || {};
   const grossPaise = Number(rzp.amountPaise) || 0;
-  const feePaise = Number(rzp.feePaise) || 0;
-  const netPaise =
-    Number(rzp.netAmountPaise) ||
-    Math.max(0, grossPaise - feePaise);
-  const showTopupBreakdown =
-    tx?.source === 'topup' && (grossPaise > 0 || feePaise > 0);
+  const showTopupBreakdown = tx?.source === 'topup' && grossPaise > 0;
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={title} showHandle>
@@ -293,8 +288,6 @@ function TransactionDetailSheet({ tx, onClose }) {
           {showTopupBreakdown ? (
             <TopupBreakdownBlock
               grossPaise={grossPaise}
-              feePaise={feePaise}
-              netPaise={netPaise}
               credited={tx.amountRupees}
             />
           ) : (
@@ -356,10 +349,9 @@ function TransactionDetailSheet({ tx, onClose }) {
   );
 }
 
-function TopupBreakdownBlock({ grossPaise, feePaise, netPaise, credited }) {
+function TopupBreakdownBlock({ grossPaise, credited }) {
   const gross = grossPaise / 100;
-  const fee = feePaise / 100;
-  const net = netPaise > 0 ? netPaise / 100 : Number(credited) || 0;
+  const creditedAmt = Number(credited) || gross;
 
   return (
     <div className="bg-gray-50 rounded-2xl divide-y divide-border-light">
@@ -372,19 +364,9 @@ function TopupBreakdownBlock({ grossPaise, feePaise, netPaise, credited }) {
           value={fmtRupees(gross)}
         />
       )}
-      {feePaise > 0 && (
-        <DetailLine
-          icon={Receipt}
-          tone="text-amber-700 bg-amber-100"
-          label="Razorpay fee"
-          sublabel="Platform fee incl. GST"
-          value={`\u2212${fmtRupees(fee)}`}
-          valueClass="text-rose-700"
-        />
-      )}
       <div className="flex items-center justify-between px-4 py-3">
         <p className="text-sm font-semibold text-text">Credited to wallet</p>
-        <p className="text-base font-bold text-success">{fmtRupees(net)}</p>
+        <p className="text-base font-bold text-success">{fmtRupees(creditedAmt)}</p>
       </div>
     </div>
   );
@@ -431,7 +413,7 @@ function sourceLabel(source) {
     case 'booking_refund':
       return 'Booking refund';
     case 'booking_no_drivers_refund':
-      return 'Refund (no drivers)';
+      return 'Refund (no driver by ride time)';
     case 'waiting_charge':
       return 'Waiting charge';
     case 'waiting_buffer_refund':

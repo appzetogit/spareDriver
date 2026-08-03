@@ -98,7 +98,9 @@ export const PAYMENT_POLICY = Object.freeze({
   PRE_PAY_WINDOW_SECONDS: 60,
   RIDE_OTP_LENGTH: 4,
   RIDE_OTP_MAX_ATTEMPTS: 5,
-  EXTENSION_PROMPT_LEAD_SECONDS: 5 * 60,
+  EXTENSION_PROMPT_LEAD_SECONDS: 15 * 60,
+  /** After booked end, seconds left to extend before auto-complete. */
+  RIDE_END_EXTENSION_GRACE_SECONDS: 5 * 60,
 });
 
 /**
@@ -114,8 +116,7 @@ export const SCHEDULED_BOOKING = Object.freeze({
   LONG_LEAD_HOURS: 4,
   LEAD_SCHEDULE_HOUR: 18,
   EMERGENCY_POOL_MINUTES: 120,
-  RETRY_DELAY_MINUTES: 5,
-  RIDE_BUFFER_MINUTES: 30,
+  RIDE_BUFFER_MINUTES: 120,
   MIN_SCHEDULED_LEAD_HOURS: 2,
   REMINDER_OFFSETS_MINUTES: [60, 15],
 });
@@ -136,10 +137,11 @@ export function mergeScheduledDispatchConfig(override) {
 
 /**
  * Statuses where the counterparty's phone may be shown. Hidden until
- * the driver taps "I have arrived". Keep in sync with backend
+ * the driver taps "Start to pickup". Keep in sync with backend
  * `bookingStatus.js`.
  */
 export const CONTACT_REVEALED_STATUSES = Object.freeze([
+  BOOKING_STATUS.EN_ROUTE,
   BOOKING_STATUS.ARRIVED,
   BOOKING_STATUS.STARTED,
   BOOKING_STATUS.COMPLETED,
@@ -154,7 +156,8 @@ export function isBookingContactRevealed(bookingOrStatus) {
   if (CONTACT_REVEALED_STATUSES.includes(status)) return true;
   if (
     status === BOOKING_STATUS.CANCELLED &&
-    bookingOrStatus?.timeline?.arrivedAt
+    (bookingOrStatus?.timeline?.enRouteAt ||
+      bookingOrStatus?.timeline?.arrivedAt)
   ) {
     return true;
   }

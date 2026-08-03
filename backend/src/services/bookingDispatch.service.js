@@ -365,6 +365,11 @@ export async function broadcastScheduledInboxService(bookingId, opts = {}) {
     return { ok: false, reason: 'not_searching' };
   }
 
+  const startAt = resolveBookingSearchStartAt(booking);
+  if (startAt && startAt.getTime() <= Date.now()) {
+    return { ok: false, reason: 'ride_time_passed' };
+  }
+
   clearWaveTimer(bookingId);
   await selfHealDriverLockState();
 
@@ -692,6 +697,26 @@ async function shouldImmediatelyLockDriver(booking) {
 
 /** Driver accepts a live offer for a booking. First driver wins (atomic claim). */
 export async function acceptBookingService(bookingId, driverId) {
+  // Hard stop: an actively locked driver must not claim another ride,
+  // even if a stale offer is still sitting in their inbox.
+  const driverRow = await Driver.findById(driverId).select('isOnTrip').lean();
+  if (!driverRow) return { ok: false, reason: 'driver_not_found' };
+  if (driverRow.isOnTrip) {
+    return { ok: false, reason: 'driver_on_trip' };
+  }
+
+  // Reject accepts after pickup time for scheduled/outstation inbox offers.
+  const preview = await Booking.findById(bookingId)
+    .select('bookingType hourly outstation status driverId')
+    .lean();
+  if (!preview) return { ok: false, reason: 'not_found' };
+  if (isInboxBookingType(preview.bookingType)) {
+    const startAt = resolveBookingSearchStartAt(preview);
+    if (startAt && startAt.getTime() <= Date.now()) {
+      return { ok: false, reason: 'ride_time_passed' };
+    }
+  }
+
   // Atomic first-wins: claim the booking while still SEARCHING and this
   // driver is in the pending set. Concurrent accepts fail the filter.
   const booking = await Booking.findOneAndUpdate(
@@ -1013,19 +1038,86 @@ export async function getPendingOfferForDriverService(driverId) {
 export async function listIncomingScheduledForDriverService(driverId) {
   if (!driverId) return { requests: [], count: 0 };
 
+  // While locked on an active trip, hide inbox accepts entirely.
+  const driverRow = await Driver.findById(driverId).select('isOnTrip').lean();
+  if (driverRow?.isOnTrip) {
+    return { requests: [], count: 0 };
+  }
+
+  const now = new Date();
+
+  // Opportunistic cleanup: past-start inbox rows still holding this driver
+  // get auto-refunded (best-effort) so they disappear without waiting for
+  // the next escalate-batch sweep.
+  Booking.find({
+    isDeleted: false,
+    status: {
+      $in: [
+        BOOKING_STATUS.SEARCHING,
+        BOOKING_STATUS.PENDING_ASSIGNMENT,
+        BOOKING_STATUS.IN_EMERGENCY_POOL,
+        BOOKING_STATUS.NO_DRIVERS_FOUND,
+      ],
+    },
+    bookingType: { $in: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION] },
+    driverId: null,
+    'dispatch.pendingOfferIds': driverId,
+    $or: [
+      { 'hourly.scheduledStartAt': { $lte: now } },
+      { 'outstation.pickupAt': { $lte: now } },
+      { 'outstation.startDate': { $lte: now } },
+    ],
+  })
+    .select('_id')
+    .lean()
+    .then(async (stale) => {
+      if (!stale?.length) return;
+      const { expireUnassignedScheduledBooking } = await import(
+        './bookingScheduled.service.js'
+      );
+      for (const row of stale) {
+        expireUnassignedScheduledBooking(row._id).catch((err) =>
+          console.warn(
+            '[dispatch] opportunistic expire failed for',
+            String(row._id),
+            err?.message,
+          ),
+        );
+      }
+    })
+    .catch(() => {});
+
   const bookings = await Booking.find({
     isDeleted: false,
     status: BOOKING_STATUS.SEARCHING,
     bookingType: { $in: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION] },
     'dispatch.pendingOfferIds': driverId,
+    $or: [
+      { 'hourly.scheduledStartAt': { $gt: now } },
+      {
+        'hourly.scheduledStartAt': { $exists: false },
+        'outstation.pickupAt': { $gt: now },
+      },
+      {
+        'hourly.scheduledStartAt': { $exists: false },
+        'outstation.pickupAt': { $exists: false },
+        'outstation.startDate': { $gt: now },
+      },
+    ],
   })
     .sort({ 'hourly.scheduledStartAt': 1, 'outstation.pickupAt': 1 })
     .lean();
 
+  // Extra guard for mixed/legacy docs that slipped past the query.
+  const futureBookings = bookings.filter((booking) => {
+    const startAt = resolveBookingSearchStartAt(booking);
+    return startAt && startAt.getTime() > Date.now();
+  });
+
   let requests = [];
-  if (bookings.length) {
-    const carIds = [...new Set(bookings.map((b) => String(b.carId || '')).filter(Boolean))];
-    const userIds = [...new Set(bookings.map((b) => String(b.userId || '')).filter(Boolean))];
+  if (futureBookings.length) {
+    const carIds = [...new Set(futureBookings.map((b) => String(b.carId || '')).filter(Boolean))];
+    const userIds = [...new Set(futureBookings.map((b) => String(b.userId || '')).filter(Boolean))];
 
     const [cars, customers] = await Promise.all([
       carIds.length
@@ -1046,7 +1138,7 @@ export async function listIncomingScheduledForDriverService(driverId) {
     const carById = new Map(cars.map((c) => [String(c._id), c]));
     const customerById = new Map(customers.map((u) => [String(u._id), u]));
 
-    requests = bookings.map((booking) => {
+    requests = futureBookings.map((booking) => {
       const offerRow = (booking.dispatch?.offers || []).find(
         (o) => String(o.driverId) === String(driverId) && o.response == null,
       );
@@ -1083,11 +1175,24 @@ export async function listIncomingScheduledForDriverService(driverId) {
 
 export async function countIncomingScheduledForDriverService(driverId) {
   if (!driverId) return 0;
+  const now = new Date();
   const bookingCount = await Booking.countDocuments({
     isDeleted: false,
     status: BOOKING_STATUS.SEARCHING,
     bookingType: { $in: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION] },
     'dispatch.pendingOfferIds': driverId,
+    $or: [
+      { 'hourly.scheduledStartAt': { $gt: now } },
+      {
+        'hourly.scheduledStartAt': { $exists: false },
+        'outstation.pickupAt': { $gt: now },
+      },
+      {
+        'hourly.scheduledStartAt': { $exists: false },
+        'outstation.pickupAt': { $exists: false },
+        'outstation.startDate': { $gt: now },
+      },
+    ],
   });
   let subCount = 0;
   try {

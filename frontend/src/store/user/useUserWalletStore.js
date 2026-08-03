@@ -32,10 +32,15 @@ const EMPTY_WALLET = {
 // Normalise the server's wallet shape into a fully-defaulted object so
 // every consumer (top-bar badge, confirm screen, wallet page) can rely
 // on the held/available fields existing even on old API responses.
+// Partial patches that omit `heldRupees` keep the previous hold so we
+// never flash gross `balance` as spendable after a top-up.
 const normaliseWallet = (wallet, prev = EMPTY_WALLET) => {
   const w = wallet || {};
   const balance = Number(w.balance) || 0;
-  const heldRupees = Number(w.heldRupees) || 0;
+  const heldRupees =
+    w.heldRupees != null
+      ? Number(w.heldRupees) || 0
+      : Number(prev.heldRupees) || 0;
   const available =
     w.availableRupees != null
       ? Number(w.availableRupees) || 0
@@ -44,8 +49,14 @@ const normaliseWallet = (wallet, prev = EMPTY_WALLET) => {
     balance,
     heldRupees,
     availableRupees: available,
-    totalCredited: Number(w.totalCredited) || 0,
-    totalSpent: Number(w.totalSpent) || 0,
+    totalCredited:
+      w.totalCredited != null
+        ? Number(w.totalCredited) || 0
+        : Number(prev.totalCredited) || 0,
+    totalSpent:
+      w.totalSpent != null
+        ? Number(w.totalSpent) || 0
+        : Number(prev.totalSpent) || 0,
     currency: w.currency || prev.currency || 'INR',
   };
 };

@@ -5,7 +5,7 @@ import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
-import { useGeolocation } from '../../../../hooks/useGeolocation';
+import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
@@ -26,7 +26,7 @@ const DriverTripInProgressPage = () => {
     if (!booking) fetchActive().catch(() => {});
   }, [booking, fetchActive]);
 
-  const { coords: driverCoords } = useGeolocation({ enabled: true });
+  const { coords: driverCoords } = useDriverLocationStatus();
   const driverPoint = useMemo(() => {
     if (!driverCoords) return null;
     return { lat: driverCoords.lat, lng: driverCoords.lng };

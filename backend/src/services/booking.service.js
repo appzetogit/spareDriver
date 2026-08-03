@@ -14,6 +14,10 @@ import {
   resumeNoShowScheduleIfNeeded,
 } from './bookingNoShowTimeout.service.js';
 import {
+  cancelRideEndSchedule,
+  resumeRideEndScheduleIfNeeded,
+} from './bookingRideEndTimeout.service.js';
+import {
   loadCancellationPolicy,
   computeUserCancellation,
   computeDriverCancellation,
@@ -317,7 +321,7 @@ export function sanitizeBookingForDriver(booking) {
     });
   }
 
-  // Hide customer phone/email until the driver marks arrived at pickup.
+  // Hide customer phone/email until the driver starts heading to pickup.
   if (!isBookingContactRevealed(obj) && obj.userId && typeof obj.userId === 'object') {
     stripContactIfHidden(obj.userId);
   }
@@ -326,7 +330,7 @@ export function sanitizeBookingForDriver(booking) {
 }
 
 /**
- * User-facing booking view: hide the driver's phone until arrived.
+ * User-facing booking view: hide the driver's phone until start-to-pickup.
  */
 export function sanitizeBookingForUser(booking) {
   if (!booking) return booking;
@@ -374,6 +378,17 @@ async function attachCancellationPreview(booking, side, { driverId } = {}) {
         chance,
         policy,
       };
+      // Same lead window the server uses for "Start to pickup" so the
+      // FE can disable the CTA instead of letting a tap bounce as 409.
+      try {
+        const dispatchCfg = await loadScheduledDispatchConfig(booking.serviceType);
+        const lead = Number(dispatchCfg?.RIDE_BUFFER_MINUTES);
+        booking.enRouteLeadMinutes = Number.isFinite(lead) && lead >= 0
+          ? lead
+          : SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+      } catch {
+        booking.enRouteLeadMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+      }
     } else {
       booking.cancellationPreview = {
         side: 'user',
@@ -482,6 +497,7 @@ export async function getActiveBookingForUserService(userId) {
   // Re-attach it here so the prompt + auto-complete cycle never goes
   // missing for an active customer fetch.
   resumeNoShowScheduleIfNeeded(booking).catch(() => {});
+  resumeRideEndScheduleIfNeeded(booking);
   return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
 }
 
@@ -543,6 +559,8 @@ export async function getBookingByIdService(bookingId, { userId, driverId } = {}
   query.populate(CAR_DRIVER_POPULATE);
   const booking = await query.lean();
   if (!booking) throw new ApiError(404, 'Booking not found');
+  resumeNoShowScheduleIfNeeded(booking).catch(() => {});
+  resumeRideEndScheduleIfNeeded(booking);
   if (driverId) {
     return attachCancellationPreview(
       sanitizeBookingForDriver(booking),
@@ -568,6 +586,7 @@ export async function getActiveBookingForDriverService(driverId) {
     .populate(CAR_DRIVER_POPULATE)
     .lean();
   resumeNoShowScheduleIfNeeded(booking).catch(() => {});
+  resumeRideEndScheduleIfNeeded(booking);
   return attachCancellationPreview(
     sanitizeBookingForDriver(booking),
     'driver',
@@ -901,8 +920,8 @@ export async function createBookingService(userId, body) {
     body.bookingType = BOOKING_TYPE.OUTSTATION;
   }
 
-  // The "one active booking per user" rule is gone — users can run
-  // bookings in parallel as long as no two collide on the same car.
+  // Conflict is car-based, not user-based: a customer may book another
+  // trip on a different free car even while one ride is in progress.
   await assertCarAvailableForWindow({ userId, carId, body });
 
   // Re-compute fare server-side. Client-supplied totals are never trusted.
@@ -1227,18 +1246,23 @@ export async function cancelBookingByUserService(
   const wasPaid = booking.paymentStatus === BOOKING_PAYMENT_STATUS.PAID;
   const paidViaWallet = booking.paymentMethod === BOOKING_PAYMENT_METHOD.WALLET;
   const wasNoDriversFound = booking.status === BOOKING_STATUS.NO_DRIVERS_FOUND;
+  const resolvedReason =
+    reason ||
+    (cancelledBy === 'admin'
+      ? 'cancelled_by_admin'
+      : wasNoDriversFound
+        ? 'cancelled_by_user_after_no_drivers'
+        : tripStarted
+          ? 'cancelled_by_user_after_start'
+          : 'cancelled_by_user');
+  const isNoDriverSystemRefund =
+    resolvedReason === 'no_driver_by_ride_time'
+    || resolvedReason === 'no_drivers_available'
+    || wasNoDriversFound;
 
   booking.status = BOOKING_STATUS.CANCELLED;
   booking.cancellation = {
-    reason:
-      reason ||
-      (cancelledBy === 'admin'
-        ? 'cancelled_by_admin'
-        : wasNoDriversFound
-          ? 'cancelled_by_user_after_no_drivers'
-          : tripStarted
-            ? 'cancelled_by_user_after_start'
-            : 'cancelled_by_user'),
+    reason: resolvedReason,
     cancelledBy,
     feeCharged,
     refundAmount,
@@ -1273,6 +1297,7 @@ export async function cancelBookingByUserService(
   // though they collected a (penalised) fare share elsewhere.
   cancelPaymentTimeout(bookingId);
   cancelNoShowSchedule(bookingId);
+  cancelRideEndSchedule(bookingId);
   // Scheduled-ride safety: drop any BullMQ jobs (assign / escalate /
   // reminders) so a cancelled booking never wakes back up.
   cancelScheduledBookingJobs(bookingId).catch(() => {});
@@ -1283,15 +1308,19 @@ export async function cancelBookingByUserService(
     if (paidViaWallet) {
       // Credit the wallet right now (atomic + ledgered).
       try {
+        const refundDescription =
+          resolvedReason === 'no_driver_by_ride_time'
+            ? `Refund \u2014 no driver assigned by ride time for ${booking.bookingNumber}`
+            : isNoDriverSystemRefund
+              ? `Refund \u2014 no drivers available for ${booking.bookingNumber}`
+              : `Refund \u2014 booking ${booking.bookingNumber} cancelled (fee \u20B9${feeCharged})`;
         await creditWalletService({
           userId: booking.userId,
           amount: refundAmount,
-          source: wasNoDriversFound
+          source: isNoDriverSystemRefund
             ? WALLET_TXN_SOURCE.BOOKING_NO_DRIVERS_REFUND
             : WALLET_TXN_SOURCE.BOOKING_REFUND,
-          description: wasNoDriversFound
-            ? `Refund \u2014 no drivers available for ${booking.bookingNumber}`
-            : `Refund \u2014 booking ${booking.bookingNumber} cancelled (fee \u20B9${feeCharged})`,
+          description: refundDescription,
           refType: 'Booking',
           refId: String(booking._id),
         });
@@ -1306,7 +1335,7 @@ export async function cancelBookingByUserService(
       // Legacy Razorpay path — admin processes manually.
       refundRecord = await issueBookingRefundService(booking, {
         initiatedBy:
-          cancelledBy === 'admin'
+          cancelledBy === 'admin' || cancelledBy === 'system'
             ? REFUND_INITIATED_BY.ADMIN
             : REFUND_INITIATED_BY.USER,
         reason: booking.cancellation.reason,
@@ -1395,6 +1424,20 @@ export async function cancelBookingByUserService(
     emitToDriver(previouslyAssignedDriver, S2C_EVENTS.BOOKING_UPDATED, payload);
   }
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
+
+  const cancelNotifyBody =
+    resolvedReason === 'no_driver_by_ride_time'
+      ? 'No driver was available by your scheduled ride time. A full refund has been credited to your wallet.'
+      : resolvedReason === 'no_drivers_available'
+        ? 'No drivers were available for your booking. You can search again or cancel for a refund.'
+        : '';
+  if (cancelNotifyBody || cancelledBy === 'system') {
+    notifyUserBookingCancelled(
+      booking.userId,
+      booking,
+      cancelNotifyBody || 'Your booking has been cancelled.',
+    ).catch(() => null);
+  }
 
   return booking.toObject();
 }

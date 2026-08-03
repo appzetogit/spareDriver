@@ -416,12 +416,11 @@ export async function createTopupOrderService(userId, amount) {
 /**
  * Validate a Razorpay payment signature, mark the matching PENDING
  * transaction as SUCCESS, and atomically credit the wallet with the
- * **net** amount (gross paid − Razorpay fee including GST).
+ * **full** amount the user topped up (e.g. ₹500 in → ₹500 credited).
  *
- * Example: user pays ₹500 → Razorpay fee (~2% + GST) is deducted →
- * only the remaining rupees land in the wallet. Fee comes from the
- * captured payment entity (`fee` already includes GST; do not also
- * subtract `tax`).
+ * Razorpay’s gateway fee is absorbed by the platform — it is stored on
+ * the transaction for reconciliation but is NOT deducted from the
+ * user’s wallet balance.
  *
  * Idempotent: if the order has already been credited (matching SUCCESS
  * row exists) we no-op and return the latest balance.
@@ -479,17 +478,19 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
     0,
     Number(payment.amount) || Number(pending.razorpay?.amountPaise) || toPaise(pending.amountRupees),
   );
-  // Razorpay docs: `fee` is the total deduction including GST.
+  // Kept for admin reconciliation only — never subtracted from credit.
   const feePaise = Math.max(0, Number(payment.fee) || 0);
   const taxPaise = Math.max(0, Number(payment.tax) || 0);
-  const netPaise = Math.max(0, grossPaise - feePaise);
-  const amt = round2(netPaise / 100);
+  // Full top-up amount lands in the wallet (platform absorbs gateway fee).
+  const orderedRupees = round2(Number(pending.amountRupees) || 0);
+  const paidRupees = round2(grossPaise / 100);
+  const amt = orderedRupees > 0 ? orderedRupees : paidRupees;
 
   if (amt <= 0) {
-    throw new ApiError(400, 'Net credit after gateway fee is zero');
+    throw new ApiError(400, 'Top-up amount is zero');
   }
 
-  const grossRupees = round2(grossPaise / 100);
+  const grossRupees = paidRupees;
   const feeRupees = round2(feePaise / 100);
 
   const updated = await User.findOneAndUpdate(
@@ -502,10 +503,7 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
   pending.status = WALLET_TXN_STATUS.SUCCESS;
   pending.amountRupees = amt;
   pending.balanceAfter = round2(updated.wallet?.balance || 0);
-  pending.description =
-    feePaise > 0
-      ? `Wallet top-up \u20B9${grossRupees} (net \u20B9${amt} after \u20B9${feeRupees} Razorpay fee)`
-      : `Wallet top-up \u20B9${amt}`;
+  pending.description = `Wallet top-up \u20B9${amt}`;
   pending.razorpay = {
     ...(pending.razorpay?.toObject?.() || pending.razorpay || {}),
     paymentId,
@@ -513,17 +511,17 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
     amountPaise: grossPaise,
     feePaise,
     taxPaise,
-    netAmountPaise: netPaise,
+    // netAmountPaise = credited amount (full top-up; fee not deducted)
+    netAmountPaise: toPaise(amt),
   };
   await pending.save();
 
+  // Full snapshot (balance + held + available) so the client never
+  // flashes gross balance as "available" after a top-up.
+  const wallet = await getWalletService(userId);
+
   return {
-    wallet: {
-      balance: round2(updated.wallet?.balance || 0),
-      totalCredited: round2(updated.wallet?.totalCredited || 0),
-      totalSpent: round2(updated.wallet?.totalSpent || 0),
-      currency: updated.wallet?.currency || 'INR',
-    },
+    wallet,
     transaction: pending.toObject(),
     alreadyCredited: false,
     creditedRupees: amt,

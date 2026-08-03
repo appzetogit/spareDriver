@@ -19,7 +19,11 @@ import { SCHEDULED_BOOKING } from '../constants/bookingStatus.js';
  *   escalate-batch (repeatable, every EMERGENCY_POOL_BATCH_INTERVAL_MINUTES)
  *     → scans for unmatched scheduled bookings past escalateAt and
  *       moves them into the admin emergency pool. Worst-case lag into
- *       the pool ≈ one batch interval after cutoff.
+ *       the pool ≈ one batch interval after cutoff. Also expires
+ *       unassigned bookings past pickup (auto-refund safety net).
+ *
+ *   expire-unassigned (per booking, fires at scheduledStartAt / pickupAt)
+ *     → if still unmatched at ride time, cancel + full wallet refund.
  *
  * Legacy (still handled by the worker for in-flight / drain):
  *   retry-{n}, escalate (per-booking) — no longer enqueued for new
@@ -39,6 +43,7 @@ export const SCHEDULED_JOB_NAMES = Object.freeze({
   REMINDER: 'reminder',
   ESCALATE: 'escalate',
   ESCALATE_BATCH: 'escalate-batch',
+  EXPIRE_UNASSIGNED: 'expire-unassigned',
 });
 
 export const ESCALATE_BATCH_JOB_ID = 'escalate-batch-recurring';
@@ -77,6 +82,9 @@ export async function getScheduledBookingQueue() {
 function jobIdFor(kind, bookingId, qualifier) {
   if (kind === SCHEDULED_JOB_NAMES.ASSIGN) return `assign-${String(bookingId)}`;
   if (kind === SCHEDULED_JOB_NAMES.ESCALATE) return `escalate-${String(bookingId)}`;
+  if (kind === SCHEDULED_JOB_NAMES.EXPIRE_UNASSIGNED) {
+    return `expire-unassigned-${String(bookingId)}`;
+  }
   if (kind === SCHEDULED_JOB_NAMES.RETRY) {
     return `retry-${Number(qualifier) || 0}-${String(bookingId)}`;
   }
@@ -107,6 +115,7 @@ async function loadDispatchConfig(serviceType) {
  * Reminder jobs are queued later via `enqueueReminderJobsForBooking`.
  * Escalation is handled by the recurring `escalate-batch` job — not
  * per-booking delayed escalate jobs.
+ * Also queues `expire-unassigned` at pickup so unmatched rides auto-refund.
  *
  * @param {{ _id: any, serviceType: string, hourly?: { scheduledStartAt: Date|string|null } }} booking
  * @returns {Promise<boolean>} true if at least one job was enqueued
@@ -132,6 +141,7 @@ export async function enqueueScheduledBookingJobs(booking) {
   const assignDelay = decision.immediate
     ? 0
     : Math.max(0, new Date(decision.assignAt).getTime() - now);
+  const expireDelay = Math.max(0, start - now);
 
   try {
     await queue.add(
@@ -140,6 +150,14 @@ export async function enqueueScheduledBookingJobs(booking) {
       {
         jobId: jobIdFor(SCHEDULED_JOB_NAMES.ASSIGN, bookingId),
         delay: assignDelay,
+      },
+    );
+    await queue.add(
+      SCHEDULED_JOB_NAMES.EXPIRE_UNASSIGNED,
+      { bookingId, scheduledStartAt: new Date(start).toISOString() },
+      {
+        jobId: jobIdFor(SCHEDULED_JOB_NAMES.EXPIRE_UNASSIGNED, bookingId),
+        delay: expireDelay,
       },
     );
     return true;
@@ -431,6 +449,7 @@ export async function removeScheduledBookingJobs(bookingId) {
     const fixed = [
       jobIdFor(SCHEDULED_JOB_NAMES.ASSIGN, bid),
       jobIdFor(SCHEDULED_JOB_NAMES.ESCALATE, bid),
+      jobIdFor(SCHEDULED_JOB_NAMES.EXPIRE_UNASSIGNED, bid),
     ];
     await Promise.all(
       fixed.map(async (id) => {
