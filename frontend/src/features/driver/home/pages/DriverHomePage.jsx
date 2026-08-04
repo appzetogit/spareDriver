@@ -31,7 +31,6 @@ import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { formatCurrency } from '../../../../utils/formatters';
 import {
   BOOKING_STATUS,
-  ACTIVE_BOOKING_STATUSES,
 } from '../../../../constants/bookingStatus';
 import OnlineBlockedDialog from '../../kit/components/OnlineBlockedDialog';
 import DriverKitHomeCard from '../../kit/components/DriverKitHomeCard';
@@ -48,6 +47,15 @@ const ACTIVE_STATUS_COPY = {
   [BOOKING_STATUS.ARRIVED]: 'At pickup — start the ride',
   [BOOKING_STATUS.STARTED]: 'Trip in progress',
 };
+
+/** Statuses a driver should see under Home → Active trips. */
+const DRIVER_HOME_ACTIVE_STATUSES = Object.freeze([
+  BOOKING_STATUS.DRIVER_ASSIGNED,
+  BOOKING_STATUS.AWAITING_PAYMENT,
+  BOOKING_STATUS.EN_ROUTE,
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+]);
 
 const DriverHomePage = () => {
   const navigate = useNavigate();
@@ -91,7 +99,7 @@ const DriverHomePage = () => {
       : summary?.activeBooking
         ? [summary.activeBooking]
         : []
-  ).filter((b) => b && ACTIVE_BOOKING_STATUSES.includes(b.status));
+  ).filter((b) => b && DRIVER_HOME_ACTIVE_STATUSES.includes(b.status));
   const cancellationChances = summary?.cancellationChances || null;
 
   const { setOnline, toggling, blocked, clearBlocked } = useDriverOnlineToggle();

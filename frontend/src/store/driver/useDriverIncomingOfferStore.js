@@ -64,12 +64,21 @@ const useDriverIncomingOfferStore = create((set, get) => ({
 
   /**
    * Idempotent offer ingest. Returns true when an offer is now showing.
-   * Scheduled inbox offers are ignored here — use
-   * `useDriverIncomingScheduledStore` instead.
+   * Inbox offers (scheduled hourly + outstation + subscription) are
+   * ignored here — use `useDriverIncomingScheduledStore` instead.
    */
   hydrateOffer(offer) {
     if (!offer?.bookingId) return false;
-    if (offer.inbox || offer.bookingType === 'scheduled') return false;
+    if (
+      offer.inbox
+      || offer.bookingType === 'scheduled'
+      || offer.bookingType === 'outstation'
+      || offer.bookingType === 'subscription'
+      || offer.kind === 'subscription'
+      || offer.serviceType === 'outstation'
+    ) {
+      return false;
+    }
     if (isOfferExpired(offer)) {
       get().clearOffer();
       return false;

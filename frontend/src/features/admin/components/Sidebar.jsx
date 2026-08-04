@@ -23,22 +23,28 @@ const navItems = [
     end: true,
     roles: ['admin'],
   },
-  { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
-  { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
   { path: '/admin/drivers', label: 'Drivers', icon: Car, end: true },
   { path: '/admin/drivers/live', label: 'Live Map', icon: Navigation },
   { path: '/admin/sos', label: 'SOS Alerts', icon: ShieldAlert, roles: ['admin', 'sub_admin', 'team_member'] },
-  { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
-  { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
-  // Ads management — admin + sub_admin can publish promotional images
-  // and short videos that surface on the user home screen.
-  { path: '/admin/ads', label: 'Ads', icon: Megaphone, roles: ['admin', 'sub_admin'] },
   {
     path: '/admin/push-notifications',
     label: 'Push Notifications',
     icon: BellRing,
     roles: ['admin', 'sub_admin'],
   },
+  // Ads management — admin + sub_admin can publish promotional images
+  // and short videos that surface on the user home screen.
+  { path: '/admin/ads', label: 'Ads', icon: Megaphone, roles: ['admin', 'sub_admin'] },
+  {
+    path: '/admin/settings/platform',
+    label: 'Vehicle Preferences',
+    icon: Tag,
+    roles: ['admin', 'sub_admin'],
+  },
+  { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
+  { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
+  { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
+  { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
   {
     label: 'Bookings',
     icon: CalendarCheck,

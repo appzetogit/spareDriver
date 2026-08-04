@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { CalendarClock } from 'lucide-react';
 import BottomSheet from '../../../../components/BottomSheet';
@@ -9,12 +9,14 @@ import {
   BOOKING_TYPE,
   SCHEDULED_BOOKING,
   mergeScheduledDispatchConfig,
+  readDispatchNumber,
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import { useUserServicePricingsStore } from '../../../../store/user/useUserPricingStore';
 import api from '../../../../utils/api';
+import { addCalendarDays, startOfLocalDay } from '../../../../utils/outstationSchedule';
 
 const EDITABLE_STATUSES = new Set([
   BOOKING_STATUS.PENDING_ASSIGNMENT,
@@ -71,10 +73,17 @@ function RescheduleBookingSheetBody({ booking, onClose, onSaved }) {
   );
   const [saving, setSaving] = useState(false);
 
-  const { data: pricingList } = useCachedQuery(
+  const cacheKey = buildCacheKey('user-services-active');
+  const { data: pricingList, refetch } = useCachedQuery(
     useUserServicePricingsStore,
-    buildCacheKey('user-services-active'),
+    cacheKey,
   );
+  // Always re-pull pricing when the sheet opens so a just-changed admin
+  // lead-time (incl. 0) isn't stuck behind the in-memory query cache.
+  useEffect(() => {
+    refetch?.();
+  }, [refetch]);
+
   const pricing = useMemo(
     () =>
       (Array.isArray(pricingList)
@@ -83,16 +92,22 @@ function RescheduleBookingSheetBody({ booking, onClose, onSaved }) {
     [pricingList, booking.serviceType],
   );
   const dispatchConfig = mergeScheduledDispatchConfig(pricing?.scheduledDispatch);
-  const minLeadHours = Math.max(
-    0,
-    Number(dispatchConfig.MIN_SCHEDULED_LEAD_HOURS)
-      || SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS
-      || 0,
+  // Admin may set lead to 0 (same-day). Do not use `|| default` — that
+  // treats 0 as missing and snaps back to SCHEDULED_BOOKING (8 days).
+  const minLeadHours = readDispatchNumber(
+    dispatchConfig.MIN_SCHEDULED_LEAD_HOURS,
+    SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS,
   );
-  const minPickupDate = useMemo(
-    () => new Date(Date.now() + minLeadHours * 60 * 60 * 1000),
-    [minLeadHours],
+  const minLeadDays = readDispatchNumber(
+    dispatchConfig.MIN_OUTSTATION_LEAD_DAYS,
+    SCHEDULED_BOOKING.MIN_OUTSTATION_LEAD_DAYS,
   );
+  const minPickupDate = useMemo(() => {
+    if (isOutstation) {
+      return addCalendarDays(new Date(), minLeadDays) || startOfLocalDay(new Date());
+    }
+    return new Date(Date.now() + minLeadHours * 60 * 60 * 1000);
+  }, [isOutstation, minLeadHours, minLeadDays]);
 
   const handleSave = async () => {
     if (!value || saving) return;
@@ -136,10 +151,12 @@ function RescheduleBookingSheetBody({ booking, onClose, onSaved }) {
           placeholder="Tap to choose a date and time"
         />
 
-        {minLeadHours > 0 && (
+        {(isOutstation ? minLeadDays > 0 : minLeadHours > 0) && (
           <p className="text-[11px] text-amber-700 flex items-start gap-1.5">
             <CalendarClock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            Pickups must be at least {minLeadHours} hour{minLeadHours === 1 ? '' : 's'} from now.
+            {isOutstation
+              ? `Pickups must be at least ${minLeadDays} day${minLeadDays === 1 ? '' : 's'} from today.`
+              : `Pickups must be at least ${minLeadHours} hour${minLeadHours === 1 ? '' : 's'} from now.`}
           </p>
         )}
 

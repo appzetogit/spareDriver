@@ -77,7 +77,9 @@ export function useNearbyDrivers({
     loading,
     error,
     refresh,
-  } = useCachedQuery(useNearbyDriversStore, cacheKey, queryParams || {}, {
+  } = useCachedQuery(useNearbyDriversStore, cacheKey, queryParams, {
+    // Only hit the API once we have a snapped lat/lng — otherwise the
+    // backend 400 ("lat and lng query params are required") surfaces on home.
     enabled: enabled && !!queryParams,
   });
 

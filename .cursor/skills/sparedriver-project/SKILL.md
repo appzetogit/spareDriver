@@ -71,7 +71,7 @@ frontend/src/
 
 Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
 
-Inbox auto-search (scheduled hourly + outstation bookings + subscription assignment): `bookingScheduled.service` (`decideScheduleTier` defers via admin `scheduledDispatch` windows) / `bookingDispatch.broadcastScheduledInboxService` / `subscriptionDispatch.service`. Admin knobs: `ServicePricing.scheduledDispatch` (hourly + outstation pricing modal) and `AppSettings.subscriptionDispatch` (Manage Subscriptions). Drivers see offers in My Trips → Incoming via `useDriverIncomingScheduledStore`.
+Inbox auto-search (scheduled hourly + outstation bookings + subscription assignment): `bookingScheduled.service` (`decideScheduleTier` for hourly hours; `decideOutstationScheduleTiers` for outstation calendar days via `MIN_OUTSTATION_LEAD_DAYS` / `DRIVER_VISIBILITY_DAYS` / `EMERGENCY_POOL_DAYS`) / `bookingDispatch.broadcastScheduledInboxService` / `subscriptionDispatch.service`. Outstation strips pickup coords until trip-day midnight (`applyOutstationLocationPrivacy`). Admin knobs: `ServicePricing.scheduledDispatch` (hourly + outstation pricing modal) and `AppSettings.subscriptionDispatch` (Manage Subscriptions). Drivers see offers in My Trips → Incoming via `useDriverIncomingScheduledStore`. Outstation ARRIVED never arms hourly no-show auto-complete; stuck no-OTP trips are settled by admin via `POST /admin/outstation-assignments/:id/settle-arrived` (Manage Outstation Assignments → Settle).
 
 ## Naming Conventions
 

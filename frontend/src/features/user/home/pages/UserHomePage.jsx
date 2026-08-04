@@ -176,7 +176,8 @@ const UserHomePage = () => {
                 <button
                   type="button"
                   onClick={refreshDrivers}
-                  className="p-1.5 rounded-full hover:bg-gray-200 text-text-muted"
+                  disabled={!center}
+                  className="p-1.5 rounded-full hover:bg-gray-200 text-text-muted disabled:opacity-40 disabled:pointer-events-none"
                   aria-label="Refresh nearby drivers"
                 >
                   <RefreshCw

@@ -19,6 +19,26 @@ import api from '../../utils/api';
  * `booking` — keeps the socket and REST paths consistent.
  */
 
+/**
+ * Extension endpoints often return `driverId` as a bare ObjectId string
+ * (unpopulated). Replacing the store booking wholesale would wipe the
+ * populated driver object from GET /active and collapse the "Your Driver"
+ * card. Keep the existing object when the id is unchanged.
+ */
+function withPreservedDriver(prev, next) {
+  if (!next) return next;
+  const prevDriver = prev?.driverId;
+  if (!prevDriver || typeof prevDriver !== 'object' || !prevDriver._id) {
+    return next;
+  }
+  const nextDriver = next.driverId;
+  if (nextDriver && typeof nextDriver === 'object') return next;
+  if (nextDriver != null && String(nextDriver) === String(prevDriver._id)) {
+    return { ...next, driverId: prevDriver };
+  }
+  return next;
+}
+
 const useUserActiveBookingStore = create((set, get) => ({
   booking: null,
   loading: false,
@@ -313,7 +333,9 @@ const useUserActiveBookingStore = create((set, get) => ({
       : { additionalHours: Number(amount) };
     const res = await api.post(`/auth/bookings/${id}/extensions/initiate`, body);
     const data = res?.data?.data || {};
-    if (data.booking) set({ booking: data.booking });
+    if (data.booking) {
+      set({ booking: withPreservedDriver(get().booking, data.booking) });
+    }
     return data;
   },
 
@@ -329,7 +351,9 @@ const useUserActiveBookingStore = create((set, get) => ({
       otp,
     });
     const data = res?.data?.data || {};
-    if (data.booking) set({ booking: data.booking });
+    if (data.booking) {
+      set({ booking: withPreservedDriver(get().booking, data.booking) });
+    }
     return data;
   },
 
@@ -344,7 +368,9 @@ const useUserActiveBookingStore = create((set, get) => ({
       extensionId,
     });
     const data = res?.data?.data || {};
-    if (data.booking) set({ booking: data.booking });
+    if (data.booking) {
+      set({ booking: withPreservedDriver(get().booking, data.booking) });
+    }
     return data;
   },
 
@@ -360,7 +386,9 @@ const useUserActiveBookingStore = create((set, get) => ({
       extensionId,
     });
     const data = res?.data?.data || {};
-    if (data.booking) set({ booking: data.booking });
+    if (data.booking) {
+      set({ booking: withPreservedDriver(get().booking, data.booking) });
+    }
     return data;
   },
 

@@ -27,7 +27,17 @@ import {
 import { getVehicleConflicts } from './vehicleConflict.service.js';
 import { loadScheduledDispatchConfig } from './bookingScheduled.service.js';
 import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
+import { cancelNoShowSchedule } from './bookingNoShowTimeout.service.js';
+import {
+  netPlatformRevenueFromFareSnapshot,
+  recordCompletedTripPlatformRevenue,
+} from './platformRevenue.service.js';
+import { creditWalletService, releaseWalletHoldService } from './wallet.service.js';
+import { creditDriverWalletService } from './driverWallet.service.js';
+import { clearPendingExtensionsOnTerminate } from './bookingExtension.service.js';
+import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 /**
  * Outstation bookings admin list + manual assign.
  *
@@ -757,5 +767,250 @@ export async function probeDriverConflictService(bookingId, driverId, staff) {
     driverConflicts: map[String(driverId)] || [],
     vehicleConflicts,
     bufferMinutes,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin settle — arrived, no OTP                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * End an outstation booking stuck at ARRIVED (customer never gave OTP).
+ *
+ * Splits the prepaid fare:
+ *   platform keeps commission + platform fee (from fareSnapshot)
+ *   admin-entered amount → driver wallet
+ *   remainder → user wallet refund
+ *
+ * Does NOT call settleDriverEarning (that would pay the full trip fare).
+ * Hourly no-show auto-complete is untouched.
+ */
+export async function adminSettleOutstationArrivedService(
+  bookingId,
+  { driverPayoutRupees, notes = '', staffId = null, staff = null } = {},
+) {
+  if (!mongoose.isValidObjectId(bookingId)) {
+    throw new ApiError(400, 'Invalid booking id');
+  }
+
+  const payout = round2(Number(driverPayoutRupees));
+  if (!Number.isFinite(payout) || payout < 0) {
+    throw new ApiError(400, 'driverPayoutRupees must be a non-negative number');
+  }
+
+  // Zone scope for team_members (same gate as detail/assign).
+  if (staff && !hasOperationalStaffAccess(staff)) {
+    const detail = await getOutstationAssignmentDetailService(bookingId, staff);
+    if (!detail) {
+      throw new ApiError(404, 'Outstation booking not found or out of zone');
+    }
+  }
+
+  cancelNoShowSchedule(bookingId);
+
+  // Claim atomically so two admins cannot double-settle.
+  const booking = await Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      serviceType: SERVICE_TYPES.OUTSTATION,
+      status: BOOKING_STATUS.ARRIVED,
+      isDeleted: false,
+      driverId: { $ne: null },
+      userId: { $ne: null },
+      'adminSettlement.settledAt': null,
+    },
+    {
+      $set: {
+        'adminSettlement.kind': 'outstation_arrived_no_otp',
+        'adminSettlement.settledAt': new Date(),
+        'adminSettlement.settledBy': staffId || null,
+      },
+    },
+    { new: true },
+  );
+
+  if (!booking) {
+    const existing = await Booking.findById(bookingId)
+      .select('serviceType status driverId userId adminSettlement')
+      .lean();
+    if (!existing || existing.serviceType !== SERVICE_TYPES.OUTSTATION) {
+      throw new ApiError(404, 'Outstation booking not found');
+    }
+    if (existing.adminSettlement?.settledAt) {
+      throw new ApiError(409, 'This booking has already been settled by admin');
+    }
+    if (existing.status !== BOOKING_STATUS.ARRIVED) {
+      throw new ApiError(
+        409,
+        `Only arrived outstation bookings can be settled (current: ${existing.status})`,
+      );
+    }
+    if (!existing.driverId || !existing.userId) {
+      throw new ApiError(409, 'Booking is missing driver or user — cannot settle');
+    }
+    throw new ApiError(409, 'Could not claim booking for settlement — retry');
+  }
+
+  const amountPaid = round2(
+    Number(booking.payment?.amountPaidRupees)
+      || Number(booking.fareSnapshot?.total)
+      || Number(booking.fareSnapshot?.breakdown?.totalPayable)
+      || 0,
+  );
+  const { commission, platformFee } = netPlatformRevenueFromFareSnapshot(
+    booking.fareSnapshot || {},
+  );
+  const platformKeep = round2(commission + platformFee);
+  const maxPayout = round2(Math.max(0, amountPaid - platformKeep));
+
+  if (payout > maxPayout + 0.001) {
+    // Roll back the claim stamp so another (valid) settle can proceed.
+    await Booking.updateOne(
+      { _id: booking._id },
+      {
+        $set: {
+          'adminSettlement.kind': '',
+          'adminSettlement.settledAt': null,
+          'adminSettlement.settledBy': null,
+        },
+      },
+    );
+    throw new ApiError(
+      422,
+      `Driver payout ₹${payout} exceeds max ₹${maxPayout} (paid ₹${amountPaid} − platform ₹${platformKeep})`,
+    );
+  }
+
+  const userRefund = round2(Math.max(0, amountPaid - platformKeep - payout));
+  const driverId = booking.driverId;
+  const userId = booking.userId;
+  const now = new Date();
+
+  let userRefundTxId = null;
+  try {
+    if (payout > 0) {
+      await creditDriverWalletService({
+        driverId,
+        amount: payout,
+        refundId: booking._id,
+        description: `Outstation settle ${booking.bookingNumber || booking._id} — admin payout`,
+        initiatedBy: staffId,
+      });
+    }
+    if (userRefund > 0) {
+      const txn = await creditWalletService({
+        userId,
+        amount: userRefund,
+        source: WALLET_TXN_SOURCE.BOOKING_REFUND,
+        description: `Outstation settle refund — ${booking.bookingNumber || booking._id}`,
+        refType: 'Booking',
+        refId: String(booking._id),
+        initiatedBy: staffId,
+      });
+      userRefundTxId = txn?._id || null;
+    }
+  } catch (moneyErr) {
+    await Booking.updateOne(
+      { _id: booking._id },
+      {
+        $set: {
+          'adminSettlement.kind': '',
+          'adminSettlement.settledAt': null,
+          'adminSettlement.settledBy': null,
+        },
+      },
+    );
+    throw moneyErr;
+  }
+
+  // Release unused waiting hold (outstation is usually ₹0).
+  const bufferHold = round2(Number(booking.waiting?.bufferRupees) || 0);
+  if (bufferHold > 0) {
+    await releaseWalletHoldService({ userId, amount: bufferHold }).catch((err) =>
+      console.warn(
+        '[outstationSettle] failed to release waiting hold:',
+        err?.message,
+      ),
+    );
+  }
+
+  await clearPendingExtensionsOnTerminate(booking, 'admin_outstation_settlement').catch(
+    () => null,
+  );
+
+  // Record platform take while driverId is still on the booking.
+  await recordCompletedTripPlatformRevenue(booking, {
+    reason: 'admin_outstation_settlement',
+    adminSettlement: true,
+  }).catch((err) =>
+    console.warn('[outstationSettle] revenue write failed:', err?.message),
+  );
+
+  booking.status = BOOKING_STATUS.CANCELLED;
+  booking.timeline = booking.timeline || {};
+  booking.timeline.cancelledAt = now;
+  booking.cancellation = {
+    ...(booking.cancellation?.toObject?.() || booking.cancellation || {}),
+    reason: 'admin_outstation_settlement',
+    cancelledBy: 'admin',
+    feeCharged: 0,
+    refundAmount: userRefund,
+    driverShare: payout,
+    companyShare: platformKeep,
+    tier: 'outstation_arrived_no_otp',
+  };
+  booking.adminSettlement = {
+    kind: 'outstation_arrived_no_otp',
+    driverPayoutRupees: payout,
+    userRefundRupees: userRefund,
+    commissionKept: commission,
+    platformFeeKept: platformFee,
+    amountPaidRupees: amountPaid,
+    settledBy: staffId || null,
+    settledAt: now,
+    notes: notes ? String(notes).slice(0, 500) : '',
+    userRefundTxId,
+  };
+  booking.dispatch = booking.dispatch || {};
+  booking.dispatch.pendingOfferIds = [];
+  booking.dispatch.currentExpiresAt = null;
+  // Keep driverId for audit, but free the lock below. Match cancel paths
+  // that unlink so active-trip queries never keep matching this row.
+  const settledDriverId = driverId;
+  booking.driverId = null;
+  await booking.save();
+
+  await Driver.updateOne(
+    { _id: settledDriverId },
+    { $set: { isOnTrip: false } },
+  ).catch((err) =>
+    console.warn(
+      '[outstationSettle] failed to clear driver.isOnTrip:',
+      err?.message,
+    ),
+  );
+
+  const payload = {
+    bookingId: String(booking._id),
+    status: booking.status,
+    reason: 'admin_outstation_settlement',
+    adminSettlement: booking.adminSettlement,
+  };
+  emitToUser(userId, S2C_EVENTS.BOOKING_UPDATED, payload);
+  emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, payload);
+  emitToDriver(settledDriverId, S2C_EVENTS.BOOKING_UPDATED, payload);
+  emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
+
+  return {
+    booking: await Booking.findById(booking._id)
+      .populate('userId', 'name phone_no')
+      .lean(),
+    settlement: {
+      amountPaidRupees: amountPaid,
+      commissionKept: commission,
+      platformFeeKept: platformFee,
+      driverPayoutRupees: payout,
+      userRefundRupees: userRefund,
+    },
   };
 }

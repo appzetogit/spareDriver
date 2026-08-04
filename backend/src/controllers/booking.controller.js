@@ -62,6 +62,7 @@ import {
   listAvailableDriversForOutstationService,
   adminAssignDriverToOutstationService,
   probeDriverConflictService,
+  adminSettleOutstationArrivedService,
 } from '../services/bookingOutstationAssignment.service.js';
 import {
   listScheduledBookingsForAdminService,
@@ -626,6 +627,29 @@ export const probeOutstationDriverConflict = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, result, 'Driver conflict probe'));
+});
+
+/**
+ * POST /admin/outstation-assignments/:id/settle-arrived
+ *
+ * Admin settles an outstation booking stuck at ARRIVED (no OTP):
+ * platform keeps commission/fee, admin-entered driver payout, remainder
+ * refunded to the user wallet. Frees driver + ends the booking.
+ */
+export const settleOutstationArrived = asyncHandler(async (req, res) => {
+  const { driverPayoutRupees, notes } = req.body || {};
+  if (driverPayoutRupees == null || driverPayoutRupees === '') {
+    throw new ApiError(400, 'driverPayoutRupees is required');
+  }
+  const result = await adminSettleOutstationArrivedService(req.params.id, {
+    driverPayoutRupees,
+    notes,
+    staffId: req.staff?._id,
+    staff: req.staff,
+  });
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Outstation booking settled'));
 });
 
 /* ------------------------------------------------------------------ */

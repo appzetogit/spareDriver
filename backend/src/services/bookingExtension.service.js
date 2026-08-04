@@ -28,6 +28,60 @@ import { scheduleRideEndTimer } from './bookingRideEndTimeout.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 import { todayKey } from './bookingCancellation.service.js';
 
+/** Same select list as booking.service DRIVER_USER_FIELDS — kept local
+ *  to avoid a circular import with booking.service. */
+const DRIVER_USER_FIELDS = [
+  'name',
+  'phone_no',
+  'rating',
+  'profilePicture',
+  'documents',
+  'experienceYears',
+  'vehicleExperience',
+  'carTypeExperience',
+].join(' ');
+
+/**
+ * Populate the assigned driver before handing the booking back to the
+ * customer app. Extension handlers otherwise return a bare ObjectId and
+ * the FE "Your Driver" card collapses until the next /active refetch.
+ */
+async function toCustomerBooking(booking) {
+  if (!booking) return null;
+  if (booking.driverId) {
+    await booking.populate('driverId', DRIVER_USER_FIELDS);
+  }
+  return typeof booking.toObject === 'function' ? booking.toObject() : booking;
+}
+
+/**
+ * Push the outstation return window forward by `additionalDays` once an
+ * extension is paid. Updates expectedReturnAt / endDate / days / nights
+ * so the customer countdown and driver complete-gate stay in sync.
+ */
+function bumpOutstationWindow(booking, additionalDays) {
+  const days = Math.max(0, Math.floor(Number(additionalDays) || 0));
+  if (days <= 0 || !booking?.outstation) return null;
+  const currentEndSrc =
+    booking.outstation.expectedReturnAt || booking.outstation.endDate;
+  const currentEnd = currentEndSrc ? new Date(currentEndSrc) : null;
+  if (!currentEnd || Number.isNaN(currentEnd.getTime())) return null;
+
+  currentEnd.setDate(currentEnd.getDate() + days);
+  booking.outstation.expectedReturnAt = currentEnd;
+  booking.outstation.endDate = currentEnd;
+  booking.outstation.days = (Number(booking.outstation.days) || 0) + days;
+  booking.outstation.nights = Math.max(0, (Number(booking.outstation.days) || 1) - 1);
+  return {
+    pickupAt: booking.outstation.pickupAt,
+    expectedReturnAt: booking.outstation.expectedReturnAt,
+    startDate: booking.outstation.startDate,
+    endDate: booking.outstation.endDate,
+    days: booking.outstation.days,
+    nights: booking.outstation.nights,
+  };
+}
+
 /**
  * In-ride extension handling.
  *
@@ -1067,7 +1121,7 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
   });
 
   return {
-    booking: booking.toObject(),
+    booking: await toCustomerBooking(booking),
     extension: serialiseExtensionForCustomer(ext),
     breakdown,
   };
@@ -1109,7 +1163,7 @@ export async function verifyExtensionOtpService(userId, bookingId, body = {}) {
   }
   if (ext.status === 'pending_payment') {
     return {
-      booking: booking.toObject(),
+      booking: await toCustomerBooking(booking),
       extension: serialiseExtensionForCustomer(ext),
       alreadyVerified: true,
     };
@@ -1157,7 +1211,7 @@ export async function verifyExtensionOtpService(userId, bookingId, body = {}) {
   }
 
   return {
-    booking: booking.toObject(),
+    booking: await toCustomerBooking(booking),
     extension: serialiseExtensionForCustomer(ext),
   };
 }
@@ -1190,8 +1244,23 @@ export async function payExtensionService(userId, bookingId, body = {}) {
   const ext = getExtensionOrThrow(booking, extensionId);
 
   if (ext.status === 'accepted') {
+    // Heal legacy outstation extensions that were paid before we
+    // started bumping expectedReturnAt on accept.
+    if (
+      booking.serviceType === SERVICE_TYPES.OUTSTATION &&
+      !ext.windowAppliedAt
+    ) {
+      const patched = bumpOutstationWindow(
+        booking,
+        ext.additionalDays || Math.round((Number(ext.additionalHours) || 0) / 24),
+      );
+      if (patched) {
+        ext.windowAppliedAt = new Date();
+        await booking.save();
+      }
+    }
     return {
-      booking: booking.toObject(),
+      booking: await toCustomerBooking(booking),
       extension: serialiseExtensionForCustomer(ext),
       alreadyPaid: true,
     };
@@ -1272,6 +1341,20 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     booking.paymentStatus = BOOKING_PAYMENT_STATUS.PAID;
   }
 
+  // Outstation: push the booked return window forward so the customer
+  // countdown and any complete-after-end gate use the new end date
+  // instead of inventing a startedAt + (days×24h) hourly clock.
+  let outstationPatch = null;
+  if (booking.serviceType === SERVICE_TYPES.OUTSTATION) {
+    outstationPatch = bumpOutstationWindow(
+      booking,
+      ext.additionalDays || Math.round((Number(ext.additionalHours) || 0) / 24),
+    );
+    if (outstationPatch) {
+      ext.windowAppliedAt = new Date();
+    }
+  }
+
   await booking.save();
 
   // Push the hourly auto-complete timer out by the newly accepted hours.
@@ -1285,6 +1368,7 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     paymentStatus: booking.paymentStatus,
     effectiveTotal: effectiveTotalForBooking(booking),
     amountDue: amountDueForBooking(booking),
+    ...(outstationPatch ? { outstation: outstationPatch } : {}),
   };
 
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_EXTENSION_PAID, userPayload);
@@ -1299,6 +1383,7 @@ export async function payExtensionService(userId, bookingId, body = {}) {
       bookingId: String(booking._id),
       extension: serialiseExtensionForDriver(ext),
       extensions: booking.extensions.map((e) => serialiseExtensionForDriver(e)),
+      ...(outstationPatch ? { outstation: outstationPatch } : {}),
     };
     emitToDriver(booking.driverId, S2C_EVENTS.BOOKING_EXTENSION_PAID, driverPayload);
     emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
@@ -1307,7 +1392,7 @@ export async function payExtensionService(userId, bookingId, body = {}) {
   emitToAdmins(S2C_EVENTS.BOOKING_EXTENSION_PAID, userPayload);
 
   return {
-    booking: booking.toObject(),
+    booking: await toCustomerBooking(booking),
     extension: serialiseExtensionForCustomer(ext),
   };
 }
@@ -1344,7 +1429,7 @@ export async function cancelExtensionService(userId, bookingId, body = {}) {
     // Already declined/expired — return idempotently so the FE's
     // "Change hours" button feels instant even on a stale row.
     return {
-      booking: booking.toObject(),
+      booking: await toCustomerBooking(booking),
       extension: serialiseExtensionForCustomer(ext),
       alreadyCancelled: true,
     };
@@ -1377,7 +1462,7 @@ export async function cancelExtensionService(userId, bookingId, body = {}) {
   });
 
   return {
-    booking: booking.toObject(),
+    booking: await toCustomerBooking(booking),
     extension: serialiseExtensionForCustomer(ext),
   };
 }

@@ -11,6 +11,7 @@ import {
   adminMarkNoDriversFoundService,
   driverEarningFromFareSnapshot,
 } from './booking.service.js';
+import { applyOutstationLocationPrivacy } from '../utils/outstationDispatch.js';
 import { schedulePaymentTimeout } from './bookingPaymentTimeout.service.js';
 import {
   BOOKING_STATUS,
@@ -211,7 +212,7 @@ async function selfHealDriverLockState() {
 }
 
 function buildOfferPayload(booking, driver, { customer, car } = {}) {
-  return {
+  const payload = {
     bookingId: String(booking._id),
     bookingNumber: booking.bookingNumber,
     serviceType: booking.serviceType,
@@ -253,9 +254,12 @@ function buildOfferPayload(booking, driver, { customer, car } = {}) {
     waveSize: booking.dispatch.pendingOfferIds.length,
     /** True when this is an open inbox item (no countdown). */
     inbox: booking.dispatch?.mode === DISPATCH_MODE.INBOX
-      || (isInboxBookingType(booking.bookingType)
-        && !booking.dispatch?.currentExpiresAt),
+      || isInboxBookingType(booking.bookingType)
+      || booking.serviceType === 'outstation',
   };
+  // Outstation: address text stays; coords unlock at trip-day midnight.
+  applyOutstationLocationPrivacy(payload);
+  return payload;
 }
 
 function isInboxDispatch(booking) {
@@ -983,8 +987,8 @@ export async function withdrawCurrentOfferService(bookingId, reason = 'cancelled
 }
 
 /**
- * Resume helper for timed wave offers only (instant). Scheduled inbox
- * items are listed via `listIncomingScheduledForDriverService`.
+ * Resume helper for timed wave offers only (instant). Scheduled /
+ * outstation inbox items are listed via `listIncomingScheduledForDriverService`.
  */
 export async function getPendingOfferForDriverService(driverId) {
   if (!driverId) return null;
@@ -993,7 +997,9 @@ export async function getPendingOfferForDriverService(driverId) {
   const booking = await Booking.findOne({
     isDeleted: false,
     status: BOOKING_STATUS.SEARCHING,
-    bookingType: { $ne: BOOKING_TYPE.SCHEDULED },
+    bookingType: {
+      $nin: [BOOKING_TYPE.SCHEDULED, BOOKING_TYPE.OUTSTATION],
+    },
     'dispatch.pendingOfferIds': driverId,
     'dispatch.currentExpiresAt': { $gt: now },
     $or: [

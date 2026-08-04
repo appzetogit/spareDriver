@@ -141,6 +141,7 @@ export async function handlePaymentTimeoutService(bookingId) {
     refundAmount: 0,
   };
   booking.timeline.cancelledAt = new Date();
+  booking.driverId = null;
   // Clear out any half-created Razorpay order so we don't try to reuse it.
   if (booking.razorpay) {
     booking.razorpay = {

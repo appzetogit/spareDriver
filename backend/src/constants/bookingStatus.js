@@ -245,6 +245,13 @@ export const SCHEDULED_BOOKING = Object.freeze({
    * needing a ride sooner should pick "Instant".
    */
   MIN_SCHEDULED_LEAD_HOURS: 2,
+  /**
+   * Outstation-only day knobs (hourly scheduled stays on the hour fields
+   * above). Calendar days, local midnight relative to pickup date.
+   */
+  MIN_OUTSTATION_LEAD_DAYS: 8,
+  DRIVER_VISIBILITY_DAYS: 8,
+  EMERGENCY_POOL_DAYS: 2,
   /** Cap for one-shot inbox broadcast (matching drivers within max radius). */
   INBOX_BROADCAST_LIMIT: 50,
 });

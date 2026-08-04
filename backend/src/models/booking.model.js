@@ -246,6 +246,13 @@ const extensionSchema = new mongoose.Schema(
     respondedAt: { type: Date, default: null },
     driverNotifiedAt: { type: Date, default: null },
     /**
+     * Set when payExtension bumps outstation expectedReturnAt / days
+     * for this row. Lets the FE countdown skip re-adding additionalDays
+     * for already-applied windows (and still correct legacy rows that
+     * were accepted before the bump existed).
+     */
+    windowAppliedAt: { type: Date, default: null },
+    /**
      * True iff the driver actively dismissed the extension request
      * from their app (vs. customer-cancel, timeout, or trip end). The
      * customer-facing UX uses this to show a distinct "Driver couldn't
@@ -398,7 +405,8 @@ const bookingSchema = new mongoose.Schema(
      *
      *   tier             which branch of the schedule decision tree
      *                    fired: 'morning' | 'morning_lead' |
-     *                    'short_window' | 'long_lead'
+     *                    'short_window' | 'long_lead' |
+     *                    'outstation_days' (calendar-day outstation)
      *   assignAt         server time at which `kickoffScheduledAssignment`
      *                    is expected to run (null = "search immediately")
      *   escalateAt       server time at which `escalateToEmergencyPool`
@@ -423,7 +431,14 @@ const bookingSchema = new mongoose.Schema(
     scheduled: {
       tier: {
         type: String,
-        enum: ['morning', 'morning_lead', 'short_window', 'long_lead', ''],
+        enum: [
+          'morning',
+          'morning_lead',
+          'short_window',
+          'long_lead',
+          'outstation_days',
+          '',
+        ],
         default: '',
       },
       assignAt: { type: Date, default: null },
@@ -601,6 +616,37 @@ const bookingSchema = new mongoose.Schema(
         stars: { type: Number, default: null, min: 0, max: 5 },
         review: { type: String, default: '', trim: true, maxlength: 500 },
         ratedAt: { type: Date, default: null },
+      },
+    },
+
+    /**
+     * Admin settle for outstation arrivals where the customer never
+     * started the trip (no OTP). Prepaid fare is split into platform
+     * commission/fee, a manual driver payout, and a user wallet refund.
+     * Distinct from hourly no-show auto-complete.
+     */
+    adminSettlement: {
+      kind: {
+        type: String,
+        enum: ['', 'outstation_arrived_no_otp'],
+        default: '',
+      },
+      driverPayoutRupees: { type: Number, default: 0, min: 0 },
+      userRefundRupees: { type: Number, default: 0, min: 0 },
+      commissionKept: { type: Number, default: 0, min: 0 },
+      platformFeeKept: { type: Number, default: 0, min: 0 },
+      amountPaidRupees: { type: Number, default: 0, min: 0 },
+      settledBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      settledAt: { type: Date, default: null },
+      notes: { type: String, default: '', trim: true, maxlength: 500 },
+      userRefundTxId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'WalletTransaction',
+        default: null,
       },
     },
 

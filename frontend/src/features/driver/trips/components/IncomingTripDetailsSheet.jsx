@@ -193,6 +193,12 @@ export default function IncomingTripDetailsSheet({
         <DetailRow icon={CarIcon} label="Vehicle" value={carLabel} multi />
       </div>
 
+      {isOutstation && request.locationRevealed === false && (
+        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4 leading-snug">
+          Exact map and pin unlock at midnight on the trip day. Address text is available above.
+        </p>
+      )}
+
       <div className="flex gap-2 pt-1">
         <Button
           className="flex-1"

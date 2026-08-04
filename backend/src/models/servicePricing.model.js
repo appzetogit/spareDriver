@@ -438,6 +438,10 @@ const driverSearchSchema = new mongoose.Schema(
  *                         customer can create a scheduled booking.
  *                         The booking-create endpoint rejects anything
  *                         sooner with a 422.
+ *   MIN_OUTSTATION_LEAD_DAYS / DRIVER_VISIBILITY_DAYS /
+ *   EMERGENCY_POOL_DAYS — outstation-only calendar-day knobs (hourly
+ *                         scheduled ignores these and uses the hour
+ *                         fields above).
  *   REMINDER_OFFSETS_MINUTES — list of minutes-before-pickup at which
  *                         the worker emits an in-app reminder toast to
  *                         the customer (and the driver once assigned).
@@ -462,6 +466,12 @@ const scheduledDispatchSchema = new mongoose.Schema(
      */
     RIDE_BUFFER_MINUTES: { type: Number, default: 120, min: 0 },
     MIN_SCHEDULED_LEAD_HOURS: { type: Number, default: 2, min: 0 },
+    /** Outstation: customer must book at least this many calendar days ahead. */
+    MIN_OUTSTATION_LEAD_DAYS: { type: Number, default: 8, min: 0 },
+    /** Outstation: inbox broadcast opens this many calendar days before pickup. */
+    DRIVER_VISIBILITY_DAYS: { type: Number, default: 8, min: 0 },
+    /** Outstation: escalate to emergency pool this many calendar days before pickup. */
+    EMERGENCY_POOL_DAYS: { type: Number, default: 2, min: 0 },
     REMINDER_OFFSETS_MINUTES: {
       type: [Number],
       default: [60, 15],

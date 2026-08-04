@@ -5,6 +5,15 @@ import { uploadImage } from '../../../../utils/upload';
 import toast from 'react-hot-toast';
 import { createEmptyKitItem } from './kitItemFormUtils';
 
+const DEFAULT_SIZE_VARIANTS = [
+  { id: 's', label: 'S' },
+  { id: 'm', label: 'M' },
+  { id: 'l', label: 'L' },
+  { id: 'xl', label: 'XL' },
+  { id: 'xxl', label: 'XXL' },
+  { id: 'xxxl', label: 'XXXL' },
+];
+
 const KitItemsEditor = ({ items, onChange }) => {
   const updateItem = (index, patch) => {
     const next = items.map((item, i) => (i === index ? { ...item, ...patch } : item));
@@ -18,15 +27,18 @@ const KitItemsEditor = ({ items, onChange }) => {
   const addVariant = (itemIndex) => {
     const item = items[itemIndex];
     updateItem(itemIndex, {
-      variants: [...(item.variants || []), { id: `v-${Date.now()}`, label: '' }],
+      // Stable id — never derive from the live label (that remounts inputs
+      // mid-keystroke and makes XXL / XXXL almost impossible to type).
+      variants: [...(item.variants || []), { id: `v-${Date.now()}-${item.variants?.length || 0}`, label: '' }],
     });
   };
 
   const updateVariant = (itemIndex, variantIndex, label) => {
     const item = items[itemIndex];
     const variants = [...item.variants];
+    const prev = variants[variantIndex] || {};
     variants[variantIndex] = {
-      id: label.toLowerCase().replace(/\s+/g, '-').slice(0, 20) || `v-${variantIndex}`,
+      id: prev.id || `v-${variantIndex}`,
       label,
     };
     updateItem(itemIndex, { variants });
@@ -115,11 +127,7 @@ const KitItemsEditor = ({ items, onChange }) => {
                 updateItem(index, {
                   hasVariants: v,
                   variants: v && !item.variants?.length
-                    ? [
-                        { id: 's', label: 'S' },
-                        { id: 'm', label: 'M' },
-                        { id: 'l', label: 'L' },
-                      ]
+                    ? DEFAULT_SIZE_VARIANTS.map((opt) => ({ ...opt }))
                     : item.variants,
                 })
               }
@@ -136,12 +144,12 @@ const KitItemsEditor = ({ items, onChange }) => {
               />
               <p className="text-xs text-slate-500">Driver will pick one option when ordering</p>
               {item.variants?.map((variant, vIdx) => (
-                <div key={variant.id || vIdx} className="flex gap-2 items-end">
+                <div key={variant.id || `opt-${index}-${vIdx}`} className="flex gap-2 items-end">
                   <Input
                     label={vIdx === 0 ? 'Options' : ''}
                     value={variant.label}
                     onChange={(e) => updateVariant(index, vIdx, e.target.value)}
-                    placeholder="e.g. M"
+                    placeholder="e.g. XXL"
                   />
                   {item.variants.length > 1 && (
                     <button
