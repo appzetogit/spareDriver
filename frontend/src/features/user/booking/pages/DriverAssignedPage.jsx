@@ -228,6 +228,8 @@ const DriverAssignedPage = () => {
   const [noShowPrompt, setNoShowPrompt] = useState(null);
   useSocketEvent(S2C_EVENTS.BOOKING_NOSHOW_PROMPT, (payload) => {
     if (!payload?.bookingId) return;
+    // Outstation never uses the hourly no-show / auto-complete flow.
+    if (booking?.serviceType === SERVICE_TYPES.OUTSTATION) return;
     if (booking?._id && String(booking._id) !== String(payload.bookingId)) {
       return;
     }
@@ -243,6 +245,10 @@ const DriverAssignedPage = () => {
   // booking with `noShow.promptDeadlineAt` so we can rehydrate the
   // modal without waiting for a fresh socket event.
   useEffect(() => {
+    if (booking?.serviceType === SERVICE_TYPES.OUTSTATION) {
+      if (noShowPrompt) setNoShowPrompt(null);
+      return;
+    }
     const deadline = booking?.noShow?.promptDeadlineAt;
     const response = booking?.noShow?.customerResponse;
     if (!deadline || response) {
@@ -268,10 +274,11 @@ const DriverAssignedPage = () => {
         isFinal: false,
       });
     }
-  }, [booking?.noShow?.promptDeadlineAt, booking?.noShow?.customerResponse, booking?.noShow?.firedFor]);
+  }, [booking?.serviceType, booking?.noShow?.promptDeadlineAt, booking?.noShow?.customerResponse, booking?.noShow?.firedFor]);
 
   const respondToNoShow = useUserActiveBookingStore((s) => s.respondToNoShow);
   const handleNoShowAnswer = async (answer) => {
+    if (booking?.serviceType === SERVICE_TYPES.OUTSTATION) return;
     try {
       await respondToNoShow(answer);
       setNoShowPrompt(null);
@@ -974,8 +981,12 @@ const DriverAssignedPage = () => {
                 {/* Trip details card */}
                 <TripDetailsCard booking={booking} />
 
-                {/* In-ride duration tracker (hourly) */}
-                {rideTimer.isStarted && rideTimer.scheduledEndAt && (
+                {/* In-ride duration tracker (hourly only). Outstation
+                    uses the calendar-day card below so we never show
+                    both "Extend ride" and "Extend trip". */}
+                {!isOutstationBooking
+                  && rideTimer.isStarted
+                  && rideTimer.scheduledEndAt && (
                   <Card>
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center">
@@ -996,26 +1007,52 @@ const DriverAssignedPage = () => {
                   </Card>
                 )}
 
-                {/* Outstation extension entry — visible only while the
-                    trip is STARTED. Outstation runs for days, so we
-                    surface a persistent "Extend trip" card rather than
-                    auto-prompting near a timer threshold. The same
-                    ExtendRideModal flow handles the OTP handshake. */}
+                {/* Outstation: days remaining + single Extend trip CTA.
+                    Same ExtendRideModal OTP handshake as hourly. */}
                 {isOutstationBooking
-                  && booking.status === BOOKING_STATUS.STARTED
-                  && outstationPerDayRate > 0 && (
+                  && booking.status === BOOKING_STATUS.STARTED && (
                   <Card>
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center">
                         <Calendar className="w-4 h-4 text-primary-dark" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-text-muted">
-                          Need more time on the road?
-                        </p>
-                        <p className="text-sm font-semibold text-text">
-                          ~₹{outstationPerDayRate}/day for extra days
-                        </p>
+                        {rideTimer.scheduledEndAt && rideTimer.remainingSeconds != null ? (
+                          <>
+                            <p className="text-xs text-text-muted">
+                              {rideTimer.remainingSeconds >= 0
+                                ? 'Days remaining'
+                                : 'Past booked return'}
+                            </p>
+                            <p
+                              className={`text-base font-bold ${
+                                rideTimer.remainingSeconds < 0
+                                  ? 'text-danger'
+                                  : 'text-text'
+                              }`}
+                            >
+                              {formatOutstationRemaining(
+                                Math.abs(rideTimer.remainingSeconds),
+                              )}
+                            </p>
+                            {outstationPerDayRate > 0 && (
+                              <p className="text-xs text-text-muted mt-0.5">
+                                ~₹{outstationPerDayRate}/day for extra days
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs text-text-muted">
+                              Need more time on the road?
+                            </p>
+                            <p className="text-sm font-semibold text-text">
+                              {outstationPerDayRate > 0
+                                ? `~₹${outstationPerDayRate}/day for extra days`
+                                : 'Extend for more days'}
+                            </p>
+                          </>
+                        )}
                       </div>
                       <Button size="sm" variant="secondary" onClick={() => setExtensionPromptOpen(true)}>
                         Extend trip
@@ -1138,7 +1175,7 @@ const DriverAssignedPage = () => {
       />
 
       <NoShowPromptModal
-        open={Boolean(noShowPrompt)}
+        open={Boolean(noShowPrompt) && booking?.serviceType !== SERVICE_TYPES.OUTSTATION}
         deadline={noShowPrompt?.promptDeadlineAt}
         promptIndex={noShowPrompt?.promptIndex}
         maxPrompts={noShowPrompt?.maxPrompts}
@@ -1298,6 +1335,25 @@ function formatRideClock(seconds) {
   const minutes = Math.floor(total / 60);
   const secs = total % 60;
   return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Outstation remaining time in calendar days (not raw hours).
+ *   ≥ 1 day  → `Nd Nh` (omit hours when 0)
+ *   < 1 day  → `Nh Nm` so the last day still ticks
+ */
+function formatOutstationRemaining(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days >= 1) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  if (hours >= 1) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  }
+  return `${minutes}m`;
 }
 
 /**

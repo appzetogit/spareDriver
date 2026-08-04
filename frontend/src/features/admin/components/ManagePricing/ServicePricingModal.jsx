@@ -144,8 +144,8 @@ const buildDefaultForm = (serviceType) => ({
     },
   },
   // Scheduled-ride dispatcher tuning. Mirrors `SCHEDULED_BOOKING` in
-  // backend constants. Hourly-only — the modal hides this section for
-  // outstation since outstation has no schedule queue today.
+  // backend constants. Hourly uses hour tiers; outstation uses day knobs
+  // on the same object (see MIN_OUTSTATION_LEAD_DAYS etc.).
   scheduledDispatch: {
     MORNING_START_HOUR: 6,
     MORNING_END_HOUR: 10,
@@ -155,6 +155,9 @@ const buildDefaultForm = (serviceType) => ({
     EMERGENCY_POOL_MINUTES: 120,
     RIDE_BUFFER_MINUTES: 120,
     MIN_SCHEDULED_LEAD_HOURS: 2,
+    MIN_OUTSTATION_LEAD_DAYS: 8,
+    DRIVER_VISIBILITY_DAYS: 8,
+    EMERGENCY_POOL_DAYS: 2,
     REMINDER_OFFSETS_MINUTES: [60, 15],
   },
   isActive: true,
@@ -236,6 +239,28 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
     if (isOutstation && !(form.outstation?.dailyRate > 0)) {
       toast.error('Daily rate is required for outstation pricing');
       return;
+    }
+    if (isOutstation) {
+      const minLead = Number(form.scheduledDispatch?.MIN_OUTSTATION_LEAD_DAYS);
+      const visibility = Number(form.scheduledDispatch?.DRIVER_VISIBILITY_DAYS);
+      const emergency = Number(form.scheduledDispatch?.EMERGENCY_POOL_DAYS);
+      if (
+        !Number.isFinite(minLead)
+        || !Number.isFinite(visibility)
+        || !Number.isFinite(emergency)
+        || minLead < 0
+        || visibility < 0
+        || emergency < 0
+      ) {
+        toast.error('Outstation day knobs must be non-negative numbers');
+        return;
+      }
+      if (!(minLead >= visibility && visibility >= emergency)) {
+        toast.error(
+          'Require: min book-ahead days ≥ driver visibility days ≥ emergency-pool days',
+        );
+        return;
+      }
     }
     setSubmitting(true);
     try {
@@ -1046,10 +1071,110 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
               title={isOutstation ? 'Outstation dispatcher' : 'Scheduled-ride dispatcher'}
               subtitle={
                 isOutstation
-                  ? 'When auto-search starts for an outstation booking, how long drivers have before the request escalates to the manual assignment queue, and how far in advance customers must book.'
+                  ? 'Day-based windows: how far ahead customers must book, when drivers see the request in their inbox, and when unmatched bookings escalate to the emergency pool.'
                   : 'When does the system start hunting for a driver for a future-scheduled hourly ride? Morning rides booked the day before fire immediately so drivers can plan; everything earlier gets queued until closer to pickup.'
               }
             >
+              {isOutstation ? (
+                <>
+                  <div className="p-3 bg-slate-50 rounded-xl space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        Calendar-day windows
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        All three values are calendar days relative to the
+                        pickup date (local midnight). Require:{' '}
+                        <strong>min book-ahead ≥ driver visibility ≥ emergency pool</strong>.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <Input
+                        label="Min book-ahead (days)"
+                        type="number"
+                        min={0}
+                        value={form.scheduledDispatch.MIN_OUTSTATION_LEAD_DAYS ?? 8}
+                        onChange={(e) =>
+                          updateNested('scheduledDispatch', {
+                            MIN_OUTSTATION_LEAD_DAYS: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <Input
+                        label="Driver inbox visibility (days)"
+                        type="number"
+                        min={0}
+                        value={form.scheduledDispatch.DRIVER_VISIBILITY_DAYS ?? 8}
+                        onChange={(e) =>
+                          updateNested('scheduledDispatch', {
+                            DRIVER_VISIBILITY_DAYS: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <Input
+                        label="Emergency-pool (days before)"
+                        type="number"
+                        min={0}
+                        value={form.scheduledDispatch.EMERGENCY_POOL_DAYS ?? 2}
+                        onChange={(e) =>
+                          updateNested('scheduledDispatch', {
+                            EMERGENCY_POOL_DAYS: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Example defaults: customers book ≥8 days ahead; drivers
+                      see the offer from 8 days before pickup; unmatched trips
+                      enter the emergency pool 2 days before pickup.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        Ride buffer &amp; reminders
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Ride buffer still gates &ldquo;Start to pickup&rdquo;
+                        unlock and conflict checks (minutes). Reminders are
+                        minutes-before-pickup, queued only after a driver is
+                        assigned. Precise map/coordinates unlock at midnight
+                        on the trip day regardless of these knobs.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Input
+                        label="Ride buffer (minutes)"
+                        type="number"
+                        min={0}
+                        value={form.scheduledDispatch.RIDE_BUFFER_MINUTES}
+                        onChange={(e) =>
+                          updateNested('scheduledDispatch', {
+                            RIDE_BUFFER_MINUTES: Number(e.target.value),
+                          })
+                        }
+                      />
+                      <Input
+                        label="Reminder offsets (minutes, comma-sep)"
+                        type="text"
+                        value={(
+                          form.scheduledDispatch.REMINDER_OFFSETS_MINUTES || []
+                        ).join(', ')}
+                        onChange={(e) =>
+                          updateNested('scheduledDispatch', {
+                            REMINDER_OFFSETS_MINUTES: e.target.value
+                              .split(',')
+                              .map((s) => Number(s.trim()))
+                              .filter((n) => Number.isFinite(n) && n > 0),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
               <div className="p-3 bg-slate-50 rounded-xl space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
@@ -1234,6 +1359,8 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                   />
                 </div>
               </div>
+                </>
+              )}
             </Section>
           )}
           <div className="flex gap-3 pt-2 sticky bottom-0 bg-white pb-1">

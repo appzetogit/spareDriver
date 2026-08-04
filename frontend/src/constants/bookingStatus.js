@@ -118,6 +118,10 @@ export const SCHEDULED_BOOKING = Object.freeze({
   EMERGENCY_POOL_MINUTES: 120,
   RIDE_BUFFER_MINUTES: 120,
   MIN_SCHEDULED_LEAD_HOURS: 2,
+  /** Outstation-only (calendar days). Hourly scheduled ignores these. */
+  MIN_OUTSTATION_LEAD_DAYS: 8,
+  DRIVER_VISIBILITY_DAYS: 8,
+  EMERGENCY_POOL_DAYS: 2,
   REMINDER_OFFSETS_MINUTES: [60, 15],
 });
 
@@ -133,6 +137,18 @@ export function mergeScheduledDispatchConfig(override) {
     return { ...SCHEDULED_BOOKING };
   }
   return { ...SCHEDULED_BOOKING, ...override };
+}
+
+/**
+ * Read a non-negative numeric dispatch knob. Prefer the admin value
+ * even when it is `0` — `Number(x) || default` wrongly treats 0 as
+ * "missing" and snaps back to the platform default (e.g. 8-day lead).
+ */
+export function readDispatchNumber(value, fallback) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n >= 0) return n;
+  const fb = Number(fallback);
+  return Number.isFinite(fb) && fb >= 0 ? fb : 0;
 }
 
 /**

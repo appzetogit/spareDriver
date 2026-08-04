@@ -62,9 +62,8 @@ function formatLocalDateTimeInput(d) {
  * Earliest pickup the customer is allowed to pick, given the
  * admin-configured outstation lead time (`scheduledDispatch
  * .MIN_SCHEDULED_LEAD_HOURS` on the outstation `ServicePricing` doc).
- * The backend enforces the same lower bound on create — keeping the
- * input's `min` attribute in lockstep avoids a confusing "pick a later
- * time" 422 after the user already submitted.
+ * Prefer `minPickupInputValueFromDays` for the day-based outstation
+ * knobs; this hour helper remains for any transitional callers.
  *
  * Returns a value formatted for `<input type="datetime-local">` (local
  * time, no timezone suffix).
@@ -72,6 +71,43 @@ function formatLocalDateTimeInput(d) {
 export function minPickupInputValue(leadHours = 1) {
   const safeLead = Math.max(0, Number(leadHours) || 0);
   const d = new Date(Date.now() + safeLead * 60 * 60 * 1000);
+  return formatLocalDateTimeInput(d);
+}
+
+export function startOfLocalDay(date = new Date()) {
+  const d = date instanceof Date ? new Date(date) : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function addCalendarDays(day, n) {
+  const base = startOfLocalDay(day);
+  if (!base) return null;
+  const out = new Date(base);
+  out.setDate(out.getDate() + Number(n || 0));
+  return out;
+}
+
+export function isOutstationLocationRevealed(pickupAt, now = new Date()) {
+  const tripDay = startOfLocalDay(pickupAt);
+  if (!tripDay) return false;
+  const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(nowMs)) return false;
+  return nowMs >= tripDay.getTime();
+}
+
+/**
+ * Earliest pickup datetime for day-based outstation lead
+ * (`MIN_OUTSTATION_LEAD_DAYS`). Uses local midnight of (today + N days)
+ * and preserves a sensible default clock time (09:00) so the picker
+ * lands on a valid datetime-local value.
+ */
+export function minPickupInputValueFromDays(leadDays = 8, hour = 9, minute = 0) {
+  const days = Math.max(0, Number(leadDays) || 0);
+  const d = addCalendarDays(new Date(), days);
+  if (!d) return minPickupInputValue(0);
+  d.setHours(Number(hour) || 0, Number(minute) || 0, 0, 0);
   return formatLocalDateTimeInput(d);
 }
 
@@ -92,6 +128,11 @@ export function defaultPickupInputValue(leadHours = 1) {
     d.setMinutes(0, 0, 0);
   }
   return formatLocalDateTimeInput(d);
+}
+
+/** Default outstation pickup: min lead day at 09:00 local. */
+export function defaultPickupInputValueFromDays(leadDays = 8) {
+  return minPickupInputValueFromDays(leadDays, 9, 0);
 }
 
 /**

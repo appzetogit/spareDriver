@@ -33,8 +33,14 @@ import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/servic
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import {
   computeOutstationDuration,
+  addCalendarDays,
+  startOfLocalDay,
 } from '../../../../utils/outstationSchedule';
-import { mergeScheduledDispatchConfig } from '../../../../constants/bookingStatus';
+import {
+  mergeScheduledDispatchConfig,
+  readDispatchNumber,
+  SCHEDULED_BOOKING,
+} from '../../../../constants/bookingStatus';
 import toast from 'react-hot-toast';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
@@ -142,9 +148,9 @@ function HourlyVariants({ pricing, draft, onPatch, onContinue }) {
     () => mergeScheduledDispatchConfig(pricing?.scheduledDispatch),
     [pricing?.scheduledDispatch],
   );
-  const minLeadHours = Math.max(
-    0,
-    Number(dispatchConfig.MIN_SCHEDULED_LEAD_HOURS) || 0,
+  const minLeadHours = readDispatchNumber(
+    dispatchConfig.MIN_SCHEDULED_LEAD_HOURS,
+    SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS,
   );
   // `Date.now` is impure, so we read it ONCE per mount via lazy
   // `useState` (idempotent for purity lint). When pricing arrives and
@@ -317,17 +323,16 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
       : null),
   );
 
-  // Admin-configured outstation lead time. Backend enforces the same
-  // floor on create (booking.service.js → outstation lead check) so
-  // gating the picker here is purely a UX nicety to surface the
-  // constraint before the user hits Continue.
+  // Admin-configured outstation lead time (calendar days). Backend
+  // enforces MIN_OUTSTATION_LEAD_DAYS on create — gating the picker
+  // here surfaces the constraint before Continue.
   const dispatchConfig = useMemo(
     () => mergeScheduledDispatchConfig(pricing?.scheduledDispatch),
     [pricing?.scheduledDispatch],
   );
-  const minLeadHours = Math.max(
-    0,
-    Number(dispatchConfig.MIN_SCHEDULED_LEAD_HOURS) || 0,
+  const minLeadDays = readDispatchNumber(
+    dispatchConfig.MIN_OUTSTATION_LEAD_DAYS,
+    SCHEDULED_BOOKING.MIN_OUTSTATION_LEAD_DAYS,
   );
   // Read the wall clock ONCE per mount so React's purity lint stays
   // happy on the derived `minPickupDate` memo. The minor downside —
@@ -336,10 +341,10 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
   // re-disable slots the user might be hovering. The backend
   // re-validates against the live clock on Continue anyway.
   const [nowAnchorMs] = useState(() => Date.now());
-  const minPickupDate = useMemo(
-    () => new Date(nowAnchorMs + minLeadHours * 60 * 60 * 1000),
-    [nowAnchorMs, minLeadHours],
-  );
+  const minPickupDate = useMemo(() => {
+    const day = addCalendarDays(new Date(nowAnchorMs), minLeadDays);
+    return day || startOfLocalDay(new Date(nowAnchorMs));
+  }, [nowAnchorMs, minLeadDays]);
 
   // Blank-by-default: neither pickup nor return is preselected. We do
   // still rehydrate from the draft (so back-navigation keeps the
@@ -978,8 +983,8 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
             minDate={minPickupDate}
             placeholder="Tap to choose pickup"
             helper={
-              minLeadHours > 0
-                ? `We need at least ${formatLeadHours(minLeadHours)} between booking and pickup so a driver can be assigned.`
+              minLeadDays > 0
+                ? `We need at least ${minLeadDays} day${minLeadDays === 1 ? '' : 's'} between booking and pickup so a driver can be assigned.`
                 : undefined
             }
             sheetTitle="Pickup date & time"

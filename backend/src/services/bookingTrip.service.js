@@ -37,6 +37,7 @@ import {
   notifyDriverEarningsCredited,
 } from '../utils/notificationDispatch.js';
 import { isTestOtp } from '../utils/otpService.js';
+import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { cancelScheduledBookingJobs } from './bookingScheduled.service.js';
 import {
@@ -261,14 +262,14 @@ async function resolveEnRouteLeadMinutes(serviceType) {
  * stricter `assertScheduledStartReached` instead — billing must not
  * begin before the customer's booked time.
  *
- * Instant bookings get `scheduledStartAt = now` at creation time, so
- * the guard is a no-op for them in practice.
+ * Uses `resolveBookingSearchStartAt` so hourly (`scheduledStartAt`) and
+ * outstation (`pickupAt`) share the same gate. Instant bookings get
+ * `scheduledStartAt = now` at creation, so the guard is a no-op for them.
  */
 async function assertWithinScheduledLead(booking, verb) {
-  const startMs = booking?.hourly?.scheduledStartAt
-    ? new Date(booking.hourly.scheduledStartAt).getTime()
-    : NaN;
-  if (!Number.isFinite(startMs)) return; // non-hourly / legacy row
+  const pickupDate = resolveBookingSearchStartAt(booking);
+  const startMs = pickupDate ? pickupDate.getTime() : NaN;
+  if (!Number.isFinite(startMs)) return;
   const leadMinutes = await resolveEnRouteLeadMinutes(booking.serviceType);
   const minutesAway = Math.ceil((startMs - Date.now()) / 60_000);
   if (minutesAway > leadMinutes) {
@@ -286,15 +287,15 @@ async function assertWithinScheduledLead(booking, verb) {
 }
 
 /**
- * Hard floor for arrival + ride start: the customer's booked
- * `hourly.scheduledStartAt` must have been reached. Heading out early
- * is fine; locking ARRIVED / STARTED early would start wait timers and
- * bill before the trip window the customer paid for.
+ * Hard floor for arrival + ride start: the customer's booked pickup
+ * (`hourly.scheduledStartAt` or `outstation.pickupAt`) must have been
+ * reached. Heading out early is fine; locking ARRIVED / STARTED early
+ * would start wait timers and bill before the trip window the customer
+ * paid for.
  */
 function assertScheduledStartReached(booking, verb) {
-  const startMs = booking?.hourly?.scheduledStartAt
-    ? new Date(booking.hourly.scheduledStartAt).getTime()
-    : NaN;
+  const pickupDate = resolveBookingSearchStartAt(booking);
+  const startMs = pickupDate ? pickupDate.getTime() : NaN;
   if (!Number.isFinite(startMs)) return;
   const remainingMs = startMs - Date.now();
   if (remainingMs <= 0) return;
@@ -341,10 +342,9 @@ export async function markDriverEnRouteService(driverId, bookingId) {
     );
   }
 
-  // Time gate — based purely on `hourly.scheduledStartAt`, not on
-  // any `bookingType` flag. See `assertWithinScheduledLead` for the
-  // reasoning. Instant bookings sail through (their scheduled time
-  // is "now") so the check is free for the hot path.
+  // Time gate — hourly scheduledStartAt / outstation pickupAt via
+  // resolveBookingSearchStartAt. Instant bookings sail through (their
+  // scheduled time is "now") so the check is free for the hot path.
   await assertWithinScheduledLead(booking, 'head out');
 
   booking.status = BOOKING_STATUS.EN_ROUTE;
@@ -511,12 +511,13 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   }
   await booking.save();
 
-  // Kick off the "are you coming?" prompt schedule. Failure here is
-  // non-fatal — the arrival itself is fine, the customer just won't
-  // get the gentle nudge after 30 min.
-  schedulePromptTimer(booking._id, arrivedAt).catch((err) =>
-    console.warn('[bookingTrip] no-show schedule failed:', err?.message),
-  );
+  // Hourly only: outstation stuck-at-OTP cases go to admin settlement
+  // instead of the free-wait → prompt → auto-complete path.
+  if (booking.serviceType !== SERVICE_TYPES.OUTSTATION) {
+    schedulePromptTimer(booking._id, arrivedAt).catch((err) =>
+      console.warn('[bookingTrip] no-show schedule failed:', err?.message),
+    );
+  }
 
   broadcastUpdate(booking);
   notifyUserDriverArrived(booking.userId, booking).catch(() => null);
@@ -692,10 +693,16 @@ async function applyWaitingChargeOnStart(booking, startedAt, flags = {}) {
  */
 /**
  * Booked ride length in ms for hourly trips (base hours + accepted
- * extensions). Returns 0 when the booking has no hourly duration
- * (outstation / legacy), so the early-complete guard is a no-op.
+ * extensions). Returns 0 for outstation — that path uses
+ * {@link earliestCompleteAtMs} against the calendar return instead.
  */
 function bookedDurationMs(booking) {
+  if (
+    booking?.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking?.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    return 0;
+  }
   const base = Number(booking?.hourly?.durationHours) || 0;
   if (base <= 0) return 0;
   const extra = (booking?.extensions || []).reduce(
@@ -706,29 +713,75 @@ function bookedDurationMs(booking) {
   return (base + extra) * 3_600_000;
 }
 
-export async function completeTripService(driverId, bookingId) {
-  const booking = await loadDriverBooking(driverId, bookingId);
-  assertStatus(booking, [BOOKING_STATUS.STARTED], 'complete the ride');
+/**
+ * Earliest wall-clock instant the driver may mark COMPLETED.
+ *   - Hourly: startedAt + booked hours (+ paid extensions)
+ *   - Outstation: expectedReturnAt / endDate, plus any paid extension
+ *     days that have not yet been applied to that window
+ *     (`windowAppliedAt` missing — legacy heal path)
+ */
+function earliestCompleteAtMs(booking) {
+  if (!booking) return null;
 
-  // Hourly / scheduled hourly: the ride may only complete once the
-  // booked duration (plus any accepted extensions) has elapsed. Ending
-  // early would short-change the customer who paid for the full window.
+  const isOutstation =
+    booking.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking.bookingType === BOOKING_TYPE.OUTSTATION;
+
+  if (isOutstation) {
+    const endSrc =
+      booking.outstation?.expectedReturnAt || booking.outstation?.endDate;
+    if (!endSrc) return null;
+    let endMs = new Date(endSrc).getTime();
+    if (!Number.isFinite(endMs)) return null;
+    const unappliedDays = (booking.extensions || []).reduce((sum, ext) => {
+      if (ext?.status !== 'accepted') return sum;
+      if (ext.windowAppliedAt) return sum;
+      const days =
+        Number(ext.additionalDays)
+        || Math.round((Number(ext.additionalHours) || 0) / 24)
+        || 0;
+      return sum + Math.max(0, days);
+    }, 0);
+    if (unappliedDays > 0) {
+      endMs += unappliedDays * 86_400_000;
+    }
+    return endMs;
+  }
+
   const startedAtMs = booking.timeline?.startedAt
     ? new Date(booking.timeline.startedAt).getTime()
     : NaN;
   const durationMs = bookedDurationMs(booking);
-  if (Number.isFinite(startedAtMs) && durationMs > 0) {
-    const earliestCompleteMs = startedAtMs + durationMs;
+  if (!Number.isFinite(startedAtMs) || durationMs <= 0) return null;
+  return startedAtMs + durationMs;
+}
+
+export async function completeTripService(driverId, bookingId) {
+  const booking = await loadDriverBooking(driverId, bookingId);
+  assertStatus(booking, [BOOKING_STATUS.STARTED], 'complete the ride');
+
+  // Do not allow completing before the booked window ends. Hourly uses
+  // startedAt + hours; outstation uses the calendar return (bumped when
+  // the customer pays for extra days).
+  const earliestCompleteMs = earliestCompleteAtMs(booking);
+  if (earliestCompleteMs != null) {
     const remainingMs = earliestCompleteMs - Date.now();
     if (remainingMs > 0) {
       const remainingMin = Math.max(1, Math.ceil(remainingMs / 60_000));
+      const isOutstation =
+        booking.serviceType === SERVICE_TYPES.OUTSTATION
+        || booking.bookingType === BOOKING_TYPE.OUTSTATION;
+      const remainingDays = Math.ceil(remainingMs / 86_400_000);
       throw new ApiError(
         409,
-        `This ride is booked for ${durationMs / 3_600_000} hour(s) — you can complete it in about ${remainingMin} min.`,
+        isOutstation
+          ? `This outstation trip runs until the booked return — you can complete it in about ${remainingDays} day(s).`
+          : `This ride is booked for ${(earliestCompleteMs - new Date(booking.timeline.startedAt).getTime()) / 3_600_000} hour(s) — you can complete it in about ${remainingMin} min.`,
         {
           code: 'TRIP_DURATION_NOT_ELAPSED',
           earliestCompleteAt: new Date(earliestCompleteMs).toISOString(),
           remainingMinutes: remainingMin,
+          remainingDays: isOutstation ? remainingDays : undefined,
         },
       );
     }

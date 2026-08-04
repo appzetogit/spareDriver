@@ -18,31 +18,31 @@ import {
 } from './catalogUi';
 
 const vehicleTabs = [
-  { id: 'categories', label: 'Categories', icon: Layers },
-  { id: 'fuel', label: 'Fuel types', icon: Fuel },
-  { id: 'brands', label: 'Brands', icon: Tag },
-  { id: 'models', label: 'Models', icon: Car },
+  { id: 'categories', label: 'CAR CATEGORY', icon: Layers },
+  { id: 'fuel', label: 'FUEL TYPE', icon: Fuel },
+  { id: 'brands', label: 'CAR BRAND', icon: Tag },
+  { id: 'models', label: 'CAR MODEL', icon: Car },
 ];
 
 const SUB_TAB_STORAGE_KEY = 'admin-vehicle-catalog-subtab';
 
 const TAB_COPY = {
   categories: {
-    title: 'Car categories',
+    title: 'CAR CATEGORY',
     description:
       'Body types such as sedan, SUV, or hatchback. Used to match drivers with customer vehicles.',
   },
   fuel: {
-    title: 'Fuel types',
+    title: 'FUEL TYPE',
     description: 'Fuel options shown when users and drivers register a vehicle.',
   },
   brands: {
-    title: 'Car brands',
+    title: 'CAR BRAND',
     description:
       'Manufacturers available during vehicle registration. Each brand can use a jsDelivr logo or a custom upload.',
   },
   models: {
-    title: 'Car models',
+    title: 'CAR MODEL',
     description: 'Models linked to a brand and optional category. Filter by brand to manage faster.',
   },
 };

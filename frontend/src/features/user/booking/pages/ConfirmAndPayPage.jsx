@@ -31,10 +31,12 @@ import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/servic
 import {
   BOOKING_STATUS,
   BOOKING_TYPE,
+  SCHEDULED_BOOKING,
   mergeScheduledDispatchConfig,
+  readDispatchNumber,
 } from '../../../../constants/bookingStatus';
 import { formatPickupDateTime } from '../../../../utils/datetime';
-import { computeOutstationDuration } from '../../../../utils/outstationSchedule';
+import { computeOutstationDuration, addCalendarDays, startOfLocalDay } from '../../../../utils/outstationSchedule';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import FareCard from '../components/FareCard';
 import CouponCodeInput from '../components/CouponCodeInput';
@@ -217,19 +219,29 @@ const ConfirmAndPayPage = () => {
     () => mergeScheduledDispatchConfig(servicePricing?.scheduledDispatch),
     [servicePricing?.scheduledDispatch],
   );
-  const minLeadHours = Math.max(
-    0,
-    Number(dispatchConfig.MIN_SCHEDULED_LEAD_HOURS) || 0,
+  const isOutstation = draft.serviceType === SERVICE_TYPES.OUTSTATION;
+  const minLeadHours = readDispatchNumber(
+    dispatchConfig.MIN_SCHEDULED_LEAD_HOURS,
+    SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS,
+  );
+  const minLeadDays = readDispatchNumber(
+    dispatchConfig.MIN_OUTSTATION_LEAD_DAYS,
+    SCHEDULED_BOOKING.MIN_OUTSTATION_LEAD_DAYS,
   );
   // Lazy-snapshot the wall clock so the derived `minPickupDate` memo
   // stays pure (Date.now is impure under react-hooks/purity). Fine to
   // be stable for the lifetime of the page — the backend re-validates
   // against the live clock when the user hits Pay.
   const [nowAnchorMs] = useState(() => Date.now());
-  const minPickupDate = useMemo(
-    () => new Date(nowAnchorMs + minLeadHours * 60 * 60 * 1000),
-    [nowAnchorMs, minLeadHours],
-  );
+  const minPickupDate = useMemo(() => {
+    if (isOutstation) {
+      return (
+        addCalendarDays(new Date(nowAnchorMs), minLeadDays)
+        || startOfLocalDay(new Date(nowAnchorMs))
+      );
+    }
+    return new Date(nowAnchorMs + minLeadHours * 60 * 60 * 1000);
+  }, [nowAnchorMs, minLeadHours, minLeadDays, isOutstation]);
 
   // Mandatory food acknowledgement gate (hourly only). The slab page
   // is meant to capture this, but a direct landing on /confirm — or a
@@ -238,7 +250,6 @@ const ConfirmAndPayPage = () => {
   // confirmed they'll feed the driver.
   const foodRequired = !!estimate?.fareBreakdown?.foodRequired;
   const isHourly = draft.serviceType === SERVICE_TYPES.HOURLY;
-  const isOutstation = draft.serviceType === SERVICE_TYPES.OUTSTATION;
   const foodAcknowledged = !!draft.hourly?.foodAcknowledged;
   const foodGateUnmet = isHourly && foodRequired && !foodAcknowledged;
   const setHourly = useBookingDraftStore((s) => s.setHourly);
@@ -625,7 +636,7 @@ const ConfirmAndPayPage = () => {
             || null
         }
         minPickupDate={minPickupDate}
-        minLeadHours={minLeadHours}
+        minLeadDays={minLeadDays}
         onClose={() => setOutstationPickupEditOpen(false)}
         onSave={handleOutstationPickupSave}
       />
@@ -1119,7 +1130,7 @@ function OutstationPickupEditDialog({
   initialPickupAt,
   initialReturnAt,
   minPickupDate,
-  minLeadHours,
+  minLeadDays,
   onClose,
   onSave,
 }) {
@@ -1129,7 +1140,7 @@ function OutstationPickupEditDialog({
       initialPickupAt={initialPickupAt}
       initialReturnAt={initialReturnAt}
       minPickupDate={minPickupDate}
-      minLeadHours={minLeadHours}
+      minLeadDays={minLeadDays}
       onClose={onClose}
       onSave={onSave}
     />
@@ -1140,7 +1151,7 @@ function OutstationPickupEditDialogBody({
   initialPickupAt,
   initialReturnAt,
   minPickupDate,
-  minLeadHours,
+  minLeadDays,
   onClose,
   onSave,
 }) {
@@ -1255,15 +1266,15 @@ function OutstationPickupEditDialogBody({
               "now + N hours" themselves. The picker below independently
               enforces the same floor by disabling any day/slot earlier
               than this moment. */}
-          {minLeadHours > 0 && earliestPickupLabel && (
+          {minLeadDays > 0 && earliestPickupLabel && (
             <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-start gap-2">
               <Clock className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
               <p className="text-[12px] leading-snug text-amber-900">
                 <strong className="font-semibold">
                   Earliest pickup: {earliestPickupLabel}.
                 </strong>{' '}
-                We need at least {formatLeadHours(minLeadHours)} between
-                booking and pickup so a driver can be assigned.
+                We need at least {minLeadDays} day{minLeadDays === 1 ? '' : 's'}{' '}
+                between booking and pickup so a driver can be assigned.
               </p>
             </div>
           )}

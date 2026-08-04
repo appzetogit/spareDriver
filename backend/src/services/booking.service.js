@@ -79,6 +79,10 @@ import {
   cancelScheduledBookingJobs,
   loadScheduledDispatchConfig,
 } from './bookingScheduled.service.js';
+import {
+  calendarDaysUntilPickup,
+  applyOutstationLocationPrivacy,
+} from '../utils/outstationDispatch.js';
 
 /**
  * Business rules:
@@ -250,6 +254,15 @@ function stripContactIfHidden(person) {
   return person;
 }
 
+/**
+ * Outstation: keep address text, strip GeoJSON coords until local
+ * midnight on the pickup calendar day. Sets `locationRevealed`.
+ * Non-outstation bookings always reveal location.
+ * Re-exported from `utils/outstationDispatch.js` for callers that already
+ * import booking.service sanitizers.
+ */
+export { applyOutstationLocationPrivacy } from '../utils/outstationDispatch.js';
+
 export function sanitizeBookingForDriver(booking) {
   if (!booking) return booking;
   const obj = booking;
@@ -325,6 +338,8 @@ export function sanitizeBookingForDriver(booking) {
   if (!isBookingContactRevealed(obj) && obj.userId && typeof obj.userId === 'object') {
     stripContactIfHidden(obj.userId);
   }
+
+  applyOutstationLocationPrivacy(obj);
 
   return obj;
 }
@@ -892,27 +907,22 @@ export async function createBookingService(userId, body) {
     }
   }
 
-  // Outstation pickups are always scheduled in advance — the manual
-  // assignment queue needs at least the admin-configured lead window
-  // for ops to pick a driver before the trip is supposed to start. Past
-  // pickups land here too (negative diff < positive lead) and are
-  // rejected with the same 422 so the FE can surface one consistent
-  // error path. The knob lives on `ServicePricing.scheduledDispatch`
-  // and is admin-tunable per service (same field hourly already uses).
+  // Outstation pickups use calendar-day lead (MIN_OUTSTATION_LEAD_DAYS).
+  // Hourly scheduled keeps MIN_SCHEDULED_LEAD_HOURS above.
   if (serviceType === SERVICE_TYPES.OUTSTATION) {
     const cfg = await loadScheduledDispatchConfig(serviceType);
-    const minLeadHours =
-      cfg.MIN_SCHEDULED_LEAD_HOURS ?? SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS;
-    const minLeadMs = minLeadHours * 60 * 60 * 1000;
+    const minLeadDays =
+      cfg.MIN_OUTSTATION_LEAD_DAYS ?? SCHEDULED_BOOKING.MIN_OUTSTATION_LEAD_DAYS;
     const pickupRaw = outstation?.pickupAt || outstation?.startDate;
     const startMs = new Date(pickupRaw).getTime();
     if (!Number.isFinite(startMs)) {
       throw new ApiError(400, 'Outstation: pickupAt is invalid');
     }
-    if (startMs - Date.now() < minLeadMs) {
+    const daysUntil = calendarDaysUntilPickup(pickupRaw);
+    if (!Number.isFinite(daysUntil) || daysUntil < minLeadDays) {
       throw new ApiError(
         422,
-        `Outstation bookings must start at least ${minLeadHours} hours from now. Pick a later pickup time.`,
+        `Outstation bookings must start at least ${minLeadDays} day${minLeadDays === 1 ? '' : 's'} from today. Pick a later pickup date.`,
       );
     }
     // Outstation always gets its own booking type — override whatever the
@@ -1178,11 +1188,24 @@ export async function createBookingService(userId, body) {
       const decision = await setupScheduledBooking(booking);
       shouldDispatchNow = decision.immediate;
     } catch (scheduleErr) {
+      // Never open the driver inbox on a failed schedule setup — that
+      // would ignore admin visibility / lead windows. Leave the row in
+      // PENDING_ASSIGNMENT so ops can recover (or the next create works
+      // after the underlying bug is fixed).
       console.error(
-        '[booking] scheduled/outstation setup failed — falling back to immediate dispatch:',
+        '[booking] scheduled/outstation setup failed — deferring dispatch:',
         scheduleErr?.message,
       );
-      shouldDispatchNow = true;
+      try {
+        booking.status = BOOKING_STATUS.PENDING_ASSIGNMENT;
+        await booking.save();
+      } catch (persistErr) {
+        console.error(
+          '[booking] failed to park booking as pending_assignment after schedule setup error:',
+          persistErr?.message,
+        );
+      }
+      shouldDispatchNow = false;
     }
   }
 
@@ -1275,6 +1298,9 @@ export async function cancelBookingByUserService(
   booking.timeline.cancelledAt = new Date();
   booking.dispatch.pendingOfferIds = [];
   booking.dispatch.currentExpiresAt = null;
+  // Unlink so driver home/active queries never keep matching this row
+  // if status filters change later.
+  booking.driverId = null;
 
   // Wallet-paid bookings refund instantly into the wallet — no admin
   // intervention needed. Razorpay-paid (legacy) bookings continue to
@@ -1579,6 +1605,8 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
   const minLeadHours =
     cfg.MIN_SCHEDULED_LEAD_HOURS ?? SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS;
   const minLeadMs = minLeadHours * 60 * 60 * 1000;
+  const minLeadDays =
+    cfg.MIN_OUTSTATION_LEAD_DAYS ?? SCHEDULED_BOOKING.MIN_OUTSTATION_LEAD_DAYS;
 
   let nextStartIso = null;
   let nextPickupIso = null;
@@ -1615,10 +1643,11 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
     if (!Number.isFinite(nextPickup.getTime())) {
       throw new ApiError(400, 'pickupAt is required');
     }
-    if (nextPickup.getTime() - Date.now() < minLeadMs) {
+    const daysUntil = calendarDaysUntilPickup(nextPickup);
+    if (!Number.isFinite(daysUntil) || daysUntil < minLeadDays) {
       throw new ApiError(
         422,
-        `Outstation bookings must start at least ${minLeadHours} hours from now.`,
+        `Outstation bookings must start at least ${minLeadDays} day${minLeadDays === 1 ? '' : 's'} from today.`,
       );
     }
 

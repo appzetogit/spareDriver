@@ -212,7 +212,7 @@ const PlatformSettings = () => {
       <div className="overflow-x-auto pb-1 no-scrollbar">
         <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 rounded-2xl w-fit">
           {[
-            { id: 'vehicles', label: 'Vehicle Catalog', icon: Car },
+            { id: 'vehicles', label: 'Vehicle Preferences', icon: Car },
             { id: 'conditions', label: 'Registration Checklist', icon: CheckSquare },
             { id: 'training', label: 'Driver Training', icon: Video },
             { id: 'support', label: 'Website & Contact', icon: Headphones },

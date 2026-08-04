@@ -29,6 +29,7 @@ import {
   Eye,
   UserPlus,
 } from 'lucide-react';
+import Modal from '../../../components/Modal';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
 import Badge from '../../../components/Badge';
@@ -125,6 +126,7 @@ const ManageOutstationAssignments = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [assignBooking, setAssignBooking] = useState(null);
+  const [settleBooking, setSettleBooking] = useState(null);
   const [detailBooking, setDetailBooking] = useState(null);
   const [detailExtra, setDetailExtra] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -354,6 +356,13 @@ const ManageOutstationAssignments = () => {
               onClick: () => setAssignBooking(row),
             });
           }
+          if (canAssign && row.status === BOOKING_STATUS.ARRIVED) {
+            items.push({
+              label: 'Settle',
+              icon: IndianRupee,
+              onClick: () => setSettleBooking(row),
+            });
+          }
           return <RowActionsMenu items={items} />;
         },
       },
@@ -563,6 +572,14 @@ const ManageOutstationAssignments = () => {
           booking={assignBooking}
           onClose={() => setAssignBooking(null)}
           onAssigned={() => { setAssignBooking(null); fetchQueue(); }}
+        />
+      )}
+
+      {settleBooking && (
+        <SettleOutstationModal
+          booking={settleBooking}
+          onClose={() => setSettleBooking(null)}
+          onSettled={() => { setSettleBooking(null); fetchQueue(); }}
         />
       )}
 
@@ -1201,6 +1218,158 @@ function ConflictBanner({ tone, title, subtitle, conflicts }) {
         {conflicts.length > 5 && <li className="list-none opacity-60">+{conflicts.length - 5} more</li>}
       </ul>
     </div>
+  );
+}
+
+/* ================================================================== */
+/* Settle modal — arrived, no OTP                                      */
+/* ================================================================== */
+
+function round2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+function SettleOutstationModal({ booking, onClose, onSettled }) {
+  const bd = booking?.fareSnapshot?.breakdown || {};
+  const amountPaid = round2(
+    Number(booking?.payment?.amountPaidRupees)
+      || Number(booking?.fareSnapshot?.total)
+      || Number(bd.totalPayable)
+      || 0,
+  );
+  const commission = round2(Number(bd.platformCommission ?? booking?.fareSnapshot?.platformCommission) || 0);
+  const platformFee = round2(
+    Number(bd.platformFee ?? bd.serviceCharge ?? booking?.fareSnapshot?.platformFee ?? booking?.fareSnapshot?.serviceCharge) || 0,
+  );
+  const platformKeep = round2(commission + platformFee);
+  const maxPayout = round2(Math.max(0, amountPaid - platformKeep));
+
+  const [payout, setPayout] = useState(String(maxPayout));
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const payoutNum = round2(Number(payout));
+  const payoutValid = Number.isFinite(payoutNum) && payoutNum >= 0 && payoutNum <= maxPayout + 0.001;
+  const userRefund = payoutValid ? round2(Math.max(0, amountPaid - platformKeep - payoutNum)) : 0;
+
+  const submit = async () => {
+    if (!payoutValid) {
+      toast.error(`Driver payout must be between ₹0 and ₹${maxPayout}`);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post(`/admin/outstation-assignments/${booking._id}/settle-arrived`, {
+        driverPayoutRupees: payoutNum,
+        notes: notes.trim() || undefined,
+      });
+      toast.success('Outstation booking settled — driver and user freed');
+      onSettled?.();
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Settle failed',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fmt = (n) => `₹${round2(n).toLocaleString('en-IN')}`;
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Settle arrived outstation"
+      size="md"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600 leading-snug">
+          Customer never started the trip (no OTP). Split the prepaid fare,
+          pay the driver a manual amount, keep platform commission/fee, and
+          refund the remainder to the user wallet.
+        </p>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm space-y-1.5">
+          <div className="flex justify-between gap-2">
+            <span className="text-slate-500">Booking</span>
+            <span className="font-mono font-semibold text-slate-900">
+              {booking.bookingNumber || booking._id}
+            </span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-slate-500">Prepaid fare</span>
+            <span className="font-semibold">{fmt(amountPaid)}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-slate-500">Platform commission</span>
+            <span>{fmt(commission)}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-slate-500">Platform fee</span>
+            <span>{fmt(platformFee)}</span>
+          </div>
+          <div className="flex justify-between gap-2 border-t border-slate-200 pt-1.5 mt-1">
+            <span className="text-slate-500">Max driver payout</span>
+            <span className="font-semibold text-slate-900">{fmt(maxPayout)}</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+            Driver payout (₹)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={maxPayout}
+            step="0.01"
+            value={payout}
+            onChange={(e) => setPayout(e.target.value)}
+            className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          />
+          {!payoutValid && (
+            <p className="text-[11px] text-rose-600 mt-1">
+              Enter a value from 0 to {fmt(maxPayout)}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 flex justify-between text-sm">
+          <span className="text-emerald-800 font-medium">User wallet refund</span>
+          <span className="font-bold text-emerald-900">{fmt(userRefund)}</span>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+            Notes (optional)
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="e.g. Customer unreachable after arrival"
+            className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+          />
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={submitting || !payoutValid}
+            className="inline-flex items-center gap-2"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <IndianRupee className="w-4 h-4" />}
+            Confirm settle
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

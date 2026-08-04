@@ -175,6 +175,7 @@ import {
   getOutstationAssignmentDrivers,
   assignDriverToOutstation,
   probeOutstationDriverConflict,
+  settleOutstationArrived,
 } from '../controllers/booking.controller.js';
 import {
   adminListAds,
@@ -381,6 +382,12 @@ router.post(
   protectStaff,
   restrictTo(...OPERATIONS),
   assignDriverToOutstation,
+);
+router.post(
+  '/outstation-assignments/:id/settle-arrived',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  settleOutstationArrived,
 );
 
 router.get('/drivers', protectStaff, restrictTo(...ALL_STAFF), getDrivers);

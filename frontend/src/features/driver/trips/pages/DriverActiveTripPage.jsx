@@ -38,7 +38,9 @@ import StartRideOtpSheet from '../components/StartRideOtpSheet';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
 import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
-import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
+import useDriverActiveTripStore, {
+  invalidateDriverDashboardCaches,
+} from '../../../../store/driver/useDriverActiveTripStore';
 import useDriverIncomingOfferStore from '../../../../store/driver/useDriverIncomingOfferStore';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
@@ -252,6 +254,7 @@ const DriverActiveTripPage = () => {
     if (status === BOOKING_STATUS.COMPLETED) {
       toast.success('Trip completed');
       clearOfferStoreActive();
+      invalidateDriverDashboardCaches();
       clear();
       navigate('/driver/home', { replace: true });
     } else if (
@@ -277,6 +280,7 @@ const DriverActiveTripPage = () => {
           duration: 6000,
         });
       }
+      invalidateDriverDashboardCaches();
       clear();
       clearOfferStoreActive();
       navigate('/driver/home', { replace: true });
@@ -372,9 +376,16 @@ const DriverActiveTripPage = () => {
   // = live ServicePricing.scheduledDispatch.RIDE_BUFFER_MINUTES) so the
   // FE disable matches the server and we never show a clickable CTA
   // that just 409s.
-  const scheduledStartMs = booking?.hourly?.scheduledStartAt
-    ? new Date(booking.hourly.scheduledStartAt).getTime()
-    : NaN;
+  // Hourly → scheduledStartAt; outstation → pickupAt (startDate fallback).
+  const scheduledStartMs = (() => {
+    const src =
+      booking?.hourly?.scheduledStartAt ||
+      booking?.outstation?.pickupAt ||
+      booking?.outstation?.startDate;
+    if (!src) return NaN;
+    const ms = new Date(src).getTime();
+    return Number.isFinite(ms) ? ms : NaN;
+  })();
   const enRouteUnlockMinutes = Number.isFinite(Number(booking?.enRouteLeadMinutes))
     ? Number(booking.enRouteLeadMinutes)
     : SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
@@ -399,10 +410,39 @@ const DriverActiveTripPage = () => {
     minutesUntilPickup != null &&
     minutesUntilPickup > 0;
 
-  // Hourly rides may only complete once booked duration (+ accepted
-  // extensions) has elapsed — mirrors `completeTripService`.
+  // Complete unlocks only after the booked window ends:
+  //   hourly     → startedAt + hours (+ paid extensions)
+  //   outstation → expectedReturnAt (+ paid extension days)
+  // Returns remaining minutes (hourly) or a days-aware label via
+  // `completeTooEarlyLabel` for the banner / CTA.
   const completeTooEarlyMinutes = useMemo(() => {
     if (status !== BOOKING_STATUS.STARTED) return null;
+
+    const isOutstation =
+      booking?.serviceType === SERVICE_TYPES.OUTSTATION ||
+      booking?.bookingType === 'outstation';
+
+    if (isOutstation) {
+      const endSrc =
+        booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
+      if (!endSrc) return null;
+      let endMs = new Date(endSrc).getTime();
+      if (!Number.isFinite(endMs)) return null;
+      const unappliedDays = (booking?.extensions || []).reduce((sum, ext) => {
+        if (ext?.status !== 'accepted') return sum;
+        if (ext.windowAppliedAt) return sum;
+        const days =
+          Number(ext.additionalDays) ||
+          Math.round((Number(ext.additionalHours) || 0) / 24) ||
+          0;
+        return sum + Math.max(0, days);
+      }, 0);
+      if (unappliedDays > 0) endMs += unappliedDays * 86_400_000;
+      const remainingMs = endMs - Date.now();
+      if (remainingMs <= 0) return null;
+      return Math.max(1, Math.ceil(remainingMs / 60_000));
+    }
+
     const startedAtMs = booking?.timeline?.startedAt
       ? new Date(booking.timeline.startedAt).getTime()
       : NaN;
@@ -419,11 +459,33 @@ const DriverActiveTripPage = () => {
     return Math.max(1, Math.ceil(remainingMs / 60_000));
   }, [
     status,
+    booking?.serviceType,
+    booking?.bookingType,
+    booking?.outstation?.expectedReturnAt,
+    booking?.outstation?.endDate,
     booking?.timeline?.startedAt,
     booking?.hourly?.durationHours,
     booking?.extensions,
     heartbeat,
   ]);
+
+  const isOutstationTrip =
+    booking?.serviceType === SERVICE_TYPES.OUTSTATION ||
+    booking?.bookingType === 'outstation';
+
+  const completeTooEarlyLabel = useMemo(() => {
+    if (completeTooEarlyMinutes == null) return null;
+    if (!isOutstationTrip) {
+      return `about ${completeTooEarlyMinutes} min`;
+    }
+    const days = Math.floor(completeTooEarlyMinutes / (24 * 60));
+    const hours = Math.floor((completeTooEarlyMinutes % (24 * 60)) / 60);
+    if (days >= 1) {
+      return hours > 0 ? `${days}d ${hours}h` : `${days} day${days === 1 ? '' : 's'}`;
+    }
+    if (hours >= 1) return `${hours}h`;
+    return `about ${completeTooEarlyMinutes} min`;
+  }, [completeTooEarlyMinutes, isOutstationTrip]);
 
   const handleAdvance = useCallback(async () => {
     if (!config?.cta) return;
@@ -447,7 +509,7 @@ const DriverActiveTripPage = () => {
     }
     if (action === 'completeTrip' && completeTooEarlyMinutes != null) {
       toast.error(
-        `Booked time remaining — you can complete in about ${completeTooEarlyMinutes} min.`,
+        `Booked time remaining — you can complete in ${completeTooEarlyLabel}.`,
       );
       return;
     }
@@ -490,6 +552,7 @@ const DriverActiveTripPage = () => {
     minutesUntilPickup,
     enRouteUnlockMinutes,
     completeTooEarlyMinutes,
+    completeTooEarlyLabel,
   ]);
 
   const handleStartWithOtp = useCallback(
@@ -630,7 +693,11 @@ const DriverActiveTripPage = () => {
   const carImage = car?.image || null;
   const carHeadline = [carBrand, carModel].filter(Boolean).join(' ') || carType || 'Vehicle';
 
-  const showMap = STATUSES_WITH_MAP.includes(booking.status) && pickupCoords;
+  const locationRevealed = booking.locationRevealed !== false;
+  const showMap =
+    STATUSES_WITH_MAP.includes(booking.status)
+    && pickupCoords
+    && locationRevealed;
 
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
@@ -676,7 +743,8 @@ const DriverActiveTripPage = () => {
       </div>
 
       <div className="flex-1 p-4 space-y-4">
-        {/* Live map: driver + pickup, emphasising the pickup pin */}
+        {/* Live map: driver + pickup, emphasising the pickup pin.
+            Outstation hides coords until midnight on trip day. */}
         {showMap && (
           <TripTrackingMap
             driver={driverPoint}
@@ -687,6 +755,23 @@ const DriverActiveTripPage = () => {
             followDriver={Boolean(driverPoint)}
             bookingStatus={booking.status}
           />
+        )}
+        {!locationRevealed && STATUSES_WITH_MAP.includes(booking.status) && (
+          <Card className="bg-amber-50 border border-amber-200">
+            <div className="flex items-start gap-3">
+              <MapPin className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-900">
+                  Map unlocks on trip day
+                </p>
+                <p className="text-xs text-amber-800 mt-1 leading-snug">
+                  {booking?.pickup?.address
+                    ? `Pickup address: ${booking.pickup.address}`
+                    : 'Full address is shown above. The live map and pin unlock at midnight on the pickup day.'}
+                </p>
+              </div>
+            </div>
+          </Card>
         )}
 
         {/* Status banner */}
@@ -723,17 +808,30 @@ const DriverActiveTripPage = () => {
           />
         )}
 
-        {/* Waiting timer — only at ARRIVED. Ticks once a second and
-            flips colour the moment the free wait expires so the
-            driver can see when the meter starts. */}
+        {/* Waiting timer — only at ARRIVED. Hourly shows free-wait /
+            charge meter; outstation just waits for OTP (admin settles
+            if the customer never starts). */}
         {booking.status === BOOKING_STATUS.ARRIVED && (
-          <WaitingTimerCard
-            arrivedAt={booking.timeline?.arrivedAt}
-            freeMinutes={booking.waiting?.freeMinutes}
-            perMinuteRupees={booking.waiting?.perMinuteRupees}
-            maxBillableMinutes={booking.waiting?.maxBillableMinutes}
-            bufferRupees={booking.waiting?.bufferRupees}
-          />
+          booking.serviceType === SERVICE_TYPES.OUTSTATION ? (
+            <Card className="border-l-4 border-l-sky-500 bg-sky-50/40">
+              <p className="text-[11px] uppercase tracking-wide text-text-muted font-semibold">
+                Waiting for customer OTP
+              </p>
+              <p className="text-sm text-text mt-1">
+                Ask the customer for the start OTP. If they do not arrive,
+                contact support — there is no automatic trip close for
+                outstation.
+              </p>
+            </Card>
+          ) : (
+            <WaitingTimerCard
+              arrivedAt={booking.timeline?.arrivedAt}
+              freeMinutes={booking.waiting?.freeMinutes}
+              perMinuteRupees={booking.waiting?.perMinuteRupees}
+              maxBillableMinutes={booking.waiting?.maxBillableMinutes}
+              bufferRupees={booking.waiting?.bufferRupees}
+            />
+          )
         )}
 
         {/* Extension OTP banner — pushed via socket when the customer
@@ -990,11 +1088,11 @@ const DriverActiveTripPage = () => {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-amber-900">
-                Booked time still running
+                {isOutstationTrip ? 'Booked return still ahead' : 'Booked time still running'}
               </p>
               <p className="text-[12px] leading-snug mt-1 text-amber-800">
-                Complete unlocks in about{' '}
-                <span className="font-semibold">{completeTooEarlyMinutes} min</span>.
+                Complete unlocks in{' '}
+                <span className="font-semibold">{completeTooEarlyLabel}</span>.
               </p>
             </div>
           </div>
@@ -1047,7 +1145,7 @@ const DriverActiveTripPage = () => {
                   ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
                   : config.cta.action === 'completeTrip' &&
                       completeTooEarlyMinutes != null
-                    ? `Complete in ~${completeTooEarlyMinutes} min`
+                    ? `Complete in ${completeTooEarlyLabel}`
                     : config.cta.label}
           </Button>
         )}

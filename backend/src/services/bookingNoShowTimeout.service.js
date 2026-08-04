@@ -2,6 +2,7 @@ import Booking from '../models/booking.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import ServicePricing from '../models/servicePricing.model.js';
 import { BOOKING_STATUS } from '../constants/bookingStatus.js';
+import { SERVICE_TYPES } from '../constants/serviceTypes.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
   emitToUser,
@@ -15,6 +16,13 @@ import {
 } from './bookingExtension.service.js';
 import { recordCompletedTripPlatformRevenue } from './platformRevenue.service.js';
 import { incrementCouponUsageService } from './coupon.service.js';
+
+function isOutstationBooking(booking) {
+  return (
+    booking?.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking?.serviceType === 'outstation'
+  );
+}
 
 /**
  * No-show timer service.
@@ -78,6 +86,8 @@ export async function schedulePromptTimer(bookingId, arrivedAt = new Date()) {
     .lean();
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.ARRIVED) return;
+  // Outstation: no prompt / auto-complete — admin settles stuck arrivals.
+  if (isOutstationBooking(booking)) return;
 
   const policy = await loadWaitingPolicy(booking.serviceType);
   const firedFor = Number(booking.noShow?.firedFor || 0);
@@ -119,6 +129,7 @@ async function firePrompt(bookingId) {
   const booking = await Booking.findById(bookingId);
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.ARRIVED) return;
+  if (isOutstationBooking(booking)) return;
   // NOTE: we deliberately do NOT short-circuit here on
   // `customerResponse === 'on_my_way'`. After the user says yes,
   // `recordCustomerOnMyWay` reschedules a fresh prompt — this fire IS
@@ -201,6 +212,7 @@ export async function recordCustomerOnMyWay(bookingId) {
   );
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.ARRIVED) return;
+  if (isOutstationBooking(booking)) return;
 
   const policy = await loadWaitingPolicy(booking.serviceType);
   const firedFor = Number(booking.noShow?.firedFor || 0);
@@ -232,6 +244,11 @@ export async function recordCustomerOnMyWay(bookingId) {
  * the driver doesn't sit there for the grace window.
  */
 export async function recordCustomerNotComing(bookingId) {
+  const preview = await Booking.findById(bookingId).select('serviceType').lean();
+  if (isOutstationBooking(preview)) {
+    cancelNoShowSchedule(bookingId);
+    return;
+  }
   cancelNoShowSchedule(bookingId);
   await Booking.updateOne(
     { _id: bookingId },
@@ -263,6 +280,7 @@ async function autoCompleteForNoShow(bookingId) {
   // Race: if the trip already started (driver entered the OTP), let
   // the normal flow take over.
   if (booking.status !== BOOKING_STATUS.ARRIVED) return;
+  if (isOutstationBooking(booking)) return;
 
   // IMPORTANT: we deliberately do NOT short-circuit on
   // `customerResponse === 'on_my_way'` here. The auto-complete timer
@@ -379,6 +397,7 @@ async function autoCompleteForNoShow(bookingId) {
 export async function resumeNoShowScheduleIfNeeded(booking) {
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.ARRIVED) return;
+  if (isOutstationBooking(booking)) return;
   if (noShowTimers.has(key(booking._id))) return;
   // If we already prompted and have a live deadline, resume the right
   // phase for the current prompt index. The (maxNoShowPrompts+1)-th

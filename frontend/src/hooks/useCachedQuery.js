@@ -15,15 +15,11 @@ export function useCachedQuery(store, cacheKey, params, options = {}) {
   const fetch = store((state) => state.fetch);
   const refresh = store((state) => state.refresh);
 
+  // Latest-params ref: update during render so the fetch effect below never
+  // races a separate "sync ref" effect and fires with a stale `{}`
+  // (nearby-drivers home widget was hitting the API before lat/lng arrived).
   const paramsRef = useRef(params);
-  // Keep the latest `params` on the ref without writing during render. Refs
-  // are mutated inside an effect so React's strict mode + the
-  // `react-hooks/refs` lint stay happy. Effects fire after every commit, so
-  // by the time any fetch consumer reaches for `paramsRef.current` it sees
-  // the freshest payload.
-  useEffect(() => {
-    paramsRef.current = params;
-  }, [params]);
+  paramsRef.current = params;
 
   // Track `isFetched` in the dep array so that when an external caller
   // wipes the entry via `store.invalidate(...)`, every still-mounted
@@ -34,13 +30,13 @@ export function useCachedQuery(store, cacheKey, params, options = {}) {
   useEffect(() => {
     if (!enabled || !cacheKey) return;
     if (entryIsFetched) return;
-    fetch(cacheKey, paramsRef.current).catch(() => {});
+    fetch(cacheKey, paramsRef.current ?? {}).catch(() => {});
   }, [cacheKey, enabled, fetch, entryIsFetched]);
 
-  const refetch = useCallback(
-    () => refresh(cacheKey, paramsRef.current),
-    [cacheKey, refresh],
-  );
+  const refetch = useCallback(() => {
+    if (!cacheKey) return Promise.resolve(null);
+    return refresh(cacheKey, paramsRef.current ?? {});
+  }, [cacheKey, refresh]);
 
   const isLoading = enabled && (entry?.loading || (!entry?.isFetched && !entry?.error));
 

@@ -21,8 +21,14 @@ import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import {
   computeOutstationDuration,
+  addCalendarDays,
+  startOfLocalDay,
 } from '../../../../utils/outstationSchedule';
-import { mergeScheduledDispatchConfig } from '../../../../constants/bookingStatus';
+import {
+  mergeScheduledDispatchConfig,
+  readDispatchNumber,
+  SCHEDULED_BOOKING,
+} from '../../../../constants/bookingStatus';
 
 /**
  * Step 3 — pick duration (hourly) or date range (outstation).
@@ -97,9 +103,9 @@ function HourlyBranch({ pricing, draft, onPatch, onContinue }) {
     () => mergeScheduledDispatchConfig(pricing?.scheduledDispatch),
     [pricing?.scheduledDispatch],
   );
-  const minLeadHours = Math.max(
-    0,
-    Number(dispatchConfig.MIN_SCHEDULED_LEAD_HOURS) || 0,
+  const minLeadHours = readDispatchNumber(
+    dispatchConfig.MIN_SCHEDULED_LEAD_HOURS,
+    SCHEDULED_BOOKING.MIN_SCHEDULED_LEAD_HOURS,
   );
   // Read the wall clock ONCE per mount so React's purity lint stays
   // happy on the derived `minPickupDate` memo (Date.now() is impure).
@@ -217,23 +223,26 @@ function HourlyBranch({ pricing, draft, onPatch, onContinue }) {
 function OutstationBranch({ pricing, draft, onPatch, onContinue }) {
   const navigate = useNavigate();
 
-  // Pull the admin-configured outstation lead time. Mirrors the hourly
-  // scheduled flow — the backend enforces the same floor on create
-  // (see booking.service.js → outstation lead check). Falls back to
-  // the platform default when no override is set so the picker still
-  // works for fresh pricing docs.
+  // Pull the admin-configured outstation lead time (calendar days).
+  // Backend enforces MIN_OUTSTATION_LEAD_DAYS on create — never use
+  // the hourly MIN_SCHEDULED_LEAD_HOURS knob here.
   const dispatchConfig = useMemo(
     () => mergeScheduledDispatchConfig(pricing?.scheduledDispatch),
     [pricing?.scheduledDispatch],
   );
-  const minLeadHours = Math.max(0, Number(dispatchConfig.MIN_SCHEDULED_LEAD_HOURS) || 0);
+  const minLeadDays = readDispatchNumber(
+    dispatchConfig.MIN_OUTSTATION_LEAD_DAYS,
+    SCHEDULED_BOOKING.MIN_OUTSTATION_LEAD_DAYS,
+  );
   // Lazy-snapshot the wall clock (Date.now is impure under
   // react-hooks/purity). Floor is stable for the lifetime of the
   // mount; backend re-validates against the live clock on Continue.
   const [nowAnchorMs] = useState(() => Date.now());
   const minPickupDate = useMemo(
-    () => new Date(nowAnchorMs + minLeadHours * 60 * 60 * 1000),
-    [nowAnchorMs, minLeadHours],
+    () =>
+      addCalendarDays(new Date(nowAnchorMs), minLeadDays)
+      || startOfLocalDay(new Date(nowAnchorMs)),
+    [nowAnchorMs, minLeadDays],
   );
 
   // Blank-by-default. Rehydrate from the draft only when the saved

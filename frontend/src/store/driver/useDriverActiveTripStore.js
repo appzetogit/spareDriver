@@ -6,6 +6,7 @@ import {
   useDriverEarningsStore,
   useDriverEarningsLedgerStore,
 } from './useDriverTripsStore';
+import { BOOKING_STATUS } from '../../constants/bookingStatus';
 
 /**
  * Wipe every dashboard cache that depends on trip-history. Called whenever
@@ -16,7 +17,7 @@ import {
  * cache key (it owns its own pagination state), so we just kick it
  * back to page-1 instead of invalidating a key.
  */
-function invalidateDashboardCaches() {
+export function invalidateDriverDashboardCaches() {
   useDriverHomeSummaryStore.getState().invalidate('driver-home-summary');
   useDriverTripsListStore.getState().invalidate('driver-trips-list');
   useDriverEarningsStore.getState().invalidate('driver-earnings');
@@ -24,6 +25,16 @@ function invalidateDashboardCaches() {
   // re-mount will catch up. Never wedges the cancel/complete flow.
   useDriverEarningsLedgerStore.getState().refresh().catch(() => {});
 }
+
+/** Statuses where this driver no longer owns an active trip. */
+const DRIVER_TRIP_ENDED_STATUSES = new Set([
+  BOOKING_STATUS.CANCELLED,
+  BOOKING_STATUS.COMPLETED,
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.PENDING_ASSIGNMENT,
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
+  BOOKING_STATUS.IN_EMERGENCY_POOL,
+]);
 
 /**
  * Source of truth for the driver's currently-active booking on the client.
@@ -72,7 +83,14 @@ const useDriverActiveTripStore = create((set, get) => ({
    */
   applyUpdate(patch = {}) {
     const current = get().booking;
-    if (!current) return;
+    if (!current) {
+      // Still refresh home tiles when a cancel/complete arrives while
+      // the driver is on /driver/home (no in-memory active booking).
+      if (patch.status && DRIVER_TRIP_ENDED_STATUSES.has(patch.status)) {
+        invalidateDriverDashboardCaches();
+      }
+      return;
+    }
     if (patch.bookingId && String(patch.bookingId) !== String(current._id)) return;
     const merged = { ...current };
     if (patch.status) merged.status = patch.status;
@@ -91,6 +109,9 @@ const useDriverActiveTripStore = create((set, get) => ({
     if (Array.isArray(patch.extensions)) {
       merged.extensions = patch.extensions;
     }
+    if (patch.outstation) {
+      merged.outstation = { ...(current.outstation || {}), ...patch.outstation };
+    }
     // Rating patch — surfaced when the customer rates this driver so
     // the driver app can show "Customer rated you ⭐ 5" badges without
     // a refetch. Merged shallow so a customer-only patch doesn't drop
@@ -102,6 +123,13 @@ const useDriverActiveTripStore = create((set, get) => ({
       };
     }
     set({ booking: merged });
+
+    // Customer/admin cancel (or outstation re-dispatch) must drop the
+    // home "Active trips" tile immediately — otherwise the cached
+    // summary keeps showing the pre-cancel DRIVER_ASSIGNED row.
+    if (patch.status && DRIVER_TRIP_ENDED_STATUSES.has(patch.status)) {
+      invalidateDriverDashboardCaches();
+    }
   },
 
   async fetchActive() {
@@ -182,12 +210,12 @@ const useDriverActiveTripStore = create((set, get) => ({
   },
   async completeTrip() {
     const booking = await get()._runTransition('complete', 'complete');
-    invalidateDashboardCaches();
+    invalidateDriverDashboardCaches();
     return booking;
   },
   async cancelTrip(reason = 'cancelled_by_driver') {
     const booking = await get()._runTransition('cancel', 'cancel', { reason });
-    invalidateDashboardCaches();
+    invalidateDriverDashboardCaches();
     return booking;
   },
   /**

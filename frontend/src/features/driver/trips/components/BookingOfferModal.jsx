@@ -127,12 +127,17 @@ const BookingOfferModal = () => {
     return () => window.removeEventListener('sd:prime-offer-audio', onPrime);
   }, [primeAlert]);
 
-  // Inbound offer from server → timed modal for instant/outstation only.
-  // Scheduled inbox items go to the Incoming list store (no countdown).
+  // Inbound offer from server → timed ringing modal for instant only.
+  // Scheduled / outstation / subscription inbox items go to the Incoming
+  // list store (no countdown, no ringtone).
   useSocketEvent(S2C_EVENTS.BOOKING_OFFERED, (payload) => {
     if (
       payload?.inbox
       || payload?.bookingType === BOOKING_TYPE.SCHEDULED
+      || payload?.bookingType === BOOKING_TYPE.OUTSTATION
+      || payload?.bookingType === 'subscription'
+      || payload?.kind === 'subscription'
+      || payload?.serviceType === SERVICE_TYPES.OUTSTATION
     ) {
       return;
     }

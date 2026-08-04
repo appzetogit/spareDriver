@@ -34,6 +34,10 @@ import {
   isInboxBookingType,
   resolveBookingSearchStartAt,
 } from '../utils/bookingInbox.js';
+import {
+  outstationAssignAt,
+  outstationEscalateAt,
+} from '../utils/outstationDispatch.js';
 
 export {
   INBOX_BOOKING_TYPES,
@@ -197,6 +201,51 @@ export function decideScheduleTier(scheduledStartAt, now, config) {
 }
 
 /**
+ * Outstation-only schedule decision — calendar days, no morning/short/
+ * long hour tiers. Driven by:
+ *   DRIVER_VISIBILITY_DAYS → assignAt (inbox opens)
+ *   EMERGENCY_POOL_DAYS    → escalateAt (emergency pool)
+ *
+ * Returns `{ tier: 'outstation_days', immediate, assignAt, escalateAt }`.
+ */
+export function decideOutstationScheduleTiers(pickupAt, now, config) {
+  const cfg = { ...SCHEDULED_BOOKING, ...(config || {}) };
+  const visibilityDays =
+    cfg.DRIVER_VISIBILITY_DAYS ?? SCHEDULED_BOOKING.DRIVER_VISIBILITY_DAYS;
+  const emergencyDays =
+    cfg.EMERGENCY_POOL_DAYS ?? SCHEDULED_BOOKING.EMERGENCY_POOL_DAYS;
+
+  const assignAt = outstationAssignAt(pickupAt, visibilityDays);
+  const escalateAt = outstationEscalateAt(pickupAt, emergencyDays);
+  const nowDate = now instanceof Date ? now : new Date(Number(now) || Date.now());
+  const nowMs = nowDate.getTime();
+
+  if (!assignAt || !Number.isFinite(assignAt.getTime())) {
+    return {
+      tier: 'outstation_days',
+      immediate: true,
+      assignAt: null,
+      escalateAt,
+    };
+  }
+
+  if (assignAt.getTime() <= nowMs) {
+    return {
+      tier: 'outstation_days',
+      immediate: true,
+      assignAt,
+      escalateAt,
+    };
+  }
+  return {
+    tier: 'outstation_days',
+    immediate: false,
+    assignAt,
+    escalateAt,
+  };
+}
+
+/**
  * Called from `createBookingService` once the booking row exists.
  *
  *   - Persists the decision (`scheduled.tier`, `assignAt`, `escalateAt`).
@@ -219,7 +268,12 @@ export async function setupScheduledBooking(booking) {
     );
   }
   const config = await loadScheduledDispatchConfig(booking.serviceType);
-  const decision = decideScheduleTier(startAt, new Date(), config);
+  const isOutstation =
+    booking?.serviceType === 'outstation'
+    || booking?.bookingType === BOOKING_TYPE.OUTSTATION;
+  const decision = isOutstation
+    ? decideOutstationScheduleTiers(startAt, new Date(), config)
+    : decideScheduleTier(startAt, new Date(), config);
 
   booking.scheduled = {
     ...(booking.scheduled?.toObject?.() || booking.scheduled || {}),

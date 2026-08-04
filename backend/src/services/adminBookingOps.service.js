@@ -6,7 +6,9 @@ import {
   BOOKING_PAYMENT_STATUS,
   DISPATCH_RESPONSE,
   TERMINAL_BOOKING_STATUSES,
+  PAYMENT_POLICY,
 } from '../constants/bookingStatus.js';
+import { SERVICE_TYPES } from '../constants/serviceTypes.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
   emitToUser,
@@ -18,6 +20,18 @@ import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { notifyDriverOrderAssigned } from '../utils/notificationDispatch.js';
 import { ApiError } from '../utils/apiError.js';
 
+function generateRideOtp() {
+  const len = PAYMENT_POLICY.RIDE_OTP_LENGTH;
+  const max = 10 ** len;
+  const n = Math.floor(Math.random() * max);
+  return String(n).padStart(len, '0');
+}
+
+function timelineObject(booking) {
+  return {
+    ...(booking.timeline?.toObject?.() || booking.timeline || {}),
+  };
+}
 /** Pre-trip statuses where admin can swap the assigned driver. */
 export const ADMIN_REASSIGN_STATUSES = Object.freeze([
   BOOKING_STATUS.DRIVER_ASSIGNED,
@@ -255,6 +269,10 @@ export async function adminAssignBookingDriverService(
  * Admin override for booking status — used to unblock account deletions
  * (cancel stuck trips, force-complete, etc.). Emits the same socket events
  * as the normal trip pipeline so clients stay in sync.
+ *
+ * When forcing **arrived**, also mints `rideStartOtp` (same as the driver
+ * "I've arrived" path) and includes the code in the user socket payload —
+ * otherwise the customer UI has no OTP to show.
  */
 export async function adminUpdateBookingStatusService(
   bookingId,
@@ -269,7 +287,12 @@ export async function adminUpdateBookingStatusService(
   if (!booking || booking.isDeleted) throw new ApiError(404, 'Booking not found');
 
   const previousStatus = booking.status;
-  if (previousStatus === status) {
+  const needsOtpBackfill =
+    previousStatus === BOOKING_STATUS.ARRIVED
+    && status === BOOKING_STATUS.ARRIVED
+    && !booking.rideStartOtp?.code;
+
+  if (previousStatus === status && !needsOtpBackfill) {
     return { booking: booking.toObject(), previousStatus, changed: false };
   }
 
@@ -279,41 +302,95 @@ export async function adminUpdateBookingStatusService(
     return { booking: cancelled, previousStatus, changed: true };
   }
 
-  booking.status = status;
-
   const now = new Date();
-  if (status === BOOKING_STATUS.COMPLETED && !booking.timeline?.completedAt) {
-    booking.timeline = {
-      ...(booking.timeline?.toObject?.() || booking.timeline || {}),
-      completedAt: now,
-    };
+  booking.status = status;
+  booking.timeline = timelineObject(booking);
+
+  if (status === BOOKING_STATUS.EN_ROUTE && !booking.timeline.enRouteAt) {
+    booking.timeline.enRouteAt = now;
+  }
+
+  let mintedOtp = false;
+  if (status === BOOKING_STATUS.ARRIVED) {
+    if (!booking.timeline.arrivedAt) {
+      booking.timeline.arrivedAt = now;
+    }
+    // Match markDriverArrivedService: customer must see a start OTP.
+    // Regenerate when missing or already verified (stale from a prior cycle).
+    if (!booking.rideStartOtp?.code || booking.rideStartOtp?.verifiedAt) {
+      booking.rideStartOtp = {
+        code: generateRideOtp(),
+        generatedAt: now,
+        verifiedAt: null,
+        attempts: 0,
+      };
+      mintedOtp = true;
+    }
+  }
+
+  if (status === BOOKING_STATUS.STARTED) {
+    if (!booking.timeline.startedAt) booking.timeline.startedAt = now;
+    if (booking.rideStartOtp && !booking.rideStartOtp.verifiedAt) {
+      booking.rideStartOtp.verifiedAt = now;
+    }
+  }
+
+  if (status === BOOKING_STATUS.COMPLETED && !booking.timeline.completedAt) {
+    booking.timeline.completedAt = now;
     cancelPaymentTimeout(booking._id);
     if (booking.driverId) {
-      const { Driver } = await import('../models/driverModels/driver.model.js');
       await Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } });
     }
   }
 
   if (TERMINAL_BOOKING_STATUSES.includes(status) && booking.driverId) {
-    const { Driver } = await import('../models/driverModels/driver.model.js');
     await Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } });
   }
 
   await booking.save();
 
-  const payload = {
+  if (status === BOOKING_STATUS.ARRIVED && mintedOtp) {
+    // Hourly no-show prompts only — outstation uses admin settle.
+    if (booking.serviceType !== SERVICE_TYPES.OUTSTATION) {
+      const { schedulePromptTimer } = await import('./bookingNoShowTimeout.service.js');
+      schedulePromptTimer(booking._id, booking.timeline.arrivedAt || now).catch((err) =>
+        console.warn('[adminBookingOps] no-show schedule failed:', err?.message),
+      );
+    }
+    const { notifyUserDriverArrived } = await import('../utils/notificationDispatch.js');
+    notifyUserDriverArrived(booking.userId, booking).catch(() => null);
+  }
+
+  const basePayload = {
     bookingId: String(booking._id),
     status: booking.status,
     bookingNumber: booking.bookingNumber || '',
     previousStatus,
     adminOverride: true,
+    timeline: booking.timeline?.toObject?.() || booking.timeline || null,
+    driverId: booking.driverId ? String(booking.driverId) : null,
   };
-  emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, payload);
-  if (booking.driverId) {
-    emitToDriver(booking.driverId, S2C_EVENTS.BOOKING_UPDATED, payload);
+
+  const userPayload = { ...basePayload };
+  if (booking.rideStartOtp?.code) {
+    userPayload.rideStartOtp = {
+      code: booking.rideStartOtp.code,
+      generatedAt: booking.rideStartOtp.generatedAt,
+      verifiedAt: booking.rideStartOtp.verifiedAt,
+    };
   }
-  emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, payload);
-  emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
+
+  const driverPayload = { ...basePayload };
+  if (booking.rideStartOtp?.code) {
+    driverPayload.otpRequired = !booking.rideStartOtp.verifiedAt;
+  }
+
+  emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, userPayload);
+  if (booking.driverId) {
+    emitToDriver(booking.driverId, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
+  }
+  emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);
+  emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, driverPayload);
 
   return { booking: booking.toObject(), previousStatus, changed: true };
 }
