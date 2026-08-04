@@ -28,6 +28,51 @@ import {
 import { TASK_TYPE } from '../constants/adminTask.js';
 import AdminTask from '../models/adminTask.model.js';
 
+function staffDisplayName(staff) {
+  return staff?.name || staff?.email || 'Staff';
+}
+
+function appendApprovalHistory(driver, { status, by, byName = '', note = '' }) {
+  if (!Array.isArray(driver.approvalHistory)) {
+    driver.approvalHistory = [];
+  }
+  driver.approvalHistory.push({
+    status,
+    note: (note || '').trim(),
+    by: by || null,
+    byName: byName || '',
+    at: new Date(),
+  });
+}
+
+/** If history was never written, surface the current approvedBy stamp once. */
+function ensureLegacyApprovalHistory(doc) {
+  if (Array.isArray(doc.approvalHistory) && doc.approvalHistory.length) {
+    return doc;
+  }
+  const by = doc.approvedBy;
+  if (!by && !doc.approvedAt) return doc;
+
+  const status =
+    doc.approvalStatus === 'rejected'
+      ? 'rejected'
+      : doc.approvalStatus === 'suspended'
+        ? 'suspended'
+        : 'approved';
+
+  doc.approvalHistory = [
+    {
+      status,
+      note: doc.approvalNote || '',
+      by: by || null,
+      byName:
+        (typeof by === 'object' && (by.name || by.email)) || '',
+      at: doc.approvedAt || doc.updatedAt || null,
+    },
+  ];
+  return doc;
+}
+
 export const loginStaffService = async (email, password) => {
   if (!email || !password) {
     throw new ApiError(400, 'Email and password required');
@@ -174,14 +219,20 @@ export const getDriverByIdService = async (staff, driverId) => {
     .populate('vehicleExperience.brandId', 'name')
     .populate('vehicleExperience.modelId', 'name')
     .populate('vehicleExperience.fuelTypeId', 'name')
-    .populate('approvedBy', 'name email');
+    .populate('approvedBy', 'name email')
+    .populate('approvalHistory.by', 'name email');
 
   if (!driver) {
     throw new ApiError(404, 'Driver not found');
   }
 
-  const doc = driver.toObject();
+  const doc = ensureLegacyApprovalHistory(driver.toObject());
   doc.documents = dedupeDocumentsByType(doc.documents);
+  if (Array.isArray(doc.approvalHistory)) {
+    doc.approvalHistory = [...doc.approvalHistory].sort(
+      (a, b) => new Date(b.at || 0) - new Date(a.at || 0),
+    );
+  }
 
   const videos = await getActiveTrainingVideos();
   const training = mergeTrainingProgress(videos, doc.trainingProgress);
@@ -218,18 +269,35 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
   driver.approvalStatus = approvalStatus;
   driver.approvalNote = note;
 
+  const actorName = staffDisplayName(staff);
+
   if (approvalStatus === 'approved') {
     driver.approvedAt = new Date();
     driver.approvedBy = staff._id;
+    appendApprovalHistory(driver, {
+      status: 'approved',
+      by: staff._id,
+      byName: actorName,
+      note,
+    });
   } else if (approvalStatus === 'rejected') {
     driver.approvedAt = null;
     driver.approvedBy = staff._id;
+    appendApprovalHistory(driver, {
+      status: 'rejected',
+      by: staff._id,
+      byName: actorName,
+      note,
+    });
   } else if (approvalStatus === 'suspended') {
     driver.isOnline = false;
     driver.isOnTrip = false;
-  } else {
-    driver.approvedAt = null;
-    driver.approvedBy = null;
+    appendApprovalHistory(driver, {
+      status: 'suspended',
+      by: staff._id,
+      byName: actorName,
+      note,
+    });
   }
 
   await driver.save();
@@ -246,7 +314,8 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
   return driver;
 };
 
-export const suspendDriverService = async (adminId, driverId, data = {}) => {
+export const suspendDriverService = async (staffOrId, driverId, data = {}) => {
+  const staffId = staffOrId?._id || staffOrId;
   const driver = await Driver.findById(driverId);
   if (!driver) {
     throw new ApiError(404, 'Driver not found');
@@ -266,11 +335,24 @@ export const suspendDriverService = async (adminId, driverId, data = {}) => {
   driver.isOnline = false;
   driver.isOnTrip = false;
 
+  let byName = staffOrId?.name || staffOrId?.email || '';
+  if (!byName && staffId) {
+    const actor = await User.findById(staffId).select('name email');
+    byName = staffDisplayName(actor);
+  }
+  appendApprovalHistory(driver, {
+    status: 'suspended',
+    by: staffId,
+    byName,
+    note,
+  });
+
   await driver.save();
   return driver;
 };
 
-export const unsuspendDriverService = async (adminId, driverId) => {
+export const unsuspendDriverService = async (staffOrId, driverId) => {
+  const staffId = staffOrId?._id || staffOrId;
   const driver = await Driver.findById(driverId);
   if (!driver) {
     throw new ApiError(404, 'Driver not found');
@@ -280,13 +362,21 @@ export const unsuspendDriverService = async (adminId, driverId) => {
     throw new ApiError(400, 'Driver is not suspended');
   }
 
+  let byName = staffOrId?.name || staffOrId?.email || '';
+  if (!byName && staffId) {
+    const actor = await User.findById(staffId).select('name email');
+    byName = staffDisplayName(actor);
+  }
+
   driver.approvalStatus = 'approved';
-  if (!driver.approvedAt) {
-    driver.approvedAt = new Date();
-  }
-  if (!driver.approvedBy) {
-    driver.approvedBy = adminId;
-  }
+  driver.approvedAt = new Date();
+  driver.approvedBy = staffId;
+  appendApprovalHistory(driver, {
+    status: 'unsuspended',
+    by: staffId,
+    byName,
+    note: '',
+  });
 
   await driver.save();
   return driver;

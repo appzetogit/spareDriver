@@ -139,6 +139,17 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
                 label: 'Type',
                 value: withdrawal.isFullSettlement ? 'Full settlement (account deletion)' : 'Normal withdrawal',
               },
+              {
+                label: 'Payout method',
+                value:
+                  withdrawal.payoutMethod === 'bank'
+                    ? 'Bank transfer'
+                    : withdrawal.qrImage?.url
+                      ? 'QR code'
+                      : withdrawal.bankDetails?.accountNumber
+                        ? 'Bank transfer'
+                        : '—',
+              },
               ...(withdrawal.status === 'processed'
                 ? [{ label: 'Processed on', value: formatDateTime(withdrawal.processedAt) }]
                 : []),
@@ -161,6 +172,22 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
               >
                 Open QR image <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            </div>
+          )}
+          {withdrawal.bankDetails?.accountNumber && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Bank details</p>
+              <InfoGrid
+                items={[
+                  { label: 'Account holder', value: withdrawal.bankDetails.accountHolderName || '—' },
+                  { label: 'Account number', value: withdrawal.bankDetails.accountNumber || '—' },
+                  { label: 'IFSC', value: withdrawal.bankDetails.ifscCode || '—' },
+                  { label: 'Bank', value: withdrawal.bankDetails.bankName || '—' },
+                  ...(withdrawal.bankDetails.upiId
+                    ? [{ label: 'UPI ID', value: withdrawal.bankDetails.upiId }]
+                    : []),
+                ]}
+              />
             </div>
           )}
           {withdrawal.paymentProof?.url && (

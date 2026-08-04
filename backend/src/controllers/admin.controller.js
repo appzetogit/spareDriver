@@ -7,6 +7,7 @@ import {
   listAdminUserTripsService,
   listAdminUserSubscriptionsService,
 } from '../services/adminUserActivity.service.js';
+import { getStaffMemberAnalyticsService } from '../services/staffAnalytics.service.js';
 
 export const loginAdmin = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -71,12 +72,12 @@ export const updateDriverStatus = asyncHandler(async (req, res) => {
 });
 
 export const suspendDriver = asyncHandler(async (req, res) => {
-  const result = await adminService.suspendDriverService(req.staff._id, req.params.id, req.body);
+  const result = await adminService.suspendDriverService(req.staff, req.params.id, req.body);
   return res.status(200).json(new ApiResponse(200, result, 'Driver suspended successfully'));
 });
 
 export const unsuspendDriver = asyncHandler(async (req, res) => {
-  const result = await adminService.unsuspendDriverService(req.staff._id, req.params.id);
+  const result = await adminService.unsuspendDriverService(req.staff, req.params.id);
   return res.status(200).json(new ApiResponse(200, result, 'Driver unsuspended successfully'));
 });
 
@@ -98,4 +99,11 @@ export const updateAdminMember = asyncHandler(async (req, res) => {
 export const deleteAdminMember = asyncHandler(async (req, res) => {
   const result = await adminService.deleteAdminMemberService(req.params.id);
   return res.status(200).json(new ApiResponse(200, result, "Admin team member removed successfully"));
+});
+
+export const getAdminTeamMemberAnalytics = asyncHandler(async (req, res) => {
+  const result = await getStaffMemberAnalyticsService(req.params.id, req.query);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Team member analytics fetched successfully'));
 });

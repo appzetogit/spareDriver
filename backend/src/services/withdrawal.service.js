@@ -3,6 +3,7 @@ import { Driver } from '../models/driverModels/driver.model.js';
 import Booking from '../models/booking.model.js';
 import {
   WITHDRAWAL_STATUS,
+  WITHDRAWAL_PAYOUT_METHOD,
   MIN_DRIVER_WALLET_BALANCE_RUPEES,
 } from '../constants/withdrawal.js';
 import { ACTIVE_BOOKING_STATUSES } from '../constants/bookingStatus.js';
@@ -43,9 +44,21 @@ async function assertNoPendingWithdrawal(driverId) {
 }
 
 async function loadDriverWallet(driverId) {
-  const driver = await Driver.findById(driverId).select('wallet name phone isDeleted').lean();
+  const driver = await Driver.findById(driverId)
+    .select('wallet name phone isDeleted bankDetails')
+    .lean();
   if (!driver || driver.isDeleted) throw new ApiError(404, 'Driver not found');
   return driver;
+}
+
+function normalizeBankDetails(input = {}) {
+  return {
+    accountHolderName: String(input.accountHolderName || '').trim(),
+    accountNumber: String(input.accountNumber || '').trim(),
+    ifscCode: String(input.ifscCode || '').trim().toUpperCase(),
+    bankName: String(input.bankName || '').trim(),
+    upiId: String(input.upiId || '').trim(),
+  };
 }
 
 function validateWithdrawAmount(balance, amount, { fullSettlement = false } = {}) {
@@ -72,6 +85,7 @@ async function uploadQrImage(file) {
 export async function getDriverWithdrawalLimitsService(driverId) {
   const driver = await loadDriverWallet(driverId);
   const balance = round2(driver.wallet?.balance || 0);
+  const bank = driver.bankDetails || {};
   return {
     balance,
     minBalance: MIN_DRIVER_WALLET_BALANCE_RUPEES,
@@ -80,21 +94,59 @@ export async function getDriverWithdrawalLimitsService(driverId) {
     hasPendingRequest: Boolean(
       await WithdrawalRequest.exists({ driverId, status: WITHDRAWAL_STATUS.PENDING }),
     ),
+    bankDetails: bank.accountNumber
+      ? {
+          accountHolderName: bank.accountHolderName || '',
+          accountNumber: bank.accountNumber || '',
+          ifscCode: bank.ifscCode || '',
+          bankName: bank.bankName || '',
+          upiId: bank.upiId || '',
+        }
+      : null,
   };
 }
 
 export async function createDriverWithdrawalService(
   driverId,
-  { amount, qrFile, isFullSettlement = false, accountDeletionRequestId = null } = {},
+  {
+    amount,
+    qrFile,
+    payoutMethod = WITHDRAWAL_PAYOUT_METHOD.QR,
+    bankDetails: bankInput = null,
+    isFullSettlement = false,
+    accountDeletionRequestId = null,
+  } = {},
 ) {
   await assertNoActiveTrip(driverId);
   await assertNoPendingWithdrawal(driverId);
+
+  const method = Object.values(WITHDRAWAL_PAYOUT_METHOD).includes(payoutMethod)
+    ? payoutMethod
+    : WITHDRAWAL_PAYOUT_METHOD.QR;
 
   const driver = await loadDriverWallet(driverId);
   const balance = round2(driver.wallet?.balance || 0);
   const amountRupees = validateWithdrawAmount(balance, amount, { fullSettlement: isFullSettlement });
 
-  const qrImage = qrFile ? await uploadQrImage(qrFile) : { url: '', publicId: '' };
+  let qrImage = { url: '', publicId: '' };
+  let bankDetails = normalizeBankDetails();
+
+  if (method === WITHDRAWAL_PAYOUT_METHOD.QR) {
+    if (!qrFile?.buffer) {
+      throw new ApiError(400, 'Please upload a payment QR code');
+    }
+    qrImage = await uploadQrImage(qrFile);
+  } else {
+    bankDetails = normalizeBankDetails(bankInput);
+    if (
+      !bankDetails.accountHolderName ||
+      !bankDetails.accountNumber ||
+      !bankDetails.ifscCode ||
+      !bankDetails.bankName
+    ) {
+      throw new ApiError(400, 'Please provide complete bank details');
+    }
+  }
 
   const withdrawal = await WithdrawalRequest.create({
     driverId,
@@ -102,7 +154,9 @@ export async function createDriverWithdrawalService(
     walletBalanceAtRequest: balance,
     isFullSettlement: Boolean(isFullSettlement),
     accountDeletionRequestId: accountDeletionRequestId || null,
+    payoutMethod: method,
     qrImage,
+    bankDetails,
     status: WITHDRAWAL_STATUS.PENDING,
   });
 
@@ -183,7 +237,9 @@ export async function listWithdrawalsAdminService({
               amountRupees: 1,
               walletBalanceAtRequest: 1,
               status: 1,
+              payoutMethod: 1,
               qrImage: 1,
+              bankDetails: 1,
               paymentProof: 1,
               transactionDetails: 1,
               isFullSettlement: 1,

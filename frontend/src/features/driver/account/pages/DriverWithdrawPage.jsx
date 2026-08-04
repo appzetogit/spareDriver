@@ -1,16 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Loader2, QrCode, Wallet, Image as ImageIcon, Clock } from 'lucide-react';
+import {
+  Loader2,
+  QrCode,
+  Wallet,
+  Image as ImageIcon,
+  Clock,
+  Building2,
+  User,
+  Hash,
+  CreditCard,
+} from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import Badge from '../../../../components/Badge';
+import Input from '../../../../components/Input';
+import Select from '../../../../components/Select';
 import DriverAccountSubPage from '../components/DriverAccountSubPage';
 import useDriverWithdrawalStore from '../../../../store/driver/useDriverWithdrawalStore';
 import { formatCurrency } from '../../../../utils/formatters';
+import api from '../../../../utils/api';
 import {
   MIN_DRIVER_WALLET_BALANCE,
   WITHDRAWAL_STATUS_LABELS,
+  WITHDRAWAL_PAYOUT_METHOD,
+  WITHDRAWAL_PAYOUT_METHOD_LABELS,
 } from '../../../../constants/withdrawal';
 
 const statusVariant = {
@@ -19,12 +34,25 @@ const statusVariant = {
   rejected: 'danger',
 };
 
+const emptyBankForm = {
+  holder: '',
+  account: '',
+  ifsc: '',
+  bank: '',
+  upi: '',
+};
+
 const DriverWithdrawPage = () => {
   const navigate = useNavigate();
   const fileRef = useRef(null);
   const [amount, setAmount] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState(WITHDRAWAL_PAYOUT_METHOD.QR);
   const [qrPreview, setQrPreview] = useState('');
   const [qrFile, setQrFile] = useState(null);
+  const [bankForm, setBankForm] = useState(emptyBankForm);
+  const [bankErrors, setBankErrors] = useState(emptyBankForm);
+  const [bankOptions, setBankOptions] = useState([]);
+  const [bankPrefillDone, setBankPrefillDone] = useState(false);
 
   const limits = useDriverWithdrawalStore((s) => s.limits);
   const withdrawals = useDriverWithdrawalStore((s) => s.withdrawals);
@@ -39,6 +67,29 @@ const DriverWithdrawPage = () => {
     fetchWithdrawals().catch(() => {});
   }, [fetchLimits, fetchWithdrawals]);
 
+  useEffect(() => {
+    api
+      .get('/common/banks')
+      .then((res) => {
+        const list = res.data?.data || [];
+        setBankOptions(list.map((b) => ({ value: b.name, label: b.name })));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (bankPrefillDone || !limits?.bankDetails?.accountNumber) return;
+    const b = limits.bankDetails;
+    setBankForm({
+      holder: b.accountHolderName || '',
+      account: b.accountNumber || '',
+      ifsc: b.ifscCode || '',
+      bank: b.bankName || '',
+      upi: b.upiId || '',
+    });
+    setBankPrefillDone(true);
+  }, [limits, bankPrefillDone]);
+
   const maxWithdrawable = limits?.maxWithdrawable || 0;
   const hasPending = limits?.hasPendingRequest;
 
@@ -51,6 +102,70 @@ const DriverWithdrawPage = () => {
     setQrPreview(URL.createObjectURL(file));
   };
 
+  const validateBankField = (name, value) => {
+    const v = (value || '').trim();
+    switch (name) {
+      case 'holder':
+        if (!v) return 'Account holder name is required';
+        if (v.length < 3) return 'Name must be at least 3 characters';
+        if (!/^[a-zA-Z\s.]+$/.test(v)) return 'Name can only contain letters, spaces, and dots';
+        return '';
+      case 'account':
+        if (!v) return 'Account number is required';
+        if (!/^\d{9,18}$/.test(v)) return 'Account number must be 9–18 digits';
+        return '';
+      case 'ifsc':
+        if (!v) return 'IFSC code is required';
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(v)) return 'Invalid IFSC format (e.g. SBIN0001234)';
+        return '';
+      case 'bank':
+        if (!v) return 'Please select a bank';
+        if (bankOptions.length > 0 && !bankOptions.some((opt) => opt.value === v)) {
+          return 'Please select a bank from the list';
+        }
+        return '';
+      case 'upi':
+        if (v && !/^[\w.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/.test(v)) {
+          return 'Invalid UPI ID format (e.g. name@bank)';
+        }
+        return '';
+      default:
+        return '';
+    }
+  };
+
+  const handleBankChange = (field) => (e) => {
+    let val = e.target.value;
+    if (field === 'account') val = val.replace(/[^0-9]/g, '').slice(0, 18);
+    if (field === 'ifsc') val = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11);
+    setBankForm((p) => ({ ...p, [field]: val }));
+    setBankErrors((prev) => ({ ...prev, [field]: validateBankField(field, val) }));
+  };
+
+  const handleBankSelect = (value) => {
+    setBankForm((p) => ({ ...p, bank: value }));
+    setBankErrors((prev) => ({ ...prev, bank: validateBankField('bank', value) }));
+  };
+
+  const validateBankForm = () => {
+    const next = {
+      holder: validateBankField('holder', bankForm.holder),
+      account: validateBankField('account', bankForm.account),
+      ifsc: validateBankField('ifsc', bankForm.ifsc),
+      bank: validateBankField('bank', bankForm.bank),
+      upi: validateBankField('upi', bankForm.upi),
+    };
+    setBankErrors(next);
+    return !Object.values(next).some(Boolean);
+  };
+
+  const resetForm = () => {
+    setAmount('');
+    setQrFile(null);
+    setQrPreview('');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     if (hasPending) {
@@ -61,17 +176,38 @@ const DriverWithdrawPage = () => {
       toast.error(`Enter an amount up to ${formatCurrency(maxWithdrawable)}`);
       return;
     }
+    if (payoutMethod === WITHDRAWAL_PAYOUT_METHOD.QR && !qrFile) {
+      toast.error('Please upload a payment QR code');
+      return;
+    }
+    if (payoutMethod === WITHDRAWAL_PAYOUT_METHOD.BANK && !validateBankForm()) {
+      toast.error('Please fix the bank details');
+      return;
+    }
     try {
-      await submitWithdrawal({ amount: parsedAmount, qrFile });
+      await submitWithdrawal({
+        amount: parsedAmount,
+        payoutMethod,
+        qrFile: payoutMethod === WITHDRAWAL_PAYOUT_METHOD.QR ? qrFile : null,
+        bankDetails:
+          payoutMethod === WITHDRAWAL_PAYOUT_METHOD.BANK
+            ? {
+                accountHolderName: bankForm.holder.trim(),
+                accountNumber: bankForm.account.trim(),
+                ifscCode: bankForm.ifsc.trim().toUpperCase(),
+                bankName: bankForm.bank.trim(),
+                upiId: bankForm.upi.trim(),
+              }
+            : null,
+      });
       toast.success('Withdrawal request submitted');
-      setAmount('');
-      setQrFile(null);
-      setQrPreview('');
-      if (fileRef.current) fileRef.current.value = '';
+      resetForm();
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Could not submit request');
     }
   };
+
+  const methodDisabled = hasPending || maxWithdrawable <= 0;
 
   return (
     <DriverAccountSubPage title="Withdraw" onBack={() => navigate('/driver/earnings')}>
@@ -117,7 +253,7 @@ const DriverWithdrawPage = () => {
                 step="1"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                disabled={hasPending || maxWithdrawable <= 0}
+                disabled={methodDisabled}
                 className="w-full rounded-2xl border border-slate-200 pl-8 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors disabled:opacity-50 disabled:bg-slate-50"
                 placeholder={`Max ${maxWithdrawable}`}
               />
@@ -125,41 +261,130 @@ const DriverWithdrawPage = () => {
           </label>
 
           <div>
-            <p className="text-sm font-semibold text-slate-800 mb-2">Payment QR (UPI / bank)</p>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={hasPending}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed border-slate-200 hover:border-primary/50 hover:bg-slate-50/50 transition-all text-left group disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {qrPreview ? (
-                <div className="relative shrink-0">
-                  <img src={qrPreview} alt="QR preview" className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
-                  <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[10px] text-white font-medium">Change</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-16 h-16 rounded-xl bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center transition-colors shrink-0">
-                  <QrCode className="w-7 h-7 text-slate-500 group-hover:text-primary transition-colors" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-slate-850 truncate">
-                  {qrFile ? qrFile.name : 'Upload Payment QR'}
-                </p>
-                <p className="text-xs text-slate-500 mt-1 leading-normal">
-                  UPI QR code or Bank details QR. Admin will scan this to process payout.
-                </p>
-              </div>
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onQrChange} />
+            <p className="text-sm font-semibold text-slate-800 mb-2">Payout method</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: WITHDRAWAL_PAYOUT_METHOD.QR, label: 'QR code', icon: QrCode },
+                { id: WITHDRAWAL_PAYOUT_METHOD.BANK, label: 'Bank details', icon: Building2 },
+              ].map(({ id, label, icon: Icon }) => {
+                const active = payoutMethod === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={methodDisabled}
+                    onClick={() => setPayoutMethod(id)}
+                    className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-semibold transition-all disabled:opacity-50 ${
+                      active
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {payoutMethod === WITHDRAWAL_PAYOUT_METHOD.QR ? (
+            <div>
+              <p className="text-sm font-semibold text-slate-800 mb-2">Payment QR (UPI / bank)</p>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={hasPending}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed border-slate-200 hover:border-primary/50 hover:bg-slate-50/50 transition-all text-left group disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {qrPreview ? (
+                  <div className="relative shrink-0">
+                    <img src={qrPreview} alt="QR preview" className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
+                    <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] text-white font-medium">Change</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center transition-colors shrink-0">
+                    <QrCode className="w-7 h-7 text-slate-500 group-hover:text-primary transition-colors" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-850 truncate">
+                    {qrFile ? qrFile.name : 'Upload Payment QR'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1 leading-normal">
+                    UPI QR code or Bank details QR. Admin will scan this to process payout.
+                  </p>
+                </div>
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onQrChange} />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-slate-800">Bank account details</p>
+              {limits?.bankDetails?.accountNumber && (
+                <p className="text-xs text-slate-500 -mt-1">
+                  Prefilled from your profile. You can edit them for this request.
+                </p>
+              )}
+              <Input
+                label="Account holder name"
+                placeholder="Name as in bank"
+                value={bankForm.holder}
+                onChange={handleBankChange('holder')}
+                error={bankErrors.holder}
+                icon={User}
+                disabled={hasPending}
+              />
+              <Input
+                label="Account number"
+                placeholder="Bank account number"
+                value={bankForm.account}
+                onChange={handleBankChange('account')}
+                maxLength={18}
+                error={bankErrors.account}
+                icon={Hash}
+                disabled={hasPending}
+              />
+              <Input
+                label="IFSC code"
+                placeholder="HDFC0001234"
+                value={bankForm.ifsc}
+                onChange={handleBankChange('ifsc')}
+                maxLength={11}
+                error={bankErrors.ifsc}
+                icon={Building2}
+                disabled={hasPending}
+              />
+              <Select
+                label="Bank name"
+                placeholder="Select your bank"
+                options={bankOptions}
+                value={bankForm.bank}
+                onChange={handleBankSelect}
+                error={bankErrors.bank}
+                icon={Building2}
+                searchable
+                disabled={hasPending}
+                prefilledLabel={bankForm.bank || undefined}
+              />
+              <Input
+                label="UPI ID (optional)"
+                placeholder="user@upi"
+                value={bankForm.upi}
+                onChange={handleBankChange('upi')}
+                error={bankErrors.upi}
+                icon={CreditCard}
+                disabled={hasPending}
+              />
+            </div>
+          )}
 
           <Button
             type="submit"
             fullWidth
-            disabled={submitting || hasPending || maxWithdrawable <= 0}
+            disabled={submitting || methodDisabled}
             className="h-12 text-sm font-bold shadow-lg shadow-primary/20 mt-2"
           >
             {submitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Request withdrawal'}
@@ -199,6 +424,8 @@ const DriverWithdrawPage = () => {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
+                      {' · '}
+                      {WITHDRAWAL_PAYOUT_METHOD_LABELS[w.payoutMethod] || 'QR code'}
                     </p>
                   </div>
                 </div>

@@ -24,6 +24,14 @@ export const createDriverWithdrawal = asyncHandler(async (req, res) => {
   const withdrawal = await createDriverWithdrawalService(req.driver._id, {
     amount: body.amount,
     qrFile: req.file,
+    payoutMethod: body.payoutMethod,
+    bankDetails: {
+      accountHolderName: body.accountHolderName,
+      accountNumber: body.accountNumber,
+      ifscCode: body.ifscCode,
+      bankName: body.bankName,
+      upiId: body.upiId,
+    },
     isFullSettlement: body.isFullSettlement,
   });
   return res

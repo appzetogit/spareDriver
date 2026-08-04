@@ -17,7 +17,9 @@ import Avatar from '../../../../components/Avatar';
 import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
 import Modal from '../../../../components/Modal';
+import OtpResendRow from '../../../../components/OtpResendRow';
 import api from '../../../../utils/api';
+import { useOtpResendCooldown } from '../../../../hooks/useOtpResendCooldown';
 
 const STEP = { IDLE: 'idle', OTP_SENT: 'otp_sent', SET_PASSWORD: 'set_password', DONE: 'done' };
 
@@ -74,6 +76,7 @@ export function ChangePasswordWidget({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const otpCooldown = useOtpResendCooldown();
 
   // The actual identifier used for API calls
   const identifier = readOnly
@@ -93,6 +96,7 @@ export function ChangePasswordWidget({
     setConfirmPassword('');
     setError('');
     setLoading(false);
+    otpCooldown.reset();
   };
 
   const handleSendOtp = async () => {
@@ -102,6 +106,8 @@ export function ChangePasswordWidget({
       const payload = mode === 'phone' ? { phone: identifier } : { email: identifier };
       await api.post(`${apiPrefix}/send-otp`, payload);
       setStep(STEP.OTP_SENT);
+      setOtp('');
+      otpCooldown.start();
       toast.success(mode === 'phone' ? 'OTP sent to your mobile' : 'OTP sent to your email');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send OTP');
@@ -313,14 +319,13 @@ export function ChangePasswordWidget({
             >
               ← Go back
             </button>
-            <button
-              type="button"
-              onClick={handleSendOtp}
-              disabled={loading}
-              className="text-sm font-semibold text-primary hover:underline disabled:opacity-50 transition-colors"
-            >
-              Resend OTP
-            </button>
+            <OtpResendRow
+              align="end"
+              canResend={otpCooldown.canResend}
+              remaining={otpCooldown.remaining}
+              onResend={handleSendOtp}
+              loading={loading}
+            />
           </div>
         </>
       )}

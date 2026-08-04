@@ -147,8 +147,8 @@ const ManageWithdrawals = () => {
         <div>
           <h2 className="text-xl font-bold text-text">Driver withdrawals</h2>
           <p className="text-xs text-text-muted mt-1 max-w-xl">
-            Review driver payout requests. Transfer money manually using the driver&apos;s QR,
-            upload proof, and mark as paid to debit their wallet.
+            Review driver payout requests. Transfer money manually using the driver&apos;s QR or bank
+            details, upload proof, and mark as paid to debit their wallet.
           </p>
         </div>
         <button
@@ -256,6 +256,15 @@ const ManageWithdrawals = () => {
                                     label: 'QR Code',
                                     icon: ExternalLink,
                                     onClick: () => window.open(w.qrImage.url, '_blank'),
+                                  },
+                                ]
+                              : []),
+                            ...(w.bankDetails?.accountNumber
+                              ? [
+                                  {
+                                    label: 'Bank details',
+                                    icon: Banknote,
+                                    onClick: () => setViewTarget(w),
                                   },
                                 ]
                               : []),
@@ -408,6 +417,33 @@ const ManageWithdrawals = () => {
                 >
                   Open QR image <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+              </div>
+            )}
+            {processTarget?.bankDetails?.accountNumber && (
+              <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3 space-y-1.5 text-sm">
+                <p className="text-xs font-semibold uppercase text-text-muted mb-2">Bank details</p>
+                <div className="flex justify-between gap-3">
+                  <span className="text-text-muted text-xs">Holder</span>
+                  <span className="font-medium text-right">{processTarget.bankDetails.accountHolderName || '—'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-text-muted text-xs">Account</span>
+                  <span className="font-mono font-medium text-right">{processTarget.bankDetails.accountNumber}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-text-muted text-xs">IFSC</span>
+                  <span className="font-mono font-medium text-right">{processTarget.bankDetails.ifscCode || '—'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-text-muted text-xs">Bank</span>
+                  <span className="font-medium text-right">{processTarget.bankDetails.bankName || '—'}</span>
+                </div>
+                {processTarget.bankDetails.upiId ? (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-text-muted text-xs">UPI</span>
+                    <span className="font-medium text-right">{processTarget.bankDetails.upiId}</span>
+                  </div>
+                ) : null}
               </div>
             )}
             <AdminTransactionFields value={txnForm} onChange={setTxnForm} requireTxn={false} />

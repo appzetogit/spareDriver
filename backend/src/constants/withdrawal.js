@@ -4,6 +4,12 @@ export const WITHDRAWAL_STATUS = Object.freeze({
   PROCESSED: 'processed',
 });
 
+/** How the driver wants to receive the payout. */
+export const WITHDRAWAL_PAYOUT_METHOD = Object.freeze({
+  QR: 'qr',
+  BANK: 'bank',
+});
+
 /** Minimum balance (₹) a driver must keep after a normal withdrawal. */
 export const MIN_DRIVER_WALLET_BALANCE_RUPEES = 100;
 

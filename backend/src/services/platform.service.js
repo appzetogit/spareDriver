@@ -1,6 +1,7 @@
 import CarType from '../models/carType.model.js';
 import PlatformCondition from '../models/platformCondition.model.js';
 import TrainingVideo from '../models/trainingVideo.model.js';
+import Bank from '../models/bank.model.js';
 import { ApiError } from '../utils/apiError.js';
 import { deleteFromCloudinary } from '../utils/cloudinary.js';
 
@@ -117,4 +118,64 @@ export const deleteTrainingVideoService = async (id) => {
   await deleteFromCloudinary(video.cloudinaryPublicId, 'video');
   await TrainingVideo.findByIdAndDelete(id);
   return { id };
+};
+
+// ─── Banks (driver payout bank-name dropdown) ─────────────────────────────────
+
+export const createBankService = async (data) => {
+  const name = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!name) throw new ApiError(400, 'Bank name is required');
+  if (name.length < 2) throw new ApiError(400, 'Bank name must be at least 2 characters');
+
+  const exists = await Bank.findOne({ name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+  if (exists) throw new ApiError(400, 'Bank already exists');
+
+  const sortOrder = Number.isFinite(Number(data.sortOrder)) ? Number(data.sortOrder) : 0;
+  return Bank.create({
+    name,
+    isActive: data.isActive !== false,
+    sortOrder,
+  });
+};
+
+export const getAllBanksService = async (onlyActive = false) => {
+  const filter = onlyActive ? { isActive: true } : {};
+  return Bank.find(filter).sort({ sortOrder: 1, name: 1 });
+};
+
+export const updateBankService = async (id, data) => {
+  const bank = await Bank.findById(id);
+  if (!bank) throw new ApiError(404, 'Bank not found');
+
+  if (data.name !== undefined) {
+    const name = typeof data.name === 'string' ? data.name.trim() : '';
+    if (!name) throw new ApiError(400, 'Bank name is required');
+    const clash = await Bank.findOne({
+      _id: { $ne: id },
+      name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+    });
+    if (clash) throw new ApiError(400, 'Bank already exists');
+    bank.name = name;
+  }
+  if (data.isActive !== undefined) bank.isActive = Boolean(data.isActive);
+  if (data.sortOrder !== undefined) bank.sortOrder = Number(data.sortOrder) || 0;
+
+  await bank.save();
+  return bank;
+};
+
+export const deleteBankService = async (id) => {
+  const bank = await Bank.findByIdAndDelete(id);
+  if (!bank) throw new ApiError(404, 'Bank not found');
+  return { id };
+};
+
+/** Returns true if an active bank with this exact name exists. */
+export const isActiveBankName = async (bankName) => {
+  if (!bankName || !String(bankName).trim()) return false;
+  const bank = await Bank.findOne({
+    name: String(bankName).trim(),
+    isActive: true,
+  }).select('_id').lean();
+  return Boolean(bank);
 };

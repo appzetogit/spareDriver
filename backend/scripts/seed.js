@@ -16,8 +16,10 @@ import CarBrand from '../src/models/carBrand.model.js';
 import CarModel from '../src/models/carModel.model.js';
 import CarType from '../src/models/carType.model.js';
 import PlatformCondition from '../src/models/platformCondition.model.js';
+import Bank from '../src/models/bank.model.js';
 import { BRAND_MODELS, CATEGORIES, FUEL_TYPES } from './data/vehicleCatalog.data.js';
 import { REGISTRATION_CONDITIONS } from './data/platformConditions.data.js';
+import { BANKS } from './data/banks.data.js';
 import { resolveCarBrandLogoUrl } from '../src/utils/carBrandLogo.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -51,12 +53,13 @@ async function disconnectDb() {
  * Order matters: models first (they ref brands / categories).
  */
 async function clearOldData() {
-  const [models, brands, categories, fuels, conditions] = await Promise.all([
+  const [models, brands, categories, fuels, conditions, banks] = await Promise.all([
     CarModel.deleteMany({}),
     CarBrand.deleteMany({}),
     CarType.deleteMany({}),
     FuelType.deleteMany({}),
     PlatformCondition.deleteMany({}),
+    Bank.deleteMany({}),
   ]);
 
   return {
@@ -65,6 +68,7 @@ async function clearOldData() {
     categories: categories.deletedCount || 0,
     fuelTypes: fuels.deletedCount || 0,
     conditions: conditions.deletedCount || 0,
+    banks: banks.deletedCount || 0,
   };
 }
 
@@ -149,6 +153,20 @@ async function seedRegistrationConditions() {
   return { conditions: count };
 }
 
+async function seedBanks() {
+  let count = 0;
+  for (let i = 0; i < BANKS.length; i += 1) {
+    const name = BANKS[i];
+    await Bank.findOneAndUpdate(
+      { name },
+      { name, sortOrder: i, isActive: true },
+      { upsert: true },
+    );
+    count += 1;
+  }
+  return { banks: count };
+}
+
 async function main() {
   const clearFirst = wantsClearOldData();
   await connectDb();
@@ -161,6 +179,7 @@ async function main() {
     console.log(`  Categories: ${cleared.categories}`);
     console.log(`  Fuel types: ${cleared.fuelTypes}`);
     console.log(`  Conditions: ${cleared.conditions}`);
+    console.log(`  Banks: ${cleared.banks}`);
   } else {
     console.log('\n▶ Keeping existing data (upsert mode)');
   }
@@ -175,6 +194,10 @@ async function main() {
   console.log('\n▶ Registration checklist');
   const checklist = await seedRegistrationConditions();
   console.log(`  Conditions: ${checklist.conditions}`);
+
+  console.log('\n▶ Banks');
+  const banks = await seedBanks();
+  console.log(`  Banks: ${banks.banks}`);
 
   console.log('\nSeed complete.');
   await disconnectDb();

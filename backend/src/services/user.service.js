@@ -889,7 +889,7 @@ export const sendForgotPasswordOtpService = async ({ phone, email } = {}) => {
 
     const user = await User.findOne({ phone_no: phone, isDeleted: false });
     if (!user) {
-      return { message: 'If this number is registered, an OTP will be sent', via: 'phone' };
+      throw new ApiError(404, 'No user found with this mobile number');
     }
     if (user.authProvider === 'google') {
       throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');
@@ -914,7 +914,7 @@ export const sendForgotPasswordOtpService = async ({ phone, email } = {}) => {
 
     const user = await User.findOne({ email: normalized, isDeleted: false, isEmailVerified: true });
     if (!user) {
-      return { message: 'If this email is registered, an OTP will be sent', via: 'email' };
+      throw new ApiError(404, 'No user found with this email address');
     }
     if (user.authProvider === 'google') {
       throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');

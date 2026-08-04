@@ -88,3 +88,32 @@ export const deleteTrainingVideo = asyncHandler(async (req, res) => {
   await platformService.deleteTrainingVideoService(req.params.id);
   return res.status(200).json(new ApiResponse(200, null, 'Training video deleted successfully'));
 });
+
+// ─── Banks ─────────────────────────────────────────────────────────────────────
+
+export const createBank = asyncHandler(async (req, res) => {
+  const bank = await platformService.createBankService(req.body);
+  return res.status(201).json(new ApiResponse(201, bank, 'Bank created successfully'));
+});
+
+export const getBanks = asyncHandler(async (req, res) => {
+  const onlyActive = req.query.active !== 'false';
+  const banks = await platformService.getAllBanksService(onlyActive);
+  return res.status(200).json(new ApiResponse(200, banks, 'Banks fetched successfully'));
+});
+
+/** Admin panel — all banks including inactive */
+export const getAdminBanks = asyncHandler(async (_req, res) => {
+  const banks = await platformService.getAllBanksService(false);
+  return res.status(200).json(new ApiResponse(200, banks, 'Banks fetched successfully'));
+});
+
+export const updateBank = asyncHandler(async (req, res) => {
+  const bank = await platformService.updateBankService(req.params.id, req.body);
+  return res.status(200).json(new ApiResponse(200, bank, 'Bank updated successfully'));
+});
+
+export const deleteBank = asyncHandler(async (req, res) => {
+  await platformService.deleteBankService(req.params.id);
+  return res.status(200).json(new ApiResponse(200, null, 'Bank deleted successfully'));
+});

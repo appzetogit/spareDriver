@@ -35,13 +35,29 @@ const useDriverWithdrawalStore = create((set, get) => ({
     }
   },
 
-  async submitWithdrawal({ amount, qrFile, isFullSettlement = false }) {
+  async submitWithdrawal({
+    amount,
+    payoutMethod = 'qr',
+    qrFile,
+    bankDetails = null,
+    isFullSettlement = false,
+  }) {
     set({ submitting: true, error: null });
     try {
       const formData = new FormData();
       formData.append('amount', String(amount));
+      formData.append('payoutMethod', payoutMethod);
       if (isFullSettlement) formData.append('isFullSettlement', 'true');
-      if (qrFile) formData.append('qrImage', qrFile);
+      if (payoutMethod === 'qr' && qrFile) {
+        formData.append('qrImage', qrFile);
+      }
+      if (payoutMethod === 'bank' && bankDetails) {
+        formData.append('accountHolderName', bankDetails.accountHolderName || '');
+        formData.append('accountNumber', bankDetails.accountNumber || '');
+        formData.append('ifscCode', bankDetails.ifscCode || '');
+        formData.append('bankName', bankDetails.bankName || '');
+        formData.append('upiId', bankDetails.upiId || '');
+      }
 
       const res = await api.post('/driver/withdrawals', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },

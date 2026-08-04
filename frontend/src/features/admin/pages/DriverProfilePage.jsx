@@ -260,12 +260,92 @@ const DriverProfilePage = () => {
                   : '—',
               },
               {
-                label: 'Approved at',
-                value: driver.approvedAt ? formatDate(driver.approvedAt) : '—',
+                label:
+                  driver.approvalStatus === 'rejected'
+                    ? 'Rejected by'
+                    : 'Approved by',
+                value: (() => {
+                  const by =
+                    driver.approvedBy?.name ||
+                    driver.approvedBy?.email ||
+                    null;
+                  if (!by && !driver.approvedAt) return '—';
+                  if (driver.approvalStatus === 'rejected') {
+                    return by || '—';
+                  }
+                  if (by && driver.approvedAt) {
+                    return `${by} on ${formatDate(driver.approvedAt)}`;
+                  }
+                  if (by) return by;
+                  return driver.approvedAt ? formatDate(driver.approvedAt) : '—';
+                })(),
               },
             ]}
           />
         </SectionCard>
+
+        {Array.isArray(driver.approvalHistory) && driver.approvalHistory.length > 0 && (
+          <SectionCard title="Approval history">
+            <ul className="space-y-3">
+              {driver.approvalHistory.map((entry, idx) => {
+                const by =
+                  entry.byName ||
+                  entry.by?.name ||
+                  entry.by?.email ||
+                  'Staff';
+                const statusLabel =
+                  entry.status === 'unsuspended'
+                    ? 'Unsuspended'
+                    : entry.status
+                      ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
+                      : 'Updated';
+                const tone =
+                  entry.status === 'approved' || entry.status === 'unsuspended'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+                    : entry.status === 'rejected'
+                      ? 'bg-rose-50 text-rose-800 border-rose-100'
+                      : entry.status === 'suspended'
+                        ? 'bg-amber-50 text-amber-800 border-amber-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-100';
+                return (
+                  <li
+                    key={entry._id || `${entry.at}-${idx}`}
+                    className="flex gap-3 items-start"
+                  >
+                    <span
+                      className={`mt-0.5 shrink-0 inline-flex px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${tone}`}
+                    >
+                      {statusLabel}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-slate-800">
+                        <span className="font-semibold">{by}</span>
+                        {entry.at ? (
+                          <span className="text-slate-500 font-normal">
+                            {' '}
+                            ·{' '}
+                            {new Date(entry.at).toLocaleString('en-GB', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        ) : null}
+                      </p>
+                      {entry.note ? (
+                        <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">
+                          {entry.note}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </SectionCard>
+        )}
 
         {driver.bankDetails && (
           <SectionCard title="Bank details">

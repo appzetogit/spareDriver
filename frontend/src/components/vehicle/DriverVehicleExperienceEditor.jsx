@@ -91,7 +91,7 @@ const DriverVehicleExperienceEditor = ({
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-border text-sm font-semibold text-text hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
         >
           <Plus className="w-4 h-4" />
-          Add vehicle experience
+          Add additional car
         </button>
       )}
     </div>

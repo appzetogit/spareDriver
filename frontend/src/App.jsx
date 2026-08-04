@@ -161,6 +161,7 @@ const ManageScheduledJobs = lazy(() => import('./features/admin/pages/ManageSche
 const ManageScheduledQueue = lazy(() => import('./features/admin/pages/ManageScheduledQueue'));
 const PlatformSettings = lazy(() => import('./features/admin/pages/PlatformSettings'));
 const ManageTeam = lazy(() => import('./features/admin/pages/ManageTeam'));
+const TeamMemberAnalyticsPage = lazy(() => import('./features/admin/pages/TeamMemberAnalyticsPage'));
 const ManageKits = lazy(() => import('./features/admin/pages/ManageKits'));
 const ManageZones = lazy(() => import('./features/admin/pages/ManageZones'));
 const ManagePricing = lazy(() => import('./features/admin/pages/ManagePricing'));
@@ -376,6 +377,10 @@ function App() {
             <Route element={<SuperAdminOnlyGuard />}>
               <Route path="/admin/tasks/activity" element={<TaskActivityLogPage />} />
               <Route path="/admin/settings/team" element={<ManageTeam />} />
+              <Route
+                path="/admin/settings/team/:memberId/analytics"
+                element={<TeamMemberAnalyticsPage />}
+              />
               <Route path="/admin/reports" element={<ReportsOverviewPage />} />
               <Route path="/admin/reports/users" element={<UserReportsPage />} />
               <Route path="/admin/reports/drivers" element={<DriverReportsPage />} />

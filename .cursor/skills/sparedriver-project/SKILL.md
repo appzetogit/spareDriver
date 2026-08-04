@@ -62,7 +62,7 @@ frontend/src/
     # Auth stores are in-memory; useAuthSessionStore bootstraps them from JWT (cookie/localStorage)
     user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore, useAdsStore, useNearbyDriversStore
     driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverIncomingScheduledStore (scheduled + outstation + subscription inbox), useDriverSubscriptionsStore (assigned dedicated-driver plans), useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
-    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool}Store
+    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool,TeamMemberAnalytics}Store
   hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...
   constants/              # mapTheme.js, etc.
   config/                 # axios, firebase, env
@@ -70,6 +70,10 @@ frontend/src/
 ```
 
 Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
+
+Banks (driver payout dropdown): model `Bank` (`bank.model.js`); public `GET /common/banks` (active only); admin CRUD `/admin/settings/banks` + Platform Settings → Banks tab (`BanksTab.jsx`). Seeded via `scripts/data/banks.data.js` in `npm run seed`. Driver onboarding `BankDetailsPage` uses searchable Select; step-3 validates name against active banks.
+
+Team member analytics (super admin): Manage Team → Analytics → `/admin/settings/team/:memberId/analytics` → `GET /admin/team/:id/analytics` (`staffAnalytics.service.js`). Aggregates driver approvals, kit reviews, completed tasks, emergency/manual assigns, withdrawals, SOS.
 
 Inbox auto-search (scheduled hourly + outstation bookings + subscription assignment): `bookingScheduled.service` (`decideScheduleTier` for hourly hours; `decideOutstationScheduleTiers` for outstation calendar days via `MIN_OUTSTATION_LEAD_DAYS` / `DRIVER_VISIBILITY_DAYS` / `EMERGENCY_POOL_DAYS`) / `bookingDispatch.broadcastScheduledInboxService` / `subscriptionDispatch.service`. Outstation strips pickup coords until trip-day midnight (`applyOutstationLocationPrivacy`). Admin knobs: `ServicePricing.scheduledDispatch` (hourly + outstation pricing modal) and `AppSettings.subscriptionDispatch` (Manage Subscriptions). Drivers see offers in My Trips → Incoming via `useDriverIncomingScheduledStore`. Outstation ARRIVED never arms hourly no-show auto-complete; stuck no-OTP trips are settled by admin via `POST /admin/outstation-assignments/:id/settle-arrived` (Manage Outstation Assignments → Settle).
 

@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  User, Mail, Phone, Lock, Edit2, Trash2, MapPin, Check,
+  User, Mail, Phone, Lock, Edit2, Trash2, MapPin, Check, BarChart3,
 } from 'lucide-react';
 import RowActionsMenu from '../components/RowActionsMenu';
 import Button from '../../../components/Button';
@@ -18,6 +19,7 @@ import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
 const ASSIGNABLE_ROLES = ['team_member', 'sub_admin'];
 
 const ManageTeam = () => {
+  const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -235,6 +237,11 @@ const ManageTeam = () => {
           align="center"
           items={[
             {
+              label: 'Analytics',
+              icon: BarChart3,
+              onClick: () => navigate(`/admin/settings/team/${row._id}/analytics`),
+            },
+            {
               label: 'Update',
               icon: Edit2,
               onClick: () => handleEdit(row),
@@ -249,7 +256,7 @@ const ManageTeam = () => {
         />
       ),
     },
-  ], []);
+  ], [navigate]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 lg:p-6 space-y-6 animate-fade-in-up pb-10">

@@ -9,11 +9,13 @@ import {
   Video,
   Headphones,
   FileText,
+  Building2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TrainingVideosTab from '../components/PlatformSettings/TrainingVideosTab';
 import VehicleCatalogSettings from '../components/PlatformSettings/VehicleCatalogSettings';
 import LegalPagesTab from '../components/PlatformSettings/LegalPagesTab';
+import BanksTab from '../components/PlatformSettings/BanksTab';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
@@ -56,6 +58,7 @@ const PlatformSettings = () => {
   const [carTypes, setCarTypes] = useState([]);
   const [conditions, setConditions] = useState([]);
   const [trainingVideos, setTrainingVideos] = useState([]);
+  const [banks, setBanks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('vehicles');
 
@@ -78,15 +81,17 @@ const PlatformSettings = () => {
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const [carsRes, condRes, trainingRes, supportRes] = await Promise.all([
+      const [carsRes, condRes, trainingRes, supportRes, banksRes] = await Promise.all([
         api.get('/admin/settings/car-types'),
         api.get('/admin/settings/conditions'),
         api.get('/admin/settings/training-videos'),
         api.get('/admin/settings/support'),
+        api.get('/admin/settings/banks'),
       ]);
       setCarTypes(carsRes.data.data);
       setConditions(condRes.data.data);
       setTrainingVideos(trainingRes.data.data);
+      setBanks(banksRes.data.data || []);
       const support = normalizeSupportForm(supportRes.data.data || {});
       setSupportForm(support);
       setSupportBaseline(support);
@@ -214,6 +219,7 @@ const PlatformSettings = () => {
           {[
             { id: 'vehicles', label: 'Vehicle Preferences', icon: Car },
             { id: 'conditions', label: 'Registration Checklist', icon: CheckSquare },
+            { id: 'banks', label: 'Banks', icon: Building2 },
             { id: 'training', label: 'Driver Training', icon: Video },
             { id: 'support', label: 'Website & Contact', icon: Headphones },
             { id: 'legal', label: 'Legal Pages', icon: FileText },
@@ -278,6 +284,10 @@ const PlatformSettings = () => {
                 await fetchData({ silent: true });
               }}
             />
+          )}
+
+          {activeTab === 'banks' && (
+            <BanksTab banks={banks} onRefresh={() => fetchData({ silent: true })} />
           )}
 
           {activeTab === 'support' && (

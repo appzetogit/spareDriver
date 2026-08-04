@@ -72,14 +72,15 @@ const Select = ({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           className={`
-            w-full h-10 bg-white border rounded-xl pr-10 text-sm text-left
+            w-full h-10 bg-white !bg-white border rounded-xl pr-10 text-sm text-left
             transition-all duration-200 flex items-center gap-2
-            ${disabled ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}
+            ${disabled ? 'opacity-60 cursor-not-allowed !bg-slate-50' : ''}
             ${isOpen ? 'border-primary ring-2 ring-primary/20' : 'border-border'}
             ${error ? 'border-danger' : ''}
             ${(!selectedOption && !(value && prefilledLabel)) ? 'text-text-muted' : 'text-text'}
             ${hasLeadingVisual ? 'pl-2.5' : 'pl-4'}
           `}
+          style={{ backgroundColor: disabled ? undefined : '#ffffff' }}
         >
           {selectedImage ? (
             <img
@@ -98,9 +99,12 @@ const Select = ({
         </button>
 
         {isOpen && (
-          <div className={`absolute z-[100] left-0 right-0 ${dropdownClasses} bg-white border border-border rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up`}>
+          <div
+            className={`absolute z-[100] left-0 right-0 ${dropdownClasses} bg-white border border-border rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up`}
+            style={{ backgroundColor: '#ffffff' }}
+          >
             {searchable && (
-              <div className="p-2 border-b border-gray-50">
+              <div className="p-2 border-b border-gray-50 bg-white">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                   <input
@@ -114,7 +118,7 @@ const Select = ({
                 </div>
               </div>
             )}
-            <div className="max-h-60 overflow-y-auto py-1">
+            <div className="max-h-60 overflow-y-auto py-1 bg-white">
               {filteredOptions.length === 0 ? (
                 <div className="px-4 py-3 text-center text-xs text-text-muted">No results found</div>
               ) : (
@@ -134,8 +138,8 @@ const Select = ({
                         setSearchTerm('');
                       }}
                       className={`
-                        w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors
-                        ${isSelected ? 'bg-primary/5 text-primary-dark font-medium' : 'text-text hover:bg-gray-50'}
+                        w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors bg-white
+                        ${isSelected ? '!bg-primary/10 text-primary-dark font-medium' : 'text-text hover:!bg-gray-50'}
                       `}
                     >
                       {optionsHaveImages && (

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
+import Select from '../../../../components/Select';
 import StepIndicator from '../../../../components/StepIndicator';
 import { ArrowLeft, User, Hash, Building2, CreditCard } from 'lucide-react';
 import api from '../../../../utils/api';
@@ -19,6 +20,25 @@ const BankDetailsPage = () => {
   const [form, setForm, clearDraft, replaceDraft] = useFormDraft(BANK_DRAFT_KEY, defaultBankForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({ holder: '', account: '', ifsc: '', bank: '', upi: '' });
+  const [bankOptions, setBankOptions] = useState([]);
+
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const res = await api.get('/common/banks');
+        const list = res.data?.data || [];
+        setBankOptions(
+          list.map((b) => ({
+            value: b.name,
+            label: b.name,
+          })),
+        );
+      } catch (error) {
+        console.error('Failed to fetch banks', error);
+      }
+    };
+    fetchBanks();
+  }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -71,11 +91,12 @@ const BankDetailsPage = () => {
         break;
       case 'bank':
         if (!value.trim()) {
-          error = 'Bank name is required';
-        } else if (value.trim().length < 3) {
-          error = 'Bank name must be at least 3 characters';
-        } else if (!/^[a-zA-Z\s.\-()]+$/.test(value)) {
-          error = 'Bank name can only contain letters, spaces, dots, hyphens, or parentheses';
+          error = 'Please select a bank';
+        } else if (
+          bankOptions.length > 0 &&
+          !bankOptions.some((opt) => opt.value === value.trim())
+        ) {
+          error = 'Please select a bank from the list';
         }
         break;
       case 'upi':
@@ -111,6 +132,11 @@ const BankDetailsPage = () => {
     setForm((p) => ({ ...p, [f]: val }));
     const error = validateField(f, val);
     setErrors((prev) => ({ ...prev, [f]: error }));
+  };
+
+  const handleBankSelect = (value) => {
+    setForm((p) => ({ ...p, bank: value }));
+    setErrors((prev) => ({ ...prev, bank: validateField('bank', value) }));
   };
 
   const handleContinue = async () => {
@@ -191,13 +217,16 @@ const BankDetailsPage = () => {
             error={errors.ifsc}
             icon={Building2} 
           />
-          <Input 
-            label="Bank name" 
-            placeholder="Bank name" 
-            value={form.bank} 
-            onChange={handleChange('bank')} 
+          <Select
+            label="Bank name"
+            placeholder="Select your bank"
+            options={bankOptions}
+            value={form.bank}
+            onChange={handleBankSelect}
             error={errors.bank}
-            icon={Building2} 
+            icon={Building2}
+            searchable
+            prefilledLabel={form.bank || undefined}
           />
           <Input 
             label="UPI ID (optional)" 

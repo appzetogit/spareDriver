@@ -10,6 +10,16 @@ export const WITHDRAWAL_STATUS_LABELS = {
   processed: 'Paid',
 };
 
+export const WITHDRAWAL_PAYOUT_METHOD = Object.freeze({
+  QR: 'qr',
+  BANK: 'bank',
+});
+
+export const WITHDRAWAL_PAYOUT_METHOD_LABELS = {
+  qr: 'QR code',
+  bank: 'Bank transfer',
+};
+
 export const MIN_DRIVER_WALLET_BALANCE = 100;
 
 export const ACCOUNT_DELETION_STATUS = Object.freeze({

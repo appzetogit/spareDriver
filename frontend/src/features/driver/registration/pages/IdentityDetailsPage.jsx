@@ -4,17 +4,20 @@ import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
 import StepIndicator from '../../../../components/StepIndicator';
 import Modal from '../../../../components/Modal';
+import OtpResendRow from '../../../../components/OtpResendRow';
 import { ArrowLeft, User, Phone, Lock } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { driverNeedsPhone, navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
+import { useOtpResendCooldown } from '../../../../hooks/useOtpResendCooldown';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 
 const IdentityDetailsPage = () => {
   const navigate = useNavigate();
   const { driver, isAuthenticated, setAuth } = useDriverAuthStore();
+  const otpCooldown = useOtpResendCooldown();
   
   useEffect(() => {
     if (!isAuthenticated || !driver) return;
@@ -42,6 +45,8 @@ const IdentityDetailsPage = () => {
       setError('');
       await api.post('/driver/auth/send-otp', { phone: form.phone });
       setShowOtpModal(true);
+      setOtp('');
+      otpCooldown.start();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send OTP');
     } finally {
@@ -65,6 +70,7 @@ const IdentityDetailsPage = () => {
       
       setIsPhoneVerified(true);
       setShowOtpModal(false);
+      otpCooldown.reset();
       navigate('/driver/register/credentials');
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid OTP');
@@ -165,7 +171,7 @@ const IdentityDetailsPage = () => {
             type="text" 
             placeholder="000000" 
             value={otp} 
-            onChange={(e) => setOtp(e.target.value)} 
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} 
             maxLength={6} 
             className="text-center text-xl tracking-widest font-mono"
           />
@@ -178,6 +184,13 @@ const IdentityDetailsPage = () => {
           >
             {loading ? 'Verifying...' : 'Verify & Create Account'}
           </Button>
+          <OtpResendRow
+            className="mt-4"
+            canResend={otpCooldown.canResend}
+            remaining={otpCooldown.remaining}
+            onResend={handleSendOtp}
+            loading={loading}
+          />
         </div>
       </Modal>
     </div>

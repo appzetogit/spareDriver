@@ -173,6 +173,24 @@ const driverSchema = new mongoose.Schema(
       ref: 'User', // admin who approved
       default: null,
     },
+    /** Chronological log of approve / reject / suspend / unsuspend decisions. */
+    approvalHistory: [
+      {
+        status: {
+          type: String,
+          enum: ['approved', 'rejected', 'suspended', 'unsuspended'],
+          required: true,
+        },
+        note: { type: String, default: '', trim: true },
+        by: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          default: null,
+        },
+        byName: { type: String, default: '', trim: true },
+        at: { type: Date, default: Date.now },
+      },
+    ],
 
     // ── Online / Live Status ──────────────────────────────────────────────────
     isOnline: {

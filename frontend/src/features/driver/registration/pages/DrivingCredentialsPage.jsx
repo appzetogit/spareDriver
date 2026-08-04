@@ -24,11 +24,13 @@ const CREDENTIAL_DOCUMENTS = [
     type: 'driving_license',
     title: 'Driving licence (front)',
     hint: 'Clear photo of the front of your valid driving licence',
+    capture: 'environment',
   },
   {
     type: 'selfie',
     title: 'Profile photo (selfie)',
     hint: 'Recent photo of your face, good lighting, no sunglasses or mask',
+    capture: 'user',
   },
 ];
 
@@ -321,11 +323,12 @@ const DrivingCredentialsPage = () => {
               Upload both documents below. They are required before you can continue.
             </p>
             <div className="space-y-4">
-              {CREDENTIAL_DOCUMENTS.map(({ type, title, hint }) => (
+              {CREDENTIAL_DOCUMENTS.map(({ type, title, hint, capture }) => (
                 <DocumentUploadField
                   key={type}
                   label={title}
                   hint={hint}
+                  capture={capture}
                   variant="card"
                   doc={documents[type]}
                   onUpload={(file) => uploadDocument(type, file)}

@@ -1,12 +1,70 @@
 import { z } from 'zod';
+import { WITHDRAWAL_PAYOUT_METHOD } from '../constants/withdrawal.js';
 
-export const createWithdrawalSchema = z.object({
-  amount: z.coerce.number().positive('Amount must be greater than zero'),
-  isFullSettlement: z
-    .union([z.boolean(), z.string()])
-    .optional()
-    .transform((v) => v === true || v === 'true'),
-});
+const optionalTrimmed = z
+  .string()
+  .optional()
+  .transform((v) => (typeof v === 'string' ? v.trim() : ''));
+
+export const createWithdrawalSchema = z
+  .object({
+    amount: z.coerce.number().positive('Amount must be greater than zero'),
+    isFullSettlement: z
+      .union([z.boolean(), z.string()])
+      .optional()
+      .transform((v) => v === true || v === 'true'),
+    payoutMethod: z
+      .enum([WITHDRAWAL_PAYOUT_METHOD.QR, WITHDRAWAL_PAYOUT_METHOD.BANK])
+      .optional()
+      .default(WITHDRAWAL_PAYOUT_METHOD.QR),
+    accountHolderName: optionalTrimmed,
+    accountNumber: optionalTrimmed,
+    ifscCode: optionalTrimmed,
+    bankName: optionalTrimmed,
+    upiId: optionalTrimmed,
+  })
+  .superRefine((data, ctx) => {
+    if (data.payoutMethod !== WITHDRAWAL_PAYOUT_METHOD.BANK) return;
+
+    if (!data.accountHolderName || data.accountHolderName.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Account holder name is required',
+        path: ['accountHolderName'],
+      });
+    }
+    if (!data.accountNumber || !/^\d{9,18}$/.test(data.accountNumber)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Account number must be 9–18 digits',
+        path: ['accountNumber'],
+      });
+    }
+    if (!data.ifscCode || !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(data.ifscCode)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid IFSC format (e.g. SBIN0001234)',
+        path: ['ifscCode'],
+      });
+    }
+    if (!data.bankName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Bank name is required',
+        path: ['bankName'],
+      });
+    }
+    if (
+      data.upiId &&
+      !/^[\w.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/.test(data.upiId)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid UPI ID format (e.g. name@bank)',
+        path: ['upiId'],
+      });
+    }
+  });
 
 export const rejectWithdrawalSchema = z.object({
   reason: z.string().max(500).optional(),

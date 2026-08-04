@@ -1,11 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminKitOrdersStore } from '../../../store/admin/useAdminKitOrdersStore';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageTaskAssignment } from '../../../constants/staffRoles';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import KitOrderFilters from '../components/ManageKitOrders/KitOrderFilters';
 import TaskAssigneeBadge from '../components/ManageTasks/TaskAssigneeBadge';
+import BulkAssignBar, {
+  runBulkAssignFromRows,
+} from '../components/ManageTasks/BulkAssignBar';
+import { isOpenTask } from '../components/ManageTasks/taskUtils';
 import {
   PAYMENT_STATUS_LABELS,
   ADMIN_STATUS_LABELS,
@@ -14,12 +21,16 @@ import {
 
 const ManageKitOrders = () => {
   const navigate = useNavigate();
+  const { admin } = useAdminAuthStore();
+  const canAssign = canManageTaskAssignment(admin?.role);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -47,12 +58,60 @@ const ManageKitOrders = () => {
   const orders = data?.orders ?? [];
   const pagination = data?.pagination ?? { total: 0, pages: 1 };
 
+  const toggleSelect = (id) => {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleBulkAssign = async (assigneeId) => {
+    setBulkLoading(true);
+    try {
+      const ok = await runBulkAssignFromRows({
+        rows: orders,
+        selectedIds: selected,
+        assigneeId,
+        onSuccess: () => {
+          setSelected([]);
+          refetch();
+        },
+      });
+      if (!ok) return;
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk assign failed');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const columns = useMemo(
     () => [
+      ...(canAssign
+        ? [
+            {
+              key: '_select',
+              label: '',
+              width: '4%',
+              render: (_v, row) =>
+                isOpenTask(row.reviewTask) ? (
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(row._id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleSelect(row._id);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded border-slate-300"
+                  />
+                ) : null,
+            },
+          ]
+        : []),
       {
         key: 'orderNumber',
         label: 'Order',
-        width: '18%',
+        width: canAssign ? '14%' : '18%',
         render: (val) => <span className="font-mono text-xs font-semibold text-slate-700">{val}</span>,
       },
       {
@@ -128,7 +187,7 @@ const ManageKitOrders = () => {
         ),
       },
     ],
-    [],
+    [canAssign, selected],
   );
 
   return (
@@ -138,20 +197,31 @@ const ManageKitOrders = () => {
         onSearchChange={(v) => {
           setSearch(v);
           setPage(1);
+          setSelected([]);
         }}
         statusFilter={statusFilter}
         onStatusChange={(v) => {
           setStatusFilter(v);
           setPage(1);
+          setSelected([]);
         }}
         assigneeFilter={assigneeFilter}
         onAssigneeChange={(v) => {
           setAssigneeFilter(v);
           setPage(1);
+          setSelected([]);
         }}
         onRefresh={refetch}
         refreshing={loading}
       />
+
+      {canAssign && (
+        <BulkAssignBar
+          selectedCount={selected.length}
+          onAssign={handleBulkAssign}
+          loading={bulkLoading}
+        />
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -166,7 +236,10 @@ const ManageKitOrders = () => {
         limit={limit}
         page={page}
         pagination={pagination}
-        onPageChange={setPage}
+        onPageChange={(p) => {
+          setPage(p);
+          setSelected([]);
+        }}
         onRowClick={(row) => navigate(`/admin/kit-orders/${row._id}`)}
         entityLabel="orders"
         emptyMessage="No kit orders found"

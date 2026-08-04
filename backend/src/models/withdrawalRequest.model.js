@@ -1,10 +1,24 @@
 import mongoose from 'mongoose';
-import { WITHDRAWAL_STATUS } from '../constants/withdrawal.js';
+import {
+  WITHDRAWAL_STATUS,
+  WITHDRAWAL_PAYOUT_METHOD,
+} from '../constants/withdrawal.js';
 
 const imageSchema = new mongoose.Schema(
   {
     url: { type: String, default: '', trim: true },
     publicId: { type: String, default: '', trim: true },
+  },
+  { _id: false },
+);
+
+const payoutBankDetailsSchema = new mongoose.Schema(
+  {
+    accountHolderName: { type: String, default: '', trim: true },
+    accountNumber: { type: String, default: '', trim: true },
+    ifscCode: { type: String, default: '', trim: true, uppercase: true },
+    bankName: { type: String, default: '', trim: true },
+    upiId: { type: String, default: '', trim: true },
   },
   { _id: false },
 );
@@ -37,8 +51,15 @@ const withdrawalRequestSchema = new mongoose.Schema(
       default: WITHDRAWAL_STATUS.PENDING,
       index: true,
     },
+    payoutMethod: {
+      type: String,
+      enum: Object.values(WITHDRAWAL_PAYOUT_METHOD),
+      default: WITHDRAWAL_PAYOUT_METHOD.QR,
+    },
     /** Driver's UPI/bank QR for admin to scan when paying out. */
     qrImage: { type: imageSchema, default: () => ({}) },
+    /** Snapshot of bank details when payoutMethod is bank. */
+    bankDetails: { type: payoutBankDetailsSchema, default: () => ({}) },
     /** Admin-uploaded proof after the manual transfer. */
     paymentProof: { type: imageSchema, default: () => ({}) },
     transactionDetails: { type: transactionDetailsSchema, default: () => ({}) },

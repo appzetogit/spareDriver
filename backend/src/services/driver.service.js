@@ -27,6 +27,7 @@ import {
 } from '../utils/driverOnboarding.util.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinary.js';
 import { resolveAuthFcm } from './fcmToken.service.js';
+import { isActiveBankName } from './platform.service.js';
 
 export const sendOtpService = async (phone) => {
   if (!phone || phone.length !== 10) {
@@ -210,8 +211,9 @@ export const updateOnboardingStepService = async (driverId, data) => {
     if (!bankName || !bankName.trim()) {
       throw new ApiError(400, 'Bank name is required');
     }
-    if (bankName.trim().length < 3 || !/^[a-zA-Z\s.\-()]+$/.test(bankName)) {
-      throw new ApiError(400, 'Bank name must be at least 3 characters and contain only letters, spaces, dots, hyphens, or parentheses');
+    const allowedBank = await isActiveBankName(bankName.trim());
+    if (!allowedBank) {
+      throw new ApiError(400, 'Please select a bank from the list');
     }
 
     if (upiId && upiId.trim() && !/^[\w.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/.test(upiId.trim())) {
@@ -630,7 +632,7 @@ export const sendDriverForgotPasswordOtpService = async (phone) => {
 
   const driver = await Driver.findOne({ phone, isDeleted: false });
   if (!driver) {
-    return { message: 'If this number is registered, an OTP will be sent', via: 'phone' };
+    throw new ApiError(404, 'No driver found with this mobile number');
   }
   if (driver.authProvider === 'google') {
     throw new ApiError(400, 'This account uses Google sign-in. Password reset is not available.');

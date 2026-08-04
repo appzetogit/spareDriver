@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
+import OtpResendRow from '../../../components/OtpResendRow';
 import { User, Phone, Lock, Mail, ArrowLeft } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
+import { useOtpResendCooldown } from '../../../hooks/useOtpResendCooldown';
 
 function VerifiedBadge() {
   return (
@@ -34,6 +36,8 @@ const RegisterPage = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
   const [phoneAlreadyRegistered, setPhoneAlreadyRegistered] = useState(false);
+  const phoneCooldown = useOtpResendCooldown();
+  const emailCooldown = useOtpResendCooldown();
 
   const handleChange = (field) => (e) => {
     const value = e.target.value;
@@ -45,14 +49,17 @@ const RegisterPage = () => {
       setPhoneVerified(false);
       setPhoneOtpSent(false);
       setPhoneOtp('');
+      phoneCooldown.reset();
       setEmailVerified(false);
       setEmailOtpSent(false);
       setEmailOtp('');
+      emailCooldown.reset();
     }
     if (field === 'email') {
       setEmailVerified(false);
       setEmailOtpSent(false);
       setEmailOtp('');
+      emailCooldown.reset();
     }
   };
 
@@ -68,6 +75,7 @@ const RegisterPage = () => {
       await api.post('/auth/send-otp', { phone: formData.phone });
       setPhoneOtpSent(true);
       setPhoneOtp('');
+      phoneCooldown.start();
     } catch (err) {
       const message = err.response?.data?.message || 'Failed to send OTP';
       setError(message);
@@ -91,6 +99,7 @@ const RegisterPage = () => {
       setPhoneVerified(true);
       setPhoneOtpSent(false);
       setPhoneOtp('');
+      phoneCooldown.reset();
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid mobile OTP');
     } finally {
@@ -117,6 +126,7 @@ const RegisterPage = () => {
       });
       setEmailOtpSent(true);
       setEmailOtp('');
+      emailCooldown.start();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send email code');
     } finally {
@@ -137,6 +147,7 @@ const RegisterPage = () => {
       setEmailVerified(true);
       setEmailOtpSent(false);
       setEmailOtp('');
+      emailCooldown.reset();
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid email OTP');
     } finally {
@@ -254,7 +265,7 @@ const RegisterPage = () => {
               </Button>
             </div>
             {phoneOtpSent && !phoneVerified && (
-              <div className="mt-2 animate-fade-in">
+              <div className="mt-2 space-y-2 animate-fade-in">
                 <Input
                   type="text"
                   inputMode="numeric"
@@ -262,6 +273,12 @@ const RegisterPage = () => {
                   value={phoneOtp}
                   onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   maxLength={6}
+                />
+                <OtpResendRow
+                  canResend={phoneCooldown.canResend}
+                  remaining={phoneCooldown.remaining}
+                  onResend={handleSendPhoneOtp}
+                  loading={phoneLoading}
                 />
               </div>
             )}
@@ -300,7 +317,7 @@ const RegisterPage = () => {
               <p className="text-xs text-text-muted">Verify mobile number first to enable email verification.</p>
             )}
             {emailOtpSent && !emailVerified && (
-              <div className="mt-2 animate-fade-in">
+              <div className="mt-2 space-y-2 animate-fade-in">
                 <Input
                   type="text"
                   inputMode="numeric"
@@ -308,6 +325,12 @@ const RegisterPage = () => {
                   value={emailOtp}
                   onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   maxLength={6}
+                />
+                <OtpResendRow
+                  canResend={emailCooldown.canResend}
+                  remaining={emailCooldown.remaining}
+                  onResend={handleSendEmailOtp}
+                  loading={emailLoading}
                 />
               </div>
             )}

@@ -15,6 +15,7 @@ import {
   getAdminTeam,
   updateAdminMember,
   deleteAdminMember,
+  getAdminTeamMemberAnalytics,
 } from '../controllers/admin.controller.js';
 import { protectStaff, restrictTo } from '../middlewares/authMiddleware.js';
 import { ROUTE_ROLES } from '../constants/staffPermissions.js';
@@ -31,6 +32,10 @@ import {
   getAdminTrainingVideos,
   updateTrainingVideo,
   deleteTrainingVideo,
+  createBank,
+  getAdminBanks,
+  updateBank,
+  deleteBank,
 } from '../controllers/platform.controller.js';
 import {
   adminListLegalDocuments,
@@ -481,6 +486,12 @@ router.delete('/ads/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteAd
 
 router.post('/team', protectStaff, restrictTo(...SUPER_ADMIN), addAdminMember);
 router.get('/team', protectStaff, restrictTo(...SUPER_ADMIN), getAdminTeam);
+router.get(
+  '/team/:id/analytics',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  getAdminTeamMemberAnalytics,
+);
 router.put('/team/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminMember);
 router.delete('/team/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteAdminMember);
 
@@ -508,6 +519,11 @@ router.get('/settings/conditions', protectStaff, restrictTo(...OPERATIONS), getA
 router.post('/settings/conditions', protectStaff, restrictTo(...OPERATIONS), createCondition);
 router.put('/settings/conditions/:id', protectStaff, restrictTo(...OPERATIONS), updateCondition);
 router.delete('/settings/conditions/:id', protectStaff, restrictTo(...OPERATIONS), deleteCondition);
+
+router.get('/settings/banks', protectStaff, restrictTo(...OPERATIONS), getAdminBanks);
+router.post('/settings/banks', protectStaff, restrictTo(...OPERATIONS), createBank);
+router.put('/settings/banks/:id', protectStaff, restrictTo(...OPERATIONS), updateBank);
+router.delete('/settings/banks/:id', protectStaff, restrictTo(...OPERATIONS), deleteBank);
 
 router.get('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS), getAdminTrainingVideos);
 router.post('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS), createTrainingVideo);

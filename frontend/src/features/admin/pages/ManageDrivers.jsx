@@ -1,26 +1,37 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Avatar from '../../../components/Avatar';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminDriversStore } from '../../../store/admin/useAdminDriversStore';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageTaskAssignment } from '../../../constants/staffRoles';
 import StatusBadge from '../components/StatusBadge';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import DriverStats from '../components/ManageDrivers/DriverStats';
 import DriverFilters from '../components/ManageDrivers/DriverFilters';
 import DriverSuspendActions from '../components/ManageDrivers/DriverSuspendActions';
 import TaskAssigneeBadge from '../components/ManageTasks/TaskAssigneeBadge';
+import BulkAssignBar, {
+  runBulkAssignFromRows,
+} from '../components/ManageTasks/BulkAssignBar';
+import { isOpenTask } from '../components/ManageTasks/taskUtils';
 import { getCarTypeLabel } from '../components/ManageDrivers/driverProfileUtils';
 
 const ManageDrivers = () => {
   const navigate = useNavigate();
+  const { admin } = useAdminAuthStore();
+  const canAssign = canManageTaskAssignment(admin?.role);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -49,12 +60,60 @@ const ManageDrivers = () => {
   const drivers = data?.drivers ?? [];
   const pagination = data?.pagination ?? { total: 0, pages: 1 };
 
+  const toggleSelect = (id) => {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleBulkAssign = async (assigneeId) => {
+    setBulkLoading(true);
+    try {
+      const ok = await runBulkAssignFromRows({
+        rows: drivers,
+        selectedIds: selected,
+        assigneeId,
+        onSuccess: () => {
+          setSelected([]);
+          refetch();
+        },
+      });
+      if (!ok) return;
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk assign failed');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const columns = useMemo(
     () => [
+      ...(canAssign
+        ? [
+            {
+              key: '_select',
+              label: '',
+              width: '4%',
+              render: (_v, row) =>
+                isOpenTask(row.reviewTask) ? (
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(row._id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleSelect(row._id);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded border-slate-300"
+                  />
+                ) : null,
+            },
+          ]
+        : []),
       {
         key: 'name',
         label: 'Driver',
-        width: '28%',
+        width: canAssign ? '24%' : '28%',
         render: (val, row) => {
           const selfie = row.documents?.find((d) => d.type === 'selfie')?.fileUrl;
           return (
@@ -157,7 +216,7 @@ const ManageDrivers = () => {
         ),
       },
     ],
-    [refetch, navigate],
+    [refetch, navigate, canAssign, selected],
   );
 
   const stats = useMemo(
@@ -180,22 +239,33 @@ const ManageDrivers = () => {
         onSearchChange={(val) => {
           setSearch(val);
           setPage(1);
+          setSelected([]);
         }}
         statusFilter={statusFilter}
         onStatusChange={(val) => {
           setStatusFilter(val);
           setPage(1);
+          setSelected([]);
         }}
         assigneeFilter={assigneeFilter}
         onAssigneeChange={(val) => {
           setAssigneeFilter(val);
           setPage(1);
+          setSelected([]);
         }}
         onRefresh={refetch}
         refreshing={loading}
       />
 
       <DriverStats {...stats} />
+
+      {canAssign && (
+        <BulkAssignBar
+          selectedCount={selected.length}
+          onAssign={handleBulkAssign}
+          loading={bulkLoading}
+        />
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -210,7 +280,10 @@ const ManageDrivers = () => {
         limit={limit}
         page={page}
         pagination={pagination}
-        onPageChange={setPage}
+        onPageChange={(p) => {
+          setPage(p);
+          setSelected([]);
+        }}
         onRowClick={(row) => navigate(`/admin/drivers/${row._id}/profile`)}
         entityLabel="drivers"
         emptyMessage="No drivers found"
