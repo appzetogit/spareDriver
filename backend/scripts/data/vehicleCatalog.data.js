@@ -15,25 +15,25 @@
 
 /** @type {{ name: string, description?: string, image?: string }[]} */
 export const CATEGORIES = [
-  { name: 'hatchback', description: 'Compact hatchback cars' },
-  { name: 'sedan', description: 'Sedan / saloon cars' },
-  { name: 'suv', description: 'SUV and crossovers' },
-  { name: 'muv', description: 'MUV / MPV family vehicles' },
-  { name: 'luxury', description: 'Luxury segment' },
+  { name: 'HATCHBACK', description: 'Compact hatchback cars' },
+  { name: 'SEDAN', description: 'Sedan / saloon cars' },
+  { name: 'SUV', description: 'SUV and crossovers' },
+  { name: 'MUV', description: 'MUV / MPV family vehicles' },
+  { name: 'LUXURY', description: 'Luxury segment' },
 ];
 
 /** @type {{ name: string, sortOrder?: number }[]} */
 export const FUEL_TYPES = [
-  { name: 'Petrol', sortOrder: 0 },
-  { name: 'Diesel', sortOrder: 1 },
+  { name: 'PETROL', sortOrder: 0 },
+  { name: 'DIESEL', sortOrder: 1 },
   { name: 'CNG', sortOrder: 2 },
-  { name: 'Electric', sortOrder: 3 },
-  { name: 'Hybrid', sortOrder: 4 },
+  { name: 'ELECTRIC', sortOrder: 3 },
+  { name: 'HYBRID', sortOrder: 4 },
 ];
 
 /**
  * brand name → models for that brand.
- * `category` must match a CATEGORIES[].name (lowercase slug).
+ * `category` is matched case-insensitively to CATEGORIES[].name (stored uppercase).
  *
  * @type {Record<string, { name: string, category: string }[]>}
  */

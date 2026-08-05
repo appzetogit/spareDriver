@@ -6,7 +6,7 @@ const carTypeSchema = new mongoose.Schema({
     required: true,
     unique: true,
     trim: true,
-    toLowerCase: true
+    uppercase: true,
   },
   description: {
     type: String,

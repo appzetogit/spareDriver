@@ -28,8 +28,8 @@ export function getCarFuelName(car) {
 }
 
 export const TRANSMISSION_OPTIONS = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'automatic', label: 'Automatic' },
+  { value: 'manual', label: 'MANUAL' },
+  { value: 'automatic', label: 'AUTOMATIC' },
 ];
 
 /** One line label for driver vehicle experience (populated refs). */

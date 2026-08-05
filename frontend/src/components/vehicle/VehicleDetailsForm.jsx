@@ -87,7 +87,7 @@ const VehicleDetailsForm = ({
       )}
 
       <Select
-        label="Car brand"
+        label="CAR BRAND"
         options={brandOptions}
         value={values.brandId}
         onChange={setField('brandId')}
@@ -99,7 +99,7 @@ const VehicleDetailsForm = ({
       />
 
       <Select
-        label="Car category"
+        label="CAR CATEGORY"
         options={categoryOptions}
         value={values.carTypeId}
         onChange={setField('carTypeId')}
@@ -119,7 +119,7 @@ const VehicleDetailsForm = ({
       />
 
       <Select
-        label="Car model"
+        label="CAR MODEL"
         options={modelOptions}
         value={values.modelId}
         onChange={setField('modelId')}
@@ -155,7 +155,7 @@ const VehicleDetailsForm = ({
 
       <div className="grid grid-cols-2 gap-4">
         <Select
-          label="Fuel type"
+          label="FUEL TYPE"
           options={fuelOptions}
           value={values.fuelTypeId}
           onChange={setField('fuelTypeId')}
@@ -165,7 +165,7 @@ const VehicleDetailsForm = ({
           prefilledLabel={editLabels?.fuelType}
         />
         <Select
-          label="Transmission"
+          label="TRANSMISSION"
           options={TRANSMISSION_OPTIONS}
           value={values.transmission}
           onChange={setField('transmission')}

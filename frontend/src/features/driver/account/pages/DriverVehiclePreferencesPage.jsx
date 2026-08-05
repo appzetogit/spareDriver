@@ -65,7 +65,7 @@ const DriverVehiclePreferencesPage = () => {
 
   return (
     <DriverAccountSubPage
-      title="Vehicle Preferences"
+      title="VEHICLE PREFERENCES"
       onBack={() => navigate('/driver/account')}
     >
       <p className="text-xs text-text-muted px-1">

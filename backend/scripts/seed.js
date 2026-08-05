@@ -73,29 +73,56 @@ async function clearOldData() {
 }
 
 async function upsertCategory({ name, description, image }) {
-  const key = name.toLowerCase().trim();
-  return CarType.findOneAndUpdate(
-    { name: key },
-    { name: key, description: description || '', image: image || '', isActive: true },
-    { upsert: true, new: true },
-  );
+  const key = String(name).trim().toUpperCase();
+  const existing = await CarType.findOne({
+    name: new RegExp(`^${escapeRegex(key)}$`, 'i'),
+  });
+  if (existing) {
+    existing.name = key;
+    existing.description = description || '';
+    if (image) existing.image = image;
+    existing.isActive = true;
+    await existing.save();
+    return existing;
+  }
+  return CarType.create({
+    name: key,
+    description: description || '',
+    image: image || '',
+    isActive: true,
+  });
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function seedVehicleCatalog() {
   let fuelCount = 0;
   for (const fuel of FUEL_TYPES) {
-    await FuelType.findOneAndUpdate(
-      { name: fuel.name },
-      { name: fuel.name, sortOrder: fuel.sortOrder ?? fuelCount, isActive: true },
-      { upsert: true },
-    );
+    const fuelName = String(fuel.name).trim().toUpperCase();
+    const existingFuel = await FuelType.findOne({
+      name: new RegExp(`^${escapeRegex(fuelName)}$`, 'i'),
+    });
+    if (existingFuel) {
+      existingFuel.name = fuelName;
+      existingFuel.sortOrder = fuel.sortOrder ?? fuelCount;
+      existingFuel.isActive = true;
+      await existingFuel.save();
+    } else {
+      await FuelType.create({
+        name: fuelName,
+        sortOrder: fuel.sortOrder ?? fuelCount,
+        isActive: true,
+      });
+    }
     fuelCount += 1;
   }
 
   const categoryMap = {};
   for (const cat of CATEGORIES) {
     const doc = await upsertCategory(cat);
-    categoryMap[cat.name] = doc;
+    categoryMap[cat.name.toUpperCase()] = doc;
   }
 
   let brandCount = 0;
@@ -103,31 +130,54 @@ async function seedVehicleCatalog() {
   const brandNames = Object.keys(BRAND_MODELS);
 
   for (let i = 0; i < brandNames.length; i += 1) {
-    const brandName = brandNames[i];
-    const logo = resolveCarBrandLogoUrl(brandName);
-    const brand = await CarBrand.findOneAndUpdate(
-      { name: brandName },
-      { name: brandName, logo, sortOrder: i, isActive: true },
-      { upsert: true, new: true },
-    );
+    const rawBrandName = brandNames[i];
+    const brandName = String(rawBrandName).trim().toUpperCase();
+    const logo = resolveCarBrandLogoUrl(rawBrandName);
+    let brand = await CarBrand.findOne({
+      name: new RegExp(`^${escapeRegex(brandName)}$`, 'i'),
+    });
+    if (brand) {
+      brand.name = brandName;
+      brand.logo = logo;
+      brand.sortOrder = i;
+      brand.isActive = true;
+      await brand.save();
+    } else {
+      brand = await CarBrand.create({
+        name: brandName,
+        logo,
+        sortOrder: i,
+        isActive: true,
+      });
+    }
     brandCount += 1;
 
-    const models = BRAND_MODELS[brandName];
+    const models = BRAND_MODELS[rawBrandName];
     for (let j = 0; j < models.length; j += 1) {
-      const { name: modelName, category } = models[j];
-      const carType = categoryMap[category] || categoryMap.sedan;
+      const { name: rawModelName, category } = models[j];
+      const modelName = String(rawModelName).trim().toUpperCase();
+      const categoryKey = String(category || '').trim().toUpperCase();
+      const carType = categoryMap[categoryKey] || categoryMap.SEDAN;
 
-      await CarModel.findOneAndUpdate(
-        { brandId: brand._id, name: modelName },
-        {
+      let model = await CarModel.findOne({
+        brandId: brand._id,
+        name: new RegExp(`^${escapeRegex(modelName)}$`, 'i'),
+      });
+      if (model) {
+        model.name = modelName;
+        model.carTypeId = carType._id;
+        model.sortOrder = j;
+        model.isActive = true;
+        await model.save();
+      } else {
+        await CarModel.create({
           name: modelName,
           brandId: brand._id,
           carTypeId: carType._id,
           sortOrder: j,
           isActive: true,
-        },
-        { upsert: true },
-      );
+        });
+      }
       modelCount += 1;
     }
   }

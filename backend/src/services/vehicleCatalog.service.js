@@ -6,7 +6,7 @@ import CarType from '../models/carType.model.js';
 import { ApiError } from '../utils/apiError.js';
 import { resolveCarBrandLogoUrl } from '../utils/carBrandLogo.js';
 
-const normalizeName = (name) => String(name || '').trim();
+const normalizeName = (name) => String(name || '').trim().toUpperCase();
 
 async function assertUniqueName(Model, name, excludeId = null) {
   const filter = { name: normalizeName(name) };

@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const carModelSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true, uppercase: true },
     brandId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'CarBrand',

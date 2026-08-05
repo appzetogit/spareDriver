@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const carBrandSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true, trim: true },
+    name: { type: String, required: true, unique: true, trim: true, uppercase: true },
     /** Absolute URL — Cloudinary upload or jsDelivr brand logo CDN. */
     logo: { type: String, default: '', trim: true },
     sortOrder: { type: Number, default: 0 },

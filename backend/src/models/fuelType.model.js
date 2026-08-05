@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const fuelTypeSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true, trim: true },
+    name: { type: String, required: true, unique: true, trim: true, uppercase: true },
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
   },

@@ -8,7 +8,8 @@ import { deleteFromCloudinary } from '../utils/cloudinary.js';
 // ─── Car Types ────────────────────────────────────────────────────────────────
 
 export const createCarTypeService = async (data) => {
-  const { name, description, image } = data;
+  const { description, image } = data;
+  const name = String(data.name || '').trim().toUpperCase();
   if (!name) throw new ApiError(400, 'Car type name is required');
   
   const exists = await CarType.findOne({ name });
@@ -23,7 +24,14 @@ export const getAllCarTypesService = async (onlyActive = false) => {
 };
 
 export const updateCarTypeService = async (id, data) => {
-  const carType = await CarType.findByIdAndUpdate(id, data, { new: true });
+  const patch = { ...data };
+  if (patch.name != null) {
+    patch.name = String(patch.name).trim().toUpperCase();
+    if (!patch.name) throw new ApiError(400, 'Car type name is required');
+    const exists = await CarType.findOne({ name: patch.name, _id: { $ne: id } });
+    if (exists) throw new ApiError(400, 'Car type already exists');
+  }
+  const carType = await CarType.findByIdAndUpdate(id, patch, { new: true });
   if (!carType) throw new ApiError(404, 'Car type not found');
   return carType;
 };
