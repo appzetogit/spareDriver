@@ -30,6 +30,7 @@ const AddCarForm = ({
   cancelLabel = 'Cancel',
   submitLabel = 'Save & Continue',
   compact = false,
+  stickyActions = false,
   editCar,
 }) => {
   const setOnboarding = useUserAuthStore((s) => s.setOnboarding);
@@ -146,7 +147,8 @@ const AddCarForm = ({
     if (!formData.modelId) next.modelId = 'Select car model';
     const rawNum = formData.vehicleNumber?.trim() || '';
     const cleanNum = rawNum.replace(/[\s-]/g, '').toUpperCase();
-    const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+    // Standard: MP09AB1234 | Bharat series: 22BH1234AB
+    const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^\d{2}BH\d{4}[A-Z]{1,2}$/;
 
     if (!rawNum) {
       next.vehicleNumber = 'Enter vehicle number';
@@ -232,16 +234,22 @@ const AddCarForm = ({
   return (
     <form
       onSubmit={handleSubmit}
-      className={`flex flex-col ${compact ? 'gap-4' : 'gap-5'}`}
+      className={`flex flex-col gap-4 ${stickyActions ? 'h-full min-h-0' : ''}`}
     >
+      <div
+        className={`flex flex-col gap-4 ${
+          stickyActions ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain pb-2' : ''
+        }`}
+      >
       <DocumentUploadField
-        label="Car Photo"
+        label="CAR PHOTO"
         doc={documents.car_image}
         onUpload={(file) => uploadDocument('car_image', file)}
         hint="Clear photo of the car"
         disabled={fieldsDisabled}
+        compact
       />
-      {errors.image && <p className="text-danger text-xs -mt-3">{errors.image}</p>}
+      {errors.image && <p className="text-danger text-xs -mt-2">{errors.image}</p>}
 
       <VehicleDetailsForm
         values={formData}
@@ -250,7 +258,8 @@ const AddCarForm = ({
           if (next.vehicleNumber !== formData.vehicleNumber) {
             const rawNum = next.vehicleNumber?.trim() || '';
             const cleanNum = rawNum.replace(/[\s-]/g, '').toUpperCase();
-            const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+            // Standard: MP09AB1234 | Bharat series: 22BH1234AB
+    const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^\d{2}BH\d{4}[A-Z]{1,2}$/;
 
             setErrors((prev) => {
               const updated = { ...prev };
@@ -273,7 +282,7 @@ const AddCarForm = ({
       <div className="space-y-3 pt-1">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-text">Safety checklist</h2>
+            <h2 className="text-sm font-bold text-text uppercase tracking-wide">Safety checklist</h2>
             <p className="text-xs text-text-muted mt-0.5">
               Answer for this vehicle so we can match the right driver.
             </p>
@@ -315,8 +324,15 @@ const AddCarForm = ({
           {errors.submit}
         </p>
       )}
+      </div>
 
-      <div className={`pt-2 flex flex-col gap-2 ${onCancel ? 'sm:flex-row-reverse' : ''}`}>
+      <div
+        className={`shrink-0 flex flex-col gap-2 ${onCancel ? 'sm:flex-row-reverse' : ''} ${
+          stickyActions
+            ? 'pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 bg-white'
+            : 'pt-2'
+        }`}
+      >
         <Button
           type="submit"
           fullWidth

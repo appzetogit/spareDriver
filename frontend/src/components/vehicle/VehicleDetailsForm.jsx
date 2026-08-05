@@ -81,7 +81,7 @@ const VehicleDetailsForm = ({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {catalogError && (
         <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
           {catalogError}
@@ -144,7 +144,7 @@ const VehicleDetailsForm = ({
 
       {showVehicleNumber && (
         <Input
-          label="Vehicle number"
+          label="VEHICLE NUMBER"
           placeholder="e.g. MP09 AB 1234"
           value={values.vehicleNumber}
           onChange={(e) => setField('vehicleNumber')(e.target.value)}
@@ -178,9 +178,9 @@ const VehicleDetailsForm = ({
       </div>
 
       {showExpiryDates && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <Input
-            label="Insurance expiry"
+            label="INSURANCE EXPIRY"
             type="date"
             value={toDateInputValue(values.insuranceExpiry)}
             onChange={(e) => setField('insuranceExpiry')(e.target.value)}
@@ -188,7 +188,7 @@ const VehicleDetailsForm = ({
             disabled={disabled}
           />
           <Input
-            label="PUC expiry"
+            label="PUC EXPIRY"
             type="date"
             value={toDateInputValue(values.pucExpiry)}
             onChange={(e) => setField('pucExpiry')(e.target.value)}

@@ -607,7 +607,8 @@ export const addCarService = async (userId, carData) => {
   }
 
   const cleanNum = String(vehicleNumber).trim().replace(/[\s-]/g, '').toUpperCase();
-  const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+  // Standard: MP09AB1234 | Bharat series: 22BH1234AB
+  const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^\d{2}BH\d{4}[A-Z]{1,2}$/;
   if (!vehicleRegex.test(cleanNum)) {
     throw new ApiError(400, 'Invalid vehicle number format. Please enter a valid registration number (e.g. MP09 AB 1234)');
   }
@@ -744,7 +745,8 @@ export const updateCarService = async (userId, carId, carData) => {
   }
 
   const cleanNum = String(vehicleNumber).trim().replace(/[\s-]/g, '').toUpperCase();
-  const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^BH\d{2}[A-Z]{1,2}\d{4}$/;
+  // Standard: MP09AB1234 | Bharat series: 22BH1234AB
+  const vehicleRegex = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^\d{2}BH\d{4}[A-Z]{1,2}$/;
   if (!vehicleRegex.test(cleanNum)) {
     throw new ApiError(400, 'Invalid vehicle number format. Please enter a valid registration number (e.g. MP09 AB 1234)');
   }

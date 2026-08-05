@@ -19,6 +19,8 @@ const DocumentUploadField = ({
   allowCamera = true,
   /** 'environment' (rear, docs) or 'user' (front, selfie) */
   capture = 'environment',
+  /** Smaller upload tile for long forms */
+  compact = false,
 }) => {
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
@@ -144,24 +146,29 @@ const DocumentUploadField = ({
 
   return (
     <div>
-      {label && <label className="text-sm font-medium text-text mb-3 block">{label}</label>}
+      {label && (
+        <label className={`text-sm font-medium text-text block ${compact ? 'mb-2' : 'mb-3'}`}>
+          {label}
+        </label>
+      )}
       <div className="relative">
         {hiddenInputs}
         <button
           type="button"
           onClick={openPicker}
           disabled={isBusy}
-          className={`w-full border-2 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 transition-colors overflow-hidden relative min-h-[140px] text-center
+          className={`w-full border-2 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors overflow-hidden relative text-center
+            ${compact ? 'p-4 min-h-[96px]' : 'p-6 min-h-[140px] gap-2'}
             ${doc.url ? 'border-primary border-solid' : 'border-dashed border-border'}
             ${isBusy ? 'opacity-70 cursor-not-allowed' : 'hover:border-primary hover:bg-primary/5 cursor-pointer'}
           `}
         >
           {doc.loading ? (
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <Loader2 className={`${compact ? 'w-6 h-6' : 'w-8 h-8'} text-primary animate-spin`} />
           ) : doc.url ? (
             <>
               <img src={doc.url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-              <CheckCircle className="w-8 h-8 text-primary z-0 bg-white rounded-full" />
+              <CheckCircle className={`${compact ? 'w-6 h-6' : 'w-8 h-8'} text-primary z-0 bg-white rounded-full`} />
               <span className="text-sm text-primary font-medium z-0 bg-white px-2 rounded">
                 {doc.isLocal || doc.pendingFile ? 'Selected' : 'Uploaded'}
               </span>
@@ -171,12 +178,12 @@ const DocumentUploadField = ({
             </>
           ) : (
             <>
-              <Upload className="w-8 h-8 text-text-muted" />
+              <Upload className={`${compact ? 'w-6 h-6' : 'w-8 h-8'} text-text-muted`} />
               <span className="text-sm text-text-secondary">
                 {showCameraChoice ? 'Tap for camera or gallery' : 'Tap to select'}
               </span>
               {hint && <span className="text-xs text-text-muted">{hint}</span>}
-              {isImageField && (
+              {isImageField && !compact && (
                 <span className="text-xs text-text-muted">Max {MAX_IMAGE_LABEL}</span>
               )}
             </>
