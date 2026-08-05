@@ -49,12 +49,17 @@ const DriverVehiclePreferencesPage = () => {
         transmission: v.transmission,
       }));
 
-      await api.put('/driver/profile/vehicle-experience', {
+      const saveRes = await api.put('/driver/profile/vehicle-experience', {
         vehicleExperience: payload,
       });
+      const savedProfile = saveRes?.data?.data;
 
       useDriverProfileStore.getState().invalidate(profileKey);
-      await refetchProfile();
+      const freshProfile = (await refetchProfile()) || savedProfile;
+      if (freshProfile) {
+        setVehicles(vehiclesFromProfile(freshProfile));
+        setHydrated(true);
+      }
       toast.success('Vehicle experience updated');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save vehicle experience');
