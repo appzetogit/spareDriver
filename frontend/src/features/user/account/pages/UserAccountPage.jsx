@@ -18,6 +18,7 @@ import useUserAuthStore from '../../../../store/useUserAuthStore';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import useUserAccountDeletionStore from '../../../../store/user/useUserAccountDeletionStore';
 import { useUserSubscriptionStore } from '../../../../store/user/useUserPricingStore';
+import { useAfterPaint } from '../../../../hooks/useAfterPaint';
 
 const menuItems = [
   { id: 'profile', icon: User, label: 'My Profile', path: '/user/profile' },
@@ -43,12 +44,23 @@ const UserAccountPage = () => {
   const fetchDeletionRequest = useUserAccountDeletionStore((s) => s.fetchRequest);
   const submitDeletionRequest = useUserAccountDeletionStore((s) => s.submitRequest);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const secondaryReady = useAfterPaint({ delayMs: 100 });
 
+  // Critical for labels: wallet. Important: subscription. Optional: deletion
+  // status — only when the delete sheet opens.
   useEffect(() => {
     fetchWallet().catch(() => { });
+  }, [fetchWallet]);
+
+  useEffect(() => {
+    if (!secondaryReady) return;
     fetchMySubscription().catch(() => { });
+  }, [secondaryReady, fetchMySubscription]);
+
+  useEffect(() => {
+    if (!deleteOpen) return;
     fetchDeletionRequest().catch(() => { });
-  }, [fetchWallet, fetchMySubscription, fetchDeletionRequest]);
+  }, [deleteOpen, fetchDeletionRequest]);
 
   const subscriptionLabel = useMemo(() => {
     const list = mySubscriptions || [];

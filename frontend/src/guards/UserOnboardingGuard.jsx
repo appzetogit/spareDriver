@@ -2,29 +2,33 @@ import { useState, useEffect, useRef } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import useUserAuthStore from '../store/useUserAuthStore';
 import api from '../utils/api';
-import { Loader2 } from 'lucide-react';
 import { MAX_USER_CARS } from '../utils/constants';
 import { userNeedsPhone, userNeedsEmail } from '../features/auth/utils/authNavigation';
 import { useStoreHydration } from '../hooks/useStoreHydration';
+import { BootstrapShellSkeleton } from '../components/skeleton/SectionSkeletons';
 
 /** Garage / account paths reachable while car checklist is incomplete. */
 const GARAGE_PATHS = ['/user/my-cars', '/user/add-car', '/user/account', '/user/profile', '/user/wallet'];
+
+function hasUsableOnboarding(onboarding) {
+  if (!onboarding || typeof onboarding !== 'object') return false;
+  return (
+    typeof onboarding.carCount === 'number' ||
+    typeof onboarding.hasCar === 'boolean' ||
+    typeof onboarding.hasChecklist === 'boolean'
+  );
+}
 
 const UserOnboardingGuard = () => {
   const hydrated = useStoreHydration(useUserAuthStore);
   const { isAuthenticated, user, setAuth, onboarding, setOnboarding } = useUserAuthStore();
   const location = useLocation();
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const pathWhenFetchedRef = useRef(null);
+  const [status, setStatus] = useState(() => (hasUsableOnboarding(onboarding) ? onboarding : null));
+  const [loading, setLoading] = useState(() => !hasUsableOnboarding(onboarding));
+  const fetchedOnceRef = useRef(false);
 
-  const statusIsStale =
-    hydrated && isAuthenticated && pathWhenFetchedRef.current !== location.pathname;
-
-  const hasOptimisticCars = statusIsStale && Boolean(onboarding?.hasCar);
-  const showLoader =
-    !hydrated || ((loading || statusIsStale) && !hasOptimisticCars);
-
+  // Bootstrap already hits `/auth/onboarding/status`. Reuse that snapshot so
+  // every in-app navigation does not block on a duplicate full-page fetch.
   useEffect(() => {
     let cancelled = false;
 
@@ -32,6 +36,21 @@ const UserOnboardingGuard = () => {
       if (!hydrated) return;
 
       if (!isAuthenticated) {
+        fetchedOnceRef.current = false;
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      if (hasUsableOnboarding(onboarding) && !fetchedOnceRef.current) {
+        fetchedOnceRef.current = true;
+        if (!cancelled) {
+          setStatus((prev) => prev ?? onboarding);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (fetchedOnceRef.current) {
         if (!cancelled) setLoading(false);
         return;
       }
@@ -47,7 +66,7 @@ const UserOnboardingGuard = () => {
           hasCar: data.hasCar,
           hasChecklist: data.hasChecklist,
         });
-        pathWhenFetchedRef.current = location.pathname;
+        fetchedOnceRef.current = true;
         if (data.user) setAuth(data.user);
       } catch (err) {
         console.error('Failed to fetch onboarding status', err);
@@ -60,14 +79,20 @@ const UserOnboardingGuard = () => {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, isAuthenticated, setAuth, setOnboarding, location.pathname]);
+  }, [hydrated, isAuthenticated, onboarding, setAuth, setOnboarding]);
 
-  if (showLoader) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
+  // Keep local status in sync when AddCar / MyCars mutate the auth store.
+  useEffect(() => {
+    if (!hasUsableOnboarding(onboarding)) return;
+    setStatus((prev) => ({ ...(prev || {}), ...onboarding }));
+  }, [onboarding]);
+
+  const resolved = status ?? (hasUsableOnboarding(onboarding) ? onboarding : null);
+  const canRenderOptimistically = Boolean(resolved) || !isAuthenticated;
+
+  // Only block the tree when we truly have nothing to decide redirects with.
+  if (!hydrated || (loading && !canRenderOptimistically)) {
+    return <BootstrapShellSkeleton />;
   }
 
   if (!isAuthenticated) {
@@ -86,8 +111,8 @@ const UserOnboardingGuard = () => {
 
   // Email already verified — don't linger on the verify screen.
   if (!userNeedsEmail(user) && path === '/user/verify-email') {
-    const carCountOptimistic = status?.carCount ?? onboarding?.carCount ?? 0;
-    const checklistOk = Boolean(status?.hasChecklist ?? onboarding?.hasChecklist);
+    const carCountOptimistic = resolved?.carCount ?? 0;
+    const checklistOk = Boolean(resolved?.hasChecklist);
     if (carCountOptimistic === 0) {
       return <Navigate to="/user/add-car" replace />;
     }
@@ -97,7 +122,6 @@ const UserOnboardingGuard = () => {
     return <Navigate to="/user/home" replace />;
   }
 
-  const resolved = hasOptimisticCars ? { ...status, ...onboarding } : status;
   const carCount = resolved?.carCount ?? 0;
   const hasChecklist = Boolean(resolved?.hasChecklist);
   const onPath = (paths) => paths.some((p) => path.startsWith(p));

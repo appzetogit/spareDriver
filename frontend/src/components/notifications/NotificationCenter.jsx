@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, Loader2, X } from 'lucide-react';
+import { Bell, CheckCheck, X } from 'lucide-react';
 import { notificationNavigatePath } from '../../constants/notificationTypes';
+import { useAfterPaint } from '../../hooks/useAfterPaint';
+import { Skeleton } from '../skeleton/Skeleton';
 
 function formatWhen(iso) {
   if (!iso) return '';
@@ -91,9 +93,15 @@ export function NotificationCenterPanel({
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto">
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          {loading && notifications.length === 0 ? (
+            <div className="px-4 py-3 space-y-3">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="space-y-2 py-1">
+                  <Skeleton className="h-3.5 w-2/3" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-2.5 w-1/4" />
+                </div>
+              ))}
             </div>
           ) : notifications.length === 0 ? (
             <p className="text-center text-sm text-text-muted py-10">No notifications yet</p>
@@ -134,10 +142,12 @@ export function useNotificationPanel(store, { audience = 'user', title = 'Notifi
   const [open, setOpen] = useState(false);
   const unreadCount = store((s) => s.unreadCount);
   const fetchUnread = store((s) => s.fetchUnread);
+  const unreadReady = useAfterPaint({ delayMs: 250 });
 
   useEffect(() => {
+    if (!unreadReady) return;
     fetchUnread().catch(() => null);
-  }, [fetchUnread]);
+  }, [unreadReady, fetchUnread]);
 
   const panel = (
     <NotificationCenterPanel

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../../../components/Button';
 import Input from '../../../components/Input';
-import { Phone, Lock, ArrowLeft, Mail, Smartphone, Loader2 } from 'lucide-react';
+import { Phone, Lock, ArrowLeft, Mail, Smartphone } from 'lucide-react';
 import api from '../../../utils/api';
 import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 import { useStoreHydration } from '../../../hooks/useStoreHydration';
+import { BootstrapShellSkeleton } from '../../../components/skeleton/SectionSkeletons';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -26,11 +27,7 @@ const LoginPage = () => {
   }, [hydrated, isAuthenticated, user, navigate]);
 
   if (!hydrated || (isAuthenticated && user)) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
+    return <BootstrapShellSkeleton />;
   }
 
   const validate = () => {

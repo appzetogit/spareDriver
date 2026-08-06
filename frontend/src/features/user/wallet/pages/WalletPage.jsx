@@ -17,6 +17,11 @@ import Button from '../../../../components/Button';
 import BottomSheet from '../../../../components/BottomSheet';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import TopupSheet from '../components/TopupSheet';
+import { useAfterPaint } from '../../../../hooks/useAfterPaint';
+import {
+  WalletBalanceSkeleton,
+  WalletTxSkeleton,
+} from '../../../../components/skeleton/SectionSkeletons';
 
 /**
  * Full-page wallet view: balance, lifetime totals, and the most recent
@@ -47,11 +52,26 @@ const WalletPage = () => {
 
   const [topupOpen, setTopupOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState(null);
+  const [txBootstrapped, setTxBootstrapped] = useState(false);
+  const txReady = useAfterPaint({ delayMs: 120 });
 
+  // Critical: balance. Important: ledger after first paint.
   useEffect(() => {
     fetchWallet().catch(() => {});
-    fetchTransactions({ page: 1, limit: PAGE_SIZE }).catch(() => {});
-  }, [fetchWallet, fetchTransactions]);
+  }, [fetchWallet]);
+
+  useEffect(() => {
+    if (!txReady) return;
+    let cancelled = false;
+    fetchTransactions({ page: 1, limit: PAGE_SIZE })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTxBootstrapped(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [txReady, fetchTransactions]);
 
   const onLoadMore = () => {
     if (loading || !hasMore) return;
@@ -106,6 +126,9 @@ const WalletPage = () => {
       </div>
 
       <div className="p-4 space-y-4 flex-1">
+        {!fetched && loading ? (
+          <WalletBalanceSkeleton />
+        ) : (
         <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white">
           <p className="text-[11px] uppercase tracking-wide text-white/70">
             Available balance
@@ -142,6 +165,7 @@ const WalletPage = () => {
             </Button>
           </div>
         </Card>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-2 px-1">
@@ -151,12 +175,8 @@ const WalletPage = () => {
             )}
           </div>
 
-          {!fetched && loading ? (
-            <Card>
-              <div className="flex justify-center py-6">
-                <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
-              </div>
-            </Card>
+          {(!txBootstrapped || (loading && transactions.length === 0)) ? (
+            <WalletTxSkeleton rows={5} />
           ) : transactions.length === 0 ? (
             <Card>
               <div className="text-center py-6 text-sm text-text-muted">

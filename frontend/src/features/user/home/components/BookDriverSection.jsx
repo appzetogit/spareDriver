@@ -4,6 +4,7 @@ import ServiceCard from './ServiceCard';
 import SubscriptionBanner from './SubscriptionBanner';
 import { SERVICE_CATALOG_LIST } from '../constants/serviceCatalog';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
+import { useAfterPaint } from '../../../../hooks/useAfterPaint';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import {
   useUserServicePricingsStore,
@@ -15,21 +16,13 @@ import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 /**
  * "Book a driver" home section.
  *
- * Renders the two service tiles (Hourly + Outstation) and the subscription
- * banner. All data comes from the public pricing endpoints — if the API
- * hasn't loaded yet we still render the tiles with their fallback copy
- * (no jarring spinner here, it's a marketing section).
- *
- * Tapping a tile:
- *   1. Preselects the service in the booking draft so we can skip the
- *      service-picker screen entirely.
- *   2. Jumps straight to the pickup step.
- *
- * Tapping the subscription banner navigates to the subscriptions page.
+ * Service pricing is critical for the "From ₹X" labels — fetch immediately.
+ * Subscription plans only feed the banner — defer until after first paint.
  */
 const BookDriverSection = () => {
   const navigate = useNavigate();
   const setServiceType = useBookingDraftStore((s) => s.setServiceType);
+  const plansReady = useAfterPaint({ delayMs: 200 });
 
   const { data: pricingData } = useCachedQuery(
     useUserServicePricingsStore,
@@ -38,9 +31,10 @@ const BookDriverSection = () => {
   const { data: planData } = useCachedQuery(
     useUserSubscriptionPlansStore,
     buildCacheKey('user-subscriptions-active'),
+    undefined,
+    { enabled: plansReady },
   );
 
-  // Map serviceType → pricing row for the "From ₹X" hint.
   const pricingByType = useMemo(() => {
     const list = Array.isArray(pricingData) ? pricingData : [];
     return list.reduce((acc, row) => {
@@ -60,7 +54,6 @@ const BookDriverSection = () => {
   const handleServiceTap = (serviceType) => {
     setServiceType(serviceType);
     if (serviceType === SERVICE_TYPES.HOURLY) {
-      // Hourly has its own dedicated flow (instant/scheduled → details → slab).
       navigate('/user/book/hourly/type');
     } else {
       navigate('/user/book/variants');

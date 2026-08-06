@@ -1,9 +1,9 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { driverNeedsPhone } from '../features/auth/utils/authNavigation';
 import { isApplicationSubmitted } from '../utils/driverOnboarding';
 import { useStoreHydration } from '../hooks/useStoreHydration';
+import { BootstrapShellSkeleton } from '../components/skeleton/SectionSkeletons';
 
 const OnboardingGuard = () => {
   const hydrated = useStoreHydration(useDriverAuthStore);
@@ -12,11 +12,7 @@ const OnboardingGuard = () => {
   const path = location.pathname;
 
   if (!hydrated) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
+    return <BootstrapShellSkeleton />;
   }
 
   if (!isAuthenticated) {

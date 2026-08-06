@@ -14,6 +14,8 @@ export const useUserSubscriptionPlansStore = createQueryStore(async () => {
   return res.data?.data ?? [];
 });
 
+let subscriptionInflight = null;
+
 export const useUserSubscriptionStore = create((set, get) => ({
   mySubscriptions: [],
   mySubscription: null,
@@ -35,21 +37,32 @@ export const useUserSubscriptionStore = create((set, get) => ({
     }
   },
 
-  async fetchMySubscription() {
-    set({ loading: true });
-    try {
-      const res = await api.get('/auth/subscriptions/me');
-      const list = Array.isArray(res?.data?.data) ? res.data.data : [];
-      set({
-        mySubscriptions: list,
-        mySubscription: list[0] || null,
-        loading: false,
-      });
-      return list;
-    } catch (err) {
-      set({ loading: false });
-      throw err;
+  async fetchMySubscription({ force = false } = {}) {
+    if (!force && get().mySubscriptions?.length && !get().loading) {
+      return get().mySubscriptions;
     }
+    if (subscriptionInflight) return subscriptionInflight;
+
+    set({ loading: true });
+    subscriptionInflight = (async () => {
+      try {
+        const res = await api.get('/auth/subscriptions/me');
+        const list = Array.isArray(res?.data?.data) ? res.data.data : [];
+        set({
+          mySubscriptions: list,
+          mySubscription: list[0] || null,
+          loading: false,
+        });
+        return list;
+      } catch (err) {
+        set({ loading: false });
+        throw err;
+      } finally {
+        subscriptionInflight = null;
+      }
+    })();
+
+    return subscriptionInflight;
   },
 
   async createPurchaseOrder(planId, zoneId, carId, { termsAccepted = false, dailyPickup, dailyDropoff, couponCode } = {}) {

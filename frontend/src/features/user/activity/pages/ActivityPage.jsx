@@ -26,6 +26,7 @@ import { SERVICE_CATALOG } from '../../home/constants/serviceCatalog';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { useSocketEvent } from '../../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../../constants/socketEvents';
+import { TripListSkeleton } from '../../../../components/skeleton/SectionSkeletons';
 
 /**
  * /user/activity — the user's "My Trips" rail.
@@ -53,17 +54,20 @@ const ActivityPage = () => {
     loading,
     error,
     refetch,
+    isFetched,
   } = useCachedQuery(
     useUserBookingsStore,
     buildCacheKey('user-bookings-history'),
   );
 
-  // Force a fresh fetch on mount so we don't render a stale cached
-  // status (e.g. SearchingDriverPage may have left the cache at
-  // SEARCHING). Both stores get refreshed in parallel.
+  // Warm-cache remounts need a background refresh (statuses drift via
+  // dispatch). Cold mounts already fetch via useCachedQuery — don't double-hit.
+  const hadHistoryCacheRef = useRef(isFetched);
   useEffect(() => {
     fetchActive().catch(() => {});
-    refetch?.().catch(() => {});
+    if (hadHistoryCacheRef.current) {
+      refetch?.().catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -147,9 +151,7 @@ const ActivityPage = () => {
 
       <div className="flex-1 p-4 space-y-3 overflow-y-auto pb-20">
         {loading && (!bookings || bookings.length === 0) ? (
-          <div className="flex-1 flex items-center justify-center py-32">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
+          <TripListSkeleton rows={4} />
         ) : error ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20">
             <AlertCircle className="w-12 h-12 text-danger mb-3 opacity-50" />

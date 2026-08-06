@@ -1,20 +1,16 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { isApplicationSubmitted } from '../utils/driverOnboarding';
 import { useStoreHydration } from '../hooks/useStoreHydration';
 import { DriverLocationBridge } from '../components/DriverLocationBridge';
+import { BootstrapShellSkeleton } from '../components/skeleton/SectionSkeletons';
 
 const DriverGuard = () => {
   const hydrated = useStoreHydration(useDriverAuthStore);
   const { isAuthenticated, driver } = useDriverAuthStore();
 
   if (!hydrated) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-white min-h-dvh">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
+    return <BootstrapShellSkeleton />;
   }
 
   if (!isAuthenticated || !driver) {

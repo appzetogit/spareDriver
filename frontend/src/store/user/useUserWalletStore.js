@@ -29,6 +29,9 @@ const EMPTY_WALLET = {
   currency: 'INR',
 };
 
+/** In-flight dedupe across home / account / confirm concurrent mounts. */
+let walletInflight = null;
+
 // Normalise the server's wallet shape into a fully-defaulted object so
 // every consumer (top-bar badge, confirm screen, wallet page) can rely
 // on the held/available fields existing even on old API responses.
@@ -78,25 +81,38 @@ const useUserWalletStore = create((set, get) => ({
     set((state) => ({ wallet: normaliseWallet(wallet, state.wallet) }));
   },
 
-  async fetchWallet() {
-    set({ loading: true, error: null });
-    try {
-      const res = await api.get('/auth/wallet');
-      const wallet = res?.data?.data?.wallet || EMPTY_WALLET;
-      const limits = res?.data?.data?.limits || get().limits;
-      set((state) => ({
-        wallet: normaliseWallet(wallet, state.wallet),
-        limits,
-        loading: false,
-        fetched: true,
-      }));
-      return wallet;
-    } catch (err) {
-      const message =
-        err?.response?.data?.message || err?.message || 'Failed to load wallet';
-      set({ loading: false, error: message });
-      throw err;
+  async fetchWallet({ force = false } = {}) {
+    // Reuse a fresh snapshot — home, account, and confirm screens all call
+    // this on mount; StrictMode + tab switches must not spam the API.
+    if (!force && get().fetched && !get().loading) {
+      return get().wallet;
     }
+    if (walletInflight) return walletInflight;
+
+    set({ loading: true, error: null });
+    walletInflight = (async () => {
+      try {
+        const res = await api.get('/auth/wallet');
+        const wallet = res?.data?.data?.wallet || EMPTY_WALLET;
+        const limits = res?.data?.data?.limits || get().limits;
+        set((state) => ({
+          wallet: normaliseWallet(wallet, state.wallet),
+          limits,
+          loading: false,
+          fetched: true,
+        }));
+        return wallet;
+      } catch (err) {
+        const message =
+          err?.response?.data?.message || err?.message || 'Failed to load wallet';
+        set({ loading: false, error: message });
+        throw err;
+      } finally {
+        walletInflight = null;
+      }
+    })();
+
+    return walletInflight;
   },
 
   async fetchTransactions({ page = 1, limit = 20, append = false } = {}) {

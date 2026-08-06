@@ -49,9 +49,8 @@ export function useGoogleMap() {
     googleMapsApiKey: apiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
     version: GOOGLE_MAPS_VERSION,
-    // Surface auth failures (bad key, missing referrer) as a normal error
-    // through `gm_authFailure` so consumers can render a help message.
-    preventGoogleFontsLoading: false,
+    // Avoid Google injecting Roboto — saves a font request in WebViews.
+    preventGoogleFontsLoading: true,
   });
 
   return useMemo(() => {

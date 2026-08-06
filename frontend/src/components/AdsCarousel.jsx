@@ -1,26 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCachedQuery } from '../hooks/useCachedQuery';
+import { useWhenVisible } from '../hooks/useWhenVisible';
 import { buildCacheKey } from '../store/lib/buildCacheKey';
 import { useAdsStore } from '../store/user/useAdsStore';
+import { AdsCarouselSkeleton } from './skeleton/SectionSkeletons';
 
 /**
  * Horizontally-scrolling ad carousel rendered on the user home screen.
  *
- * - Pulls active ads from `GET /common/ads` (Zustand-cached — remounts
- *   after route changes reuse the snapshot instead of re-fetching).
- * - Renders each ad as a 16:9 card (image or muted autoplay video).
- * - If the ad has a `linkUrl`, tapping it opens the link in a new
- *   browser tab. Otherwise the card is non-interactive.
- * - Auto-rotates every 5 seconds when there are multiple ads. Pauses
- *   while the user is touching the strip so swipe gestures aren't
- *   fighting the timer.
- * - Renders nothing while loading the first time and on fetch error,
- *   so the home layout doesn't reserve space for an empty section.
+ * Ads are optional / below the fold — fetch only once the strip is near
+ * the viewport so home startup is not competing with critical APIs.
  */
 const ADS_CACHE_KEY = buildCacheKey('common-ads');
 
 const AdsCarousel = () => {
-  const { data, isFetched } = useCachedQuery(useAdsStore, ADS_CACHE_KEY);
+  const sectionRef = useRef(null);
+  const visible = useWhenVisible(sectionRef, { rootMargin: '240px 0px' });
+  const { data, isFetched, loading } = useCachedQuery(
+    useAdsStore,
+    ADS_CACHE_KEY,
+    undefined,
+    { enabled: visible },
+  );
   const ads = Array.isArray(data) ? data : [];
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollerRef = useRef(null);
@@ -73,10 +74,26 @@ const AdsCarousel = () => {
     window.open(ad.linkUrl, '_blank', 'noopener,noreferrer');
   };
 
-  if (!isFetched || ads.length === 0) return null;
+  if (visible && loading && !isFetched) {
+    return (
+      <section ref={sectionRef} aria-label="Promotions" className="animate-fade-in-up">
+        <AdsCarouselSkeleton />
+      </section>
+    );
+  }
+
+  if (isFetched && ads.length === 0) {
+    return <section ref={sectionRef} aria-hidden className="h-0 overflow-hidden" />;
+  }
+
+  if (!isFetched) {
+    // Reserve an observation target so IntersectionObserver can fire.
+    return <section ref={sectionRef} aria-hidden className="h-1" />;
+  }
 
   return (
     <section
+      ref={sectionRef}
       className="animate-fade-in-up"
       style={{ animationDelay: '0.1s' }}
       aria-label="Promotions"

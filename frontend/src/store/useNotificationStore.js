@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import api from '../utils/api';
 
 function makeNotificationStore(basePath) {
+  let unreadInflight = null;
+  let unreadFetchedAt = 0;
+  const UNREAD_TTL_MS = 30_000;
+
   return create((set, get) => ({
     notifications: [],
     unreadCount: 0,
@@ -12,6 +16,8 @@ function makeNotificationStore(basePath) {
     error: null,
 
     reset() {
+      unreadInflight = null;
+      unreadFetchedAt = 0;
       set({
         notifications: [],
         unreadCount: 0,
@@ -26,15 +32,28 @@ function makeNotificationStore(basePath) {
       set({ unreadCount: Math.max(0, Number(count) || 0) });
     },
 
-    async fetchUnread() {
-      try {
-        const res = await api.get(`${basePath}/notifications/unread`);
-        const data = res?.data?.data || {};
-        set({ unreadCount: data.unreadCount || 0 });
-        return data;
-      } catch {
-        return null;
+    async fetchUnread({ force = false } = {}) {
+      const fresh = Date.now() - unreadFetchedAt < UNREAD_TTL_MS;
+      if (!force && fresh) {
+        return { unreadCount: get().unreadCount };
       }
+      if (unreadInflight) return unreadInflight;
+
+      unreadInflight = (async () => {
+        try {
+          const res = await api.get(`${basePath}/notifications/unread`);
+          const data = res?.data?.data || {};
+          unreadFetchedAt = Date.now();
+          set({ unreadCount: data.unreadCount || 0 });
+          return data;
+        } catch {
+          return null;
+        } finally {
+          unreadInflight = null;
+        }
+      })();
+
+      return unreadInflight;
     },
 
     async fetchNotifications({ page } = {}) {

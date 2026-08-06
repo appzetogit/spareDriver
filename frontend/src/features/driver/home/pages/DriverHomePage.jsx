@@ -39,6 +39,9 @@ import DriverTripCard from '../../trips/components/DriverTripCard';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
 import { useNotificationPanel } from '../../../../components/notifications/NotificationCenter';
 import { useDriverNotificationStore } from '../../../../store/useNotificationStore';
+import { useAfterPaint } from '../../../../hooks/useAfterPaint';
+import { Skeleton } from '../../../../components/skeleton/Skeleton';
+import { TripCardSkeleton } from '../../../../components/skeleton/SectionSkeletons';
 
 const ACTIVE_STATUS_COPY = {
   [BOOKING_STATUS.DRIVER_ASSIGNED]: 'Heading to customer',
@@ -73,12 +76,21 @@ const DriverHomePage = () => {
   const activeKey = buildCacheKey('driver-kit-active', {});
   const summaryKey = buildCacheKey('driver-home-summary', {});
 
+  // Critical for go-online toggle + active trips. Secondary APIs wait for paint.
+  const secondaryReady = useAfterPaint({ delayMs: 150 });
+  const optionalReady = useAfterPaint({ delayMs: 400 });
+
   const { data: onlineStatus, refetch: refetchOnline } = useCachedQuery(
     useDriverOnlineStore,
     onlineKey,
     {},
   );
-  const { refetch: refetchKit } = useCachedQuery(useDriverKitActiveStore, activeKey, {});
+  const { refetch: refetchKit } = useCachedQuery(
+    useDriverKitActiveStore,
+    activeKey,
+    {},
+    { enabled: secondaryReady },
+  );
   const { data: summary, loading: summaryLoading } = useCachedQuery(
     useDriverHomeSummaryStore,
     summaryKey,
@@ -151,8 +163,9 @@ const DriverHomePage = () => {
   }, [isOnline, fetchIncomingCount]);
 
   useEffect(() => {
+    if (!optionalReady) return;
     fetchAssignedSubscriptions().catch(() => {});
-  }, [fetchAssignedSubscriptions]);
+  }, [optionalReady, fetchAssignedSubscriptions]);
 
   const handleToggle = async (next) => {
     if (next) {
@@ -418,9 +431,7 @@ function ActiveTripsSection({ bookings, loading, onOpen, onViewAll }) {
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-base font-bold text-text">Active trips</h2>
         </div>
-        <Card className="flex items-center justify-center py-8">
-          <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
-        </Card>
+        <TripCardSkeleton />
       </section>
     );
   }
@@ -483,8 +494,10 @@ function ActiveTripsSection({ bookings, loading, onOpen, onViewAll }) {
 function AssignedSubscriptionsSection({ loading, subscriptions, onOpen }) {
   if (loading && !subscriptions.length) {
     return (
-      <Card className="animate-fade-in-up flex items-center justify-center py-6">
-        <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
+      <Card className="animate-fade-in-up space-y-3 py-4">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
       </Card>
     );
   }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { RouteShellSkeleton } from './components/skeleton/SectionSkeletons';
 
 // Layouts + guards stay eager — they're small, used on every route, and
 // keeping them out of the Suspense boundary avoids a double spinner on every
@@ -192,14 +192,6 @@ const BookingReportsPage = lazy(() => import('./features/admin/pages/reports/Boo
 const RevenueReportsPage = lazy(() => import('./features/admin/pages/reports/RevenueReportsPage'));
 const GstReportsPage = lazy(() => import('./features/admin/pages/reports/GstReportsPage'));
 
-function PageLoader() {
-  return (
-    <div className="flex items-center justify-center min-h-dvh bg-bg">
-      <Loader2 className="w-6 h-6 animate-spin text-text-muted" />
-    </div>
-  );
-}
-
 function App() {
   const bootstrap = useAuthSessionStore((s) => s.bootstrap);
 
@@ -208,7 +200,7 @@ function App() {
   }, [bootstrap]);
 
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteShellSkeleton />}>
       <Routes>
         {/* ========== Marketing / Landing Routes (Outside MobileLayout) ========== */}
         <Route path="/" element={<LandingPage />} />
