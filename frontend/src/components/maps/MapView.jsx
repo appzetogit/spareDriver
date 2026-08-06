@@ -37,7 +37,7 @@ const DEFAULT_OPTIONS = Object.freeze({
   disableDefaultUI: true,
   clickableIcons: false,
   gestureHandling: 'greedy',
-  backgroundColor: '#f4efe6',
+  backgroundColor: '#f5f0e8',
   styles: RAPIDO_MAP_STYLES,
   zoomControl: false,
   fullscreenControl: false,
@@ -65,7 +65,9 @@ const MapView = forwardRef(function MapView(
     onLoad,
     onUnmount,
     onClick,
+    onDragStart,
     onDragEnd,
+    onZoomChanged,
     onIdle,
     children,
   },
@@ -122,6 +124,17 @@ const MapView = forwardRef(function MapView(
         if (dx || dy) map.panBy(dx, dy);
       },
       setZoom: (z) => mapRef.current?.setZoom(z),
+      /** Map bearing in degrees (0 = north-up). Used for rotate + recenter. */
+      setHeading: (deg) => {
+        const map = mapRef.current;
+        if (!map || typeof map.setHeading !== 'function') return;
+        map.setHeading(((Number(deg) % 360) + 360) % 360);
+      },
+      getHeading: () => {
+        const map = mapRef.current;
+        if (!map || typeof map.getHeading !== 'function') return 0;
+        return map.getHeading() || 0;
+      },
       fitBounds: (bounds, padding) => mapRef.current?.fitBounds(bounds, padding),
       triggerResize: () => {
         const map = mapRef.current;
@@ -134,7 +147,7 @@ const MapView = forwardRef(function MapView(
   );
 
   const wrapperClass = [
-    'relative overflow-hidden bg-[#f4efe6]',
+    'relative overflow-hidden bg-[#f5f0e8]',
     rounded ? 'rounded-2xl' : '',
     className,
   ]
@@ -165,7 +178,9 @@ const MapView = forwardRef(function MapView(
           onLoad={handleLoad}
           onUnmount={handleUnmount}
           onClick={onClick}
+          onDragStart={onDragStart}
           onDragEnd={onDragEnd}
+          onZoomChanged={onZoomChanged}
           onIdle={onIdle}
         >
           {children}

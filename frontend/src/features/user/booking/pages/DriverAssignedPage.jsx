@@ -682,7 +682,6 @@ const DriverAssignedPage = () => {
       {showMap ? (
         <div
           className="absolute inset-0"
-          style={{ pointerEvents: mapLocked ? 'none' : 'auto' }}
         >
           <TripTrackingMap
             driver={driverPoint}
@@ -698,8 +697,14 @@ const DriverAssignedPage = () => {
             // progress). It's the ARRIVED phase that intentionally
             // hides it (the driver is on top of the pin).
             showRoute={booking.status !== BOOKING_STATUS.ARRIVED}
-            followDriver={isTripStarted}
+            // Follow for the whole live-map phase so the customer can
+            // pan / two-finger-rotate and tap Recenter (north-up).
+            followDriver={Boolean(driverPoint)}
             bookingStatus={booking.status}
+            // Sit above the collapsed bottom sheet.
+            controlClassName="!bottom-[28dvh] sm:!bottom-[26dvh]"
+            // Lock only the canvas — Recenter stays tappable.
+            mapInteractive={!mapLocked}
           />
         </div>
       ) : !driverLocationRevealed ? (

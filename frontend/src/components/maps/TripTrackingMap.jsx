@@ -1,58 +1,57 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Compass, Loader2, MapPin, Navigation } from 'lucide-react';
 import MapView from './MapView';
 import UserMarker from './UserMarker';
 import DriverMarker from './DriverMarker';
 import RoutePolyline from './RoutePolyline';
 import { useGoogleMap } from '../../hooks/useGoogleMap';
 import { useDirectionsRoute } from '../../hooks/useDirectionsRoute';
+import { useSmoothCamera } from '../../hooks/useSmoothCamera';
+import { useDriverSpeed } from '../../hooks/useDriverSpeed';
+import { useMapFollowControl } from '../../hooks/useMapFollowControl';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../utils/geo';
 import { ROUTE_POLYLINE, driverPinForStatus } from '../../constants/mapTheme';
+import { BOOKING_STATUS } from '../../constants/bookingStatus';
 
 /**
- * <TripTrackingMap /> — the live ride map used by both the customer and
- * driver post-acceptance flows. Composes the new declarative map
- * primitives:
+ * <TripTrackingMap /> — live ride map for customer + driver post-acceptance.
  *
- *   <MapView>
- *     <UserMarker kind="pickup" />
- *     <UserMarker kind="drop" />       (outstation only)
- *     <DriverMarker />                  (smoothly animated)
- *     <RoutePolyline path={…} />        (road-following + premium stroke)
- *   </MapView>
+ * Camera phases (driven by `bookingStatus` + props):
+ *   EN_ROUTE  → fit driver + pickup + route (unless followDriver)
+ *   ARRIVED   → hide route, fit pickup + driver
+ *   STARTED   → follow driver with dynamic zoom; route to destination
  *
- * Props (kept identical to the previous imperative implementation so
- * `DriverAssignedPage` and `DriverActiveTripPage` need zero changes):
+ * Interaction:
+ *   - Pan / two-finger rotate exits follow mode and shows Recenter.
+ *   - Recenter re-enables follow and resets heading to north-up.
  *
- *   - driver         { lat, lng, heading? }   live driver location
- *   - pickup         { lat, lng }             customer pickup point
- *   - dropoff        Optional { lat, lng }    outstation destination
- *   - height         CSS height (default 260)
- *   - showRoute      true → fetch & draw road-following route + ETA badge
- *   - followDriver   true → camera smoothly trails the driver (default off,
- *                    enabled by callers during ride-in-progress flows)
- *   - emphasis       'driver' | 'pickup' — which marker renders larger
- *   - className      extra wrapper classes
- *   - onEtaChange    callback called with `{ distanceMeters, etaMinutes }`
- *   - showOutline    true → premium double-stroke polyline (default).
- *                    false → single clean stroke. Centralised in
- *                    `ROUTE_POLYLINE.OUTLINE_DEFAULT` (mapTheme.js).
- *   - strokeOptions  per-instance overrides forwarded to `<RoutePolyline>`
- *                    (e.g. brand colour on a specific screen). Falls back
- *                    to `ROUTE_POLYLINE.STROKE` otherwise.
- *   - outlineOptions per-instance overrides for the outline halo.
- *   - bookingStatus  booking status → picks en-route arrow vs in-trip car
- *   - driverImageSrc optional explicit pin override (wins over status)
- *
- * Camera behaviour:
- *   - First mount + every endpoint change → `fitBounds` so both pins are
- *     visible with the entire route polyline.
- *   - While following the driver → smooth `panTo` to the latest position
- *     each animation tick (we let `<DriverMarker>` interpolate the pin and
- *     piggy-back on the same prop update for the camera).
- *   - We never call `setZoom` mid-follow to avoid the jarring "snap-to-
- *     close-up" zoom that looks bad on mobile.
+ * Props kept compatible with existing callers (DriverAssignedPage, etc.).
  */
+
+const ARRIVING_METERS = 150;
+const ARRIVED_METERS = 50;
+
+/** Allow two-finger rotate on vector maps; keep UI chrome off. */
+const TRACKING_MAP_OPTIONS = Object.freeze({
+  rotateControl: false,
+  tilt: 0,
+});
+
+function tripStatusLabel({ bookingStatus, distanceMeters }) {
+  if (
+    bookingStatus === BOOKING_STATUS.ARRIVED ||
+    (Number.isFinite(distanceMeters) && distanceMeters <= ARRIVED_METERS)
+  ) {
+    return 'Driver has arrived';
+  }
+  if (Number.isFinite(distanceMeters) && distanceMeters <= ARRIVING_METERS) {
+    return 'Driver is arriving';
+  }
+  if (bookingStatus === BOOKING_STATUS.STARTED) {
+    return 'Trip in progress';
+  }
+  return 'Driver is on the way';
+}
 
 function TripTrackingMap({
   driver,
@@ -69,96 +68,70 @@ function TripTrackingMap({
   outlineOptions,
   bookingStatus = null,
   driverImageSrc = null,
+  /** Extra classes for the Recenter control (e.g. clear a bottom sheet). */
+  controlClassName = '',
+  /** When false, map gestures are blocked but Recenter stays clickable. */
+  mapInteractive = true,
 }) {
   const { isLoaded, loadError, maps } = useGoogleMap();
   const viewRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const fittedKeyRef = useRef(null);
+  const animatedDriverRef = useRef(null);
+  const [mapHeading, setMapHeading] = useState(0);
 
   const driverPinSrc = driverImageSrc || driverPinForStatus(bookingStatus);
+  const isArrivedStatus = bookingStatus === BOOKING_STATUS.ARRIVED;
+  const isStartedStatus = bookingStatus === BOOKING_STATUS.STARTED;
 
-  /* ------------------------------------------------------------------ */
-  /* Directions: road-following polyline                                 */
-  /* ------------------------------------------------------------------ */
+  const straightLineMeters = useMemo(() => {
+    if (!driver || !pickup) return null;
+    const d = haversineMeters(driver, pickup);
+    return Number.isFinite(d) ? d : null;
+  }, [driver, pickup]);
+
+  const routeVisible =
+    showRoute &&
+    !isArrivedStatus &&
+    !(Number.isFinite(straightLineMeters) && straightLineMeters <= ARRIVED_METERS);
+
+  const resetMapHeading = useCallback(() => {
+    viewRef.current?.setHeading?.(0);
+    setMapHeading(0);
+  }, []);
+
+  const {
+    following,
+    showRecenter,
+    onUserGesture,
+    recenter,
+    isGestureSuppressed,
+  } = useMapFollowControl({
+    enabled: followDriver,
+    onRecenter: resetMapHeading,
+  });
+
+  const speedKmh = useDriverSpeed(driver);
+
   const {
     path: routePath,
     distanceMeters: routeDistanceMeters,
     durationSeconds: routeDurationSeconds,
   } = useDirectionsRoute({
     maps,
-    origin: showRoute ? driver : null,
-    destination: showRoute ? pickup : null,
-    enabled: showRoute && Boolean(driver && pickup),
+    origin: routeVisible ? driver : null,
+    destination: routeVisible ? pickup : null,
+    enabled: routeVisible && Boolean(driver && pickup),
   });
 
-  /* ------------------------------------------------------------------ */
-  /* Initial centre — picks the most "useful" point on first mount so
-   * the map doesn't start zoomed into the Pacific while we wait for the
-   * effect below to call `fitBounds`.                                    */
-  /* ------------------------------------------------------------------ */
   const initialCenter = useMemo(() => {
     return pickup || driver || { lat: 28.6139, lng: 77.209 };
   }, [pickup, driver]);
 
-  /* ------------------------------------------------------------------ */
-  /* Fit-bounds: re-runs whenever the endpoints (or the route) change.   */
-  /* ------------------------------------------------------------------ */
-  useEffect(() => {
-    if (!mapReady || !maps || !viewRef.current) return;
-    if (!pickup && !driver) return;
+  const onAnimatedPositionChange = useCallback((pos) => {
+    animatedDriverRef.current = pos;
+  }, []);
 
-    // While in "follow driver" mode we deliberately skip fitBounds — the
-    // dedicated follow effect below owns the camera. Without this skip the
-    // bounds would yank the camera away from the driver each tick.
-    if (followDriver) return;
-
-    const points = [];
-    if (pickup) points.push(pickup);
-    if (driver) points.push(driver);
-    if (dropoff) points.push(dropoff);
-    if (Array.isArray(routePath) && routePath.length > 1) {
-      // Anchor the bounds against the route endpoints too — long detours
-      // would otherwise scroll off-screen on the initial fit.
-      points.push(routePath[0], routePath[routePath.length - 1]);
-    }
-
-    if (points.length === 0) return;
-
-    const key = points
-      .map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`)
-      .join('|');
-    if (fittedKeyRef.current === key) return;
-    fittedKeyRef.current = key;
-
-    if (points.length === 1) {
-      viewRef.current.panTo(points[0]);
-      return;
-    }
-
-    const bounds = new maps.LatLngBounds();
-    points.forEach((p) => bounds.extend(p));
-    if (Array.isArray(routePath)) routePath.forEach((p) => bounds.extend(p));
-    viewRef.current.fitBounds(bounds, 64);
-  }, [mapReady, maps, pickup, driver, dropoff, routePath, followDriver]);
-
-  /* ------------------------------------------------------------------ */
-  /* Smooth follow: pan the camera to each new driver sample.            */
-  /*                                                                     */
-  /* We piggy-back on the parent's `driver` prop change rather than
-   * polling the DriverMarker's animated position — keeping the camera
-   * on the *target* (not the in-flight interpolated point) avoids the
-   * compounded jitter you'd otherwise get from two animation loops.    */
-  /* ------------------------------------------------------------------ */
-  useEffect(() => {
-    if (!mapReady || !followDriver || !driver) return;
-    viewRef.current?.panTo(driver);
-  }, [mapReady, followDriver, driver]);
-
-  /* ------------------------------------------------------------------ */
-  /* ETA derivation — prefer the Directions response, fall back to a
-   * straight-line haversine + avg-urban-speed estimate so the badge
-   * never reads "—" just because the API call hasn't returned.          */
-  /* ------------------------------------------------------------------ */
   const { distanceMeters, etaMinutes } = useMemo(() => {
     if (!driver || !pickup) return { distanceMeters: null, etaMinutes: null };
     if (Number.isFinite(routeDistanceMeters) && Number.isFinite(routeDurationSeconds)) {
@@ -176,9 +149,109 @@ function TripTrackingMap({
     onEtaChange({ distanceMeters, etaMinutes });
   }, [distanceMeters, etaMinutes, onEtaChange]);
 
-  /* ------------------------------------------------------------------ */
-  /* Render                                                              */
-  /* ------------------------------------------------------------------ */
+  const statusText = useMemo(
+    () => tripStatusLabel({ bookingStatus, distanceMeters }),
+    [bookingStatus, distanceMeters],
+  );
+
+  useSmoothCamera({
+    mapRef: viewRef,
+    maps,
+    enabled: mapReady && following && Boolean(driver),
+    target: driver,
+    animatedTargetRef: animatedDriverRef,
+    speedKmh,
+    distanceMeters,
+  });
+
+  /* Detect two-finger rotate — exits follow and shows Recenter. */
+  useEffect(() => {
+    if (!mapReady || !maps?.event || !followDriver) return undefined;
+    const map = viewRef.current?.getMap?.();
+    if (!map) return undefined;
+
+    const onHeadingChanged = () => {
+      const heading =
+        typeof map.getHeading === 'function' ? map.getHeading() || 0 : 0;
+      setMapHeading(heading);
+      if (isGestureSuppressed?.()) return;
+      if (Math.abs(heading) > 2) onUserGesture();
+    };
+
+    const listener = maps.event.addListener(map, 'heading_changed', onHeadingChanged);
+    return () => {
+      maps.event.removeListener(listener);
+    };
+  }, [mapReady, maps, followDriver, onUserGesture, isGestureSuppressed]);
+
+  /* Phase-aware fitBounds when NOT following. */
+  useEffect(() => {
+    if (!mapReady || !maps || !viewRef.current) return;
+    if (!pickup && !driver) return;
+    if (following) return;
+
+    const points = [];
+    if (pickup) points.push(pickup);
+    if (driver) points.push(driver);
+    if (!isArrivedStatus && dropoff) points.push(dropoff);
+
+    const includeRoute =
+      routeVisible &&
+      !isArrivedStatus &&
+      Array.isArray(routePath) &&
+      routePath.length > 1;
+
+    if (includeRoute) {
+      points.push(routePath[0], routePath[routePath.length - 1]);
+    }
+
+    if (points.length === 0) return;
+
+    const key = [
+      bookingStatus || 'none',
+      points.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join('|'),
+      includeRoute ? `r${routePath.length}` : 'nr',
+    ].join('::');
+    if (fittedKeyRef.current === key) return;
+    fittedKeyRef.current = key;
+
+    if (points.length === 1) {
+      viewRef.current.panTo(points[0]);
+      return;
+    }
+
+    const bounds = new maps.LatLngBounds();
+    points.forEach((p) => bounds.extend(p));
+    if (includeRoute) {
+      const stride = Math.max(1, Math.floor(routePath.length / 40));
+      for (let i = 0; i < routePath.length; i += stride) {
+        bounds.extend(routePath[i]);
+      }
+    }
+
+    const padding = isArrivedStatus ? 80 : isStartedStatus ? 56 : 64;
+    viewRef.current.fitBounds(bounds, padding);
+  }, [
+    mapReady,
+    maps,
+    pickup,
+    driver,
+    dropoff,
+    routePath,
+    following,
+    routeVisible,
+    isArrivedStatus,
+    isStartedStatus,
+    bookingStatus,
+  ]);
+
+  const handleMapLoad = useCallback(() => {
+    setMapReady(true);
+  }, []);
+
+  const isRotated = Math.abs(mapHeading) > 2;
+  const showControl = showRecenter || (followDriver && isRotated && !following);
+
   if (loadError) {
     return (
       <div
@@ -195,69 +268,78 @@ function TripTrackingMap({
     );
   }
 
-  const hasRoute = showRoute && Array.isArray(routePath) && routePath.length > 1;
+  const hasRoute = routeVisible && Array.isArray(routePath) && routePath.length > 1;
   const showFallback =
-    showRoute && driver && pickup && (!routePath || routePath.length < 2);
+    routeVisible && driver && pickup && (!routePath || routePath.length < 2);
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl bg-[#f4efe6] ${className}`}
+      className={`relative overflow-hidden rounded-2xl bg-[#f5f0e8] ${className}`}
       style={{ height }}
     >
-      <MapView
-        ref={viewRef}
-        center={initialCenter}
-        zoom={14}
-        height="100%"
-        rounded={false}
-        onLoad={() => setMapReady(true)}
+      <div
+        className="absolute inset-0"
+        style={{ pointerEvents: mapInteractive ? 'auto' : 'none' }}
       >
-        {pickup && (
-          <UserMarker
-            position={pickup}
-            kind="pickup"
-            size={emphasis === 'pickup' ? 52 : 44}
-            ariaLabel="Pickup"
-          />
-        )}
+        <MapView
+          ref={viewRef}
+          center={initialCenter}
+          zoom={15}
+          height="100%"
+          rounded={false}
+          options={TRACKING_MAP_OPTIONS}
+          onLoad={handleMapLoad}
+          onDragStart={onUserGesture}
+        >
+          {pickup && (
+            <UserMarker
+              position={pickup}
+              kind="pickup"
+              size={emphasis === 'pickup' ? 52 : 44}
+              ariaLabel="Pickup"
+            />
+          )}
 
-        {dropoff && (
-          <UserMarker
-            position={dropoff}
-            kind="drop"
-            size={40}
-            ariaLabel="Drop"
-          />
-        )}
+          {dropoff && (
+            <UserMarker
+              position={dropoff}
+              kind="drop"
+              size={40}
+              ariaLabel="Drop"
+            />
+          )}
 
-        {driver && (
-          <DriverMarker
-            position={driver}
-            heading={typeof driver.heading === 'number' ? driver.heading : undefined}
-            imageSrc={driverPinSrc}
-            size={emphasis === 'driver' ? 52 : 44}
-            animateMs={1200}
-          />
-        )}
+          {driver && (
+            <DriverMarker
+              position={driver}
+              heading={typeof driver.heading === 'number' ? driver.heading : undefined}
+              mapHeading={mapHeading}
+              imageSrc={driverPinSrc}
+              size={emphasis === 'driver' ? 54 : 46}
+              animateMs={1400}
+              onAnimatedPositionChange={onAnimatedPositionChange}
+            />
+          )}
 
-        {hasRoute && (
-          <RoutePolyline
-            path={routePath}
-            animate={false}
-            showOutline={false}
-            strokeOptions={strokeOptions}
-            outlineOptions={outlineOptions}
-          />
-        )}
+          {hasRoute && (
+            <RoutePolyline
+              path={routePath}
+              animate={false}
+              showOutline={showOutline}
+              strokeOptions={strokeOptions}
+              outlineOptions={outlineOptions}
+            />
+          )}
 
-        {showFallback && (
-          <RoutePolyline
-            path={[driver, pickup]}
-            animate={false}
-            dashed
-          />
-        )}
-      </MapView>
+          {showFallback && (
+            <RoutePolyline
+              path={[driver, pickup]}
+              animate={false}
+              dashed
+            />
+          )}
+        </MapView>
+      </div>
 
       {!isLoaded && !loadError && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-50/80 pointer-events-none">
@@ -266,14 +348,38 @@ function TripTrackingMap({
       )}
 
       {distanceMeters != null && etaMinutes != null && (
-        <div className="absolute top-3 left-3 right-3 flex justify-center pointer-events-none">
-          <div className="bg-white/95 backdrop-blur rounded-full shadow px-3.5 py-1.5 flex items-center gap-2 text-[12px] font-semibold text-text">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{formatDistance(distanceMeters)}</span>
-            <span className="text-text-muted">·</span>
-            <span>~{etaMinutes} min</span>
+        <div className="absolute top-3 left-3 right-3 flex justify-center pointer-events-none z-[2]">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-md px-4 py-2.5 min-w-[200px] text-center">
+            <div className="flex items-baseline justify-center gap-2">
+              <span className="text-xl font-bold text-slate-900 tracking-tight tabular-nums">
+                {etaMinutes} min
+              </span>
+              <span className="text-sm font-semibold text-slate-500 tabular-nums">
+                {formatDistance(distanceMeters)}
+              </span>
+            </div>
+            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+              {statusText}
+            </p>
           </div>
         </div>
+      )}
+
+      {/* Recenter / north-up — pan or rotate exits follow */}
+      {showControl && (
+        <button
+          type="button"
+          onClick={recenter}
+          className={`absolute z-[3] flex items-center gap-1.5 rounded-full bg-white shadow-lg border border-slate-200/80 px-3.5 py-2 text-[12px] font-semibold text-slate-800 active:scale-[0.97] transition-transform pointer-events-auto bottom-4 right-4 ${controlClassName}`}
+          aria-label="Recenter map on driver"
+        >
+          {isRotated ? (
+            <Compass className="w-3.5 h-3.5 text-emerald-600" />
+          ) : (
+            <Navigation className="w-3.5 h-3.5 text-emerald-600" />
+          )}
+          Recenter
+        </button>
       )}
     </div>
   );

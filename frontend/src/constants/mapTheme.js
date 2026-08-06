@@ -60,36 +60,18 @@ export function driverPinForStatus(status) {
 /**
  * Single source of truth for the route polyline's look — colour, opacity,
  * weight, the (optional) outline behind it, and the dashed-loading style.
- *
- * Why centralise it?
- *   - One file to tweak when product asks for a different route colour.
- *   - Every consumer (`<TripTrackingMap>`, the dev simulator, future
- *     completed-trip summaries) inherits the same look automatically.
- *   - Props on `<RoutePolyline>` still let any one screen override a
- *     specific field (e.g. dim the route on the trip-completed map),
- *     without forking the defaults.
- *
- * Tweak guidance:
- *   - `STROKE`  → the visible line on top. Bump `strokeWeight` for chunkier
- *                 lines, change `strokeColor` for brand colour shifts.
- *   - `OUTLINE` → the wider, translucent halo drawn beneath the stroke for
- *                 the Uber/Rapido "premium" look. Optional — toggle it off
- *                 per-instance via `<RoutePolyline showOutline={false} />`
- *                 or globally by flipping `ROUTE_POLYLINE.OUTLINE_DEFAULT`.
- *   - `DASHED`  → used by `<TripTrackingMap>` as the placeholder while the
- *                 Directions API is still resolving.
  */
 export const ROUTE_POLYLINE = Object.freeze({
   STROKE: Object.freeze({
-    strokeColor: '#000000',
-    strokeOpacity: 0.92,
+    strokeColor: '#1a1a1a',
+    strokeOpacity: 0.95,
     strokeWeight: 5,
     geodesic: true,
     clickable: false,
   }),
   OUTLINE: Object.freeze({
-    strokeColor: '#000000',
-    strokeOpacity: 0.18,
+    strokeColor: '#ffffff',
+    strokeOpacity: 0.85,
     strokeWeight: 9,
     geodesic: true,
     clickable: false,
@@ -106,12 +88,6 @@ export const ROUTE_POLYLINE = Object.freeze({
 /* -------------------------------------------------------------------------- */
 /* Z-index layering for overlays                                              */
 /* -------------------------------------------------------------------------- */
-/**
- * Logical z-index buckets so overlays stack predictably:
- * polyline outline → polyline stroke → static pins → driver pin.
- * Stack values are only meaningful *within the same map pane*, but we keep
- * them here so the precedence is documented in one spot.
- */
 export const MAP_Z_INDEX = Object.freeze({
   POLYLINE_OUTLINE: 1,
   POLYLINE_STROKE: 2,
@@ -120,34 +96,54 @@ export const MAP_Z_INDEX = Object.freeze({
 });
 
 /**
- * Rapido-inspired soft palette. Cream landscape, white roads with subtle
- * outlines, warm-amber highways, all POI/transit labels stripped. Designed
- * to push driver/pickup pins into the foreground.
+ * Low-clutter basemap: roads stay visible, POIs / business labels / transit
+ * are stripped so the driver pin + route read first.
  *
- * NB: When a *vector* mapId is in use, Google ignores `styles`. The visual
- * result will still match because the AdvancedMarkers + clean UI options
- * already do most of the work — but switching the project to a Cloud-styled
- * Map ID is the proper long-term solution.
+ * NB: When a *vector* mapId is in use, Google ignores `styles`. Cloud-styled
+ * Map IDs are the long-term fix via `VITE_GOOGLE_MAP_ID`.
  */
 export const RAPIDO_MAP_STYLES = Object.freeze([
-  { elementType: 'geometry', stylers: [{ color: '#f4efe6' }] },
+  { elementType: 'geometry', stylers: [{ color: '#f5f0e8' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#6b6157' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a8074' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#fdfbf6' }] },
+
   { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
   { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
   { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
+
+  // Strip all POIs (businesses, attractions, etc.)
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e3eedb' }] },
+  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.government', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.medical', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.place_of_worship', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.school', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.sports_complex', stylers: [{ visibility: 'off' }] },
+  // Soft parks only — geometry, no labels.
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e4eedc' }] },
+  { featureType: 'poi.park', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit.station', stylers: [{ visibility: 'off' }] },
+
+  // Roads — keep hierarchy readable, hide minor road names to reduce clutter.
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e6dfd4' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#fff9ec' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ffdfa7' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e8b974' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e4ddd2' }] },
+  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#fff8ec' }] },
+  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#9a9084' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ffe2a8' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e6b86e' }] },
+  { featureType: 'road.highway', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'road.highway.controlled_access', elementType: 'geometry', stylers: [{ color: '#ffd07a' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cfe2eb' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a7793' }] },
+
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9dce8' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#5a7f96' }] },
+  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#f0ebe3' }] },
   { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#ebe6dc' }] },
 ]);
 
@@ -156,7 +152,7 @@ export const RAPIDO_MAP_OPTIONS = Object.freeze({
   disableDefaultUI: true,
   clickableIcons: false,
   gestureHandling: 'greedy',
-  backgroundColor: '#f4efe6',
+  backgroundColor: '#f5f0e8',
   styles: RAPIDO_MAP_STYLES,
 });
 
@@ -175,8 +171,6 @@ export const RAPIDO_MAP_OPTIONS = Object.freeze({
 export function createImageMarkerContent(src, { size = 48, alt = 'Pin', bounce = false } = {}) {
   const wrapper = document.createElement('div');
   wrapper.className = 'gmap-image-pin';
-  // The image's "tip" sits a little above the very bottom of the canvas;
-  // a small negative margin keeps the visible tip on the coordinate.
   wrapper.style.cssText = [
     `width:${size}px`,
     `height:${Math.round(size * 1.25)}px`,
