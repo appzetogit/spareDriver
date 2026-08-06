@@ -1,10 +1,16 @@
 import Booking from '../models/booking.model.js';
+import UserSubscription from '../models/userSubscription.model.js';
 import {
   ACTIVE_BOOKING_STATUSES,
   BOOKING_STATUS,
   BOOKING_TYPE,
   SCHEDULED_BOOKING,
 } from '../constants/bookingStatus.js';
+import {
+  SUBSCRIPTION_STATUS,
+  SUBSCRIPTION_ASSIGNMENT_STATUS,
+} from '../constants/serviceTypes.js';
+import { ApiError } from '../utils/apiError.js';
 
 /**
  * Driver scheduling-conflict helpers.
@@ -14,6 +20,11 @@ import {
  * window — even when those bookings are hours away. A driver who
  * accepted a 6 PM scheduled pickup should still be receiving 11 AM
  * instant offers, but NOT a 5:30 PM instant offer.
+ *
+ * Dedicated-driver subscription stints are treated the same way: a
+ * driver assigned to an active subscription for [assignedAt,
+ * assignedWorkingEndDate || expiryDate] must not receive booking
+ * offers (or admin manual assigns) that overlap that window.
  *
  * The buffer (`SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES`, admin-tunable
  * per service via `ServicePricing.scheduledDispatch.RIDE_BUFFER_MINUTES`)
@@ -97,10 +108,104 @@ export function applyBuffer(window, bufferMinutes) {
 }
 
 /**
+ * Flatten current + historical assignment stints on a subscription into
+ * concrete `[startMs, endMs]` windows keyed by driver.
+ */
+export function listSubscriptionStints(subscription) {
+  if (!subscription) return [];
+  const stints = [];
+  const expiryMs = toMs(subscription.expiryDate);
+
+  if (
+    subscription.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED
+    && subscription.assignedDriverId
+  ) {
+    const startMs =
+      toMs(subscription.assignedAt) || toMs(subscription.startDate);
+    const endMs =
+      toMs(subscription.assignedWorkingEndDate) || expiryMs;
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+      stints.push({
+        driverId: String(subscription.assignedDriverId),
+        startMs,
+        endMs,
+        subscription,
+      });
+    }
+  }
+
+  for (const prev of subscription.previousAssignments || []) {
+    if (!prev?.driverId || !prev.assignedAt) continue;
+    const startMs = toMs(prev.assignedAt);
+    const endMs = toMs(prev.releasedAt) || expiryMs;
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+      continue;
+    }
+    stints.push({
+      driverId: String(prev.driverId),
+      startMs,
+      endMs,
+      subscription,
+    });
+  }
+
+  return stints;
+}
+
+function subscriptionConflictRow(stint) {
+  const sub = stint.subscription;
+  return {
+    _id: String(sub._id),
+    bookingNumber: sub.subscriptionNumber || 'SUB',
+    bookingType: 'subscription',
+    serviceType: 'subscription',
+    status: sub.status,
+    startMs: stint.startMs,
+    endMs: stint.endMs,
+    conflictKind: 'subscription',
+    planName: sub.planNameSnapshot || '',
+  };
+}
+
+async function loadActiveSubscriptionDocs({ driverIds = null } = {}) {
+  const query = {
+    status: SUBSCRIPTION_STATUS.ACTIVE,
+  };
+
+  if (driverIds?.length) {
+    const ids = driverIds.map(String);
+    query.$or = [
+      {
+        assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED,
+        assignedDriverId: { $in: ids },
+      },
+      { 'previousAssignments.driverId': { $in: ids } },
+    ];
+  } else {
+    query.$or = [
+      {
+        assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED,
+        assignedDriverId: { $ne: null },
+      },
+      { 'previousAssignments.0': { $exists: true } },
+    ];
+  }
+
+  return UserSubscription.find(query)
+    .select(
+      'subscriptionNumber status assignmentStatus assignedDriverId assignedAt assignedWorkingEndDate startDate expiryDate planNameSnapshot previousAssignments',
+    )
+    .lean();
+}
+
+/**
  * Returns the list of driver IDs (as strings) currently assigned to a
  * booking whose time window overlaps `window` (after applying the
  * shared buffer). Use this to populate `excludeDriverIds` when calling
  * `findDriversInExpandingRadius`.
+ *
+ * Also excludes drivers whose dedicated-subscription working stint
+ * overlaps the same window.
  *
  * The wave dispatcher passes the new booking's `_id` as `excludeBookingId`
  * so we don't conflict a booking against itself (the new booking might
@@ -148,12 +253,14 @@ export async function findConflictingDriverIds({
     query._id = { $ne: excludeBookingId };
   }
 
-  const candidates = await Booking.find(query)
-    .select(
-      'bookingType driverId hourly outstation timeline status',
-    )
-    .lean();
-  if (!candidates.length) return [];
+  const [candidates, subscriptions] = await Promise.all([
+    Booking.find(query)
+      .select(
+        'bookingType driverId hourly outstation timeline status',
+      )
+      .lean(),
+    loadActiveSubscriptionDocs(),
+  ]);
 
   const bufferMs = Math.max(0, Number(bufferMinutes) || 0) * 60_000;
   const newStart = window.startMs;
@@ -169,6 +276,16 @@ export async function findConflictingDriverIds({
     // [paddedStart, paddedEnd] and [newStart, newEnd].
     if (paddedStart <= newEnd && paddedEnd >= newStart) {
       conflicted.add(String(candidate.driverId));
+    }
+  }
+
+  for (const sub of subscriptions) {
+    for (const stint of listSubscriptionStints(sub)) {
+      const paddedStart = stint.startMs - bufferMs;
+      const paddedEnd = stint.endMs + bufferMs;
+      if (paddedStart <= newEnd && paddedEnd >= newStart) {
+        conflicted.add(stint.driverId);
+      }
     }
   }
 
@@ -197,6 +314,10 @@ export async function findConflictingDriverIdsForBooking(booking, { bufferMinute
  * buffered time window overlaps `window`. Used by the admin "manual
  * assignment" UI so each candidate driver can be rendered with a
  * conflict badge + the actual overlapping bookings as a tooltip.
+ *
+ * Dedicated-subscription stints that overlap are included with
+ * `conflictKind: 'subscription'` (and `bookingType`/`serviceType`
+ * set to `'subscription'`).
  *
  *   { [driverId]: [{ _id, bookingNumber, bookingType, status, startMs, endMs }, ...] }
  *
@@ -239,16 +360,19 @@ export async function getDriverConflictMap({
     query._id = { $ne: excludeBookingId };
   }
 
-  const candidates = await Booking.find(query)
-    .select(
-      'bookingNumber bookingType driverId hourly outstation timeline status serviceType',
-    )
-    .lean();
-  if (!candidates.length) return out;
+  const [candidates, subscriptions] = await Promise.all([
+    Booking.find(query)
+      .select(
+        'bookingNumber bookingType driverId hourly outstation timeline status serviceType',
+      )
+      .lean(),
+    loadActiveSubscriptionDocs({ driverIds: driverIdStrings }),
+  ]);
 
   const bufferMs = Math.max(0, Number(bufferMinutes) || 0) * 60_000;
   const newStart = window.startMs;
   const newEnd = window.endMs;
+  const wanted = new Set(driverIdStrings);
 
   for (const candidate of candidates) {
     const baseWindow = estimateBookingWindow(candidate);
@@ -266,9 +390,91 @@ export async function getDriverConflictMap({
         status: candidate.status,
         startMs: baseWindow.startMs,
         endMs: baseWindow.endMs,
+        conflictKind: 'booking',
       });
     }
   }
 
+  for (const sub of subscriptions) {
+    for (const stint of listSubscriptionStints(sub)) {
+      if (!wanted.has(stint.driverId)) continue;
+      const paddedStart = stint.startMs - bufferMs;
+      const paddedEnd = stint.endMs + bufferMs;
+      if (paddedStart <= newEnd && paddedEnd >= newStart) {
+        if (!out[stint.driverId]) out[stint.driverId] = [];
+        out[stint.driverId].push(subscriptionConflictRow(stint));
+      }
+    }
+  }
+
   return out;
+}
+
+/**
+ * Throw 409 when `driverId` has any booking or subscription overlap
+ * with `window`. Used by admin manual-assign paths.
+ */
+export async function assertDriverFreeForWindow({
+  driverId,
+  window,
+  excludeBookingId = null,
+  bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES,
+} = {}) {
+  if (!driverId || !window) return [];
+  const map = await getDriverConflictMap({
+    driverIds: [driverId],
+    window,
+    excludeBookingId,
+    bufferMinutes,
+  });
+  const conflicts = map[String(driverId)] || [];
+  if (!conflicts.length) return conflicts;
+
+  const hasSubscription = conflicts.some(
+    (c) => c.conflictKind === 'subscription' || c.bookingType === 'subscription',
+  );
+  const err = new ApiError(
+    409,
+    hasSubscription
+      ? 'Driver is assigned to a dedicated subscription during this period. Pick another driver.'
+      : 'Driver is already assigned to an overlapping booking. Pick another driver.',
+  );
+  err.data = { code: 'DRIVER_CONFLICT', conflicts };
+  throw err;
+}
+
+/**
+ * Attach `conflicts` / `hasConflict` to each driver row for admin pickers.
+ */
+export async function enrichDriversWithScheduleConflicts(
+  drivers,
+  {
+    window,
+    excludeBookingId = null,
+    bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES,
+  } = {},
+) {
+  if (!drivers?.length || !window) {
+    return (drivers || []).map((d) => ({
+      ...d,
+      conflicts: d.conflicts || [],
+      hasConflict: Boolean(d.hasConflict),
+    }));
+  }
+
+  const conflictMap = await getDriverConflictMap({
+    driverIds: drivers.map((d) => d._id),
+    window,
+    excludeBookingId,
+    bufferMinutes,
+  });
+
+  return drivers.map((d) => {
+    const conflicts = conflictMap[String(d._id)] || [];
+    return {
+      ...d,
+      conflicts,
+      hasConflict: conflicts.length > 0,
+    };
+  });
 }

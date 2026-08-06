@@ -35,6 +35,12 @@ import {
   resolveBookingSearchStartAt,
 } from '../utils/bookingInbox.js';
 import {
+  applyBuffer,
+  assertDriverFreeForWindow,
+  enrichDriversWithScheduleConflicts,
+  estimateBookingWindow,
+} from './driverConflict.service.js';
+import {
   outstationAssignAt,
   outstationEscalateAt,
 } from '../utils/outstationDispatch.js';
@@ -44,6 +50,17 @@ export {
   isInboxBookingType,
   resolveBookingSearchStartAt,
 };
+
+async function resolveBufferMinutesForBooking(booking) {
+  try {
+    const cfg = await loadScheduledDispatchConfig(booking?.serviceType);
+    const value = Number(cfg?.RIDE_BUFFER_MINUTES);
+    if (Number.isFinite(value) && value >= 0) return value;
+  } catch {
+    /* fall through */
+  }
+  return SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+}
 
 /** Statuses where staff can still manually assign a scheduled ride. */
 export const SCHEDULED_MANUAL_ASSIGN_STATUSES = Object.freeze([
@@ -920,7 +937,7 @@ export async function listAvailableDriversForScheduledBookingService(
     _id: bookingId,
     isDeleted: false,
   })
-    .select('pickup bookingType zoneIds driverId status carId')
+    .select('pickup bookingType zoneIds driverId status carId serviceType hourly outstation timeline')
     .lean();
   if (!booking) throw new ApiError(404, 'Booking not found');
   if (booking.bookingType !== BOOKING_TYPE.SCHEDULED) {
@@ -939,12 +956,23 @@ export async function listAvailableDriversForScheduledBookingService(
       ? { lng: coords[0], lat: coords[1] }
       : null;
 
-  return listAvailableDriversForAssignmentService({
+  const result = await listAvailableDriversForAssignmentService({
     carTypeId: resolvedCarTypeId,
     pickupCoords,
     page,
     limit,
   });
+
+  const bufferMinutes = await resolveBufferMinutesForBooking(booking);
+  const baseWindow = estimateBookingWindow(booking);
+  const buffered = baseWindow ? applyBuffer(baseWindow, bufferMinutes) : null;
+  result.drivers = await enrichDriversWithScheduleConflicts(result.drivers, {
+    window: buffered,
+    excludeBookingId: booking._id,
+    bufferMinutes,
+  });
+
+  return result;
 }
 
 /**
@@ -1000,6 +1028,17 @@ export async function adminAssignDriverToScheduledBookingService(
   if (!driver) throw new ApiError(404, 'Driver not found or not approved');
   if (driver.isOnTrip) {
     throw new ApiError(409, 'Driver is already on another trip');
+  }
+
+  const bufferMinutes = await resolveBufferMinutesForBooking(booking);
+  const baseWindow = estimateBookingWindow(booking);
+  if (baseWindow) {
+    await assertDriverFreeForWindow({
+      driverId: driver._id,
+      window: applyBuffer(baseWindow, bufferMinutes),
+      excludeBookingId: booking._id,
+      bufferMinutes,
+    });
   }
 
   try {

@@ -25,8 +25,10 @@ import {
   SCHEDULED_BOOKING,
 } from '../constants/bookingStatus.js';
 import {
+  applyBuffer,
   estimateBookingWindow,
   findConflictingDriverIds,
+  getDriverConflictMap,
 } from './driverConflict.service.js';
 import {
   isInboxBookingType,
@@ -711,13 +713,30 @@ export async function acceptBookingService(bookingId, driverId) {
 
   // Reject accepts after pickup time for scheduled/outstation inbox offers.
   const preview = await Booking.findById(bookingId)
-    .select('bookingType hourly outstation status driverId')
+    .select('bookingType serviceType hourly outstation status driverId timeline')
     .lean();
   if (!preview) return { ok: false, reason: 'not_found' };
   if (isInboxBookingType(preview.bookingType)) {
     const startAt = resolveBookingSearchStartAt(preview);
     if (startAt && startAt.getTime() <= Date.now()) {
       return { ok: false, reason: 'ride_time_passed' };
+    }
+  }
+
+  // Hard stop: dedicated-subscription stints (and overlapping bookings)
+  // must block accept even if a stale offer reached the driver.
+  const acceptWindow = estimateBookingWindow(preview);
+  if (acceptWindow) {
+    const bufferMinutes = await resolveRideBufferMinutes(preview.serviceType);
+    const buffered = applyBuffer(acceptWindow, bufferMinutes);
+    const conflictMap = await getDriverConflictMap({
+      driverIds: [driverId],
+      window: buffered,
+      excludeBookingId: bookingId,
+      bufferMinutes,
+    });
+    if ((conflictMap[String(driverId)] || []).length) {
+      return { ok: false, reason: 'driver_schedule_conflict' };
     }
   }
 

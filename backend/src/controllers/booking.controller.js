@@ -55,6 +55,7 @@ import {
   adminAssignDriverToEmergencyPoolService,
   listAvailableDriversForAssignmentService,
   getBookingCarTypeIdService,
+  attachScheduleConflictsToDrivers,
 } from '../services/bookingEmergencyPool.service.js';
 import {
   listOutstationAssignmentsService,
@@ -518,10 +519,10 @@ export const getEmergencyPoolAvailableDrivers = asyncHandler(async (req, res) =>
     (await getBookingCarTypeIdService(req.params.id)) ||
     null;
 
-  // Look up the booking's pickup coordinates so the service can
-  // geo-sort drivers by distance from the pickup point.
+  // Look up the booking so the service can geo-sort and flag
+  // schedule / subscription conflicts on each candidate.
   const booking = await Booking.findById(req.params.id)
-    .select('pickup')
+    .select('pickup serviceType bookingType hourly outstation timeline')
     .lean();
   const coords = booking?.pickup?.location?.coordinates;
   const pickupCoords =
@@ -535,6 +536,7 @@ export const getEmergencyPoolAvailableDrivers = asyncHandler(async (req, res) =>
     page: req.query?.page,
     limit: req.query?.limit,
   });
+  await attachScheduleConflictsToDrivers(booking, result);
   return res
     .status(200)
     .json(new ApiResponse(200, { ...result, carTypeId }, 'Available drivers fetched'));

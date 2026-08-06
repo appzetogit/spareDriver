@@ -600,9 +600,14 @@ export async function adminAssignDriverToOutstationService(
   });
   const driverConflicts = driverConflictMap[String(driver._id)] || [];
   if (driverConflicts.length) {
+    const hasSubscription = driverConflicts.some(
+      (c) => c.conflictKind === 'subscription' || c.bookingType === 'subscription',
+    );
     const err = new ApiError(
       409,
-      'Driver is already assigned to an overlapping booking. Pick another driver.',
+      hasSubscription
+        ? 'Driver is assigned to a dedicated subscription during this period. Pick another driver.'
+        : 'Driver is already assigned to an overlapping booking. Pick another driver.',
     );
     err.data = { code: 'DRIVER_CONFLICT', conflicts: driverConflicts };
     throw err;

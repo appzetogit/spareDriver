@@ -7,6 +7,7 @@ import {
   DISPATCH_RESPONSE,
   TERMINAL_BOOKING_STATUSES,
   PAYMENT_POLICY,
+  SCHEDULED_BOOKING,
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES } from '../constants/serviceTypes.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
@@ -19,6 +20,11 @@ import {
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { notifyDriverOrderAssigned } from '../utils/notificationDispatch.js';
 import { ApiError } from '../utils/apiError.js';
+import {
+  applyBuffer,
+  assertDriverFreeForWindow,
+  estimateBookingWindow,
+} from './driverConflict.service.js';
 
 function generateRideOtp() {
   const len = PAYMENT_POLICY.RIDE_OTP_LENGTH;
@@ -49,13 +55,14 @@ export async function listAvailableDriversForAdminBookingService(
   { page, limit } = {},
 ) {
   const booking = await Booking.findOne({ _id: bookingId, isDeleted: false })
-    .select('pickup driverId status carId')
+    .select('pickup driverId status carId serviceType bookingType hourly outstation timeline')
     .lean();
   if (!booking) throw new ApiError(404, 'Booking not found');
 
   const {
     listAvailableDriversForAssignmentService,
     getBookingCarTypeIdService,
+    attachScheduleConflictsToDrivers,
   } = await import('./bookingEmergencyPool.service.js');
 
   const carTypeId = (await getBookingCarTypeIdService(bookingId)) || null;
@@ -81,6 +88,7 @@ export async function listAvailableDriversForAdminBookingService(
     }
   }
 
+  await attachScheduleConflictsToDrivers(booking, result);
   return result;
 }
 
@@ -136,6 +144,27 @@ export async function adminAssignBookingDriverService(
   if (!driver) throw new ApiError(404, 'Driver not found or not approved');
   if (driver.isOnTrip) {
     throw new ApiError(409, 'Driver is already on another trip');
+  }
+
+  const { loadScheduledDispatchConfig } = await import(
+    './bookingScheduled.service.js'
+  );
+  let bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+  try {
+    const cfg = await loadScheduledDispatchConfig(booking.serviceType);
+    const value = Number(cfg?.RIDE_BUFFER_MINUTES);
+    if (Number.isFinite(value) && value >= 0) bufferMinutes = value;
+  } catch {
+    /* defaults */
+  }
+  const baseWindow = estimateBookingWindow(booking);
+  if (baseWindow) {
+    await assertDriverFreeForWindow({
+      driverId: driver._id,
+      window: applyBuffer(baseWindow, bufferMinutes),
+      excludeBookingId: booking._id,
+      bufferMinutes,
+    });
   }
 
   try {

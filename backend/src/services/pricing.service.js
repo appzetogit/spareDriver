@@ -1887,24 +1887,47 @@ function zoneScopeForStaff(staff) {
     .filter(Boolean);
 }
 
-async function assertDriverAvailableForSubscription(subscription, driverId, { excludeSubscriptionId } = {}) {
+async function assertDriverAvailableForSubscription(
+  subscription,
+  driverId,
+  { excludeSubscriptionId, windowMs } = {},
+) {
+  const overlapWindow = windowMs || subscriptionWindowMs(subscription);
   const overlappingSubscription = await UserSubscription.findOne({
     _id: { $ne: excludeSubscriptionId || subscription._id },
     assignedDriverId: driverId,
     status: SUBSCRIPTION_STATUS.ACTIVE,
     assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED,
-    startDate: { $lt: subscription.expiryDate },
-    expiryDate: { $gt: subscription.startDate },
-  }).select('_id planNameSnapshot userId');
+    startDate: { $lt: new Date(overlapWindow?.endMs || subscription.expiryDate) },
+    expiryDate: { $gt: new Date(overlapWindow?.startMs || subscription.startDate) },
+  }).select('_id planNameSnapshot userId assignedAt assignedWorkingEndDate startDate expiryDate');
 
   if (overlappingSubscription) {
-    throw new ApiError(
-      409,
-      'Driver is already assigned to another active subscription in this period',
-    );
+    // Refine with the other subscription's actual working stint when present.
+    const otherStart =
+      overlappingSubscription.assignedAt || overlappingSubscription.startDate;
+    const otherEnd =
+      overlappingSubscription.assignedWorkingEndDate
+      || overlappingSubscription.expiryDate;
+    const otherStartMs = otherStart ? new Date(otherStart).getTime() : null;
+    const otherEndMs = otherEnd ? new Date(otherEnd).getTime() : null;
+    const overlaps =
+      !overlapWindow
+      || (
+        Number.isFinite(otherStartMs)
+        && Number.isFinite(otherEndMs)
+        && otherStartMs <= overlapWindow.endMs
+        && otherEndMs >= overlapWindow.startMs
+      );
+    if (overlaps) {
+      throw new ApiError(
+        409,
+        'Driver is already assigned to another active subscription in this period',
+      );
+    }
   }
 
-  const baseWindow = subscriptionWindowMs(subscription);
+  const baseWindow = overlapWindow;
   if (!baseWindow) return;
 
   const bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
@@ -1994,7 +2017,12 @@ export const assignDriverToSubscriptionService = async (
     }
   }
 
-  await assertDriverAvailableForSubscription(sub, driverId);
+  await assertDriverAvailableForSubscription(sub, driverId, {
+    windowMs: {
+      startMs: workStart.getTime(),
+      endMs: (workEnd ? endOfDay(workEnd) : new Date(sub.expiryDate)).getTime(),
+    },
+  });
 
   if (sub.assignedDriverId) {
     const prevLastDay = assertDateWithinSubscription(

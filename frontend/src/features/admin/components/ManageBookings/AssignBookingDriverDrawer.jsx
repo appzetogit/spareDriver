@@ -206,8 +206,8 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
       toast.error('Pick a driver first');
       return;
     }
-    if (isOutstation && selectedDriver?.hasConflict) {
-      toast.error('This driver has an overlapping booking. Pick another.');
+    if (selectedDriver?.hasConflict) {
+      toast.error('This driver has an overlapping booking or subscription. Pick another.');
       return;
     }
     if (hasVehicleConflict) {

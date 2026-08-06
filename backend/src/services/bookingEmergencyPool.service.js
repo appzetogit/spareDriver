@@ -25,6 +25,12 @@ import {
 } from './bookingScheduled.service.js';
 import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
 import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
+import {
+  applyBuffer,
+  assertDriverFreeForWindow,
+  enrichDriversWithScheduleConflicts,
+  estimateBookingWindow,
+} from './driverConflict.service.js';
 
 /**
  * Emergency pool — the manual-assignment safety net for scheduled rides.
@@ -427,6 +433,27 @@ export async function adminAssignDriverToEmergencyPoolService(
     throw new ApiError(409, 'Driver is already on another trip');
   }
 
+  const { loadScheduledDispatchConfig } = await import(
+    './bookingScheduled.service.js'
+  );
+  let bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+  try {
+    const cfg = await loadScheduledDispatchConfig(booking.serviceType);
+    const value = Number(cfg?.RIDE_BUFFER_MINUTES);
+    if (Number.isFinite(value) && value >= 0) bufferMinutes = value;
+  } catch {
+    /* defaults */
+  }
+  const baseWindow = estimateBookingWindow(booking);
+  if (baseWindow) {
+    await assertDriverFreeForWindow({
+      driverId: driver._id,
+      window: applyBuffer(baseWindow, bufferMinutes),
+      excludeBookingId: booking._id,
+      bufferMinutes,
+    });
+  }
+
   // Cancel any pending scheduled-jobs so the worker doesn't fire the
   // already-assigned booking back into reminders / escalation cycles.
   cancelScheduledBookingJobs(booking._id).catch(() => {});
@@ -628,4 +655,31 @@ export async function getBookingCarTypeIdService(bookingId) {
   if (!booking?.carId) return null;
   const car = await Car.findById(booking.carId).select('carTypeId').lean();
   return car?.carTypeId ? String(car.carTypeId) : null;
+}
+
+/**
+ * Enrich an available-drivers result with booking + subscription
+ * schedule conflicts for the given booking.
+ */
+export async function attachScheduleConflictsToDrivers(booking, result) {
+  if (!booking || !result?.drivers?.length) return result;
+  const { loadScheduledDispatchConfig } = await import(
+    './bookingScheduled.service.js'
+  );
+  let bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+  try {
+    const cfg = await loadScheduledDispatchConfig(booking.serviceType);
+    const value = Number(cfg?.RIDE_BUFFER_MINUTES);
+    if (Number.isFinite(value) && value >= 0) bufferMinutes = value;
+  } catch {
+    /* defaults */
+  }
+  const baseWindow = estimateBookingWindow(booking);
+  const buffered = baseWindow ? applyBuffer(baseWindow, bufferMinutes) : null;
+  result.drivers = await enrichDriversWithScheduleConflicts(result.drivers, {
+    window: buffered,
+    excludeBookingId: booking._id,
+    bufferMinutes,
+  });
+  return result;
 }

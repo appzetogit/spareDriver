@@ -116,7 +116,10 @@ const AssignDriverPickerRow = ({ driver, selected, onSelect }) => {
                 {c.bookingNumber || c._id?.slice?.(-6)}
               </span>
               <span className="truncate text-rose-500">
-                {formatDateTime12(c.startMs)} → {formatDateTime12(c.endMs)} · {c.serviceType}/{c.bookingType}
+                {formatDateTime12(c.startMs)} → {formatDateTime12(c.endMs)}
+                {c.conflictKind === 'subscription' || c.bookingType === 'subscription'
+                  ? ` · subscription${c.planName ? ` (${c.planName})` : ''}`
+                  : ` · ${c.serviceType}/${c.bookingType}`}
               </span>
             </div>
           ))}

@@ -9,8 +9,13 @@ import {
   SUBSCRIPTION_ASSIGNMENT_STATUS,
   SUBSCRIPTION_DISPATCH,
 } from '../constants/serviceTypes.js';
-import { DISPATCH_RESPONSE, DISPATCH_MODE } from '../constants/bookingStatus.js';
+import { DISPATCH_RESPONSE, DISPATCH_MODE, SCHEDULED_BOOKING } from '../constants/bookingStatus.js';
 import { findDriversWithinRadius } from './driverFinder.service.js';
+import {
+  applyBuffer,
+  findConflictingDriverIds,
+  getDriverConflictMap,
+} from './driverConflict.service.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import { emitToDriver, emitToAdmins } from '../utils/socketEmitters.js';
 import { notifyDriverSubscriptionAssigned } from '../utils/notificationDispatch.js';
@@ -209,6 +214,18 @@ export async function broadcastSubscriptionInboxService(subscriptionId, opts = {
     .lean();
   const busyIds = new Set(busySubs.map((s) => String(s.assignedDriverId)));
 
+  // Drivers with bookings overlapping this subscription period.
+  const subStartMs = sub.startDate ? new Date(sub.startDate).getTime() : null;
+  const subEndMs = sub.expiryDate ? new Date(sub.expiryDate).getTime() : null;
+  let bookingBusyIds = [];
+  if (Number.isFinite(subStartMs) && Number.isFinite(subEndMs)) {
+    const bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+    bookingBusyIds = await findConflictingDriverIds({
+      window: applyBuffer({ startMs: subStartMs, endMs: subEndMs }, bufferMinutes),
+      bufferMinutes,
+    });
+  }
+
   const skipIds = new Set([
     ...(sub.dispatch?.pendingOfferIds || []).map(String),
     ...(sub.dispatch?.offers || [])
@@ -219,6 +236,7 @@ export async function broadcastSubscriptionInboxService(subscriptionId, opts = {
       )
       .map((o) => String(o.driverId)),
     ...busyIds,
+    ...bookingBusyIds,
   ]);
 
   const drivers = await findDriversWithinRadius({
@@ -278,6 +296,34 @@ export async function broadcastSubscriptionInboxService(subscriptionId, opts = {
 }
 
 export async function acceptSubscriptionOfferService(subscriptionId, driverId) {
+  const preview = await UserSubscription.findById(subscriptionId)
+    .select('startDate expiryDate status assignmentStatus')
+    .lean();
+  if (!preview) throw new ApiError(404, 'Subscription not found');
+  if (preview.status !== SUBSCRIPTION_STATUS.ACTIVE) {
+    throw new ApiError(409, 'Subscription is no longer active');
+  }
+  if (preview.assignmentStatus !== SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING) {
+    throw new ApiError(409, 'Subscription offer is no longer available');
+  }
+
+  const subStartMs = preview.startDate ? new Date(preview.startDate).getTime() : null;
+  const subEndMs = preview.expiryDate ? new Date(preview.expiryDate).getTime() : null;
+  if (Number.isFinite(subStartMs) && Number.isFinite(subEndMs)) {
+    const bufferMinutes = SCHEDULED_BOOKING.RIDE_BUFFER_MINUTES;
+    const conflictMap = await getDriverConflictMap({
+      driverIds: [driverId],
+      window: applyBuffer({ startMs: subStartMs, endMs: subEndMs }, bufferMinutes),
+      bufferMinutes,
+    });
+    if ((conflictMap[String(driverId)] || []).length) {
+      throw new ApiError(
+        409,
+        'You already have an overlapping booking or subscription for this period',
+      );
+    }
+  }
+
   const now = new Date();
   const sub = await UserSubscription.findOneAndUpdate(
     {

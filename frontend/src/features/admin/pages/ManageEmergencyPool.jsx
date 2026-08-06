@@ -539,6 +539,11 @@ function AssignDriverDrawer({ booking, onClose, onAssigned }) {
       toast.error('Pick a driver first');
       return;
     }
+    const selected = drivers.find((d) => String(d._id) === String(selectedDriverId));
+    if (selected?.hasConflict) {
+      toast.error('This driver has an overlapping booking or subscription. Pick another.');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post(`/admin/emergency-pool/${booking._id}/assign-driver`, {
@@ -589,7 +594,10 @@ function AssignDriverDrawer({ booking, onClose, onAssigned }) {
       <Button
         fullWidth
         loading={submitting}
-        disabled={!selectedDriverId}
+        disabled={
+          !selectedDriverId
+          || Boolean(drivers.find((d) => String(d._id) === String(selectedDriverId))?.hasConflict)
+        }
         onClick={handleAssign}
       >
         Assign driver
@@ -669,24 +677,37 @@ function AssignDriverDrawer({ booking, onClose, onAssigned }) {
             ) : (
               filtered.map((d) => {
                 const active = String(selectedDriverId) === String(d._id);
+                const hasConflict = Boolean(d.hasConflict);
                 return (
                   <button
                     key={d._id}
                     type="button"
-                    onClick={() => setSelectedDriverId(d._id)}
+                    onClick={() => !hasConflict && setSelectedDriverId(d._id)}
+                    disabled={hasConflict}
                     className={`w-full text-left flex items-center gap-3 p-3 rounded-2xl border transition ${
                       active
                         ? 'border-primary bg-primary/5'
-                        : 'border-slate-200 hover:border-slate-300'
+                        : hasConflict
+                          ? 'border-rose-200 bg-rose-50/40 opacity-70 cursor-not-allowed'
+                          : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center font-bold uppercase shrink-0">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold uppercase shrink-0 ${
+                      hasConflict ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500'
+                    }`}>
                       {d.name?.charAt(0) || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">
-                        {d.name}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {d.name}
+                        </p>
+                        {hasConflict ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded-full">
+                            <AlertTriangle className="w-2.5 h-2.5" /> Conflict
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
                         <span className="inline-flex items-center gap-1">
                           <Phone className="w-3 h-3" />
@@ -710,6 +731,14 @@ function AssignDriverDrawer({ booking, onClose, onAssigned }) {
                           </span>
                         )}
                       </div>
+                      {hasConflict && (d.conflicts || []).length > 0 ? (
+                        <p className="text-[10px] text-rose-500 mt-1 truncate">
+                          {(d.conflicts[0].conflictKind === 'subscription'
+                            || d.conflicts[0].bookingType === 'subscription')
+                            ? `On subscription${d.conflicts[0].planName ? ` (${d.conflicts[0].planName})` : ''}`
+                            : `Overlaps ${d.conflicts[0].bookingNumber || 'another ride'}`}
+                        </p>
+                      ) : null}
                     </div>
                   </button>
                 );
