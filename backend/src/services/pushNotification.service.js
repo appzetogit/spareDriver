@@ -8,7 +8,18 @@ import {
   NOTIFICATION_AUDIENCE,
   NOTIFICATION_SEVERITY,
   ADMIN_PERSISTED_NOTIFICATION_TYPES,
+  ADMIN_FCM_NOTIFICATION_TYPES,
 } from '../constants/notificationTypes.js';
+import { STAFF_ROLES } from '../constants/staffPermissions.js';
+import { USER_ROLES } from '../constants/roles.js';
+
+const HAS_FCM_FILTER = {
+  $or: [
+    { fcmTokenWeb: { $exists: true, $nin: [null, ''] } },
+    { fcmTokenMobile: { $exists: true, $nin: [null, ''] } },
+    { fcmToken: { $exists: true, $nin: [null, ''] } },
+  ],
+};
 
 const INVALID_FCM_CODES = new Set([
   'messaging/invalid-registration-token',
@@ -208,8 +219,72 @@ export async function sendPushNotification(
 }
 
 /**
- * Admin inbox notification: Socket.IO always; DB only for actionable types.
- * Powers the admin panel bell icon.
+ * Active staff docs that have an FCM token.
+ * When `zoneIds` is provided, team_members are limited to overlapping
+ * assignedZones; admin / sub_admin always receive the push.
+ */
+async function loadStaffFcmRecipients(zoneIds) {
+  const zones = (zoneIds || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+
+  const filter = {
+    role: { $in: STAFF_ROLES },
+    isActive: true,
+    isDeleted: { $ne: true },
+  };
+
+  if (zones.length) {
+    filter.$and = [
+      HAS_FCM_FILTER,
+      {
+        $or: [
+          { role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUB_ADMIN] } },
+          {
+            role: USER_ROLES.TEAM_MEMBER,
+            assignedZones: { $in: zones },
+          },
+        ],
+      },
+    ];
+  } else {
+    Object.assign(filter, HAS_FCM_FILTER);
+  }
+
+  return User.find(filter)
+    .select('_id fcmToken fcmTokenWeb fcmTokenMobile')
+    .lean();
+}
+
+async function sendFcmToStaff(payload, { zoneIds } = {}) {
+  if (!isFirebaseReady()) return;
+  const staff = await loadStaffFcmRecipients(zoneIds);
+  if (!staff.length) return;
+
+  await Promise.all(
+    staff.map((doc) =>
+      sendFcmToTarget(
+        { userId: doc._id },
+        {
+          title: payload.title,
+          body: payload.body,
+          data: {
+            ...payload.data,
+            priority: 'high',
+            fcmTag: payload.data?.kind
+              ? `admin_${payload.data.kind}`
+              : 'admin_alert',
+            fcmChannelId: 'admin_alerts',
+          },
+        },
+      ),
+    ),
+  );
+}
+
+/**
+ * Admin inbox notification: Socket.IO always; DB for actionable types;
+ * FCM for ADMIN_FCM_NOTIFICATION_TYPES (e.g. emergency pool).
  */
 export async function sendAdminNotification({
   title,
@@ -218,6 +293,8 @@ export async function sendAdminNotification({
   severity = 'info',
   data = {},
   persist,
+  zoneIds,
+  sendFcm,
 }) {
   const payload = {
     title,
@@ -239,18 +316,31 @@ export async function sendAdminNotification({
       ? persist
       : ADMIN_PERSISTED_NOTIFICATION_TYPES.has(type);
 
-  if (!shouldPersist) return;
+  if (shouldPersist) {
+    try {
+      await createNotificationRecord({
+        audience: NOTIFICATION_AUDIENCE.ADMIN,
+        title,
+        body,
+        type: type || 'admin_alert',
+        severity,
+        data: payload.data,
+      });
+    } catch (err) {
+      console.warn('[push] failed to persist admin notification:', err?.message);
+    }
+  }
 
-  try {
-    await createNotificationRecord({
-      audience: NOTIFICATION_AUDIENCE.ADMIN,
-      title,
-      body,
-      type: type || 'admin_alert',
-      severity,
-      data: payload.data,
-    });
-  } catch (err) {
-    console.warn('[push] failed to persist admin notification:', err?.message);
+  const shouldSendFcm =
+    typeof sendFcm === 'boolean'
+      ? sendFcm
+      : ADMIN_FCM_NOTIFICATION_TYPES.has(type);
+
+  if (shouldSendFcm) {
+    try {
+      await sendFcmToStaff(payload, { zoneIds });
+    } catch (err) {
+      console.warn('[push] admin FCM fan-out failed:', err?.message);
+    }
   }
 }

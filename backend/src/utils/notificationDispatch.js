@@ -624,12 +624,17 @@ export function notifyAdminWithdrawalRequest({ driverId, amountRupees, withdrawa
 }
 
 export function notifyAdminEmergencyPoolEntered(booking) {
+  const zoneIds = (booking.zoneIds || []).map((id) => String(id));
   return sendAdminNotification({
     title: 'Emergency pool',
     body: `Booking ${booking.bookingNumber || ''} needs manual driver assignment.`,
     severity: 'warn',
     type: ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
-    data: bookingRef(booking),
+    data: {
+      ...bookingRef(booking),
+      path: '/admin/emergency-pool',
+    },
+    zoneIds,
   });
 }
 

@@ -71,6 +71,8 @@ frontend/src/
 
 Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
 
+Admin device FCM: staff are `User` docs (same `fcmToken*` fields). Register via `POST /admin/fcm-token` (`AdminNotificationBridge` + login `withFcmAuthPayload`). Emergency-pool entry fans out FCM via `sendAdminNotification` + `ADMIN_FCM_NOTIFICATION_TYPES` (zone-scoped for team_members).
+
 Banks (driver payout dropdown): model `Bank` (`bank.model.js`); public `GET /common/banks` (active only); admin CRUD `/admin/settings/banks` + Platform Settings → Banks tab (`BanksTab.jsx`). Seeded via `scripts/data/banks.data.js` in `npm run seed`. Driver onboarding `BankDetailsPage` uses searchable Select; step-3 validates name against active banks.
 
 Team member analytics (super admin): Manage Team → Analytics → `/admin/settings/team/:memberId/analytics` → `GET /admin/team/:id/analytics` (`staffAnalytics.service.js`). Aggregates driver approvals, kit reviews, completed tasks, emergency/manual assigns, withdrawals, SOS.

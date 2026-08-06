@@ -67,7 +67,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   BOOKING_REMINDER: 'booking_reminder',
 });
 
-/** Admin inbox kinds (socket + DB only — no FCM push) */
+/** Admin inbox kinds (socket + DB; FCM only for ADMIN_FCM_NOTIFICATION_TYPES) */
 export const ADMIN_NOTIFICATION = Object.freeze({
   NEW_USER_REGISTRATION: 'new_user_registration',
   NEW_DRIVER_REGISTRATION: 'new_driver_registration',
@@ -107,5 +107,12 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
     ADMIN_NOTIFICATION.ACCOUNTING_MISMATCH,
     ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
+  ]),
+);
+
+/** Admin types that also fan out via FCM to staff devices. */
+export const ADMIN_FCM_NOTIFICATION_TYPES = Object.freeze(
+  new Set([
+    ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
   ]),
 );

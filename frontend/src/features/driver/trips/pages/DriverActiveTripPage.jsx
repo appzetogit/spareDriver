@@ -392,8 +392,12 @@ const DriverActiveTripPage = () => {
   const minutesUntilPickup = Number.isFinite(scheduledStartMs)
     ? Math.ceil((scheduledStartMs - Date.now()) / 60_000)
     : null;
-  // "Start to pickup" unlocks RIDE_BUFFER early. "I've arrived" /
-  // "Start ride" stay locked until the booked pickup time itself.
+  // Instant: proximity-only for "I've arrived" / start. Scheduled/outstation
+  // keep the pickup-time floor — the +15m scheduledStartAt seed is a
+  // dispatch buffer, not an arrival/start gate.
+  const isScheduledLikeTrip =
+    booking?.bookingType === BOOKING_TYPE.SCHEDULED ||
+    booking?.bookingType === BOOKING_TYPE.OUTSTATION;
   const enRouteTooEarly =
     status === BOOKING_STATUS.DRIVER_ASSIGNED &&
     Number.isFinite(scheduledStartMs) &&
@@ -403,9 +407,15 @@ const DriverActiveTripPage = () => {
     enRouteTooEarly && minutesUntilPickup != null
       ? Math.max(1, minutesUntilPickup - enRouteUnlockMinutes)
       : null;
-  const arrivalOrStartTooEarly =
-    (status === BOOKING_STATUS.EN_ROUTE ||
-      status === BOOKING_STATUS.ARRIVED) &&
+  const arrivedTooEarly =
+    status === BOOKING_STATUS.EN_ROUTE &&
+    isScheduledLikeTrip &&
+    Number.isFinite(scheduledStartMs) &&
+    minutesUntilPickup != null &&
+    minutesUntilPickup > 0;
+  const startTooEarly =
+    status === BOOKING_STATUS.ARRIVED &&
+    isScheduledLikeTrip &&
     Number.isFinite(scheduledStartMs) &&
     minutesUntilPickup != null &&
     minutesUntilPickup > 0;
@@ -496,14 +506,15 @@ const DriverActiveTripPage = () => {
       );
       return;
     }
-    if (
-      (action === 'markArrived' || action === 'startTrip') &&
-      arrivalOrStartTooEarly
-    ) {
+    if (action === 'markArrived' && arrivedTooEarly) {
       toast.error(
-        `Pickup is still ${minutesUntilPickup} min away — you can ${
-          action === 'markArrived' ? 'mark arrival' : 'start the ride'
-        } at the scheduled time.`,
+        `Pickup is still ${minutesUntilPickup} min away — you can mark arrival at the scheduled time.`,
+      );
+      return;
+    }
+    if (action === 'startTrip' && startTooEarly) {
+      toast.error(
+        `Pickup is still ${minutesUntilPickup} min away — you can start the ride at the scheduled time.`,
       );
       return;
     }
@@ -548,7 +559,8 @@ const DriverActiveTripPage = () => {
     driverPoint,
     distanceToPickup,
     enRouteTooEarly,
-    arrivalOrStartTooEarly,
+    arrivedTooEarly,
+    startTooEarly,
     minutesUntilPickup,
     enRouteUnlockMinutes,
     completeTooEarlyMinutes,
@@ -1019,8 +1031,9 @@ const DriverActiveTripPage = () => {
 
         {/* Scheduled-pickup countdown banners.
             - DRIVER_ASSIGNED: "Start to pickup" unlocks RIDE_BUFFER early.
-            - EN_ROUTE / ARRIVED: arrival + start stay locked until the
-              booked pickup time itself. */}
+            - EN_ROUTE (scheduled/outstation): "I've arrived" locked until pickup.
+            - ARRIVED (scheduled/outstation): start ride locked until pickup.
+            Instant skips both time floors (proximity / OTP only). */}
         {enRouteTooEarly && (
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-indigo-100 text-indigo-700">
@@ -1053,7 +1066,7 @@ const DriverActiveTripPage = () => {
           </div>
         )}
 
-        {arrivalOrStartTooEarly && (
+        {(arrivedTooEarly || startTooEarly) && (
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-indigo-100 text-indigo-700">
               <CalendarClock className="w-4 h-4" />
@@ -1074,8 +1087,9 @@ const DriverActiveTripPage = () => {
                 )}
               </p>
               <p className="text-[12px] leading-snug mt-1 text-indigo-800">
-                &quot;I&apos;ve arrived&quot; and starting the ride unlock at
-                the scheduled pickup time.
+                {arrivedTooEarly
+                  ? '"I\'ve arrived" unlocks at the scheduled pickup time.'
+                  : 'Starting the ride unlocks at the scheduled pickup time.'}
               </p>
             </div>
           </div>
@@ -1127,9 +1141,8 @@ const DriverActiveTripPage = () => {
               busy === 'cancel' ||
               (config.cta.action === 'markArrived' && !arrivalReady) ||
               (config.cta.action === 'markEnRoute' && enRouteTooEarly) ||
-              ((config.cta.action === 'markArrived' ||
-                config.cta.action === 'startTrip') &&
-                arrivalOrStartTooEarly) ||
+              (config.cta.action === 'markArrived' && arrivedTooEarly) ||
+              (config.cta.action === 'startTrip' && startTooEarly) ||
               (config.cta.action === 'completeTrip' &&
                 completeTooEarlyMinutes != null)
             }
@@ -1139,9 +1152,9 @@ const DriverActiveTripPage = () => {
           >
             {config.cta.action === 'markEnRoute' && enRouteTooEarly
               ? `Unlocks in ${formatScheduledLead(minutesUntilEnRouteUnlock)}`
-              : config.cta.action === 'markArrived' && arrivalOrStartTooEarly
+              : config.cta.action === 'markArrived' && arrivedTooEarly
                 ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
-                : config.cta.action === 'startTrip' && arrivalOrStartTooEarly
+                : config.cta.action === 'startTrip' && startTooEarly
                   ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
                   : config.cta.action === 'completeTrip' &&
                       completeTooEarlyMinutes != null

@@ -27,6 +27,7 @@ import {
 } from './adminTask.service.js';
 import { TASK_TYPE } from '../constants/adminTask.js';
 import AdminTask from '../models/adminTask.model.js';
+import { resolveAuthFcm } from './fcmToken.service.js';
 
 function staffDisplayName(staff) {
   return staff?.name || staff?.email || 'Staff';
@@ -73,11 +74,10 @@ function ensureLegacyApprovalHistory(doc) {
   return doc;
 }
 
-export const loginStaffService = async (email, password) => {
+export const loginStaffService = async (email, password, fcmInput = {}) => {
   if (!email || !password) {
     throw new ApiError(400, 'Email and password required');
   }
-  console.log("email and password is ", email, password);
   const staff = await User.findOne({ email: email.toLowerCase() }).select('+password');
   if (!staff || !STAFF_ROLES.includes(staff.role)) {
     throw new ApiError(401, 'Invalid credentials or unauthorized');
@@ -89,17 +89,19 @@ export const loginStaffService = async (email, password) => {
 
   const isMatch = await bcrypt.compare(password, staff.password);
   if (!isMatch) {
-    console.log("password did not match");
     throw new ApiError(401, 'Invalid credentials');
   }
 
   staff.password = undefined;
   const payload = tokenPayloadFromUser(staff);
+  // Staff share the User document — reuse user FCM fields.
+  const fcm = await resolveAuthFcm('user', staff._id, staff, fcmInput);
 
   return {
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
     admin: staff,
+    fcm,
   };
 };
 

@@ -13,6 +13,12 @@ async function postToken(path, token, platform) {
   await api.post(path, { token, platform });
 }
 
+function fcmTokenPath(audience) {
+  if (audience === 'driver') return '/driver/fcm-token';
+  if (audience === 'admin') return '/admin/fcm-token';
+  return '/auth/fcm-token';
+}
+
 function handleDriverFcmPayload(payload) {
   const data = payload?.data || {};
   const action = parseDriverOfferFcmData(data);
@@ -33,7 +39,7 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
     let refreshTimer;
     let unsubscribeOnMessage;
 
-    const path = audience === 'driver' ? '/driver/fcm-token' : '/auth/fcm-token';
+    const path = fcmTokenPath(audience);
     const platform = getFcmPlatform();
 
     (async () => {
@@ -84,7 +90,7 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
 
 /** Call before logout to clear server-side FCM token for this device. */
 export async function unregisterFcmToken(audience = 'user') {
-  const path = audience === 'driver' ? '/driver/fcm-token' : '/auth/fcm-token';
+  const path = fcmTokenPath(audience);
   try {
     await api.delete(path, { data: { platform: 'all' } });
   } catch {

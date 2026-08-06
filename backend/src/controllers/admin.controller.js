@@ -10,8 +10,12 @@ import {
 import { getStaffMemberAnalyticsService } from '../services/staffAnalytics.service.js';
 
 export const loginAdmin = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  const result = await adminService.loginStaffService(email, password);
+  const { email, password, fcmToken, token, platform } = req.body;
+  const result = await adminService.loginStaffService(email, password, {
+    fcmToken,
+    token,
+    platform,
+  });
 
   setAuthCookies(res, {
     accessToken: result.accessToken,
@@ -25,6 +29,7 @@ export const loginAdmin = asyncHandler(async (req, res) => {
         admin: result.admin,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
+        fcm: result.fcm,
       },
       'Staff login successful',
     ),

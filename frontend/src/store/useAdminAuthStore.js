@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { unregisterFcmToken } from '../hooks/useFcmRegistration';
 import { useAdminNotificationStore } from './useNotificationStore';
 import { clearAuthTokens } from '../utils/authTokens';
 
@@ -9,8 +10,10 @@ const useAdminAuthStore = create((set) => ({
   setAuth: (admin) => set({ admin, isAuthenticated: !!admin }),
   logout: () => {
     useAdminNotificationStore.getState().reset();
-    clearAuthTokens();
     set({ admin: null, isAuthenticated: false });
+    void unregisterFcmToken('admin')
+      .catch(() => null)
+      .finally(() => clearAuthTokens());
   },
 }));
 

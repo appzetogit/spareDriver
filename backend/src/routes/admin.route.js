@@ -20,6 +20,10 @@ import {
 import { protectStaff, restrictTo } from '../middlewares/authMiddleware.js';
 import { ROUTE_ROLES } from '../constants/staffPermissions.js';
 import {
+  registerStaffFcmToken,
+  unregisterStaffFcmToken,
+} from '../controllers/fcmToken.controller.js';
+import {
   createCarType,
   updateCarType,
   deleteCarType,
@@ -225,6 +229,8 @@ const { ALL_STAFF, OPERATIONS, SUPER_ADMIN } = ROUTE_ROLES;
 
 router.post('/auth/login', loginAdmin);
 router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
+router.post('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), registerStaffFcmToken);
+router.delete('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), unregisterStaffFcmToken);
 router.get('/dashboard', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDashboard);
 
 /* ---- Reports & Analytics (super-admin only) --------------------------- */

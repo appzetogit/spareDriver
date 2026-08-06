@@ -93,20 +93,29 @@ const ManageDrivers = () => {
             {
               key: '_select',
               label: '',
-              width: '4%',
+              width: '52px',
+              sortable: false,
+              unclamp: true,
+              compact: true,
+              align: 'center',
               render: (_v, row) =>
                 isOpenTask(row.reviewTask) ? (
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(row._id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggleSelect(row._id);
-                    }}
+                  <div
+                    data-row-action
+                    className="flex items-center justify-center"
                     onClick={(e) => e.stopPropagation()}
-                    className="rounded border-slate-300"
-                  />
-                ) : null,
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(row._id)}
+                      onChange={() => toggleSelect(row._id)}
+                      className="h-4 w-4 shrink-0 rounded border-slate-300 text-primary accent-primary focus:ring-primary/30 cursor-pointer"
+                      aria-label={`Select ${row.name || 'driver'}`}
+                    />
+                  </div>
+                ) : (
+                  <span className="inline-block w-4" aria-hidden />
+                ),
             },
           ]
         : []),
@@ -198,18 +207,20 @@ const ManageDrivers = () => {
       {
         key: 'actions',
         label: 'Actions',
-        width: '220px',
+        width: '160px',
         unclamp: true,
         align: 'right',
+        sortable: false,
         render: (_val, row) => (
           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap min-w-max" data-row-action onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={() => navigate(`/admin/drivers/${row._id}/analytics`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors shrink-0"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors shrink-0"
+              aria-label="Analytics"
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              Analytics
+              <span className="hidden sm:inline">Analytics</span>
             </button>
             <DriverSuspendActions driver={row} onSuccess={refetch} compact />
           </div>
@@ -233,7 +244,7 @@ const ManageDrivers = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-4 animate-fade-in-up">
+    <div className="min-h-screen bg-slate-50 space-y-3 sm:space-y-4 animate-fade-in-up">
       <DriverFilters
         search={search}
         onSearchChange={(val) => {
@@ -287,7 +298,7 @@ const ManageDrivers = () => {
         onRowClick={(row) => navigate(`/admin/drivers/${row._id}/profile`)}
         entityLabel="drivers"
         emptyMessage="No drivers found"
-        minWidth="min-w-[1050px]"
+        minWidth="min-w-[520px] md:min-w-[800px] xl:min-w-[1050px]"
       />
     </div>
   );

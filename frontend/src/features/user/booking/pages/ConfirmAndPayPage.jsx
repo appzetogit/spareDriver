@@ -20,6 +20,7 @@ import {
   CalendarClock,
   HandCoins,
   AlertCircle,
+  Lock,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
@@ -35,11 +36,13 @@ import {
   mergeScheduledDispatchConfig,
   readDispatchNumber,
 } from '../../../../constants/bookingStatus';
+import { MAX_USER_CARS } from '../../../../constants/limits';
 import { formatPickupDateTime } from '../../../../utils/datetime';
 import { computeOutstationDuration, addCalendarDays, startOfLocalDay } from '../../../../utils/outstationSchedule';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import FareCard from '../components/FareCard';
 import CouponCodeInput from '../components/CouponCodeInput';
+import AddCarModal from '../components/AddCarModal';
 import useFareEstimate from '../hooks/useFareEstimate';
 import TopupSheet from '../../wallet/components/TopupSheet';
 import DateTimePickerField from '../../../../components/inputs/DateTimePickerField';
@@ -598,7 +601,7 @@ const ConfirmAndPayPage = () => {
         onSuccess={handleTopupSuccess}
       />
 
-      {/* Edit car bottom-sheet */}
+      {/* Edit car bottom-sheet — same list + "Add car" CTA as instant ride */}
       <EditCarSheet
         open={carEditOpen}
         cars={allCars}
@@ -606,6 +609,17 @@ const ConfirmAndPayPage = () => {
         onClose={() => setCarEditOpen(false)}
         onSelect={(carId) => {
           setCarId(carId);
+          setCarEditOpen(false);
+        }}
+        onCarAdded={({ car }) => {
+          if (car?._id) {
+            setAllCars((prev) => {
+              const exists = prev.some((c) => c._id === car._id);
+              return exists ? prev : [car, ...prev];
+            });
+            setCarId(car._id);
+            setSelectedCar(car);
+          }
           setCarEditOpen(false);
         }}
       />
@@ -975,75 +989,118 @@ function TripSummary({ draft, car, onEditCar, onEditPickup }) {
 /* Edit Car Sheet                                                       */
 /* ------------------------------------------------------------------ */
 
-function EditCarSheet({ open, cars, selectedCarId, onClose, onSelect }) {
+function EditCarSheet({ open, cars, selectedCarId, onClose, onSelect, onCarAdded }) {
+  const [addOpen, setAddOpen] = useState(false);
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center">
-      <div
-        className="bg-white w-full max-w-lg rounded-t-3xl shadow-2xl animate-fade-in-up max-h-[80dvh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border-light">
-          <div>
-            <p className="text-base font-bold text-text">Select a car</p>
-            <p className="text-xs text-text-muted mt-0.5">Choose which car the driver will manage</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition"
-          >
-            <X className="w-4 h-4 text-text-muted" />
-          </button>
-        </div>
 
-        {/* Car list */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {cars.length === 0 && (
-            <p className="text-sm text-text-muted text-center py-8">No cars found.</p>
-          )}
-          {cars.map((c) => {
-            const isActive = c._id === selectedCarId;
-            return (
-              <button
-                key={c._id}
-                type="button"
-                onClick={() => onSelect(c._id)}
-                className={`w-full flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
-                  isActive
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-white hover:bg-gray-50'
-                }`}
-              >
-                {/* Car thumbnail */}
-                <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-                  {c.image ? (
-                    <img src={c.image} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <Car className="w-5 h-5 text-text-muted" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-text truncate">
-                    {getCarBrandName(c)} · {getCarModelName(c)}
-                  </p>
-                  <p className="text-[11px] font-mono text-text-secondary">{c.vehicleNumber}</p>
-                </div>
-                {/* Active check */}
-                <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition ${
-                    isActive ? 'border-primary bg-primary' : 'border-gray-300'
+  const atLimit = cars.length >= MAX_USER_CARS;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center">
+        <div
+          className="bg-white w-full max-w-lg rounded-t-3xl shadow-2xl animate-fade-in-up max-h-[80dvh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border-light">
+            <div>
+              <p className="text-base font-bold text-text">Select a car</p>
+              <p className="text-xs text-text-muted mt-0.5">Choose which car the driver will manage</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition"
+            >
+              <X className="w-4 h-4 text-text-muted" />
+            </button>
+          </div>
+
+          {/* Car list + Add car CTA (mirrors instant-ride CarPickerSheet) */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {cars.length === 0 && (
+              <p className="text-sm text-text-muted text-center py-8">No cars found.</p>
+            )}
+            {cars.map((c) => {
+              const isActive = c._id === selectedCarId;
+              return (
+                <button
+                  key={c._id}
+                  type="button"
+                  onClick={() => onSelect(c._id)}
+                  className={`w-full flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
+                    isActive
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border bg-white hover:bg-gray-50'
                   }`}
                 >
-                  {isActive && <CheckCircle2 className="w-3 h-3 text-white" />}
-                </div>
-              </button>
-            );
-          })}
+                  <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                    {c.image ? (
+                      <img src={c.image} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Car className="w-5 h-5 text-text-muted" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-text truncate">
+                      {getCarBrandName(c)} · {getCarModelName(c)}
+                    </p>
+                    <p className="text-[11px] font-mono text-text-secondary">{c.vehicleNumber}</p>
+                  </div>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition ${
+                      isActive ? 'border-primary bg-primary' : 'border-gray-300'
+                    }`}
+                  >
+                    {isActive && <CheckCircle2 className="w-3 h-3 text-white" />}
+                  </div>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              disabled={atLimit}
+              aria-disabled={atLimit}
+              className={`w-full flex items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3 text-left transition ${
+                atLimit
+                  ? 'border-border bg-gray-50 cursor-not-allowed opacity-70'
+                  : 'border-border hover:bg-gray-50 active:scale-[0.99]'
+              }`}
+            >
+              <span
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  atLimit ? 'bg-gray-200 text-text-muted' : 'bg-primary/10 text-primary'
+                }`}
+              >
+                {atLimit ? <Lock className="w-4 h-4" /> : <Plus className="w-5 h-5" />}
+              </span>
+              <span className="flex-1">
+                <span className="block text-sm font-semibold text-text">
+                  {atLimit ? `You've reached the ${MAX_USER_CARS}-car limit` : 'Add a new car'}
+                </span>
+                <span className="block text-[11px] text-text-muted">
+                  {atLimit
+                    ? 'Remove a car from "My cars" to register a new vehicle.'
+                    : 'Register another vehicle without leaving this booking.'}
+                </span>
+              </span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      <AddCarModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCarAdded={(payload) => {
+          setAddOpen(false);
+          onCarAdded?.(payload);
+        }}
+      />
+    </>
   );
 }
 

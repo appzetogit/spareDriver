@@ -13,28 +13,30 @@ const DriverFilters = ({
   refreshing = false,
 }) => {
   return (
-    <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md pt-4 pb-2">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Manage Drivers</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Review, approve and manage driver applications</p>
+    <div className="lg:sticky lg:top-0 lg:z-20 bg-slate-50 lg:bg-slate-50/90 lg:backdrop-blur-md pt-3 pb-2 lg:pt-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Manage Drivers
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">
+            Review, approve and manage driver applications
+          </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          {/* SEARCH */}
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-row lg:items-center lg:gap-3 w-full lg:w-auto">
+          <div className="relative w-full sm:col-span-2 lg:col-auto lg:w-72 xl:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search by name or phone..."
+              placeholder="Search name or phone..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full h-12 pl-11 pr-4 rounded-2xl border border-slate-200 bg-white shadow-sm text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all"
+              className="w-full h-11 lg:h-12 pl-10 pr-3 rounded-xl lg:rounded-2xl border border-slate-200 bg-white shadow-sm text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all"
             />
           </div>
 
-          {/* FILTER */}
-          <div className="w-full sm:w-60">
+          <div className="w-full lg:w-52 xl:w-60">
             <Select
               value={statusFilter}
               onChange={(val) => onStatusChange(val)}
@@ -50,23 +52,26 @@ const DriverFilters = ({
               icon={Filter}
             />
           </div>
+
           {onAssigneeChange && (
-            <div className="w-full sm:w-56">
+            <div className="w-full lg:w-52 xl:w-56">
               <AssigneeFilterSelect
                 value={assigneeFilter}
                 onChange={onAssigneeChange}
               />
             </div>
           )}
+
           {onRefresh && (
             <button
               type="button"
               onClick={onRefresh}
               disabled={refreshing}
-              className="h-12 px-4 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 shrink-0"
+              aria-label="Refresh"
+              className="h-11 lg:h-12 px-3 lg:px-4 rounded-xl lg:rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-2 shrink-0 sm:col-span-2 lg:col-auto"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
+              <span>Refresh</span>
             </button>
           )}
         </div>

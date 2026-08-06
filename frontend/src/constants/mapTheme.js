@@ -28,15 +28,15 @@ export const PIN_ASSETS = Object.freeze({
   DRIVER: '/images/pin/user.png',
   /** Driver heading to pickup (en route). Direction arrow. */
   DRIVER_EN_ROUTE: '/images/pin/right-arrow.png',
-  /** Driver on an active trip (after start). Car icon. */
+  /** Driver on an active trip (after start). Car pin. */
   DRIVER_IN_TRIP: '/images/pin/car.png',
   /** The pickup location for a booking. Coral pin with a car. */
   PICKUP: '/images/pin/gps.png',
 });
 
 /**
- * Live-trip driver pin: arrow while heading to pickup, car once the
- * trip has started. Falls back to the generic nearby-driver pin.
+ * Live-trip driver pin: arrow while heading to pickup, car pin once
+ * the trip has started. Falls back to the generic nearby-driver pin.
  *
  * @param {string|null|undefined} status  Booking status enum value
  * @returns {string} Public image path

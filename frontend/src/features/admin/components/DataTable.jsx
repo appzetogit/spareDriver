@@ -109,15 +109,16 @@ const DataTable = ({
                 {columns.map((col) => {
                   const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
                   const justifyClass = col.align === 'center' ? 'justify-center' : col.align === 'right' ? 'justify-end' : 'justify-start';
+                  const padClass = col.compact ? 'px-2' : 'px-4';
                   return (
                     <th
                       key={col.key}
                       className={`
-                        px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider ${alignClass}
+                        ${padClass} py-3 text-xs font-medium text-slate-500 uppercase tracking-wider ${alignClass}
                         ${col.sortable !== false ? 'cursor-pointer select-none hover:text-slate-700 transition-colors' : ''}
                         ${col.className || ''}
                       `}
-                      style={col.width ? { width: col.width } : undefined}
+                      style={col.width ? { width: col.width, minWidth: col.width } : undefined}
                       onClick={() => col.sortable !== false && handleSort(col.key)}
                     >
                       <div className={`flex items-center gap-1.5 min-w-0 ${justifyClass}`}>
@@ -156,7 +157,12 @@ const DataTable = ({
                   <tr
                     key={row.id || row._id || idx}
                     onClick={(e) => {
-                      if (e.target.closest('[data-row-action]')) return;
+                      if (
+                        e.target.closest('[data-row-action]') ||
+                        e.target.closest('input, button, a, label, select, textarea')
+                      ) {
+                        return;
+                      }
                       onRowClick?.(row);
                     }}
                     className={`
@@ -166,6 +172,7 @@ const DataTable = ({
                   >
                     {columns.map((col) => {
                       const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+                      const padClass = col.compact ? 'px-2' : 'px-4';
                       const cell = col.render ? (
                         col.render(row[col.key], row)
                       ) : (
@@ -177,7 +184,8 @@ const DataTable = ({
                       return (
                         <td
                           key={col.key}
-                          className={`px-4 py-3 text-sm text-slate-700 align-top ${col.unclamp ? 'overflow-visible' : 'max-w-0'} ${alignClass} ${col.className || ''}`}
+                          className={`${padClass} py-3 text-sm text-slate-700 align-middle ${col.unclamp ? 'overflow-visible' : 'max-w-0'} ${alignClass} ${col.className || ''}`}
+                          style={col.width ? { width: col.width, minWidth: col.width } : undefined}
                         >
                           {col.unclamp ? cell : <CellContent>{cell}</CellContent>}
                         </td>

@@ -287,11 +287,15 @@ async function assertWithinScheduledLead(booking, verb) {
 }
 
 /**
- * Hard floor for arrival + ride start: the customer's booked pickup
- * (`hourly.scheduledStartAt` or `outstation.pickupAt`) must have been
- * reached. Heading out early is fine; locking ARRIVED / STARTED early
- * would start wait timers and bill before the trip window the customer
- * paid for.
+ * Hard floor for arrival + ride start on **scheduled / outstation** trips:
+ * the customer's booked pickup (`hourly.scheduledStartAt` or
+ * `outstation.pickupAt`) must have been reached. Heading out early is fine;
+ * locking ARRIVED / STARTED early would start wait timers and bill before
+ * the trip window the customer paid for.
+ *
+ * Instant arrivals/starts skip this at the call site — arrival uses the
+ * 100 m proximity guard only; start uses OTP only (their +15m
+ * scheduledStartAt is a dispatch seed, not a hard floor).
  */
 function assertScheduledStartReached(booking, verb) {
   const pickupDate = resolveBookingSearchStartAt(booking);
@@ -425,9 +429,16 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.EN_ROUTE], 'mark arrival');
 
-  // Arrival may only lock in at/after the booked pickup time — even
-  // though the driver was allowed to head out up to RIDE_BUFFER early.
-  assertScheduledStartReached(booking, 'mark arrival');
+  // Scheduled / outstation: arrival may only lock in at/after the booked
+  // pickup time (even though en-route was allowed up to RIDE_BUFFER early).
+  // Instant: skip the time floor — the +15m scheduledStartAt seed is a
+  // dispatch buffer, not a hard gate; proximity below is the only check.
+  if (
+    booking.bookingType === BOOKING_TYPE.SCHEDULED ||
+    booking.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    assertScheduledStartReached(booking, 'mark arrival');
+  }
 
   const pickupCoords = (() => {
     const c = booking.pickup?.location?.coordinates;
@@ -537,8 +548,14 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.ARRIVED], 'start the ride');
 
-  // Ride start (and billing clock) only after the booked pickup time.
-  assertScheduledStartReached(booking, 'start the ride');
+  // Scheduled / outstation: billing clock must not start before pickup.
+  // Instant skips — OTP + arrival proximity are the only gates.
+  if (
+    booking.bookingType === BOOKING_TYPE.SCHEDULED ||
+    booking.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    assertScheduledStartReached(booking, 'start the ride');
+  }
 
   const expected = booking.rideStartOtp?.code;
   if (!expected) {

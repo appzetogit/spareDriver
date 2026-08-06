@@ -6,6 +6,7 @@ import { Mail, Lock, Shield, Loader2 } from 'lucide-react';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useStoreHydration } from '../../../hooks/useStoreHydration';
+import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 
 const AdminLoginPage = () => {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ const AdminLoginPage = () => {
     setLoading(true);
     
     try {
-      const res = await api.post('/admin/auth/login', formData);
+      const res = await api.post('/admin/auth/login', await withFcmAuthPayload(formData));
       const { admin } = res.data.data;
       
       setAuth(admin);

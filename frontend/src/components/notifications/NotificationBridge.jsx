@@ -35,6 +35,7 @@ export function AdminNotificationBridge() {
   const isAuthenticated = useAdminAuthStore((s) => s.isAuthenticated);
   const fetchUnread = useAdminNotificationStore((s) => s.fetchUnread);
 
+  useFcmRegistration({ enabled: isAuthenticated, audience: 'admin' });
   useNotificationListener({
     enabled: isAuthenticated,
     onNotification: () => fetchUnread().catch(() => null),
