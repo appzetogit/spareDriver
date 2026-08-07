@@ -15,6 +15,8 @@ import {
   kitItemFromApi,
   kitItemsToPayload,
 } from '../components/ManageKits/kitItemFormUtils';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageKitsCatalog } from '../../../constants/staffRoles';
 
 const emptyForm = {
   name: '',
@@ -27,6 +29,8 @@ const emptyForm = {
 };
 
 const ManageKits = () => {
+  const { admin } = useAdminAuthStore();
+  const canEdit = canManageKitsCatalog(admin?.role);
   const cacheKey = buildCacheKey('admin-kits', {});
   const { data: kits = [], loading, refetch } = useCachedQuery(useAdminKitsStore, cacheKey, {});
   const [showModal, setShowModal] = useState(false);
@@ -120,10 +124,18 @@ const ManageKits = () => {
             Each kit includes items (T-shirt with sizes, badge, etc.)
           </p>
         </div>
-        <Button variant="admin" size="md" onClick={openCreate} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add kit
-        </Button>
+        {canEdit && (
+          <Button variant="admin" size="md" onClick={openCreate} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add kit
+          </Button>
+        )}
       </div>
+
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          View only — only the super admin can edit driver kits.
+        </div>
+      )}
 
       <div className="grid gap-4">
         {loading && <p className="text-sm text-slate-500">Loading...</p>}
@@ -153,29 +165,32 @@ const ManageKits = () => {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => openEdit(kit)}
-                className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-800 transition-colors"
-                title="Edit kit"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(kit)}
-                disabled={deletingId === kit._id}
-                className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-50"
-                title="Delete kit"
-              >
-                <Trash2 className={`w-4 h-4 ${deletingId === kit._id ? 'animate-pulse' : ''}`} />
-              </button>
-            </div>
+            {canEdit && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => openEdit(kit)}
+                  className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-800 transition-colors"
+                  title="Edit kit"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(kit)}
+                  disabled={deletingId === kit._id}
+                  className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-50"
+                  title="Delete kit"
+                >
+                  <Trash2 className={`w-4 h-4 ${deletingId === kit._id ? 'animate-pulse' : ''}`} />
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
+      {canEdit && (
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -225,6 +240,7 @@ const ManageKits = () => {
           </div>
         </form>
       </Modal>
+      )}
     </div>
   );
 };

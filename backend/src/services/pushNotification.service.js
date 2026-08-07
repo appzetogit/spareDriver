@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import User from '../models/user.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import { getFirebaseAdmin, isFirebaseReady } from '../config/firebase.js';
@@ -10,7 +11,6 @@ import {
   ADMIN_PERSISTED_NOTIFICATION_TYPES,
   ADMIN_FCM_NOTIFICATION_TYPES,
 } from '../constants/notificationTypes.js';
-import { STAFF_ROLES } from '../constants/staffPermissions.js';
 import { USER_ROLES } from '../constants/roles.js';
 
 const HAS_FCM_FILTER = {
@@ -220,16 +220,24 @@ export async function sendPushNotification(
 
 /**
  * Active staff docs that have an FCM token.
- * When `zoneIds` is provided, team_members are limited to overlapping
- * assignedZones; admin / sub_admin always receive the push.
+ *
+ * Visibility matches the admin inbox:
+ *   - no zoneIds → super admin only (platform-wide alerts)
+ *   - with zoneIds → admin + sub_admin/team_members whose
+ *     assignedZones overlap those zones
  */
 async function loadStaffFcmRecipients(zoneIds) {
   const zones = (zoneIds || [])
-    .map((id) => String(id || '').trim())
+    .map((id) => {
+      try {
+        return new mongoose.Types.ObjectId(String(id).trim());
+      } catch {
+        return null;
+      }
+    })
     .filter(Boolean);
 
   const filter = {
-    role: { $in: STAFF_ROLES },
     isActive: true,
     isDeleted: { $ne: true },
   };
@@ -239,21 +247,59 @@ async function loadStaffFcmRecipients(zoneIds) {
       HAS_FCM_FILTER,
       {
         $or: [
-          { role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUB_ADMIN] } },
+          { role: USER_ROLES.ADMIN },
           {
-            role: USER_ROLES.TEAM_MEMBER,
+            role: { $in: [USER_ROLES.SUB_ADMIN, USER_ROLES.TEAM_MEMBER] },
             assignedZones: { $in: zones },
           },
         ],
       },
     ];
   } else {
+    filter.role = USER_ROLES.ADMIN;
     Object.assign(filter, HAS_FCM_FILTER);
   }
 
   return User.find(filter)
     .select('_id fcmToken fcmTokenWeb fcmTokenMobile')
     .lean();
+}
+
+/**
+ * Socket toast recipients for admin notifications (same rules as FCM).
+ */
+async function emitAdminNotificationScoped(payload, zoneIds) {
+  const zones = (zoneIds || []).map((id) => String(id || '').trim()).filter(Boolean);
+
+  emitNotification({ adminRole: USER_ROLES.ADMIN }, payload);
+
+  if (!zones.length) return;
+
+  const zoneOids = zones
+    .map((id) => {
+      try {
+        return new mongoose.Types.ObjectId(id);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  if (!zoneOids.length) return;
+
+  const scopedStaff = await User.find({
+    role: { $in: [USER_ROLES.SUB_ADMIN, USER_ROLES.TEAM_MEMBER] },
+    isActive: true,
+    isDeleted: { $ne: true },
+    assignedZones: { $in: zoneOids },
+  })
+    .select('_id')
+    .lean();
+
+  await Promise.all(
+    scopedStaff.map((doc) =>
+      Promise.resolve(emitNotification({ userId: doc._id }, payload)),
+    ),
+  );
 }
 
 async function sendFcmToStaff(payload, { zoneIds } = {}) {
@@ -296,11 +342,16 @@ export async function sendAdminNotification({
   zoneIds,
   sendFcm,
 }) {
+  const zones = (zoneIds || []).map((id) => String(id || '').trim()).filter(Boolean);
   const payload = {
     title,
     body,
     severity,
-    data: { ...data, kind: type },
+    data: {
+      ...data,
+      kind: type,
+      ...(zones.length ? { zoneIds: zones } : {}),
+    },
   };
 
   emitAdminAlert({
@@ -309,7 +360,7 @@ export async function sendAdminNotification({
     message: body || title,
     data: payload.data,
   });
-  emitNotification({ admin: true }, payload);
+  await emitAdminNotificationScoped(payload, zones);
 
   const shouldPersist =
     typeof persist === 'boolean'
@@ -325,6 +376,7 @@ export async function sendAdminNotification({
         type: type || 'admin_alert',
         severity,
         data: payload.data,
+        zoneIds: zones,
       });
     } catch (err) {
       console.warn('[push] failed to persist admin notification:', err?.message);
@@ -338,7 +390,7 @@ export async function sendAdminNotification({
 
   if (shouldSendFcm) {
     try {
-      await sendFcmToStaff(payload, { zoneIds });
+      await sendFcmToStaff(payload, { zoneIds: zones });
     } catch (err) {
       console.warn('[push] admin FCM fan-out failed:', err?.message);
     }

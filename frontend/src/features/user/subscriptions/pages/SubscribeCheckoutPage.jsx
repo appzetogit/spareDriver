@@ -512,7 +512,7 @@ function PlacePickButton({ label, place, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left p-3 rounded-xl border border-border-light bg-white hover:border-primary/30 transition"
+      className="w-full text-left p-3 rounded-xl border border-gray-400 bg-white hover:border-primary transition"
     >
       <p className="text-[10px] font-bold uppercase text-text-muted">{label}</p>
       <p className="text-xs text-text mt-1 line-clamp-2">

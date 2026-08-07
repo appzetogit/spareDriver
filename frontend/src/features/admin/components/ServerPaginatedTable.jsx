@@ -14,6 +14,7 @@ const ServerPaginatedTable = ({
   pagination,
   onPageChange,
   onRowClick,
+  getRowClassName,
   entityLabel = 'items',
   emptyMessage = 'No results found',
   minWidth,
@@ -34,6 +35,7 @@ const ServerPaginatedTable = ({
               columns={columns}
               data={data}
               onRowClick={onRowClick}
+              getRowClassName={getRowClassName}
               showSearch={false}
               showToolbar={false}
               embedded

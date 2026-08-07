@@ -36,6 +36,17 @@ const DRIVER_TRIP_ENDED_STATUSES = new Set([
   BOOKING_STATUS.IN_EMERGENCY_POOL,
 ]);
 
+function isPopulatedDoc(value) {
+  return Boolean(value) && typeof value === 'object' && (value.name || value.vehicleNumber);
+}
+
+function sameRefId(a, b) {
+  const idA = a && typeof a === 'object' ? a._id : a;
+  const idB = b && typeof b === 'object' ? b._id : b;
+  if (idA == null || idB == null) return true; // response omitted id — keep current
+  return String(idA) === String(idB);
+}
+
 /**
  * Source of truth for the driver's currently-active booking on the client.
  *
@@ -173,7 +184,20 @@ const useDriverActiveTripStore = create((set, get) => ({
     try {
       const res = await api.post(`/driver/bookings/${id}/${path}`, body);
       const booking = res?.data?.data?.booking || null;
-      if (booking) set({ booking });
+      if (booking) {
+        // Keep populated customer/car when a transition response only
+        // carries bare ObjectIds (e.g. older dismiss-extension payloads).
+        // Full replace would blank the active-trip page until refetch.
+        const current = get().booking;
+        const next = { ...booking };
+        if (current && isPopulatedDoc(current.userId) && !isPopulatedDoc(next.userId)) {
+          if (sameRefId(current.userId, next.userId)) next.userId = current.userId;
+        }
+        if (current && isPopulatedDoc(current.carId) && !isPopulatedDoc(next.carId)) {
+          if (sameRefId(current.carId, next.carId)) next.carId = current.carId;
+        }
+        set({ booking: next });
+      }
       set({ busy: null });
       return booking;
     } catch (err) {

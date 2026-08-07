@@ -160,7 +160,7 @@ const LocationPickerSheet = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search places, areas, landmarks"
-            className="w-full h-11 bg-gray-50 border border-border rounded-xl pl-9 pr-9 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:bg-white"
+            className="w-full h-11 bg-white border border-gray-400 rounded-xl pl-9 pr-9 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
             autoFocus
           />
           {query && (

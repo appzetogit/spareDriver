@@ -138,10 +138,10 @@ export const DISPATCH = Object.freeze({
  *                             contact support (we surface a soft error; the
  *                             booking is not auto-cancelled).
  *   EXTENSION_PROMPT_LEAD_SECONDS  Seconds before booked end time at which
- *                                  the user app surfaces the "extend the
- *                                  ride?" prompt. Used purely on the
- *                                  client; lives here so both sides stay
- *                                  in lockstep.
+ *                                  we push "ride ending soon — extend?"
+ *                                  and the user app surfaces the extend
+ *                                  sheet. Kept on both sides so timers
+ *                                  stay in lockstep.
  *   RIDE_END_EXTENSION_GRACE_SECONDS  After booked duration ends, how long
  *                                  the customer still has to extend before
  *                                  the server auto-completes the ride.
@@ -152,7 +152,7 @@ export const PAYMENT_POLICY = Object.freeze({
   RIDE_OTP_LENGTH: 4,
   RIDE_OTP_MAX_ATTEMPTS: 5,
   EXTENSION_PROMPT_LEAD_SECONDS: 15 * 60,
-  RIDE_END_EXTENSION_GRACE_SECONDS: 5 * 60,
+  RIDE_END_EXTENSION_GRACE_SECONDS: 10 * 60,
 });
 
 /** Constants for the user-facing "nearby drivers" view (home page). */

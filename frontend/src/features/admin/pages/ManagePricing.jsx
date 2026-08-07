@@ -13,6 +13,8 @@ import {
 } from '../../../constants/serviceTypes';
 import { formatCurrency } from '../../../utils/fareCalculator';
 import ServicePricingModal from '../components/ManagePricing/ServicePricingModal';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageServicePricing } from '../../../constants/staffRoles';
 
 const SERVICE_CARDS = [
   { type: SERVICE_TYPES.HOURLY, icon: Clock },
@@ -20,6 +22,8 @@ const SERVICE_CARDS = [
 ];
 
 const ManagePricing = () => {
+  const { admin } = useAdminAuthStore();
+  const canEdit = canManageServicePricing(admin?.role);
   const cacheKey = buildCacheKey('admin-service-pricings', {});
   const { data, loading, refetch } = useCachedQuery(
     useAdminServicePricingStore,
@@ -127,6 +131,12 @@ const ManagePricing = () => {
         </div>
       </div>
 
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          View only — only the super admin can edit service pricing.
+        </div>
+      )}
+
       {loading && pricings.length === 0 && (
         <p className="text-sm text-slate-500">Loading pricing…</p>
       )}
@@ -186,30 +196,32 @@ const ManagePricing = () => {
                 </div>
               )}
 
-              <div className="flex gap-2 mt-auto">
-                <Button
-                  variant="admin"
-                  size="sm"
-                  className="flex-1 flex items-center justify-center gap-1.5"
-                  onClick={() => setEditing(type)}
-                >
-                  <Settings2 className="w-3.5 h-3.5" />
-                  {pricing ? 'Edit' : 'Configure'}
-                </Button>
-                {pricing && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(pricing)}
-                    disabled={deletingId === pricing._id}
-                    className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-50"
-                    title="Reset pricing"
+              {canEdit && (
+                <div className="flex gap-2 mt-auto">
+                  <Button
+                    variant="admin"
+                    size="sm"
+                    className="flex-1 flex items-center justify-center gap-1.5"
+                    onClick={() => setEditing(type)}
                   >
-                    <Trash2
-                      className={`w-4 h-4 ${deletingId === pricing._id ? 'animate-pulse' : ''}`}
-                    />
-                  </button>
-                )}
-              </div>
+                    <Settings2 className="w-3.5 h-3.5" />
+                    {pricing ? 'Edit' : 'Configure'}
+                  </Button>
+                  {pricing && (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(pricing)}
+                      disabled={deletingId === pricing._id}
+                      className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-50"
+                      title="Reset pricing"
+                    >
+                      <Trash2
+                        className={`w-4 h-4 ${deletingId === pricing._id ? 'animate-pulse' : ''}`}
+                      />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

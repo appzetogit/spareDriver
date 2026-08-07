@@ -12,6 +12,12 @@ import {
   notifyUserSupportReply,
   notifyDriverSupportReply,
 } from '../utils/notificationDispatch.js';
+import {
+  staffAssigneeListFilter,
+  assertStaffCanAccessAssigned,
+  findTeamMemberAssignee,
+  assertCanAssignToTeamMember,
+} from '../utils/staffAssignment.util.js';
 
 async function generateTicketNumber() {
   const count = await SupportTicket.countDocuments();
@@ -91,8 +97,15 @@ export async function getSupportTicketByIdService(id, principal) {
   return ticket;
 }
 
-export async function listAdminSupportTicketsService({ status } = {}) {
-  const filter = {};
+const ASSIGNEE_POPULATE = [
+  { path: 'assignedTo', select: 'name email role' },
+  { path: 'assignedBy', select: 'name email role' },
+];
+
+export async function listAdminSupportTicketsService(staff, { status } = {}) {
+  const filter = {
+    ...staffAssigneeListFilter(staff),
+  };
   if (status && status !== 'all' && SUPPORT_TICKET_STATUS_LIST.includes(status)) {
     filter.status = status;
   }
@@ -102,22 +115,26 @@ export async function listAdminSupportTicketsService({ status } = {}) {
     .populate('userId', 'name phone email')
     .populate('driverId', 'name phone email')
     .populate('bookingId', 'bookingNumber status pickupAddress dropAddress')
+    .populate(ASSIGNEE_POPULATE)
     .lean();
 }
 
-export async function getAdminSupportTicketService(id) {
+export async function getAdminSupportTicketService(staff, id) {
   const ticket = await SupportTicket.findById(id)
     .populate('userId', 'name phone email')
     .populate('driverId', 'name phone email')
     .populate('bookingId', 'bookingNumber status pickupAddress dropAddress createdAt serviceType')
+    .populate(ASSIGNEE_POPULATE)
     .lean();
   if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  assertStaffCanAccessAssigned(staff, ticket.assignedTo);
   return ticket;
 }
 
-export async function updateAdminSupportTicketService(id, data) {
+export async function updateAdminSupportTicketService(staff, id, data) {
   const ticket = await SupportTicket.findById(id);
   if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  assertStaffCanAccessAssigned(staff, ticket.assignedTo);
 
   const { status, adminReply } = data || {};
   const replyChanged =
@@ -145,5 +162,26 @@ export async function updateAdminSupportTicketService(id, data) {
     }
   }
 
-  return getAdminSupportTicketService(id);
+  return getAdminSupportTicketService(staff, id);
+}
+
+export async function assignSupportTicketService(staff, id, { assigneeId }) {
+  assertCanAssignToTeamMember(staff);
+
+  const ticket = await SupportTicket.findById(id);
+  if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  if (ticket.status === SUPPORT_TICKET_STATUS.RESOLVED) {
+    throw new ApiError(400, 'Cannot assign a resolved ticket');
+  }
+
+  const assignee = await findTeamMemberAssignee(assigneeId);
+  ticket.assignedTo = assignee._id;
+  ticket.assignedBy = staff._id;
+  ticket.assignedAt = new Date();
+  if (ticket.status === SUPPORT_TICKET_STATUS.OPEN) {
+    ticket.status = SUPPORT_TICKET_STATUS.IN_PROGRESS;
+  }
+  await ticket.save();
+
+  return getAdminSupportTicketService(staff, id);
 }

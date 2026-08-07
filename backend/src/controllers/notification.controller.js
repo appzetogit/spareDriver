@@ -7,6 +7,8 @@ import {
   markNotificationReadService,
   markAllNotificationsReadService,
   listAdminNotificationsService,
+  markAdminNotificationReadService,
+  markAllAdminNotificationsReadService,
 } from '../services/notification.service.js';
 
 export const getUserNotifications = asyncHandler(async (req, res) => {
@@ -79,6 +81,7 @@ export const markAllDriverNotificationsRead = asyncHandler(async (req, res) => {
 
 export const getAdminNotifications = asyncHandler(async (req, res) => {
   const data = await listAdminNotificationsService({
+    staff: req.staff,
     page: req.query.page,
     limit: req.query.limit,
   });
@@ -86,15 +89,11 @@ export const getAdminNotifications = asyncHandler(async (req, res) => {
 });
 
 export const markAdminNotificationRead = asyncHandler(async (req, res) => {
-  const data = await markNotificationReadService(req.params.id, {
-    audience: NOTIFICATION_AUDIENCE.ADMIN,
-  });
+  const data = await markAdminNotificationReadService(req.params.id, req.staff);
   return res.status(200).json(new ApiResponse(200, data, 'Notification marked as read'));
 });
 
 export const markAllAdminNotificationsRead = asyncHandler(async (req, res) => {
-  const data = await markAllNotificationsReadService({
-    audience: NOTIFICATION_AUDIENCE.ADMIN,
-  });
+  const data = await markAllAdminNotificationsReadService(req.staff);
   return res.status(200).json(new ApiResponse(200, data, 'All notifications marked as read'));
 });

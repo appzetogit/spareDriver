@@ -15,7 +15,6 @@ import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 const SearchingDriverPage = () => {
   const navigate = useNavigate();
   const booking = useUserActiveBookingStore((s) => s.booking);
-  const fetchActive = useUserActiveBookingStore((s) => s.fetchActive);
   const applyUpdate = useUserActiveBookingStore((s) => s.applyUpdate);
   const notePaymentRequired = useUserActiveBookingStore((s) => s.notePaymentRequired);
   const cancelBooking = useUserActiveBookingStore((s) => s.cancelBooking);
@@ -35,14 +34,28 @@ const SearchingDriverPage = () => {
   const [reassigning, setReassigning] = useState(false);
   const [dismissedCancelledAt, setDismissedCancelledAt] = useState(null);
 
-  // Hydrate if the user landed here directly via URL.
-  useEffect(() => {
-    if (!booking) {
-      fetchActive().catch(() => {});
-    }
-  }, [booking, fetchActive]);
+  const refreshCurrentOrActive = useUserActiveBookingStore(
+    (s) => s.refreshCurrentOrActive,
+  );
 
+  // Always re-sync on mount. Instant dispatch can flip to
+  // `no_drivers_found` before this page attaches its socket listener
+  // (zero nearby drivers fails in milliseconds), so trusting only the
+  // create-response snapshot leaves the spinner stuck forever.
+  useEffect(() => {
+    refreshCurrentOrActive().catch(() => {});
+  }, [refreshCurrentOrActive]);
+
+  // Poll while SEARCHING so a missed BOOKING_UPDATED still recovers.
   const bookingStatus = booking?.status;
+  useEffect(() => {
+    if (bookingStatus !== BOOKING_STATUS.SEARCHING) return undefined;
+    const id = setInterval(() => {
+      refreshCurrentOrActive().catch(() => {});
+    }, 4000);
+    return () => clearInterval(id);
+  }, [bookingStatus, refreshCurrentOrActive]);
+
   const bookingIdForRedirect = booking?._id;
   const serviceType = booking?.serviceType;
   const bookingType = booking?.bookingType;

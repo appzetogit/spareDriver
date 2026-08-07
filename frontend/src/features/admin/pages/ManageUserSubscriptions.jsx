@@ -47,6 +47,19 @@ const ASSIGNMENT_FILTERS = [
   { value: SUBSCRIPTION_ASSIGNMENT_STATUS.RELEASED, label: 'Released' },
 ];
 
+/** Pending + start calendar day already passed → admin needs to assign ASAP. */
+function isOverdueUnassignedSubscription(row) {
+  if (!row?.startDate) return false;
+  if (row.assignmentStatus !== SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING) return false;
+  if (row.assignedDriverId) return false;
+  const start = new Date(row.startDate);
+  if (Number.isNaN(start.getTime())) return false;
+  start.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return start.getTime() < today.getTime();
+}
+
 const ManageUserSubscriptions = () => {
   const admin = useAdminAuthStore((s) => s.admin);
   const canAssign = OPERATIONS_ROLES.has(admin?.role);
@@ -92,6 +105,12 @@ const ManageUserSubscriptions = () => {
       setLoading(false);
     }
   }, [page, limit, filters]);
+
+  const handleDrawerUpdated = useCallback((nextSub) => {
+    if (nextSub) setAssignRow(nextSub);
+    else setAssignRow(null);
+    fetchQueue();
+  }, [fetchQueue]);
 
   useEffect(() => {
     fetchQueue();
@@ -161,12 +180,20 @@ const ManageUserSubscriptions = () => {
     {
       key: 'period',
       label: 'Period',
-      render: (_, row) => (
-        <div className="text-xs text-slate-600">
-          <p>{row.startDate ? formatDateTime12(row.startDate) : '—'}</p>
-          <p className="text-slate-400">to {row.expiryDate ? formatDateTime12(row.expiryDate) : '—'}</p>
-        </div>
-      ),
+      render: (_, row) => {
+        const overdue = isOverdueUnassignedSubscription(row);
+        return (
+          <div className="text-xs text-slate-600">
+            <p className={overdue ? 'font-semibold text-rose-700' : undefined}>
+              {row.startDate ? formatDateTime12(row.startDate) : '—'}
+            </p>
+            <p className="text-slate-400">to {row.expiryDate ? formatDateTime12(row.expiryDate) : '—'}</p>
+            {overdue && (
+              <Badge variant="danger" className="mt-1">Overdue</Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'driver',
@@ -324,6 +351,11 @@ const ManageUserSubscriptions = () => {
         pagination={pagination}
         onPageChange={setPage}
         onRowClick={canAssign ? (row) => setAssignRow(row) : undefined}
+        getRowClassName={(row) =>
+          isOverdueUnassignedSubscription(row)
+            ? '!bg-rose-50 hover:!bg-rose-100/80'
+            : ''
+        }
         entityLabel="subscriptions"
         emptyMessage="No subscription requests match these filters."
       />
@@ -332,10 +364,7 @@ const ManageUserSubscriptions = () => {
         <AssignSubscriptionDrawer
           subscription={assignRow}
           onClose={() => setAssignRow(null)}
-          onUpdated={() => {
-            setAssignRow(null);
-            fetchQueue();
-          }}
+          onUpdated={handleDrawerUpdated}
         />
       )}
     </div>
@@ -372,6 +401,13 @@ function todayInputValue() {
   return toDateInputValue(new Date());
 }
 
+function addMonthsToDate(dateInput, months) {
+  const d = new Date(`${dateInput}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + Math.max(1, Number(months) || 1));
+  return d;
+}
+
 function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [drivers, setDrivers] = useState([]);
   const [driversLoading, setDriversLoading] = useState(true);
@@ -398,6 +434,8 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [settlementConfirmed, setSettlementConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [periodStartDraft, setPeriodStartDraft] = useState(() => toDateInputValue(subscription.startDate));
+  const [periodSaving, setPeriodSaving] = useState(false);
   const searchRef = useRef(null);
 
   const subscriptionPeriodLabel = useMemo(() => {
@@ -406,6 +444,27 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     if (!start || !end) return '—';
     return `${start} → ${end}`;
   }, [subscription.startDate, subscription.expiryDate]);
+
+  const periodPreviewExpiry = useMemo(() => {
+    if (!periodStartDraft) return '';
+    return toDateInputValue(addMonthsToDate(periodStartDraft, subscription.durationMonths));
+  }, [periodStartDraft, subscription.durationMonths]);
+
+  const periodDirty = periodStartDraft !== toDateInputValue(subscription.startDate);
+
+  useEffect(() => {
+    setPeriodStartDraft(toDateInputValue(subscription.startDate));
+    setSubscriptionStatusDraft(subscription.status || '');
+    setWorkingStartDate(todayInputValue());
+    setWorkingEndDate('');
+    setPreviousDriverLastWorkingDate(todayInputValue());
+    setReleaseLastWorkingDate(todayInputValue());
+  }, [
+    subscription._id,
+    subscription.startDate,
+    subscription.expiryDate,
+    subscription.status,
+  ]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search), 250);
@@ -537,6 +596,24 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     }
   };
 
+  const handleReschedulePeriod = async () => {
+    if (!periodStartDraft || periodSaving || !periodDirty) return;
+    setPeriodSaving(true);
+    try {
+      const res = await api.post(
+        `/admin/subscriptions/users/${subscription._id}/reschedule`,
+        { startDate: new Date(`${periodStartDraft}T00:00:00`).toISOString() },
+      );
+      const updated = res?.data?.data || null;
+      toast.success('Subscription period updated');
+      onUpdated(updated);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not update period');
+    } finally {
+      setPeriodSaving(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     if (!settlementConfirmed) return;
     setSubmitting(true);
@@ -638,6 +715,57 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               Current: {subscription.assignedDriverId.name}
             </div>
           )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+            <CalendarRange className="w-3.5 h-3.5" />
+            Change subscription period
+          </p>
+          <p className="text-xs text-slate-500">
+            {subscription.assignedDriverId
+              ? 'After a driver is assigned, only admin can move the start date. End date shifts to keep the same plan length; the driver working window is adjusted if needed.'
+              : 'Move the start date before assignment. End date shifts to keep the same plan length. Customers can also do this from their app while pending.'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600">
+                Start date <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={periodStartDraft}
+                onChange={(e) => setPeriodStartDraft(e.target.value)}
+                disabled={subscription.status !== SUBSCRIPTION_STATUS.ACTIVE || periodSaving}
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm disabled:bg-slate-50"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">
+                End date (auto)
+              </label>
+              <input
+                type="date"
+                value={periodPreviewExpiry}
+                readOnly
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm bg-slate-50 text-slate-600"
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={
+              submitting
+              || periodSaving
+              || !periodDirty
+              || !periodStartDraft
+              || subscription.status !== SUBSCRIPTION_STATUS.ACTIVE
+            }
+            onClick={handleReschedulePeriod}
+          >
+            {periodSaving ? 'Saving…' : 'Save period'}
+          </Button>
         </div>
 
         <div className="rounded-2xl border border-slate-200 p-4 space-y-3">

@@ -24,6 +24,16 @@ const notificationSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    /**
+     * Zone scope for admin-audience rows. Empty = platform-wide (super
+     * admin only). Non-empty = visible to admin/sub_admin + team_members
+     * whose assignedZones overlap.
+     */
+    zoneIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+      default: [],
+      index: true,
+    },
     title: { type: String, required: true, trim: true },
     body: { type: String, default: '', trim: true },
     type: { type: String, required: true, trim: true, index: true },

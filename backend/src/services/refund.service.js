@@ -28,10 +28,11 @@ import { recordPlatformRevenueDebit } from './platformRevenue.service.js';
 /**
  * Booking refund pipeline.
  *
- * Refunds are NOT issued automatically on Razorpay. The cancellation
- * services only *record* a Refund document with the amount + reason;
- * an admin then manually moves the money on the Razorpay dashboard and
- * marks the Refund as `processed` (or `failed`) from the admin panel.
+ * Wallet-paid cancellations credit the customer immediately and write a
+ * Refund row marked `processed` (automatic). Legacy Razorpay-paid
+ * cancellations write a `pending` row; an admin moves the money on the
+ * Razorpay dashboard and marks it `processed` / `failed` from Account →
+ * Refunds. Admin-created manual refunds also land here.
  *
  *   1. `computeRefundAmount(booking, policy)` — pure helper returning
  *      `{ amountRupees, cancellationFeeRupees, grossPaidRupees }` using
@@ -42,8 +43,10 @@ import { recordPlatformRevenueDebit } from './platformRevenue.service.js';
  *      platform.
  *
  *   2. `issueBookingRefundService(booking, options)` — creates the
- *      Refund ledger entry. Idempotent: returns the existing pending /
- *      processed refund if one already exists for the booking.
+ *      Refund ledger entry. Pass `autoProcessed: true` after a wallet
+ *      credit so the admin history shows automatic refunds. Idempotent:
+ *      returns the existing pending / processed refund if one already
+ *      exists for the booking.
  *
  *   3. `listRefundsService(query)` — paginated admin list with filters.
  *
@@ -53,9 +56,8 @@ import { recordPlatformRevenueDebit } from './platformRevenue.service.js';
  *      Flips `booking.paymentStatus → REFUNDED` only when transitioning
  *      to `processed`.
  *
- * The booking's `paymentStatus` is only touched in step 4 — the
- * cancellation services leave it at `PAID` until the admin actually
- * confirms the money has moved.
+ * For wallet auto-refunds, `paymentStatus` is flipped by the cancel
+ * service itself; for Razorpay it waits until step 4.
  */
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -97,9 +99,22 @@ export function computeRefundAmount(booking, policy = {}) {
  * Persist a Refund document — used internally by the cancellation
  * services. Exported for admin tooling that wants to materialise a
  * record without going through a booking cancellation.
+ *
+ * `meta.autoProcessed` — wallet refunds that already credited the
+ * customer. Written as `processed` so admin history shows both
+ * automatic and manual refunds in one ledger.
  */
 async function createRefundRecord(booking, breakdown, meta) {
+  const autoProcessed = !!meta?.autoProcessed;
+  const payoutMethod =
+    meta?.payoutMethod ||
+    (autoProcessed
+      ? REFUND_PAYOUT_METHOD.WALLET
+      : REFUND_PAYOUT_METHOD.BANK_ACCOUNT);
+  const walletTxId = meta?.walletTxId ? String(meta.walletTxId) : '';
+
   return Refund.create({
+    kind: REFUND_KIND.BOOKING_CANCELLATION,
     bookingId: booking._id,
     bookingNumber: booking.bookingNumber || '',
     userId: booking.userId,
@@ -107,9 +122,18 @@ async function createRefundRecord(booking, breakdown, meta) {
     cancellationFeeRupees: breakdown.cancellationFeeRupees,
     grossPaidRupees: breakdown.grossPaidRupees,
     razorpayPaymentId: booking.razorpay?.paymentId || '',
-    status: REFUND_STATUS.PENDING,
+    payoutMethod,
+    status: autoProcessed ? REFUND_STATUS.PROCESSED : REFUND_STATUS.PENDING,
     initiatedBy: meta?.initiatedBy || REFUND_INITIATED_BY.SYSTEM,
     reason: meta?.reason || '',
+    processedAt: autoProcessed ? new Date() : null,
+    transactionDetails: autoProcessed
+      ? {
+          mode: 'wallet',
+          transactionId: walletTxId,
+          notes: 'Automatic wallet credit',
+        }
+      : {},
   });
 }
 
@@ -143,6 +167,11 @@ async function findActiveRefund(bookingId) {
  *                                        `{ amountRupees, cancellationFeeRupees, grossPaidRupees }`.
  *                                        Wins over `options.policy` when
  *                                        present.
+ *   @param {boolean} [options.autoProcessed]  true when money was already
+ *                                        credited (wallet). Ledger entry
+ *                                        is written as `processed`.
+ *   @param {string} [options.payoutMethod]   wallet | bank_account
+ *   @param {string} [options.walletTxId]  wallet txn id for audit
  *
  * Returns the persisted Refund document. Idempotent: returns an
  * existing non-failed Refund for the same booking instead of creating
@@ -154,12 +183,14 @@ export async function issueBookingRefundService(booking, options = {}) {
   const breakdown =
     options.breakdown ||
     computeRefundAmount(booking, options.policy || {});
+  const autoProcessed = !!options.autoProcessed;
 
   // Zero-refund: still log a record so the admin audit shows the
   // cancellation was considered, but mark it processed immediately —
   // there's no money to move.
   if (breakdown.amountRupees <= 0) {
     return Refund.create({
+      kind: REFUND_KIND.BOOKING_CANCELLATION,
       bookingId: booking._id,
       bookingNumber: booking.bookingNumber || '',
       userId: booking.userId,
@@ -167,6 +198,7 @@ export async function issueBookingRefundService(booking, options = {}) {
       cancellationFeeRupees: breakdown.cancellationFeeRupees,
       grossPaidRupees: breakdown.grossPaidRupees,
       razorpayPaymentId: booking.razorpay?.paymentId || '',
+      payoutMethod: options.payoutMethod || REFUND_PAYOUT_METHOD.WALLET,
       status: REFUND_STATUS.PROCESSED,
       initiatedBy: options.initiatedBy || REFUND_INITIATED_BY.SYSTEM,
       reason: options.reason || 'no_refund_due',
@@ -178,8 +210,12 @@ export async function issueBookingRefundService(booking, options = {}) {
   if (existing) return existing.toObject();
 
   const refund = await createRefundRecord(booking, breakdown, options);
-  notifyUserRefundInitiated(booking.userId, refund).catch(() => null);
-  notifyAdminRefundRequest(refund).catch(() => null);
+  if (!autoProcessed) {
+    // Manual / Razorpay path — notify pending review. Auto wallet
+    // refunds already moved money; skip the pending-admin fan-out.
+    notifyUserRefundInitiated(booking.userId, refund).catch(() => null);
+    notifyAdminRefundRequest(refund).catch(() => null);
+  }
   return refund;
 }
 

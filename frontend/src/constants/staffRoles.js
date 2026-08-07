@@ -27,6 +27,19 @@ export function hasOperationalAccess(role) {
   return isSuperAdmin(role) || isSubAdmin(role);
 }
 
+export function usesAssignedZoneScope(role) {
+  return isSubAdmin(role) || isTeamMember(role);
+}
+
+/** Normalize assignedZones from auth/profile payloads to string ids. */
+export function getAssignedZoneIds(admin) {
+  if (!admin || isSuperAdmin(admin.role)) return null;
+  if (!usesAssignedZoneScope(admin.role)) return [];
+  return (admin.assignedZones || [])
+    .map((z) => String(typeof z === 'object' && z?._id != null ? z._id : z))
+    .filter(Boolean);
+}
+
 export function canAccessTeamManagement(role) {
   return isSuperAdmin(role);
 }
@@ -44,15 +57,39 @@ export function canViewTaskActivityLog(role) {
 }
 
 export function canManagePlatformSettings(role) {
+  return isSuperAdmin(role);
+}
+
+export function canViewPlatformSettings(role) {
   return hasOperationalAccess(role);
 }
 
 export function canManageKitsCatalog(role) {
+  return isSuperAdmin(role);
+}
+
+export function canViewKitsCatalog(role) {
   return hasOperationalAccess(role);
 }
 
 export function canManageZones(role) {
+  return isSuperAdmin(role);
+}
+
+export function canViewZones(role) {
   return hasOperationalAccess(role);
+}
+
+export function canManageServicePricing(role) {
+  return isSuperAdmin(role);
+}
+
+export function canManageSubscriptionPlans(role) {
+  return isSuperAdmin(role);
+}
+
+export function canManageCoupons(role) {
+  return isSuperAdmin(role);
 }
 
 export function canAccessUsers(role) {

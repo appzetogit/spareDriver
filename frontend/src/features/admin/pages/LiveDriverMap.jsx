@@ -23,6 +23,8 @@ import api from '../../../utils/api';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, GOOGLE_MAP_ID } from '../../../constants/mapDefaults';
 import { findZoneForPoint } from '../../../utils/zoneContains';
 import { BOOKING_STATUS } from '../../../constants/bookingStatus';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { getAssignedZoneIds } from '../../../constants/staffRoles';
 
 const STATUS_FILTER = Object.freeze({
   ALL: 'all',
@@ -93,6 +95,8 @@ function matchesSearch(driver, query) {
 }
 
 const LiveDriverMap = () => {
+  const { admin } = useAdminAuthStore();
+  const assignedZoneIds = useMemo(() => getAssignedZoneIds(admin), [admin]);
   const { maps, AdvancedMarkerElement, PinElement, ready, error } = useGoogleMaps();
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -110,18 +114,27 @@ const LiveDriverMap = () => {
 
   const zonesKey = buildCacheKey('admin-zones', {});
   const { data: zonesRaw } = useCachedQuery(useAdminZonesStore, zonesKey, {});
-  const zones = useMemo(
-    () => (Array.isArray(zonesRaw) ? zonesRaw.filter((z) => z.isActive !== false) : []),
-    [zonesRaw],
-  );
+  const zones = useMemo(() => {
+    const active = Array.isArray(zonesRaw) ? zonesRaw.filter((z) => z.isActive !== false) : [];
+    if (assignedZoneIds === null) return active;
+    const allowed = new Set(assignedZoneIds);
+    return active.filter((z) => allowed.has(String(z._id)));
+  }, [zonesRaw, assignedZoneIds]);
 
   const allDrivers = useMemo(
     () => mergeLiveDrivers(firebaseMap, metadata?.items, zones),
     [firebaseMap, metadata?.items, zones],
   );
 
+  const scopedDrivers = useMemo(() => {
+    if (assignedZoneIds === null) return allDrivers;
+    if (!assignedZoneIds.length) return [];
+    const allowed = new Set(assignedZoneIds);
+    return allDrivers.filter((d) => d.zoneId && allowed.has(d.zoneId));
+  }, [allDrivers, assignedZoneIds]);
+
   const filteredDrivers = useMemo(() => {
-    let list = allDrivers;
+    let list = scopedDrivers;
     if (statusFilter === STATUS_FILTER.AVAILABLE) {
       list = list.filter((d) => !d.isOnTrip);
     } else if (statusFilter === STATUS_FILTER.ON_TRIP) {
@@ -132,13 +145,13 @@ const LiveDriverMap = () => {
     }
     list = list.filter((d) => matchesSearch(d, search));
     return list;
-  }, [allDrivers, statusFilter, zoneFilter, search]);
+  }, [scopedDrivers, statusFilter, zoneFilter, search]);
 
   const selectedDriver = useMemo(
     () => filteredDrivers.find((d) => d.driverId === selectedId)
-      || allDrivers.find((d) => d.driverId === selectedId)
+      || scopedDrivers.find((d) => d.driverId === selectedId)
       || null,
-    [filteredDrivers, allDrivers, selectedId],
+    [filteredDrivers, scopedDrivers, selectedId],
   );
 
   useEffect(() => {
@@ -218,8 +231,8 @@ const LiveDriverMap = () => {
     }
   };
 
-  const onlineCount = allDrivers.length;
-  const onTripCount = allDrivers.filter((d) => d.isOnTrip).length;
+  const onlineCount = scopedDrivers.length;
+  const onTripCount = scopedDrivers.filter((d) => d.isOnTrip).length;
   const visibleCount = filteredDrivers.length;
 
   return (

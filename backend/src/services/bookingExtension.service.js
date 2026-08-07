@@ -54,6 +54,41 @@ async function toCustomerBooking(booking) {
   return typeof booking.toObject === 'function' ? booking.toObject() : booking;
 }
 
+/** Same select list as booking.service CUSTOMER_DRIVER_FIELDS. */
+const CUSTOMER_DRIVER_FIELDS = 'name phone_no email profilePicture createdAt';
+
+/**
+ * Same car populate recipe as bookingTrip.loadDriverBooking /
+ * booking.service CAR_DRIVER_POPULATE — kept local to avoid a circular
+ * import with booking.service.
+ */
+const CAR_DRIVER_POPULATE = {
+  path: 'carId',
+  select: 'vehicleNumber transmission image carTypeId brandId modelId fuelTypeId',
+  populate: [
+    { path: 'carTypeId', select: 'name' },
+    { path: 'brandId', select: 'name' },
+    { path: 'modelId', select: 'name' },
+    { path: 'fuelTypeId', select: 'name' },
+  ],
+};
+
+/**
+ * Populate customer + car before handing the booking back to the driver
+ * app. The active-trip store does a full `set({ booking })` on every
+ * transition response; without these populates, dismissing an extension
+ * replaces the hydrated trip with bare ObjectIds and the page blanks
+ * until the next GET /driver/bookings/:id.
+ */
+async function toDriverBooking(booking) {
+  if (!booking) return null;
+  await booking.populate([
+    { path: 'userId', select: CUSTOMER_DRIVER_FIELDS },
+    CAR_DRIVER_POPULATE,
+  ]);
+  return typeof booking.toObject === 'function' ? booking.toObject() : booking;
+}
+
 /**
  * Push the outstation return window forward by `additionalDays` once an
  * extension is paid. Updates expectedReturnAt / endDate / days / nights
@@ -1503,7 +1538,7 @@ export async function dismissExtensionByDriverService(driverId, bookingId, body 
     // Already gone — return idempotently so a double-tap on the
     // Dismiss button doesn't surface an error.
     return {
-      booking: booking.toObject(),
+      booking: await toDriverBooking(booking),
       extension: serialiseExtensionForCustomer(ext),
       alreadyResolved: true,
     };
@@ -1548,7 +1583,7 @@ export async function dismissExtensionByDriverService(driverId, bookingId, body 
   });
 
   return {
-    booking: booking.toObject(),
+    booking: await toDriverBooking(booking),
     extension: serialiseExtensionForCustomer(ext),
   };
 }

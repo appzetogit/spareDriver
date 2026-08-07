@@ -28,7 +28,9 @@ import {
   enqueueReminderJobsForBooking,
   removeScheduledBookingJobs,
 } from '../queues/scheduledBooking.queue.js';
-import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
+import {
+  isSuperAdmin,
+} from '../constants/staffPermissions.js';
 import {
   INBOX_BOOKING_TYPES,
   isInboxBookingType,
@@ -72,7 +74,7 @@ export const SCHEDULED_MANUAL_ASSIGN_STATUSES = Object.freeze([
 
 function zoneScopeForStaff(staff) {
   if (!staff) return [];
-  if (hasOperationalStaffAccess(staff)) return null;
+  if (isSuperAdmin(staff)) return null;
   const ids = (staff.assignedZones || [])
     .map((id) => {
       try {
@@ -87,7 +89,7 @@ function zoneScopeForStaff(staff) {
 
 function assertStaffCanAccessBookingZones(staff, booking) {
   const scope = zoneScopeForStaff(staff);
-  if (scope === null) return; // admin / sub_admin
+  if (scope === null) return; // super admin
   if (!scope.length) {
     throw new ApiError(403, 'No zones assigned — cannot assign drivers');
   }

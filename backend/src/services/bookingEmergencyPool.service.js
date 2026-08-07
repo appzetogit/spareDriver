@@ -23,7 +23,9 @@ import {
   cancelScheduledBookingJobs,
   enqueueRemindersAfterAssignment,
 } from './bookingScheduled.service.js';
-import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
+import {
+  isSuperAdmin,
+} from '../constants/staffPermissions.js';
 import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
 import {
   applyBuffer,
@@ -182,12 +184,12 @@ export async function escalateToEmergencyPool(bookingId) {
 
 /**
  * Resolve which zones a staff account is allowed to see in the emergency
- * pool. `null` means "all zones" (admin / sub_admin); an array of
- * ObjectIds means "filter to these zones".
+ * pool. `null` means "all zones" (super admin); an array of ObjectIds
+ * means "filter to these zones" (sub_admin + team_member).
  */
 function zoneScopeForStaff(staff) {
   if (!staff) return [];
-  if (hasOperationalStaffAccess(staff)) return null;
+  if (isSuperAdmin(staff)) return null;
   const ids = (staff.assignedZones || [])
     .map((id) => {
       try {
@@ -204,9 +206,9 @@ function zoneScopeForStaff(staff) {
  * List bookings sitting in the emergency pool, scoped by the caller's
  * role:
  *
- *   admin / sub_admin → every row
- *   team_member       → rows whose `zoneIds` overlap `assignedZones`
- *                       (returns [] when the staff has no zones)
+ *   super admin              → every row
+ *   sub_admin / team_member  → rows whose `zoneIds` overlap `assignedZones`
+ *                              (returns [] when the staff has no zones)
  *
  * Ordered by `hourly.scheduledStartAt` ASC so the most urgent pickups
  * surface first. Returns the standard `{ bookings, total, page, pages }`

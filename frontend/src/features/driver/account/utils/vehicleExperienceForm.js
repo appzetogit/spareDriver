@@ -28,6 +28,18 @@ export const vehiclesFromProfile = (profile) => {
   return [{ ...emptyVehicleFormValues }];
 };
 
+/** Stable fingerprint for dirty-checking (ignores UI-only `_labels`). */
+export const vehiclesSignature = (vehicles = []) =>
+  JSON.stringify(
+    (vehicles || []).map((v) => ({
+      carTypeId: String(v?.carTypeId || ''),
+      brandId: String(v?.brandId || ''),
+      modelId: String(v?.modelId || ''),
+      fuelTypeId: String(v?.fuelTypeId || ''),
+      transmission: String(v?.transmission || 'manual'),
+    })),
+  );
+
 export const validateVehicles = (vehicles) => {
   const fieldErrors = {};
   let valid = true;

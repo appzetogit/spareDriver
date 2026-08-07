@@ -15,3 +15,8 @@ export async function updateSupportTicket(id, payload) {
   const res = await api.put(`/admin/support/${id}`, payload);
   return res.data?.data?.ticket ?? null;
 }
+
+export async function assignSupportTicket(id, { assigneeId }) {
+  const res = await api.patch(`/admin/support/${id}/assign`, { assigneeId });
+  return res.data?.data?.ticket ?? null;
+}

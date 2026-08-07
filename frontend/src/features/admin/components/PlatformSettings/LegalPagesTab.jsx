@@ -16,7 +16,7 @@ const emptyForms = () =>
     ]),
   );
 
-const LegalPagesTab = () => {
+const LegalPagesTab = ({ readOnly = false }) => {
   const [forms, setForms] = useState(emptyForms);
   const [baseline, setBaseline] = useState(emptyForms);
   const [activeType, setActiveType] = useState(SITE_LEGAL_PAGES[0].type);
@@ -132,15 +132,17 @@ const LegalPagesTab = () => {
               Open public page
             </Link>
           </div>
-          <Button
-            onClick={() => savePage(activeType)}
-            loading={isSaving}
-            disabled={!isDirty || isSaving || loading}
-            className="flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            Save {activeMeta?.label}
-          </Button>
+          {!readOnly && (
+            <Button
+              onClick={() => savePage(activeType)}
+              loading={isSaving}
+              disabled={!isDirty || isSaving || loading}
+              className="flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              Save {activeMeta?.label}
+            </Button>
+          )}
         </div>
 
         <Input
@@ -153,6 +155,7 @@ const LegalPagesTab = () => {
             }))
           }
           required
+          disabled={readOnly}
         />
 
         <div className="space-y-1.5">
@@ -166,7 +169,8 @@ const LegalPagesTab = () => {
               }))
             }
             rows={18}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-yellow-400/60"
+            disabled={readOnly}
+            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 disabled:bg-slate-50 disabled:text-slate-500"
             placeholder="Paste or write the full policy content here…"
             required
           />

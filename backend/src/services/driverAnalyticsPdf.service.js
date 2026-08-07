@@ -5,6 +5,7 @@ import {
   listAdminDriverWithdrawalsService,
   listAdminDriverEarningsService,
 } from './adminDriverAnalytics.service.js';
+import { stampBrandLogoOnAllPages } from '../utils/pdfBrand.js';
 
 const PALETTE = {
   text: '#0F172A',
@@ -671,6 +672,7 @@ export async function buildDriverAnalyticsPdf(driverId, query = {}, { res } = {}
     { emptyText: 'No withdrawal requests in the selected period.' },
   );
 
+  stampBrandLogoOnAllPages(doc);
   addFooters(doc);
   doc.end();
   return doc;

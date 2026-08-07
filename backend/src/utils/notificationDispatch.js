@@ -44,6 +44,22 @@ export function notifyUserDriverSearching(userId, booking) {
   );
 }
 
+export function notifyUserNoDriversFound(userId, booking) {
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'No driver found',
+      body: 'We could not find an available driver nearby. Search again or cancel for a refund.',
+      type: USER_NOTIFICATION.NO_DRIVERS_FOUND,
+      data: {
+        ...bookingRef(booking),
+        status: 'no_drivers_found',
+        path: '/user/book/no-drivers',
+      },
+    },
+  );
+}
+
 export function notifyUserDriverAssigned(userId, booking, driverName = '') {
   return sendPushNotification(
     { userId },
@@ -90,6 +106,25 @@ export function notifyUserTripStarted(userId, booking) {
       body: 'Your trip is now in progress.',
       type: USER_NOTIFICATION.TRIP_STARTED,
       data: bookingRef(booking),
+    },
+  );
+}
+
+export function notifyUserRideEndingSoon(userId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'Ride ending soon',
+      body: 'Your ride is about to end. Do you want to extend?',
+      type: USER_NOTIFICATION.RIDE_ENDING_SOON,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'started',
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}?extend=1`
+          : '/user/book/assigned?extend=1',
+      },
     },
   );
 }
@@ -577,27 +612,32 @@ export function notifyAdminNewDriverRegistration(driver) {
     title: 'New driver registration',
     body: `${driver.name || 'A driver'} submitted an application.`,
     type: ADMIN_NOTIFICATION.NEW_DRIVER_REGISTRATION,
-    data: { driverId: String(driver._id) },
+    data: { driverId: String(driver._id), path: '/admin/drivers' },
   });
 }
 
 export function notifyAdminSosTriggered(data) {
+  const zoneIds = (data.zoneIds || []).map((id) => String(id));
   return sendAdminNotification({
-    title: '🚨 Emergency SOS Alert',
+    title: 'Emergency SOS Alert',
     body: data.message || 'Passenger has requested emergency assistance.',
     severity: 'error',
     type: ADMIN_NOTIFICATION.SOS_TRIGGERED,
-    data,
+    data: { ...data, path: '/admin/sos' },
+    zoneIds,
   });
 }
 
 export function notifyOperationsSosTriggered(data) {
+  // Socket-only companion to notifyAdminSosTriggered — avoids duplicate FCM/inbox.
   return sendAdminNotification({
-    title: '🚨 Emergency SOS Alert',
+    title: 'Emergency SOS Alert',
     body: data.message || 'Passenger has requested emergency assistance.',
     severity: 'error',
     type: ADMIN_NOTIFICATION.SOS_TRIGGERED,
-    data: { ...data, audience: 'operations' },
+    data: { ...data, audience: 'operations', path: '/admin/sos' },
+    persist: false,
+    sendFcm: false,
   });
 }
 
@@ -632,7 +672,23 @@ export function notifyAdminEmergencyPoolEntered(booking) {
     type: ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
     data: {
       ...bookingRef(booking),
-      path: '/admin/emergency-pool',
+      path: '/admin/bookings/emergency-pool',
+    },
+    zoneIds,
+  });
+}
+
+export function notifyAdminNoDriversFound(booking) {
+  const zoneIds = (booking.zoneIds || []).map((id) => String(id));
+  return sendAdminNotification({
+    title: 'No driver found',
+    body: `Instant booking ${booking.bookingNumber || ''} exhausted driver search.`,
+    severity: 'warn',
+    type: ADMIN_NOTIFICATION.NO_DRIVERS_FOUND,
+    data: {
+      ...bookingRef(booking),
+      status: 'no_drivers_found',
+      path: '/admin/bookings',
     },
     zoneIds,
   });
@@ -665,11 +721,18 @@ function supportTicketRef(ticket) {
 }
 
 export function notifyAdminSupportTicketReceived(ticket) {
+  const subject = String(ticket.subject || '').trim();
   return sendAdminNotification({
     title: 'New support ticket',
-    body: 'New support ticket received.',
+    body: subject
+      ? `${ticket.ticketNumber || 'Ticket'}: ${subject}`
+      : 'New support ticket received.',
+    severity: 'warn',
     type: ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
-    data: supportTicketRef(ticket),
+    data: {
+      ...supportTicketRef(ticket),
+      path: '/admin/support',
+    },
   });
 }
 

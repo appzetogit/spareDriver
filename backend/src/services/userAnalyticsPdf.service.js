@@ -4,6 +4,7 @@ import {
   listAdminUserTripsService,
   listAdminUserSubscriptionsService,
 } from './adminUserActivity.service.js';
+import { stampBrandLogoOnAllPages } from '../utils/pdfBrand.js';
 
 const PALETTE = {
   text: '#0F172A',
@@ -701,6 +702,7 @@ export async function buildUserAnalyticsPdf(userId, query = {}, { res } = {}) {
     { emptyText: 'No wallet transactions in the selected period.' },
   );
 
+  stampBrandLogoOnAllPages(doc);
   addFooters(doc);
   doc.end();
   return doc;

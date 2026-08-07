@@ -14,8 +14,12 @@ import {
   formToZonePayload,
   validateZoneForm,
 } from '../utils/zoneFormUtils';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageZones } from '../../../constants/staffRoles';
 
 const ManageZones = () => {
+  const { admin } = useAdminAuthStore();
+  const canEdit = canManageZones(admin?.role);
   const cacheKey = buildCacheKey('admin-zones', {});
   const { data: zones = [], loading, refetch } = useCachedQuery(useAdminZonesStore, cacheKey, {});
   const [showModal, setShowModal] = useState(false);
@@ -96,11 +100,19 @@ const ManageZones = () => {
             circle or a pentagon directly on the map.
           </p>
         </div>
-        <Button onClick={openCreate} className="shrink-0">
-          <Plus className="w-4 h-4 mr-2" />
-          Add zone
-        </Button>
+        {canEdit && (
+          <Button onClick={openCreate} className="shrink-0">
+            <Plus className="w-4 h-4 mr-2" />
+            Add zone
+          </Button>
+        )}
       </div>
+
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          View only — only the super admin can edit service zones.
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16">
@@ -111,7 +123,7 @@ const ManageZones = () => {
           <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-700 font-medium">No zones yet</p>
           <p className="text-sm text-slate-500 mt-1 mb-4">Create your first service zone to enable dispatch.</p>
-          <Button onClick={openCreate}>Create zone</Button>
+          {canEdit && <Button onClick={openCreate}>Create zone</Button>}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -170,38 +182,42 @@ const ManageZones = () => {
                 <p className="text-xs text-slate-500 mt-3 line-clamp-2">{zone.description}</p>
               )}
 
-              <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
-                <Button variant="outline" size="sm" fullWidth onClick={() => openEdit(zone)}>
-                  <Edit2 className="w-3.5 h-3.5 mr-1" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  fullWidth
-                  onClick={() => handleDelete(zone)}
-                  loading={deletingId === zone._id}
-                  className="text-rose-600 border-rose-200 hover:bg-rose-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />
-                  Delete
-                </Button>
-              </div>
+              {canEdit && (
+                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+                  <Button variant="outline" size="sm" fullWidth onClick={() => openEdit(zone)}>
+                    <Edit2 className="w-3.5 h-3.5 mr-1" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    fullWidth
+                    onClick={() => handleDelete(zone)}
+                    loading={deletingId === zone._id}
+                    className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    Delete
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <ZoneFormModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        editing={editing}
-        form={form}
-        onChange={handleChange}
-        onGeometryChange={handleGeometryChange}
-        onSubmit={handleSubmit}
-        submitting={submitting}
-      />
+      {canEdit && (
+        <ZoneFormModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          editing={editing}
+          form={form}
+          onChange={handleChange}
+          onGeometryChange={handleGeometryChange}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+        />
+      )}
     </div>
   );
 };

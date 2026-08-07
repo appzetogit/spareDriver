@@ -1,4 +1,4 @@
-import Booking from '../models/booking.model.js';
+import Booking, { BOOKING_PAYMENT_METHOD } from '../models/booking.model.js';
 import { Driver } from '../models/driverModels/driver.model.js';
 import ServicePricing from '../models/servicePricing.model.js';
 import { ApiError } from '../utils/apiError.js';
@@ -50,6 +50,7 @@ import {
 import {
   issueBookingRefundService,
   REFUND_INITIATED_BY,
+  REFUND_PAYOUT_METHOD,
 } from './refund.service.js';
 import { dispatchNextDriverService } from './bookingDispatch.service.js';
 import { driverEarningFromFareSnapshot } from './booking.service.js';
@@ -65,6 +66,8 @@ import {
   settleDriverEarning,
 } from './bookingExtension.service.js';
 import { incrementCouponUsageService } from './coupon.service.js';
+import { creditWalletService } from './wallet.service.js';
+import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 
 /**
  * Generate a numeric OTP of the configured length. We zero-pad so codes that
@@ -993,17 +996,11 @@ async function spendDriverCancelChance(driverId, dateKey) {
 async function redispatchAfterDriverCancel(booking, driverId, policy, chance) {
   const { driverPenalty } = computeDriverCancellation(booking, policy, chance);
 
-  // Stamp this driver's cancellation onto the dispatch history so the
-  // admin/dispatch audit shows why we're searching again. We reuse the
-  // existing offers schema (response = CANCELLED on the driver row).
+  // Fresh dispatch wave: clear prior offers so alreadyOfferedDriverIds
+  // does not exclude every driver from the first search (including the
+  // cancelling driver and anyone who timed out / was withdrawn).
   if (booking.dispatch) {
-    const offer = booking.dispatch.offers?.find(
-      (o) => String(o.driverId) === String(driverId),
-    );
-    if (offer) {
-      offer.response = DISPATCH_RESPONSE.CANCELLED;
-      offer.respondedAt = new Date();
-    }
+    booking.dispatch.offers = [];
     booking.dispatch.pendingOfferIds = [];
     booking.dispatch.currentExpiresAt = null;
     // Reset radius / attempts so the new search starts fresh from the
@@ -1126,12 +1123,13 @@ async function terminateBookingByDriver(
     ),
   );
 
-  // Record the refund request for whatever the user had paid. Status
-  // stays `pending` until the admin processes it manually on Razorpay.
+  // Record the refund. Wallet-paid bookings credit instantly and land
+  // on the admin ledger as processed; Razorpay stays pending for admin.
   let refundRecord = null;
   const wasPaid = booking.paymentStatus === BOOKING_PAYMENT_STATUS.PAID;
+  const paidViaWallet = booking.paymentMethod === BOOKING_PAYMENT_METHOD.WALLET;
   if (wasPaid && refundAmount > 0) {
-    refundRecord = await issueBookingRefundService(booking, {
+    const refundMeta = {
       initiatedBy: REFUND_INITIATED_BY.DRIVER,
       reason: booking.cancellation.reason,
       breakdown: {
@@ -1139,7 +1137,38 @@ async function terminateBookingByDriver(
         cancellationFeeRupees: userBreakdown.feeCharged,
         grossPaidRupees: Number(booking.payment?.amountPaidRupees) || 0,
       },
-    });
+    };
+    if (paidViaWallet) {
+      try {
+        const walletTx = await creditWalletService({
+          userId: booking.userId,
+          amount: refundAmount,
+          source: WALLET_TXN_SOURCE.BOOKING_REFUND,
+          description: `Refund \u2014 booking ${booking.bookingNumber} cancelled by driver`,
+          refType: 'Booking',
+          refId: String(booking._id),
+        });
+        booking.paymentStatus = BOOKING_PAYMENT_STATUS.REFUNDED;
+        await Booking.updateOne(
+          { _id: booking._id },
+          { $set: { paymentStatus: BOOKING_PAYMENT_STATUS.REFUNDED } },
+        );
+        refundRecord = await issueBookingRefundService(booking, {
+          ...refundMeta,
+          autoProcessed: true,
+          payoutMethod: REFUND_PAYOUT_METHOD.WALLET,
+          walletTxId: walletTx?._id,
+        });
+      } catch (refundErr) {
+        console.error(
+          '[bookingTrip] failed to credit wallet refund for booking',
+          String(booking._id),
+          refundErr?.message,
+        );
+      }
+    } else {
+      refundRecord = await issueBookingRefundService(booking, refundMeta);
+    }
   }
 
   const payload = {
@@ -1466,6 +1495,17 @@ export async function cancelBookingByDriverService(driverId, bookingId, reason =
     throw new ApiError(
       400,
       'Trip is already in progress — please contact support to cancel',
+    );
+  }
+
+  // Instant rides: once the trip has started the driver cannot cancel —
+  // they must complete the ride (or contact support).
+  const isInstant =
+    !booking.bookingType || booking.bookingType === BOOKING_TYPE.INSTANT;
+  if (isInstant && booking.status === BOOKING_STATUS.STARTED) {
+    throw new ApiError(
+      400,
+      'Trip is in progress — you can no longer cancel this ride',
     );
   }
 

@@ -44,7 +44,8 @@ backend/src/
     driverModels/         # driver.model.js + *.schema.js subdocs
   routes/                 # *.routes.js per audience
   services/               # ALL business logic lives here (*.service.js)
-  utils/                  # apiError.js, razorpay.js, asyncHandler, etc.
+  utils/                  # apiError.js, razorpay.js, asyncHandler, pdfBrand.js, etc.
+  assets/                 # brand-logo.png for PDFKit exports (invoice + admin PDFs)
   validations/            # zod schemas per route group
 
 frontend/src/
@@ -62,16 +63,18 @@ frontend/src/
     # Auth stores are in-memory; useAuthSessionStore bootstraps them from JWT (cookie/localStorage)
     user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore, useAdsStore, useNearbyDriversStore
     driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverIncomingScheduledStore (scheduled + outstation + subscription inbox), useDriverSubscriptionsStore (assigned dedicated-driver plans), useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
-    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool,TeamMemberAnalytics}Store
+    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool,SidebarCounts,TeamMemberAnalytics}Store
   hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...
   constants/              # mapTheme.js, etc.
   config/                 # axios, firebase, env
   lib/, utils/            # helpers
 ```
 
-Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
+Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`) — **super admin only** (sidebar + routes). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.
 
-Admin device FCM: staff are `User` docs (same `fcmToken*` fields). Register via `POST /admin/fcm-token` (`AdminNotificationBridge` + login `withFcmAuthPayload`). Emergency-pool entry fans out FCM via `sendAdminNotification` + `ADMIN_FCM_NOTIFICATION_TYPES` (zone-scoped for team_members).
+Admin device FCM: staff are `User` docs (same `fcmToken*` fields). Register via `POST /admin/fcm-token` (`AdminNotificationBridge` + login `withFcmAuthPayload`). Emergency-pool / SOS / support-ticket / no-drivers fan out via `sendAdminNotification` + `ADMIN_FCM_NOTIFICATION_TYPES`. Visibility: platform-wide (no `zoneIds`) → super admin only; zone-scoped → admin + sub_admin/team_members whose `assignedZones` overlap. Inbox list/mark-read use the same filter (`buildAdminNotificationFilter`). Sidebar badges: `GET /admin/sidebar-counts` → `useAdminSidebarCountsStore` (emergency pool, pending drivers, kit orders, active SOS, open support). Team-member SOS/support badge counts are assignee-scoped (`assignedTo`).
+
+Staff roles / zones: Super admin (`admin`) is platform-wide. `sub_admin` and `team_member` are zone-scoped via `User.assignedZones` (assign in Manage Team). Sub admins can view (not edit) platform settings, kits, zones, pricing, subscription plans, and coupons — mutations are `SUPER_ADMIN` only. Bookings / emergency pool / outstation / live map / admin notifications are filtered to assigned zones for sub_admin + team_member (`getStaffZoneScopeIds` in `staffPermissions.js`). SOS alerts and support tickets are **not** zone-filtered; ops (`admin`/`sub_admin`) assign via `PATCH /admin/sos|:support/:id/assign` (`assignedTo`/`assignedBy`/`assignedAt`); team members only list/act on items assigned to them (`staffAssignment.util.js`).
 
 Banks (driver payout dropdown): model `Bank` (`bank.model.js`); public `GET /common/banks` (active only); admin CRUD `/admin/settings/banks` + Platform Settings → Banks tab (`BanksTab.jsx`). Seeded via `scripts/data/banks.data.js` in `npm run seed`. Driver onboarding `BankDetailsPage` uses searchable Select; step-3 validates name against active banks.
 

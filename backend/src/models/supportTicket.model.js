@@ -28,11 +28,24 @@ const supportTicketSchema = new mongoose.Schema(
       index: true,
     },
     adminReply: { type: String, default: '', trim: true, maxlength: 5000 },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    assignedAt: { type: Date, default: null },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   { timestamps: true },
 );
 
 supportTicketSchema.index({ createdAt: -1 });
+supportTicketSchema.index({ assignedTo: 1, status: 1 });
 
 const SupportTicket =
   mongoose.models.SupportTicket || mongoose.model('SupportTicket', supportTicketSchema);

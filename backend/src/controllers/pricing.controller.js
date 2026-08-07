@@ -221,6 +221,16 @@ export const adminUpdateUserSubscriptionStatus = asyncHandler(async (req, res) =
   return res.status(200).json(new ApiResponse(200, result, 'Subscription status updated'));
 });
 
+export const adminRescheduleUserSubscription = asyncHandler(async (req, res) => {
+  const subscription = await pricingService.adminRescheduleUserSubscriptionService(
+    req.params.id,
+    req.body || {},
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, subscription, 'Subscription period updated'));
+});
+
 /**
  * Fare estimate before the user confirms a booking.
  * Body: { serviceType, slabId, bookedHours, scheduledAt, foodProvided }

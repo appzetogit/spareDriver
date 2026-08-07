@@ -2,7 +2,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { setAuthCookies } from '../utils/cookie.util.js';
 import * as adminService from '../services/admin.service.js';
-import { getAdminDashboardService } from '../services/adminDashboard.service.js';
+import { getAdminDashboardService, getAdminSidebarCountsService } from '../services/adminDashboard.service.js';
 import {
   listAdminUserTripsService,
   listAdminUserSubscriptionsService,
@@ -44,6 +44,11 @@ export const getStaffMe = asyncHandler(async (req, res) => {
 export const getAdminDashboard = asyncHandler(async (_req, res) => {
   const result = await getAdminDashboardService();
   return res.status(200).json(new ApiResponse(200, result, 'Dashboard fetched'));
+});
+
+export const getAdminSidebarCounts = asyncHandler(async (req, res) => {
+  const result = await getAdminSidebarCountsService({ staff: req.staff });
+  return res.status(200).json(new ApiResponse(200, result, 'Sidebar counts fetched'));
 });
 
 export const getCustomers = asyncHandler(async (req, res) => {

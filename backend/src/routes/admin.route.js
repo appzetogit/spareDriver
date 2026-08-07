@@ -3,6 +3,7 @@ import {
   loginAdmin,
   getStaffMe,
   getAdminDashboard,
+  getAdminSidebarCounts,
   getCustomers,
   getAdminUserTrips,
   getAdminUserSubscriptions,
@@ -101,6 +102,7 @@ import {
   adminGetSubscriptionDriverPayouts,
   adminPaySubscriptionDrivers,
   adminUpdateUserSubscriptionStatus,
+  adminRescheduleUserSubscription,
 } from '../controllers/pricing.controller.js';
 import {
   adminListCoupons,
@@ -152,11 +154,13 @@ import {
 import {
   listAdminSos,
   getAdminSosDetail,
+  assignAdminSos,
 } from '../controllers/sos.controller.js';
 import {
   adminListSupportTickets,
   adminGetSupportTicket,
   adminUpdateSupportTicket,
+  adminAssignSupportTicket,
 } from '../controllers/support.controller.js';
 import {
   getAdminSupportConfig,
@@ -232,6 +236,7 @@ router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
 router.post('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), registerStaffFcmToken);
 router.delete('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), unregisterStaffFcmToken);
 router.get('/dashboard', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDashboard);
+router.get('/sidebar-counts', protectStaff, restrictTo(...ALL_STAFF), getAdminSidebarCounts);
 
 /* ---- Reports & Analytics (super-admin only) --------------------------- */
 router.get('/reports/overview', protectStaff, restrictTo(...SUPER_ADMIN), getAdminReportsOverview);
@@ -456,25 +461,25 @@ router.patch('/drivers/:id/unsuspend', protectStaff, restrictTo(...ALL_STAFF), u
 router.get(
   '/notifications/bulk-push/stats',
   protectStaff,
-  restrictTo(...OPERATIONS),
+  restrictTo(...SUPER_ADMIN),
   getBulkPushAudienceStats,
 );
 router.get(
   '/notifications/bulk-push/recipients',
   protectStaff,
-  restrictTo(...OPERATIONS),
+  restrictTo(...SUPER_ADMIN),
   listBulkPushRecipients,
 );
 router.get(
   '/notifications/bulk-push/history',
   protectStaff,
-  restrictTo(...OPERATIONS),
+  restrictTo(...SUPER_ADMIN),
   listBulkPushHistory,
 );
 router.post(
   '/notifications/bulk-push',
   protectStaff,
-  restrictTo(...OPERATIONS),
+  restrictTo(...SUPER_ADMIN),
   sendBulkPromotionalPush,
 );
 
@@ -502,47 +507,47 @@ router.put('/team/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminMem
 router.delete('/team/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteAdminMember);
 
 router.get('/settings/car-types', protectStaff, restrictTo(...OPERATIONS), getAdminCarTypes);
-router.post('/settings/car-types', protectStaff, restrictTo(...OPERATIONS), createCarType);
-router.put('/settings/car-types/:id', protectStaff, restrictTo(...OPERATIONS), updateCarType);
-router.delete('/settings/car-types/:id', protectStaff, restrictTo(...OPERATIONS), deleteCarType);
+router.post('/settings/car-types', protectStaff, restrictTo(...SUPER_ADMIN), createCarType);
+router.put('/settings/car-types/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateCarType);
+router.delete('/settings/car-types/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteCarType);
 
 router.get('/settings/fuel-types', protectStaff, restrictTo(...OPERATIONS), getAdminFuelTypes);
-router.post('/settings/fuel-types', protectStaff, restrictTo(...OPERATIONS), createFuelType);
-router.put('/settings/fuel-types/:id', protectStaff, restrictTo(...OPERATIONS), updateFuelType);
-router.delete('/settings/fuel-types/:id', protectStaff, restrictTo(...OPERATIONS), deleteFuelType);
+router.post('/settings/fuel-types', protectStaff, restrictTo(...SUPER_ADMIN), createFuelType);
+router.put('/settings/fuel-types/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateFuelType);
+router.delete('/settings/fuel-types/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteFuelType);
 
 router.get('/settings/car-brands', protectStaff, restrictTo(...OPERATIONS), getAdminCarBrands);
-router.post('/settings/car-brands', protectStaff, restrictTo(...OPERATIONS), createCarBrand);
-router.put('/settings/car-brands/:id', protectStaff, restrictTo(...OPERATIONS), updateCarBrand);
-router.delete('/settings/car-brands/:id', protectStaff, restrictTo(...OPERATIONS), deleteCarBrand);
+router.post('/settings/car-brands', protectStaff, restrictTo(...SUPER_ADMIN), createCarBrand);
+router.put('/settings/car-brands/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateCarBrand);
+router.delete('/settings/car-brands/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteCarBrand);
 
 router.get('/settings/car-models', protectStaff, restrictTo(...OPERATIONS), getAdminCarModels);
-router.post('/settings/car-models', protectStaff, restrictTo(...OPERATIONS), createCarModel);
-router.put('/settings/car-models/:id', protectStaff, restrictTo(...OPERATIONS), updateCarModel);
-router.delete('/settings/car-models/:id', protectStaff, restrictTo(...OPERATIONS), deleteCarModel);
+router.post('/settings/car-models', protectStaff, restrictTo(...SUPER_ADMIN), createCarModel);
+router.put('/settings/car-models/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateCarModel);
+router.delete('/settings/car-models/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteCarModel);
 
 router.get('/settings/conditions', protectStaff, restrictTo(...OPERATIONS), getAdminConditions);
-router.post('/settings/conditions', protectStaff, restrictTo(...OPERATIONS), createCondition);
-router.put('/settings/conditions/:id', protectStaff, restrictTo(...OPERATIONS), updateCondition);
-router.delete('/settings/conditions/:id', protectStaff, restrictTo(...OPERATIONS), deleteCondition);
+router.post('/settings/conditions', protectStaff, restrictTo(...SUPER_ADMIN), createCondition);
+router.put('/settings/conditions/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateCondition);
+router.delete('/settings/conditions/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteCondition);
 
 router.get('/settings/banks', protectStaff, restrictTo(...OPERATIONS), getAdminBanks);
-router.post('/settings/banks', protectStaff, restrictTo(...OPERATIONS), createBank);
-router.put('/settings/banks/:id', protectStaff, restrictTo(...OPERATIONS), updateBank);
-router.delete('/settings/banks/:id', protectStaff, restrictTo(...OPERATIONS), deleteBank);
+router.post('/settings/banks', protectStaff, restrictTo(...SUPER_ADMIN), createBank);
+router.put('/settings/banks/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateBank);
+router.delete('/settings/banks/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteBank);
 
 router.get('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS), getAdminTrainingVideos);
-router.post('/settings/training-videos', protectStaff, restrictTo(...OPERATIONS), createTrainingVideo);
-router.put('/settings/training-videos/:id', protectStaff, restrictTo(...OPERATIONS), updateTrainingVideo);
-router.delete('/settings/training-videos/:id', protectStaff, restrictTo(...OPERATIONS), deleteTrainingVideo);
+router.post('/settings/training-videos', protectStaff, restrictTo(...SUPER_ADMIN), createTrainingVideo);
+router.put('/settings/training-videos/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateTrainingVideo);
+router.delete('/settings/training-videos/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteTrainingVideo);
 
 router.get('/settings/legal-documents', protectStaff, restrictTo(...OPERATIONS), adminListLegalDocuments);
-router.post('/settings/subscription-terms', protectStaff, restrictTo(...OPERATIONS), adminUpsertSubscriptionTerms);
-router.post('/settings/legal-documents/:type', protectStaff, restrictTo(...OPERATIONS), adminUpsertSiteLegalDocument);
-router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateLegalDocument);
+router.post('/settings/subscription-terms', protectStaff, restrictTo(...SUPER_ADMIN), adminUpsertSubscriptionTerms);
+router.post('/settings/legal-documents/:type', protectStaff, restrictTo(...SUPER_ADMIN), adminUpsertSiteLegalDocument);
+router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminUpdateLegalDocument);
 
 router.get('/settings/support', protectStaff, restrictTo(...OPERATIONS), getAdminSupportConfig);
-router.put('/settings/support', protectStaff, restrictTo(...OPERATIONS), updateAdminSupportConfig);
+router.put('/settings/support', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminSupportConfig);
 router.get(
   '/settings/subscription-dispatch',
   protectStaff,
@@ -552,37 +557,37 @@ router.get(
 router.put(
   '/settings/subscription-dispatch',
   protectStaff,
-  restrictTo(...OPERATIONS),
+  restrictTo(...SUPER_ADMIN),
   updateAdminSubscriptionDispatch,
 );
 
-router.post('/kits', protectStaff, restrictTo(...OPERATIONS), createKit);
+router.post('/kits', protectStaff, restrictTo(...SUPER_ADMIN), createKit);
 router.get('/kits', protectStaff, restrictTo(...ALL_STAFF), getKits);
 router.get('/kits/:id', protectStaff, restrictTo(...ALL_STAFF), getKitById);
-router.put('/kits/:id', protectStaff, restrictTo(...OPERATIONS), updateKit);
-router.delete('/kits/:id', protectStaff, restrictTo(...OPERATIONS), deleteKit);
+router.put('/kits/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateKit);
+router.delete('/kits/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteKit);
 
 router.get('/zones', protectStaff, restrictTo(...OPERATIONS), listZones);
-router.post('/zones', protectStaff, restrictTo(...OPERATIONS), createZone);
+router.post('/zones', protectStaff, restrictTo(...SUPER_ADMIN), createZone);
 router.get('/zones/:id', protectStaff, restrictTo(...OPERATIONS), getZoneById);
-router.put('/zones/:id', protectStaff, restrictTo(...OPERATIONS), updateZone);
-router.delete('/zones/:id', protectStaff, restrictTo(...OPERATIONS), deleteZone);
+router.put('/zones/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateZone);
+router.delete('/zones/:id', protectStaff, restrictTo(...SUPER_ADMIN), deleteZone);
 
 router.get('/pricing/services', protectStaff, restrictTo(...OPERATIONS), adminListServicePricings);
-router.post('/pricing/services', protectStaff, restrictTo(...OPERATIONS), adminUpsertServicePricing);
-router.put('/pricing/services/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateServicePricing);
-router.delete('/pricing/services/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteServicePricing);
+router.post('/pricing/services', protectStaff, restrictTo(...SUPER_ADMIN), adminUpsertServicePricing);
+router.put('/pricing/services/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminUpdateServicePricing);
+router.delete('/pricing/services/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminDeleteServicePricing);
 
 router.get('/pricing/subscriptions', protectStaff, restrictTo(...OPERATIONS), adminListSubscriptionPlans);
-router.post('/pricing/subscriptions', protectStaff, restrictTo(...OPERATIONS), adminCreateSubscriptionPlan);
-router.put('/pricing/subscriptions/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateSubscriptionPlan);
-router.delete('/pricing/subscriptions/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteSubscriptionPlan);
+router.post('/pricing/subscriptions', protectStaff, restrictTo(...SUPER_ADMIN), adminCreateSubscriptionPlan);
+router.put('/pricing/subscriptions/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminUpdateSubscriptionPlan);
+router.delete('/pricing/subscriptions/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminDeleteSubscriptionPlan);
 
 router.get('/coupons', protectStaff, restrictTo(...OPERATIONS), adminListCoupons);
-router.post('/coupons', protectStaff, restrictTo(...OPERATIONS), adminCreateCoupon);
+router.post('/coupons', protectStaff, restrictTo(...SUPER_ADMIN), adminCreateCoupon);
 router.get('/coupons/:id/analytics', protectStaff, restrictTo(...OPERATIONS), adminCouponAnalytics);
-router.put('/coupons/:id', protectStaff, restrictTo(...OPERATIONS), adminUpdateCoupon);
-router.delete('/coupons/:id', protectStaff, restrictTo(...OPERATIONS), adminDeleteCoupon);
+router.put('/coupons/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminUpdateCoupon);
+router.delete('/coupons/:id', protectStaff, restrictTo(...SUPER_ADMIN), adminDeleteCoupon);
 
 router.get('/subscriptions/users', protectStaff, restrictTo(...ALL_STAFF), adminListUserSubscriptions);
 router.get(
@@ -682,6 +687,12 @@ router.patch(
   restrictTo(...OPERATIONS),
   adminUpdateUserSubscriptionStatus,
 );
+router.post(
+  '/subscriptions/users/:id/reschedule',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  adminRescheduleUserSubscription,
+);
 
 router.get('/notifications', protectStaff, restrictTo(...ALL_STAFF), getAdminNotifications);
 router.patch('/notifications/read-all', protectStaff, restrictTo(...ALL_STAFF), markAllAdminNotificationsRead);
@@ -701,9 +712,11 @@ router.get('/kit-revenue', protectStaff, restrictTo(...SUPER_ADMIN), listKitReve
 
 router.get('/sos', protectStaff, restrictTo(...ALL_STAFF), listAdminSos);
 router.get('/sos/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminSosDetail);
+router.patch('/sos/:id/assign', protectStaff, restrictTo(...OPERATIONS), assignAdminSos);
 
 router.get('/support', protectStaff, restrictTo(...ALL_STAFF), adminListSupportTickets);
 router.get('/support/:id', protectStaff, restrictTo(...ALL_STAFF), adminGetSupportTicket);
 router.put('/support/:id', protectStaff, restrictTo(...ALL_STAFF), adminUpdateSupportTicket);
+router.patch('/support/:id/assign', protectStaff, restrictTo(...OPERATIONS), adminAssignSupportTicket);
 
 export default router;

@@ -5,6 +5,9 @@ import api from '../../utils/api';
  * Realtime-ish emergency pool badge for admin sidebar.
  * Seeded once via GET /admin/emergency-pool/count; bumped on
  * ADMIN_ALERT (emergency_pool_entered) / BOOKING_UPDATED without polling.
+ *
+ * Prefer useAdminSidebarCountsStore for new work — it includes this
+ * count plus SOS / support / drivers / kit-order badges.
  */
 const useAdminEmergencyPoolStore = create((set, get) => ({
   count: 0,

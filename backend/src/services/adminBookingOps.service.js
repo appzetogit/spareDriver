@@ -108,6 +108,11 @@ export async function adminAssignBookingDriverService(
   const booking = await Booking.findOne({ _id: bookingId, isDeleted: false });
   if (!booking) throw new ApiError(404, 'Booking not found');
 
+  if (staff) {
+    const { assertStaffCanViewBooking } = await import('./booking.service.js');
+    assertStaffCanViewBooking(staff, booking);
+  }
+
   const previousDriverId = booking.driverId ? String(booking.driverId) : null;
   const isReassign = Boolean(previousDriverId);
 

@@ -24,7 +24,7 @@ import {
   PAYMENT_PURPOSE,
 } from '../constants/kitStatus.js';
 import { SCHEDULED_BOOKING } from '../constants/bookingStatus.js';
-import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
+import { isSuperAdmin } from '../constants/staffPermissions.js';
 import {
   applyBuffer,
   getDriverConflictMap,
@@ -478,6 +478,107 @@ export async function rescheduleUserSubscriptionService(userId, subscriptionId, 
     .populate('assignedDriverId', 'name phone profilePicture rating');
 
   return serializeSubscriptionForUser(populated);
+}
+
+/**
+ * Admin: move subscription start (and matching expiry). Allowed for
+ * active subscriptions whether or not a driver is assigned. When a
+ * driver is already assigned, their working window is clamped into the
+ * new period and availability is re-checked.
+ */
+export async function adminRescheduleUserSubscriptionService(
+  subscriptionId,
+  body = {},
+) {
+  const subscription = await UserSubscription.findById(subscriptionId);
+  if (!subscription) throw new ApiError(404, 'Subscription not found');
+  if (subscription.status !== SUBSCRIPTION_STATUS.ACTIVE) {
+    throw new ApiError(400, 'Only active subscriptions can be rescheduled');
+  }
+
+  const nextStart = startOfDay(new Date(body.startDate));
+  if (!Number.isFinite(nextStart.getTime())) {
+    throw new ApiError(400, 'startDate is required');
+  }
+  const nextExpiry = addMonths(nextStart, subscription.durationMonths);
+
+  let nextAssignedAt = subscription.assignedAt
+    ? startOfDay(subscription.assignedAt)
+    : null;
+  let nextWorkingEnd = subscription.assignedWorkingEndDate
+    ? startOfDay(subscription.assignedWorkingEndDate)
+    : null;
+
+  if (
+    subscription.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED
+    && subscription.assignedDriverId
+  ) {
+    if (!nextAssignedAt) nextAssignedAt = nextStart;
+    if (nextAssignedAt < nextStart) nextAssignedAt = nextStart;
+    if (nextAssignedAt > startOfDay(nextExpiry)) {
+      throw new ApiError(
+        400,
+        'Cannot move the period after the driver working start. Release or reassign the driver first.',
+      );
+    }
+    if (nextWorkingEnd) {
+      if (nextWorkingEnd > startOfDay(nextExpiry)) {
+        nextWorkingEnd = startOfDay(nextExpiry);
+      }
+      if (nextWorkingEnd < nextAssignedAt) {
+        nextWorkingEnd = null;
+      }
+    }
+
+    await assertDriverAvailableForSubscription(
+      {
+        ...subscription.toObject(),
+        startDate: nextStart,
+        expiryDate: nextExpiry,
+        assignedAt: nextAssignedAt,
+        assignedWorkingEndDate: nextWorkingEnd
+          ? endOfDay(nextWorkingEnd)
+          : null,
+      },
+      subscription.assignedDriverId,
+      {
+        windowMs: {
+          startMs: nextAssignedAt.getTime(),
+          endMs: (nextWorkingEnd
+            ? endOfDay(nextWorkingEnd)
+            : endOfDay(nextExpiry)
+          ).getTime(),
+        },
+      },
+    );
+
+    subscription.assignedAt = nextAssignedAt;
+    subscription.assignedWorkingEndDate = nextWorkingEnd
+      ? endOfDay(nextWorkingEnd)
+      : null;
+  }
+
+  subscription.startDate = nextStart;
+  subscription.expiryDate = nextExpiry;
+  await subscription.save();
+
+  await subscription.populate([
+    { path: 'userId', select: 'name phone_no email' },
+    { path: 'planId', select: 'name' },
+    { path: 'zoneId', select: 'name city' },
+    {
+      path: 'carId',
+      select: 'vehicleNumber carTypeId brandId modelId',
+      populate: [
+        { path: 'carTypeId', select: 'name' },
+        { path: 'brandId', select: 'name' },
+        { path: 'modelId', select: 'name' },
+      ],
+    },
+    { path: 'assignedDriverId', select: 'name phone rating profilePicture' },
+  ]);
+
+  return subscription.toObject ? subscription.toObject() : subscription;
 }
 
 function addMonths(date, months) {
@@ -1881,7 +1982,7 @@ function subscriptionWindowMs(subscription) {
 
 function zoneScopeForStaff(staff) {
   if (!staff) return [];
-  if (hasOperationalStaffAccess(staff)) return null;
+  if (isSuperAdmin(staff)) return null;
   return (staff.assignedZones || [])
     .map((id) => String(id))
     .filter(Boolean);

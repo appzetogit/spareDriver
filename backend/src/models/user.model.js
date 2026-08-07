@@ -162,12 +162,11 @@ const userSchema = new mongoose.Schema(
     },
 
     /**
-     * Zones a `team_member` staff account is responsible for.
+     * Zones a `sub_admin` or `team_member` is responsible for.
      *
-     * Drives visibility on the admin "Emergency Pool" page: a team
-     * member only sees bookings whose pickup falls inside one of
-     * these zones. `admin` and `sub_admin` see everything regardless
-     * of this list, so it's safe to leave empty for them.
+     * Drives visibility on bookings, emergency pool, live map, and
+     * zone-scoped admin notifications. Super admin sees everything
+     * regardless of this list.
      */
     assignedZones: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],

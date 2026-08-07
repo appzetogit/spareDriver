@@ -131,10 +131,11 @@ const ManageTeam = () => {
     setSubmitting(true);
     setFormError(null);
     try {
-      // Only team_members carry zone assignments — backend already
-      // wipes them for other roles, but be tidy and don't send noise.
+      // sub_admin + team_member carry zone assignments
       const zonesForPayload =
-        formData.role === 'team_member' ? formData.assignedZones || [] : [];
+        formData.role === 'team_member' || formData.role === 'sub_admin'
+          ? formData.assignedZones || []
+          : [];
       if (selectedMember) {
         await api.put(`/admin/team/${selectedMember._id}`, {
           name: formData.name,
@@ -418,7 +419,7 @@ const ManageTeam = () => {
             )}
           </div>
 
-          {formData.role === 'team_member' && (
+          {(formData.role === 'team_member' || formData.role === 'sub_admin') && (
             <AssignedZonesPicker
               zones={allZones}
               loading={!!zonesEntry?.loading}
@@ -473,9 +474,9 @@ const ManageTeam = () => {
 };
 
 /**
- * Multi-select pill grid for assigning zones to a team_member. The
- * server scopes the emergency-pool listing to these IDs — pick zero
- * and the member sees an empty queue (intentional: they must be
+ * Multi-select pill grid for assigning zones to sub_admin / team_member.
+ * The server scopes bookings, emergency pool, and live map to these IDs —
+ * pick zero and the member sees an empty queue (intentional: they must be
  * explicitly enrolled before getting access).
  */
 function AssignedZonesPicker({ zones, loading, selectedIds, onToggle, onClear }) {

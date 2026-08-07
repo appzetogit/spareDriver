@@ -26,6 +26,7 @@ import {
 import {
   issueBookingRefundService,
   REFUND_INITIATED_BY,
+  REFUND_PAYOUT_METHOD,
 } from './refund.service.js';
 import {
   notifyUserBookingCreated,
@@ -74,6 +75,7 @@ import {
   emitToDriver,
 } from '../utils/socketEmitters.js';
 import { findActiveZoneIdsForPointService } from './zone.service.js';
+import { getStaffZoneScopeIds } from '../constants/staffPermissions.js';
 import {
   setupScheduledBooking,
   cancelScheduledBookingJobs,
@@ -1331,8 +1333,24 @@ export async function cancelBookingByUserService(
 
   let refundRecord = null;
   if (wasPaid && refundAmount > 0) {
+    const refundMeta = {
+      initiatedBy:
+        cancelledBy === 'admin' || cancelledBy === 'system'
+          ? REFUND_INITIATED_BY.ADMIN
+          : cancelledBy === 'driver'
+            ? REFUND_INITIATED_BY.DRIVER
+            : REFUND_INITIATED_BY.USER,
+      reason: booking.cancellation.reason,
+      breakdown: {
+        amountRupees: refundAmount,
+        cancellationFeeRupees: feeCharged,
+        grossPaidRupees: Number(booking.payment?.amountPaidRupees) || 0,
+      },
+    };
     if (paidViaWallet) {
-      // Credit the wallet right now (atomic + ledgered).
+      // Credit the wallet right now (atomic + ledgered), then write the
+      // same Refund ledger row the admin history reads — marked
+      // processed so automatic + manual refunds share one list.
       try {
         const refundDescription =
           resolvedReason === 'no_driver_by_ride_time'
@@ -1340,7 +1358,7 @@ export async function cancelBookingByUserService(
             : isNoDriverSystemRefund
               ? `Refund \u2014 no drivers available for ${booking.bookingNumber}`
               : `Refund \u2014 booking ${booking.bookingNumber} cancelled (fee \u20B9${feeCharged})`;
-        await creditWalletService({
+        const walletTx = await creditWalletService({
           userId: booking.userId,
           amount: refundAmount,
           source: isNoDriverSystemRefund
@@ -1349,6 +1367,12 @@ export async function cancelBookingByUserService(
           description: refundDescription,
           refType: 'Booking',
           refId: String(booking._id),
+        });
+        refundRecord = await issueBookingRefundService(booking, {
+          ...refundMeta,
+          autoProcessed: true,
+          payoutMethod: REFUND_PAYOUT_METHOD.WALLET,
+          walletTxId: walletTx?._id,
         });
       } catch (refundErr) {
         console.error(
@@ -1359,18 +1383,7 @@ export async function cancelBookingByUserService(
       }
     } else {
       // Legacy Razorpay path — admin processes manually.
-      refundRecord = await issueBookingRefundService(booking, {
-        initiatedBy:
-          cancelledBy === 'admin' || cancelledBy === 'system'
-            ? REFUND_INITIATED_BY.ADMIN
-            : REFUND_INITIATED_BY.USER,
-        reason: booking.cancellation.reason,
-        breakdown: {
-          amountRupees: refundAmount,
-          cancellationFeeRupees: feeCharged,
-          grossPaidRupees: Number(booking.payment?.amountPaidRupees) || 0,
-        },
-      });
+      refundRecord = await issueBookingRefundService(booking, refundMeta);
     }
   }
 
@@ -1448,6 +1461,7 @@ export async function cancelBookingByUserService(
   emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, payload);
   if (previouslyAssignedDriver) {
     emitToDriver(previouslyAssignedDriver, S2C_EVENTS.BOOKING_UPDATED, payload);
+    notifyDriverCustomerCancelled(previouslyAssignedDriver, booking).catch(() => null);
   }
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
 
@@ -1526,6 +1540,10 @@ export async function searchAgainBookingService(userId, bookingId) {
     booking.dispatch.currentExpiresAt = null;
     booking.dispatch.currentRadiusMeters = DISPATCH.SEARCH_RADIUS_START_METERS;
     booking.dispatch.attemptsCount = 0;
+    // Fresh search must re-offer nearby drivers — leaving stale offers
+    // would exclude them via alreadyOfferedDriverIds and immediately
+    // land back on no_drivers_found.
+    booking.dispatch.offers = [];
   }
   booking.status = BOOKING_STATUS.SEARCHING;
   booking.driverId = null;
@@ -1778,7 +1796,7 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
 /* /pay endpoint or cancels.                                           */
 /* ------------------------------------------------------------------ */
 
-export async function listAdminBookingsService(query = {}) {
+export async function listAdminBookingsService(query = {}, { staff } = {}) {
   const {
     page = 1,
     limit = 20,
@@ -1797,6 +1815,27 @@ export async function listAdminBookingsService(query = {}) {
   if (bookingType) filter.bookingType = bookingType;
   if (serviceType) filter.serviceType = serviceType;
   if (paymentStatus) filter.paymentStatus = paymentStatus;
+
+  const zoneScope = getStaffZoneScopeIds(staff);
+  if (zoneScope !== null) {
+    if (!zoneScope.length) {
+      return {
+        bookings: [],
+        total: 0,
+        page: parseInt(page, 10),
+        pages: 0,
+        stats: {
+          total: 0,
+          searching: 0,
+          active: 0,
+          completed: 0,
+          cancelled: 0,
+          noDriversFound: 0,
+        },
+      };
+    }
+    filter.zoneIds = { $in: zoneScope };
+  }
 
   // Date range over createdAt — admins typically want "show me bookings
   // created on date X" rather than "scheduled for X" because the latter
@@ -1825,9 +1864,14 @@ export async function listAdminBookingsService(query = {}) {
     }
   }
 
-  // Aggregate true stats for the dashboard across all bookings (ignoring current page filters)
+  const statsMatch = { isDeleted: false };
+  if (zoneScope !== null) {
+    statsMatch.zoneIds = { $in: zoneScope };
+  }
+
+  // Aggregate true stats for the dashboard across scoped bookings
   const statsPromise = Booking.aggregate([
-    { $match: { isDeleted: false } },
+    { $match: statsMatch },
     {
       $group: {
         _id: '$status',
@@ -1865,7 +1909,23 @@ export async function listAdminBookingsService(query = {}) {
       (statusCounts[BOOKING_STATUS.STARTED] || 0),
     completed: statusCounts[BOOKING_STATUS.COMPLETED] || 0,
     cancelled: statusCounts[BOOKING_STATUS.CANCELLED] || 0,
+    noDriversFound: statusCounts[BOOKING_STATUS.NO_DRIVERS_FOUND] || 0,
   };
 
   return { bookings, total, page: parseInt(page, 10), pages: Math.ceil(total / limit), stats };
+}
+
+export function assertStaffCanViewBooking(staff, booking) {
+  const zoneScope = getStaffZoneScopeIds(staff);
+  if (zoneScope === null) return;
+  if (!zoneScope.length) {
+    throw new ApiError(403, 'No zones assigned');
+  }
+  const bookingZones = (booking?.zoneIds || []).map((z) =>
+    String(typeof z === 'object' && z?._id != null ? z._id : z),
+  );
+  const allowed = new Set(zoneScope);
+  if (!bookingZones.some((z) => allowed.has(z))) {
+    throw new ApiError(403, 'This booking is outside your assigned zones');
+  }
 }

@@ -90,6 +90,14 @@ export const updateVehicleExperience = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, result, 'Vehicle experience updated'));
 });
 
+export const updateBankDetails = asyncHandler(async (req, res) => {
+  const result = await driverService.updateBankDetailsService(
+    req.driver._id,
+    req.body.bankDetails || req.body,
+  );
+  return res.status(200).json(new ApiResponse(200, result, 'Bank details updated'));
+});
+
 export const getTraining = asyncHandler(async (req, res) => {
   const result = await driverService.getDriverTrainingService(req.driver._id);
   return res.status(200).json(new ApiResponse(200, result, 'Training modules fetched'));

@@ -1,12 +1,58 @@
+import mongoose from 'mongoose';
 import Notification from '../models/notification.model.js';
 import { ApiError } from '../utils/apiError.js';
 import {
   NOTIFICATION_AUDIENCE,
   NOTIFICATION_RETENTION_DAYS,
 } from '../constants/notificationTypes.js';
+import {
+  isSuperAdmin,
+  isSubAdmin,
+  isTeamMember,
+} from '../constants/staffPermissions.js';
 
 export function notificationRetentionCutoff(now = new Date()) {
   return new Date(now.getTime() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function normalizeZoneObjectIds(zoneIds = []) {
+  return (zoneIds || [])
+    .map((id) => {
+      try {
+        return new mongoose.Types.ObjectId(String(id));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Admin inbox visibility:
+ *   - super admin                    → every admin row
+ *   - sub_admin / team_member        → rows whose zoneIds overlap assignedZones
+ */
+export function buildAdminNotificationFilter(staff, { isRead } = {}) {
+  const filter = {
+    audience: NOTIFICATION_AUDIENCE.ADMIN,
+    createdAt: { $gte: notificationRetentionCutoff() },
+  };
+  if (typeof isRead === 'boolean') filter.isRead = isRead;
+
+  if (isSuperAdmin(staff)) return filter;
+
+  if (isSubAdmin(staff) || isTeamMember(staff)) {
+    const zones = normalizeZoneObjectIds(staff.assignedZones);
+    if (!zones.length) {
+      filter._id = { $in: [] };
+      return filter;
+    }
+    filter.zoneIds = { $in: zones };
+    return filter;
+  }
+
+  filter._id = { $in: [] };
+  return filter;
 }
 
 function buildFilter({ audience, userId, driverId, isRead }) {
@@ -46,6 +92,7 @@ export async function createNotificationRecord({
   audience,
   userId = null,
   driverId = null,
+  zoneIds = [],
   title,
   body = '',
   type,
@@ -56,6 +103,7 @@ export async function createNotificationRecord({
     audience,
     userId,
     driverId,
+    zoneIds: normalizeZoneObjectIds(zoneIds),
     title,
     body,
     type,
@@ -117,10 +165,41 @@ export async function markAllNotificationsReadService({ audience, userId, driver
   return { modifiedCount: result.modifiedCount || 0 };
 }
 
-export async function listAdminNotificationsService({ page = 1, limit = 20 } = {}) {
-  return listNotificationsService({
-    audience: NOTIFICATION_AUDIENCE.ADMIN,
-    page,
-    limit,
+export async function listAdminNotificationsService({
+  staff,
+  page = 1,
+  limit = 20,
+} = {}) {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+  const safePage = Math.max(1, Number(page) || 1);
+  const filter = buildAdminNotificationFilter(staff);
+  const [notifications, total, unreadCount] = await Promise.all([
+    Notification.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((safePage - 1) * safeLimit)
+      .limit(safeLimit)
+      .lean(),
+    Notification.countDocuments(filter),
+    Notification.countDocuments({ ...filter, isRead: false }),
+  ]);
+  return { notifications, total, unreadCount, page: safePage, limit: safeLimit };
+}
+
+export async function markAdminNotificationReadService(notificationId, staff) {
+  const scoped = buildAdminNotificationFilter(staff);
+  const updated = await Notification.findOneAndUpdate(
+    { _id: notificationId, ...scoped },
+    { $set: { isRead: true, readAt: new Date() } },
+    { new: true },
+  ).lean();
+  if (!updated) throw new ApiError(404, 'Notification not found');
+  return updated;
+}
+
+export async function markAllAdminNotificationsReadService(staff) {
+  const filter = buildAdminNotificationFilter(staff, { isRead: false });
+  const result = await Notification.updateMany(filter, {
+    $set: { isRead: true, readAt: new Date() },
   });
+  return { modifiedCount: result.modifiedCount || 0 };
 }

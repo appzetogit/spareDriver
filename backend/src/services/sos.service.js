@@ -23,6 +23,12 @@ import {
   notifyDriverEmergencyAlert,
 } from '../utils/notificationDispatch.js';
 import { emitSosCreated, emitSosLocation, emitSosResolved } from '../utils/socketEmitters.js';
+import {
+  staffAssigneeListFilter,
+  assertStaffCanAccessAssigned,
+  findTeamMemberAssignee,
+  assertCanAssignToTeamMember,
+} from '../utils/staffAssignment.util.js';
 
 function formatTimelineLabel(event) {
   const labels = {
@@ -31,6 +37,7 @@ function formatTimelineLabel(event) {
     [SOS_AUDIT_EVENT.OPERATIONS_NOTIFIED]: 'Operations Notified',
     [SOS_AUDIT_EVENT.EMERGENCY_CONTACT_NOTIFIED]: 'Emergency Contact Notified',
     [SOS_AUDIT_EVENT.LOCATION_UPDATED]: 'Location Updated',
+    [SOS_AUDIT_EVENT.SOS_ASSIGNED]: 'Assigned to Team Member',
     [SOS_AUDIT_EVENT.SOS_RESOLVED]: 'SOS Resolved',
   };
   return labels[event] || event;
@@ -180,6 +187,7 @@ export async function createSosService({ tripId, latitude, longitude, principal,
     sosId: String(alert._id),
     tripId: String(alert.tripId),
     message: 'Passenger has requested emergency assistance.',
+    zoneIds: (booking.zoneIds || []).map((id) => String(id)),
   });
   pushTimelineEvent(alert, SOS_AUDIT_EVENT.ADMIN_NOTIFIED);
   await writeAuditLog({
@@ -284,11 +292,13 @@ export async function updateSosLocationService({ sosId, latitude, longitude, pri
   return { sosId: String(alert._id) };
 }
 
-export async function resolveSosService({ sosId, staffId, ip }) {
+export async function resolveSosService({ sosId, staff, ip }) {
   assertObjectId(sosId, 'sosId');
+  const staffId = staff._id;
 
   const alert = await SosAlert.findById(sosId);
   if (!alert) throw new ApiError(404, 'SOS alert not found');
+  assertStaffCanAccessAssigned(staff, alert.assignedTo);
   if (alert.status === SOS_STATUS.RESOLVED) {
     throw new ApiError(400, 'SOS alert is already resolved');
   }
@@ -334,8 +344,10 @@ export async function getActiveSosForTripService(tripId, principal) {
   return SosAlert.findOne({ tripId, status: SOS_STATUS.ACTIVE }).lean();
 }
 
-export async function listAdminSosService({ status, page = 1, limit = 20, search }) {
-  const filter = {};
+export async function listAdminSosService(staff, { status, page = 1, limit = 20, search }) {
+  const filter = {
+    ...staffAssigneeListFilter(staff),
+  };
   if (status) filter.status = status;
 
   if (search) {
@@ -354,6 +366,8 @@ export async function listAdminSosService({ status, page = 1, limit = 20, search
   const skip = (page - 1) * limit;
   const [alerts, total] = await Promise.all([
     SosAlert.find(filter)
+      .populate('assignedTo', 'name email role')
+      .populate('assignedBy', 'name email role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -372,11 +386,15 @@ export async function listAdminSosService({ status, page = 1, limit = 20, search
   };
 }
 
-export async function getAdminSosDetailService(sosId) {
+export async function getAdminSosDetailService(staff, sosId) {
   assertObjectId(sosId, 'sosId');
 
-  const alert = await SosAlert.findById(sosId).lean();
+  const alert = await SosAlert.findById(sosId)
+    .populate('assignedTo', 'name email role')
+    .populate('assignedBy', 'name email role')
+    .lean();
   if (!alert) throw new ApiError(404, 'SOS alert not found');
+  assertStaffCanAccessAssigned(staff, alert.assignedTo);
 
   const [locationLogs, auditLogs] = await Promise.all([
     SosLocationLog.find({ sosId }).sort({ timestamp: -1 }).limit(200).lean(),
@@ -384,4 +402,42 @@ export async function getAdminSosDetailService(sosId) {
   ]);
 
   return { alert, locationLogs, auditLogs };
+}
+
+export async function assignSosService(staff, sosId, { assigneeId }) {
+  assertCanAssignToTeamMember(staff);
+  assertObjectId(sosId, 'sosId');
+
+  const alert = await SosAlert.findById(sosId);
+  if (!alert) throw new ApiError(404, 'SOS alert not found');
+  if (alert.status === SOS_STATUS.RESOLVED) {
+    throw new ApiError(400, 'Cannot assign a resolved SOS alert');
+  }
+
+  const assignee = await findTeamMemberAssignee(assigneeId);
+  alert.assignedTo = assignee._id;
+  alert.assignedBy = staff._id;
+  alert.assignedAt = new Date();
+  pushTimelineEvent(alert, SOS_AUDIT_EVENT.SOS_ASSIGNED, {
+    assigneeId: String(assignee._id),
+    assigneeName: assignee.name || assignee.email || '',
+  });
+  await alert.save();
+
+  await writeAuditLog({
+    sosId: alert._id,
+    tripId: alert.tripId,
+    action: SOS_AUDIT_EVENT.SOS_ASSIGNED,
+    actorType: 'staff',
+    actorId: staff._id,
+    details: {
+      assigneeId: String(assignee._id),
+      assigneeName: assignee.name || assignee.email || '',
+    },
+  });
+
+  return SosAlert.findById(alert._id)
+    .populate('assignedTo', 'name email role')
+    .populate('assignedBy', 'name email role')
+    .lean();
 }

@@ -12,11 +12,16 @@ import {
   useAdminSupportStore,
   fetchSupportTicketDetail,
   updateSupportTicket,
+  assignSupportTicket,
 } from '../../../store/admin/useAdminSupportStore';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageTaskAssignment } from '../../../constants/staffRoles';
 import {
   SUPPORT_CATEGORIES,
   SUPPORT_STATUS_LABELS,
 } from '../../../constants/supportTicket';
+import AssigneeBadge from '../components/AssigneeBadge';
+import AssignToTeamMemberControl from '../components/AssignToTeamMemberControl';
 
 const STATUS_BADGE = {
   open: 'warning',
@@ -59,6 +64,8 @@ function userDisplayName(ticket) {
 }
 
 const ManageSupport = () => {
+  const { admin } = useAdminAuthStore();
+  const canAssign = canManageTaskAssignment(admin?.role);
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,6 +117,15 @@ const ManageSupport = () => {
     }
   };
 
+  const handleAssign = async (assigneeId) => {
+    if (!selectedTicket) return;
+    const updated = await assignSupportTicket(selectedTicket._id, { assigneeId });
+    toast.success('Ticket assigned');
+    setSelectedTicket(updated);
+    setStatus(updated?.status || status);
+    refetch();
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -137,6 +153,7 @@ const ManageSupport = () => {
                 <th className="px-4 py-3 font-semibold text-text-secondary">User Name</th>
                 <th className="px-4 py-3 font-semibold text-text-secondary">Category</th>
                 <th className="px-4 py-3 font-semibold text-text-secondary">Subject</th>
+                <th className="px-4 py-3 font-semibold text-text-secondary">Assignee</th>
                 <th className="px-4 py-3 font-semibold text-text-secondary">Status</th>
                 <th className="px-4 py-3 font-semibold text-text-secondary">Created Date</th>
                 <th className="px-4 py-3 font-semibold text-text-secondary">Action</th>
@@ -145,13 +162,13 @@ const ManageSupport = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-text-muted">
+                  <td colSpan={8} className="px-4 py-8 text-center text-text-muted">
                     Loading tickets…
                   </td>
                 </tr>
               ) : tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-text-muted">
+                  <td colSpan={8} className="px-4 py-8 text-center text-text-muted">
                     No tickets found
                   </td>
                 </tr>
@@ -165,6 +182,9 @@ const ManageSupport = () => {
                         ticket.category}
                     </td>
                     <td className="px-4 py-3 max-w-[200px] truncate">{ticket.subject}</td>
+                    <td className="px-4 py-3">
+                      <AssigneeBadge assignedTo={ticket.assignedTo} compact />
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={STATUS_BADGE[ticket.status] || 'default'}>
                         {SUPPORT_STATUS_LABELS[ticket.status] || ticket.status}
@@ -255,9 +275,15 @@ const ManageSupport = () => {
                   <p className="text-text-muted text-xs">Description</p>
                   <p className="text-text-secondary whitespace-pre-wrap">{selectedTicket.description}</p>
                 </div>
-                <div className="col-span-2">
+                <div>
                   <p className="text-text-muted text-xs">Created</p>
                   <p>{formatDate(selectedTicket.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-text-muted text-xs">Assignee</p>
+                  <div className="mt-1">
+                    <AssigneeBadge assignedTo={selectedTicket.assignedTo} />
+                  </div>
                 </div>
               </div>
               {selectedTicket.screenshot && (
@@ -273,6 +299,15 @@ const ManageSupport = () => {
                 </div>
               )}
             </Card>
+
+            {canAssign && selectedTicket.status !== 'resolved' && (
+              <Card className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-text-muted">
+                  Assign to Team Member
+                </h4>
+                <AssignToTeamMemberControl onAssign={handleAssign} />
+              </Card>
+            )}
 
             <div className="space-y-3">
               <label className="block text-sm font-medium text-text">

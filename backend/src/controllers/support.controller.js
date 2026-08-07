@@ -47,18 +47,29 @@ export const getSupportTicketById = asyncHandler(async (req, res) => {
 });
 
 export const adminListSupportTickets = asyncHandler(async (req, res) => {
-  const tickets = await supportService.listAdminSupportTicketsService({
+  const tickets = await supportService.listAdminSupportTicketsService(req.staff, {
     status: req.query.status,
   });
   return res.status(200).json(new ApiResponse(200, { tickets }, 'Support tickets fetched'));
 });
 
 export const adminGetSupportTicket = asyncHandler(async (req, res) => {
-  const ticket = await supportService.getAdminSupportTicketService(req.params.id);
+  const ticket = await supportService.getAdminSupportTicketService(req.staff, req.params.id);
   return res.status(200).json(new ApiResponse(200, { ticket }, 'Support ticket fetched'));
 });
 
 export const adminUpdateSupportTicket = asyncHandler(async (req, res) => {
-  const ticket = await supportService.updateAdminSupportTicketService(req.params.id, req.body);
+  const ticket = await supportService.updateAdminSupportTicketService(
+    req.staff,
+    req.params.id,
+    req.body,
+  );
   return res.status(200).json(new ApiResponse(200, { ticket }, 'Support ticket updated'));
+});
+
+export const adminAssignSupportTicket = asyncHandler(async (req, res) => {
+  const ticket = await supportService.assignSupportTicketService(req.staff, req.params.id, {
+    assigneeId: req.body?.assigneeId,
+  });
+  return res.status(200).json(new ApiResponse(200, { ticket }, 'Support ticket assigned'));
 });

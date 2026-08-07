@@ -21,6 +21,7 @@ import {
   REFUND_KIND_LABELS,
   REFUND_PAYOUT_METHOD_LABELS,
   REFUND_SUBJECT_TYPE_LABELS,
+  refundChannelLabel,
 } from '../../../constants/refund';
 
 const STATUS_META = {
@@ -143,8 +144,8 @@ const ManageRefunds = () => {
         <div>
           <h2 className="text-xl font-bold text-text">Refunds & settlements</h2>
           <p className="text-xs text-text-muted mt-1 max-w-xl">
-            Booking cancellation refunds and account-deletion wallet settlements appear here.
-            Process booking refunds on{' '}
+            Automatic wallet refunds (cancellations) and manual admin refunds
+            share this ledger. Process legacy Razorpay refunds on{' '}
             <a
               href="https://dashboard.razorpay.com/app/refunds"
               target="_blank"
@@ -353,6 +354,12 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
   const Icon = meta.icon;
   const isWalletSettlement = refund.kind === 'wallet_settlement';
   const isAdminManual = refund.kind === 'admin_manual';
+  const isAutoWallet =
+    !isWalletSettlement &&
+    !isAdminManual &&
+    refund.payoutMethod === 'wallet' &&
+    status === 'processed';
+  const channel = refundChannelLabel(refund);
   const customer =
     refund.userId?.name ||
     refund.userId?.phone ||
@@ -362,7 +369,7 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
     'Customer';
 
   const menuItems =
-    status === 'pending' && !isWalletSettlement && !isAdminManual
+    status === 'pending' && !isWalletSettlement && !isAdminManual && !isAutoWallet
       ? [
           { label: 'Mark processed', icon: CheckCircle2, onClick: onMarkProcessed },
           { label: 'Mark failed', icon: XCircle, variant: 'danger', onClick: onMarkFailed },
@@ -373,15 +380,20 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
     <tr className="border-t border-border-light hover:bg-gray-50/60 align-top">
       <td className="px-4 py-3">
         <span className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary">
-          {isWalletSettlement || isAdminManual ? <Wallet className="w-3.5 h-3.5" /> : null}
+          {isWalletSettlement || isAdminManual || isAutoWallet ? (
+            <Wallet className="w-3.5 h-3.5" />
+          ) : null}
           {KIND_LABELS[refund.kind] || 'Refund'}
         </span>
-        {isAdminManual && refund.payoutMethod ? (
-          <p className="text-[10px] text-text-muted mt-0.5">
-            {REFUND_PAYOUT_METHOD_LABELS[refund.payoutMethod] || refund.payoutMethod}
-            {refund.subjectType ? ` · ${REFUND_SUBJECT_TYPE_LABELS[refund.subjectType] || refund.subjectType}` : ''}
-          </p>
-        ) : null}
+        <p className="text-[10px] text-text-muted mt-0.5">
+          {channel}
+          {refund.payoutMethod
+            ? ` · ${REFUND_PAYOUT_METHOD_LABELS[refund.payoutMethod] || refund.payoutMethod}`
+            : ''}
+          {isAdminManual && refund.subjectType
+            ? ` · ${REFUND_SUBJECT_TYPE_LABELS[refund.subjectType] || refund.subjectType}`
+            : ''}
+        </p>
       </td>
       <td className="px-4 py-3">
         <p className="font-mono text-xs font-medium text-text">
@@ -396,7 +408,7 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
             {String(refund.bookingId).slice(-8)}
           </p>
         )}
-        {isAdminManual && refund.reason ? (
+        {(isAdminManual || isAutoWallet) && refund.reason ? (
           <p className="text-[10px] text-text-muted mt-0.5 line-clamp-2">{refund.reason}</p>
         ) : null}
       </td>

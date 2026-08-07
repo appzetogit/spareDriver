@@ -5,7 +5,7 @@ import Car from '../models/user/car.model.js';
 import bcrypt from 'bcryptjs';
 import { ApiError } from '../utils/apiError.js';
 import { USER_ROLES } from '../constants/roles.js';
-import { STAFF_ROLES } from '../constants/staffPermissions.js';
+import { STAFF_ROLES, usesAssignedZoneScope } from '../constants/staffPermissions.js';
 import { dedupeDocumentsByType } from '../utils/driverDocuments.util.js';
 import {
   getActiveTrainingVideos,
@@ -399,8 +399,8 @@ async function assertSingleSuperAdmin(role, excludeUserId = null) {
 /**
  * Normalise an `assignedZones` payload into an array of valid ObjectIds.
  * Drops `null`/`undefined` and anything that can't be coerced. Used for
- * both create + update so the team_member zone-scoped emergency-pool
- * filter has a clean array to work with.
+ * both create + update so zone-scoped staff (sub_admin + team_member)
+ * filters have a clean array to work with.
  */
 function normalizeAssignedZones(value) {
   if (!Array.isArray(value)) return [];
@@ -457,10 +457,10 @@ export const addAdminMemberService = async (data) => {
     phone_no,
     password: hashedPassword,
     role,
-    // Only team_member uses `assignedZones`; admin + sub_admin see all
-    // zones regardless. Empty array for other roles keeps schemas tidy.
-    assignedZones:
-      role === USER_ROLES.TEAM_MEMBER ? normalizeAssignedZones(assignedZones) : [],
+    // sub_admin + team_member are zone-scoped; super admin ignores this.
+    assignedZones: usesAssignedZoneScope({ role })
+      ? normalizeAssignedZones(assignedZones)
+      : [],
   });
 
   await newAdmin.save();
@@ -543,15 +543,13 @@ export const updateAdminMemberService = async (id, data) => {
     staff.role = role;
   }
   if (isActive !== undefined) staff.isActive = isActive;
-  // Zone assignments only matter for team_members (the others see all
-  // emergency-pool entries regardless). Switching a member off of
-  // team_member clears the array so stale data doesn't linger.
+  // Zone assignments for sub_admin + team_member. Switching off those
+  // roles clears the array so stale data doesn't linger.
   if (assignedZones !== undefined) {
-    staff.assignedZones =
-      staff.role === USER_ROLES.TEAM_MEMBER
-        ? normalizeAssignedZones(assignedZones)
-        : [];
-  } else if (staff.role !== USER_ROLES.TEAM_MEMBER && staff.assignedZones?.length) {
+    staff.assignedZones = usesAssignedZoneScope(staff)
+      ? normalizeAssignedZones(assignedZones)
+      : [];
+  } else if (!usesAssignedZoneScope(staff) && staff.assignedZones?.length) {
     staff.assignedZones = [];
   }
 

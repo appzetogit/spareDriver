@@ -18,7 +18,7 @@ const emptyForm = {
   sortOrder: 0,
 };
 
-const TrainingVideosTab = ({ videos, onRefresh, onCreate, onUpdate, onDelete }) => {
+const TrainingVideosTab = ({ videos, onRefresh, onCreate, onUpdate, onDelete, readOnly = false }) => {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -90,9 +90,11 @@ const TrainingVideosTab = ({ videos, onRefresh, onCreate, onUpdate, onDelete }) 
           <h3 className="text-xl font-bold text-slate-800">Driver training videos</h3>
           <p className="text-sm text-slate-500 mt-1">Required videos drivers must complete before submission</p>
         </div>
-        <Button onClick={openCreate} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add video
-        </Button>
+        {!readOnly && (
+          <Button onClick={openCreate} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add video
+          </Button>
+        )}
       </div>
       <div className="space-y-3">
         {videos.map((video, idx) => (
@@ -104,10 +106,12 @@ const TrainingVideosTab = ({ videos, onRefresh, onCreate, onUpdate, onDelete }) 
                 <p className="text-xs text-slate-500 mt-0.5">{Math.round(video.durationSeconds || 0)} sec {video.isRequired ? '· Required' : ''}</p>
               </div>
             </div>
-            <div className="flex gap-1 shrink-0">
-              <button type="button" onClick={() => openEdit(video)} className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400"><Edit2 className="w-4 h-4" /></button>
-              <button type="button" onClick={() => onDelete(video._id)} className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-            </div>
+            {!readOnly && (
+              <div className="flex gap-1 shrink-0">
+                <button type="button" onClick={() => openEdit(video)} className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                <button type="button" onClick={() => onDelete(video._id)} className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            )}
           </div>
         ))}
       </div>

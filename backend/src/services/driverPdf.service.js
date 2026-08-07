@@ -2,15 +2,19 @@ import PDFDocument from 'pdfkit';
 import { Driver } from '../models/driverModels/driver.model.js';
 import { ApiError } from '../utils/apiError.js';
 import { dedupeDocumentsByType } from '../utils/driverDocuments.util.js';
+import { drawBrandLogo, getBrandLogoPath } from '../utils/pdfBrand.js';
 
 const PALETTE = {
   text: '#0F172A',
   muted: '#64748B',
   border: '#E2E8F0',
   accent: '#0D9488',
+  accentSoft: '#F0FDFA',
   danger: '#DC2626',
   success: '#16A34A',
-  pillBg: '#F1F5F9',
+  headerBg: '#0F172A',
+  cardBg: '#F8FAFC',
+  white: '#FFFFFF',
 };
 
 const STATUS_TONE = {
@@ -34,6 +38,10 @@ const DOC_TYPE_LABELS = {
   permit: 'Permit',
   fitness: 'Fitness certificate',
 };
+
+const MARGIN = 40;
+/** Continued pages reserve space for the dark logo strip stamped in chrome. */
+const CONTINUED_PAGE_TOP = 56;
 
 function fmtDate(value) {
   if (!value) return '—';
@@ -67,12 +75,18 @@ function docLabel(type) {
   return DOC_TYPE_LABELS[type] || type.replace(/_/g, ' ');
 }
 
-/**
- * Fetch a remote URL into a Buffer. We deliberately swallow errors and
- * return `null` so a broken/expired Cloudinary URL never fails the
- * whole PDF export — the affected image is just rendered as a
- * placeholder with the URL written underneath.
- */
+function pageLeft(doc) {
+  return doc.page.margins.left;
+}
+
+function pageRight(doc) {
+  return doc.page.width - doc.page.margins.right;
+}
+
+function contentWidth(doc) {
+  return pageRight(doc) - pageLeft(doc);
+}
+
 async function fetchAsBuffer(url, { timeoutMs = 12_000 } = {}) {
   if (!url) return null;
   try {
@@ -88,120 +102,278 @@ async function fetchAsBuffer(url, { timeoutMs = 12_000 } = {}) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* PDF primitives                                                      */
-/* ------------------------------------------------------------------ */
-
-function drawDivider(doc) {
-  const y = doc.y + 4;
-  doc
-    .moveTo(doc.page.margins.left, y)
-    .lineTo(doc.page.width - doc.page.margins.right, y)
-    .lineWidth(0.5)
-    .strokeColor(PALETTE.border)
-    .stroke();
-  doc.moveDown(0.8);
+function ensureSpace(doc, neededHeight = 120) {
+  const bottom = doc.page.height - doc.page.margins.bottom - 24;
+  if (doc.y + neededHeight > bottom) {
+    doc.addPage();
+    doc.x = pageLeft(doc);
+    doc.y = CONTINUED_PAGE_TOP;
+  }
 }
 
 function sectionHeading(doc, label) {
-  doc
-    .moveDown(0.8)
-    .font('Helvetica-Bold')
-    .fontSize(13)
-    .fillColor(PALETTE.accent)
-    .text(label.toUpperCase(), { characterSpacing: 1 });
-  drawDivider(doc);
-}
+  ensureSpace(doc, 56);
+  const left = pageLeft(doc);
+  const y = doc.y + 6;
 
-function ensureSpace(doc, neededHeight = 120) {
-  const bottom = doc.page.height - doc.page.margins.bottom;
-  if (doc.y + neededHeight > bottom) doc.addPage();
+  doc
+    .roundedRect(left, y, 4, 16, 2)
+    .fillColor(PALETTE.accent)
+    .fill();
+
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(11)
+    .fillColor(PALETTE.text)
+    .text(label.toUpperCase(), left + 12, y + 2, {
+      characterSpacing: 0.8,
+      lineBreak: false,
+    });
+
+  doc.y = y + 22;
+  doc
+    .moveTo(left, doc.y)
+    .lineTo(pageRight(doc), doc.y)
+    .lineWidth(0.6)
+    .strokeColor(PALETTE.border)
+    .stroke();
+  doc.y += 12;
+  doc.x = left;
 }
 
 function infoGrid(doc, rows) {
-  const colGap = 18;
-  const colWidth =
-    (doc.page.width - doc.page.margins.left - doc.page.margins.right - colGap) / 2;
-  const startX = doc.page.margins.left;
-  let rowY = doc.y;
-
-  const pairs = [];
-  for (let i = 0; i < rows.length; i += 2) {
-    pairs.push([rows[i], rows[i + 1] || null]);
+  const usable = (rows || []).filter(Boolean);
+  if (!usable.length) {
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(PALETTE.muted)
+      .text('No data available.', pageLeft(doc), doc.y);
+    doc.moveDown(0.6);
+    return;
   }
 
-  pairs.forEach(([left, right]) => {
-    ensureSpace(doc, 50);
-    const yStart = doc.y;
-    const drawCell = (cell, x) => {
-      if (!cell) return 0;
-      doc
-        .font('Helvetica')
-        .fontSize(8)
-        .fillColor(PALETTE.muted)
-        .text(cell.label.toUpperCase(), x, yStart, {
-          width: colWidth,
-          characterSpacing: 0.6,
-        });
-      const labelHeight = doc.heightOfString(cell.label.toUpperCase(), {
-        width: colWidth,
-      });
-      doc
-        .font('Helvetica-Bold')
-        .fontSize(10)
-        .fillColor(PALETTE.text)
-        .text(pretty(cell.value), x, yStart + labelHeight + 2, {
-          width: colWidth,
-        });
-      const valueHeight = doc.heightOfString(pretty(cell.value), {
-        width: colWidth,
-      });
-      return labelHeight + valueHeight + 4;
+  const gap = 12;
+  const colW = (contentWidth(doc) - gap) / 2;
+  const left = pageLeft(doc);
+  const cellPad = 10;
+  const labelSize = 7.5;
+  const valueSize = 10;
+
+  for (let i = 0; i < usable.length; i += 2) {
+    const leftCell = usable[i];
+    const rightCell = usable[i + 1] || null;
+
+    const measure = (cell) => {
+      if (!cell) return 40;
+      const label = String(cell.label || '').toUpperCase();
+      const value = pretty(cell.value);
+      doc.font('Helvetica').fontSize(labelSize);
+      const lh = doc.heightOfString(label, { width: colW - cellPad * 2 });
+      doc.font('Helvetica-Bold').fontSize(valueSize);
+      const vh = doc.heightOfString(value, { width: colW - cellPad * 2 });
+      return Math.max(44, cellPad + lh + 4 + vh + cellPad);
     };
 
-    const leftHeight = drawCell(left, startX);
-    const rightHeight = drawCell(right, startX + colWidth + colGap);
-    rowY = yStart + Math.max(leftHeight, rightHeight) + 10;
-    doc.y = rowY;
-  });
+    const rowH = Math.max(measure(leftCell), measure(rightCell));
+    ensureSpace(doc, rowH + 8);
+    const y = doc.y;
+
+    const drawCell = (cell, x) => {
+      if (!cell) return;
+      doc
+        .roundedRect(x, y, colW, rowH, 8)
+        .fillColor(PALETTE.cardBg)
+        .fill();
+      doc
+        .roundedRect(x, y, colW, rowH, 8)
+        .lineWidth(0.5)
+        .strokeColor(PALETTE.border)
+        .stroke();
+
+      const label = String(cell.label || '').toUpperCase();
+      const value = pretty(cell.value);
+      doc
+        .font('Helvetica')
+        .fontSize(labelSize)
+        .fillColor(PALETTE.muted)
+        .text(label, x + cellPad, y + cellPad, {
+          width: colW - cellPad * 2,
+          characterSpacing: 0.4,
+        });
+      const labelH = doc.heightOfString(label, { width: colW - cellPad * 2 });
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(valueSize)
+        .fillColor(PALETTE.text)
+        .text(value, x + cellPad, y + cellPad + labelH + 4, {
+          width: colW - cellPad * 2,
+        });
+    };
+
+    drawCell(leftCell, left);
+    if (rightCell) drawCell(rightCell, left + colW + gap);
+
+    doc.y = y + rowH + 8;
+    doc.x = left;
+  }
 }
 
-function statusPill(doc, status) {
-  if (!status) return;
-  const label = status.replace(/_/g, ' ').toUpperCase();
-  const padX = 8;
-  const padY = 4;
-  doc.font('Helvetica-Bold').fontSize(9);
-  const textWidth = doc.widthOfString(label);
-  const w = textWidth + padX * 2;
-  const h = doc.currentLineHeight() + padY * 2;
-  const x = doc.x;
-  const y = doc.y;
+function drawStatusPill(doc, status, x, y) {
+  if (!status) return { width: 0, height: 0 };
+  const label = String(status).replace(/_/g, ' ').toUpperCase();
+  const padX = 10;
+  const padY = 5;
+  doc.font('Helvetica-Bold').fontSize(8);
+  const textW = doc.widthOfString(label);
+  const w = textW + padX * 2;
+  const h = 8 + padY * 2;
+  const tone = STATUS_TONE[status] || '#475569';
+  doc.roundedRect(x, y, w, h, 999).fillColor(tone).fill();
+  doc.fillColor(PALETTE.white).text(label, x + padX, y + padY, { lineBreak: false });
+  return { width: w, height: h };
+}
+
+function drawHeaderBanner(doc, driver, profilePicBuffer) {
+  const left = pageLeft(doc);
+  const right = pageRight(doc);
+  const width = right - left;
+  const bannerH = 128;
+  const y = doc.page.margins.top;
+
+  doc.roundedRect(left, y, width, bannerH, 14).fillColor(PALETTE.headerBg).fill();
+
+  // Brand logo (white/gold on black works on dark banner)
+  const logo = drawBrandLogo(doc, {
+    x: right - 12,
+    y: y + 10,
+    height: 34,
+    align: 'right',
+  });
+
+  const avatarSize = 76;
+  const avatarX = left + 16;
+  const avatarY = y + (bannerH - avatarSize) / 2;
+  let photoDrawn = false;
+
+  if (profilePicBuffer) {
+    try {
+      doc.save();
+      doc.roundedRect(avatarX, avatarY, avatarSize, avatarSize, avatarSize / 2).clip();
+      doc.image(profilePicBuffer, avatarX, avatarY, {
+        fit: [avatarSize, avatarSize],
+        align: 'center',
+        valign: 'center',
+      });
+      doc.restore();
+      // thin ring
+      doc
+        .circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2)
+        .lineWidth(2)
+        .strokeColor('#334155')
+        .stroke();
+      photoDrawn = true;
+    } catch {
+      photoDrawn = false;
+    }
+  }
+
+  if (!photoDrawn) {
+    doc
+      .roundedRect(avatarX, avatarY, avatarSize, avatarSize, avatarSize / 2)
+      .fillColor('#1E293B')
+      .fill();
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(28)
+      .fillColor('#94A3B8')
+      .text((driver.name || '?').charAt(0).toUpperCase(), avatarX, avatarY + 22, {
+        width: avatarSize,
+        align: 'center',
+        lineBreak: false,
+      });
+  }
+
+  const titleX = avatarX + avatarSize + 16;
+  const titleMaxW = Math.max(
+    120,
+    right - titleX - 20 - (logo.drawn ? logo.width + 8 : 0),
+  );
+
   doc
-    .roundedRect(x, y, w, h, 999)
-    .fillAndStroke(STATUS_TONE[status] || PALETTE.muted, STATUS_TONE[status] || PALETTE.muted);
+    .font('Helvetica-Bold')
+    .fontSize(18)
+    .fillColor(PALETTE.white)
+    .text(driver.name || 'Driver', titleX, y + 22, {
+      width: titleMaxW,
+      ellipsis: true,
+      lineBreak: false,
+    });
+
   doc
-    .fillColor('#FFFFFF')
-    .text(label, x + padX, y + padY, { lineBreak: false });
-  doc.x = x + w + 8;
-  doc.y = y;
+    .font('Helvetica')
+    .fontSize(9)
+    .fillColor('#94A3B8')
+    .text('Driver profile dossier', titleX, y + 44, {
+      width: titleMaxW,
+      lineBreak: false,
+    });
+
+  const meta = [
+    driver.phone ? `+91 ${driver.phone}` : null,
+    driver.email || null,
+    `Joined ${fmtDate(driver.createdAt)}`,
+  ]
+    .filter(Boolean)
+    .join('   ·   ');
+
+  doc
+    .font('Helvetica')
+    .fontSize(9)
+    .fillColor('#CBD5E1')
+    .text(meta, titleX, y + 60, {
+      width: titleMaxW,
+      ellipsis: true,
+      lineBreak: false,
+    });
+
+  doc
+    .font('Helvetica')
+    .fontSize(8)
+    .fillColor('#64748B')
+    .text(`ID  ${driver._id}`, titleX, y + 76, {
+      width: titleMaxW,
+      ellipsis: true,
+      lineBreak: false,
+    });
+
+  if (driver.approvalStatus) {
+    const pillH = 18;
+    drawStatusPill(doc, driver.approvalStatus, titleX, y + bannerH - pillH - 16);
+  }
+
+  doc.y = y + bannerH + 18;
+  doc.x = left;
 }
 
 async function drawImageCell({ doc, x, y, w, h, url, caption, hint }) {
+  doc.roundedRect(x, y, w, h, 10).fillColor(PALETTE.cardBg).fill();
   doc
-    .roundedRect(x, y, w, h, 8)
-    .lineWidth(0.5)
+    .roundedRect(x, y, w, h, 10)
+    .lineWidth(0.6)
     .strokeColor(PALETTE.border)
     .stroke();
 
+  const footerH = 36;
+  const imgAreaH = h - footerH - 4;
   const imgBuffer = await fetchAsBuffer(url);
-  const captionY = y + h - 28;
+
   if (imgBuffer) {
     try {
       doc.save();
-      doc.roundedRect(x + 1, y + 1, w - 2, h - 32, 8).clip();
-      doc.image(imgBuffer, x + 1, y + 1, {
-        fit: [w - 2, h - 32],
+      doc.roundedRect(x + 6, y + 6, w - 12, imgAreaH - 6, 6).clip();
+      doc.image(imgBuffer, x + 6, y + 6, {
+        fit: [w - 12, imgAreaH - 6],
         align: 'center',
         valign: 'center',
       });
@@ -211,50 +383,143 @@ async function drawImageCell({ doc, x, y, w, h, url, caption, hint }) {
         .font('Helvetica')
         .fontSize(8)
         .fillColor(PALETTE.muted)
-        .text('Could not render image', x + 6, y + 12, { width: w - 12 });
+        .text('Could not render image', x + 10, y + 16, { width: w - 20 });
     }
   } else {
     doc
       .font('Helvetica')
       .fontSize(8)
       .fillColor(PALETTE.muted)
-      .text(url ? 'Image unavailable' : 'No file uploaded', x + 6, y + 12, {
-        width: w - 12,
+      .text(url ? 'Image unavailable' : 'No file uploaded', x + 10, y + 20, {
+        width: w - 20,
       });
-    if (url) {
-      doc
-        .font('Helvetica')
-        .fontSize(7)
-        .fillColor(PALETTE.muted)
-        .text(url, x + 6, y + 28, { width: w - 12, ellipsis: true });
-    }
   }
 
+  const captionY = y + h - footerH + 6;
   doc
     .font('Helvetica-Bold')
     .fontSize(9)
     .fillColor(PALETTE.text)
-    .text(caption || 'Document', x + 6, captionY, { width: w - 12, ellipsis: true });
+    .text(caption || 'Document', x + 10, captionY, {
+      width: w - 20,
+      ellipsis: true,
+      lineBreak: false,
+    });
   if (hint) {
     doc
       .font('Helvetica')
       .fontSize(7)
       .fillColor(PALETTE.muted)
-      .text(hint, x + 6, captionY + 12, { width: w - 12, ellipsis: true });
+      .text(hint, x + 10, captionY + 13, {
+        width: w - 20,
+        ellipsis: true,
+        lineBreak: false,
+      });
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Top-level builder                                                   */
-/* ------------------------------------------------------------------ */
+async function drawDocumentsGrid(doc, documents) {
+  if (!documents.length) {
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .fillColor(PALETTE.muted)
+      .text('No documents have been uploaded.', pageLeft(doc), doc.y);
+    doc.moveDown(0.8);
+    return;
+  }
+
+  const gap = 12;
+  const cols = 2;
+  const cellW = (contentWidth(doc) - gap) / cols;
+  const cellH = 210;
+  const left = pageLeft(doc);
+
+  let rowStartY = doc.y;
+  for (let i = 0; i < documents.length; i += 1) {
+    const col = i % cols;
+    if (col === 0) {
+      ensureSpace(doc, cellH + 14);
+      rowStartY = doc.y;
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    await drawImageCell({
+      doc,
+      x: left + col * (cellW + gap),
+      y: rowStartY,
+      w: cellW,
+      h: cellH,
+      url: documents[i].fileUrl,
+      caption: docLabel(documents[i].type),
+      hint: documents[i].uploadedAt
+        ? `Uploaded ${fmtDate(documents[i].uploadedAt)}`
+        : null,
+    });
+
+    if (col === cols - 1 || i === documents.length - 1) {
+      doc.y = rowStartY + cellH + gap;
+      doc.x = left;
+    }
+  }
+}
+
+function addPageChrome(doc) {
+  const logoPath = getBrandLogoPath();
+  const range = doc.bufferedPageRange();
+  const generated = fmtDateTime(new Date());
+
+  for (let i = range.start; i < range.start + range.count; i += 1) {
+    doc.switchToPage(i);
+    const left = pageLeft(doc);
+    const right = pageRight(doc);
+    const isFirst = i === range.start;
+
+    // Subsequent pages: compact dark strip with logo (logo is light-on-dark)
+    if (!isFirst && logoPath) {
+      const stripH = 36;
+      const stripY = 12;
+      doc.roundedRect(left, stripY, right - left, stripH, 8).fillColor(PALETTE.headerBg).fill();
+      drawBrandLogo(doc, {
+        x: left + 10,
+        y: stripY + 4,
+        height: 28,
+      });
+      doc
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#94A3B8')
+        .text('Driver profile', right - 120, stripY + 13, {
+          width: 110,
+          align: 'right',
+          lineBreak: false,
+        });
+    }
+
+    const footerY = doc.page.height - doc.page.margins.bottom + 10;
+    doc
+      .moveTo(left, footerY - 6)
+      .lineTo(right, footerY - 6)
+      .lineWidth(0.4)
+      .strokeColor(PALETTE.border)
+      .stroke();
+    doc
+      .font('Helvetica')
+      .fontSize(7.5)
+      .fillColor(PALETTE.muted)
+      .text(
+        `Generated ${generated}  ·  SpareDriver Admin  ·  Page ${i + 1} of ${range.count}`,
+        left,
+        footerY,
+        { width: right - left, align: 'center' },
+      );
+  }
+
+  doc.switchToPage(range.start + range.count - 1);
+}
 
 /**
- * Build a one-click driver dossier as a PDF stream. Caller is
- * expected to pipe `doc` into the HTTP response and set the
- * appropriate `Content-Disposition` / `Content-Type` headers.
- *
- * The renderer is deliberately defensive: every image fetch is
- * best-effort, so a broken URL never crashes the export.
+ * Build a one-click driver dossier as a PDF stream.
  */
 export async function buildDriverProfilePdf(driverId, { res } = {}) {
   const driver = await Driver.findById(driverId)
@@ -274,7 +539,7 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
 
   const doc = new PDFDocument({
     size: 'A4',
-    margin: 42,
+    margins: { top: MARGIN, bottom: MARGIN + 8, left: MARGIN, right: MARGIN },
     bufferPages: true,
     info: {
       Title: `${driver.name || 'Driver'} – Profile`,
@@ -293,98 +558,7 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
     doc.pipe(res);
   }
 
-  /* ───── Header banner ─────────────────────────────────────────── */
-
-  const pageLeft = doc.page.margins.left;
-  const pageRight = doc.page.width - doc.page.margins.right;
-  const bannerHeight = 110;
-  const bannerY = doc.y;
-
-  doc
-    .roundedRect(pageLeft, bannerY, pageRight - pageLeft, bannerHeight, 12)
-    .fillColor('#0F172A')
-    .fill();
-
-  const avatarSize = 72;
-  const avatarX = pageLeft + 16;
-  const avatarY = bannerY + (bannerHeight - avatarSize) / 2;
-  if (profilePicBuffer) {
-    try {
-      doc.save();
-      doc.roundedRect(avatarX, avatarY, avatarSize, avatarSize, avatarSize / 2).clip();
-      doc.image(profilePicBuffer, avatarX, avatarY, {
-        fit: [avatarSize, avatarSize],
-        align: 'center',
-        valign: 'center',
-      });
-      doc.restore();
-    } catch {
-      // fall through to initials avatar below
-    }
-  }
-  if (!profilePicBuffer) {
-    doc
-      .roundedRect(avatarX, avatarY, avatarSize, avatarSize, avatarSize / 2)
-      .fillColor('#1E293B')
-      .fill();
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(28)
-      .fillColor('#94A3B8')
-      .text((driver.name || '?').charAt(0).toUpperCase(), avatarX, avatarY + 18, {
-        width: avatarSize,
-        align: 'center',
-      });
-  }
-
-  const titleX = avatarX + avatarSize + 18;
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(20)
-    .fillColor('#FFFFFF')
-    .text(driver.name || 'Driver', titleX, bannerY + 18, {
-      width: pageRight - titleX - 16,
-    });
-  doc
-    .font('Helvetica')
-    .fontSize(10)
-    .fillColor('#CBD5F5')
-    .text(`Driver ID: ${driver._id}`, titleX, doc.y + 2, {
-      width: pageRight - titleX - 16,
-    });
-  doc.font('Helvetica').fontSize(10).fillColor('#CBD5F5');
-  const subLine = [
-    driver.phone ? `+91 ${driver.phone}` : null,
-    driver.email ? driver.email : null,
-    `Joined ${fmtDate(driver.createdAt)}`,
-  ]
-    .filter(Boolean)
-    .join('  •  ');
-  doc.text(subLine, titleX, doc.y + 2, { width: pageRight - titleX - 16 });
-
-  // Status pill, anchored bottom-right of the banner.
-  if (driver.approvalStatus) {
-    const pillLabel = driver.approvalStatus.replace(/_/g, ' ').toUpperCase();
-    doc.font('Helvetica-Bold').fontSize(9);
-    const padX = 10;
-    const padY = 5;
-    const pillW = doc.widthOfString(pillLabel) + padX * 2;
-    const pillH = doc.currentLineHeight() + padY * 2;
-    const pillX = pageRight - pillW - 16;
-    const pillY = bannerY + bannerHeight - pillH - 16;
-    doc
-      .roundedRect(pillX, pillY, pillW, pillH, 999)
-      .fillColor(STATUS_TONE[driver.approvalStatus] || '#475569')
-      .fill();
-    doc
-      .fillColor('#FFFFFF')
-      .text(pillLabel, pillX + padX, pillY + padY, { lineBreak: false });
-  }
-
-  doc.y = bannerY + bannerHeight + 18;
-  doc.x = pageLeft;
-
-  /* ───── Identity ──────────────────────────────────────────────── */
+  drawHeaderBanner(doc, driver, profilePicBuffer);
 
   sectionHeading(doc, 'Identity');
   const identityRows = [
@@ -393,15 +567,17 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
   ];
   if (driver.email) identityRows.push({ label: 'Email', value: driver.email });
   if (driver.gender) identityRows.push({ label: 'Gender', value: driver.gender });
-  if (driver.dateOfBirth)
+  if (driver.dateOfBirth) {
     identityRows.push({ label: 'Date of birth', value: fmtDate(driver.dateOfBirth) });
-  if (driver.authProvider) identityRows.push({ label: 'Auth provider', value: driver.authProvider });
+  }
+  if (driver.authProvider) {
+    identityRows.push({ label: 'Auth provider', value: driver.authProvider });
+  }
   if (driver.city) identityRows.push({ label: 'City', value: driver.city });
-  if (driver.referralCode) identityRows.push({ label: 'Referral code', value: driver.referralCode });
-
+  if (driver.referralCode) {
+    identityRows.push({ label: 'Referral code', value: driver.referralCode });
+  }
   infoGrid(doc, identityRows);
-
-  /* ───── Driving credentials ───────────────────────────────────── */
 
   sectionHeading(doc, 'Driving credentials');
   infoGrid(doc, [
@@ -431,8 +607,6 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
     },
   ]);
 
-  /* ───── Bank details ─────────────────────────────────────────── */
-
   if (driver.bankDetails) {
     sectionHeading(doc, 'Bank details');
     infoGrid(doc, [
@@ -444,138 +618,94 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
     ]);
   }
 
-  /* ───── Vehicle experience ────────────────────────────────────── */
-
   if ((driver.vehicleExperience || []).length > 0) {
     sectionHeading(doc, `Vehicle experience (${driver.vehicleExperience.length})`);
+    const left = pageLeft(doc);
     driver.vehicleExperience.forEach((entry, idx) => {
-      ensureSpace(doc, 24);
+      ensureSpace(doc, 28);
       const parts = [
         entry.carTypeId?.name,
         entry.brandId?.name,
         entry.modelId?.name,
         entry.fuelTypeId?.name,
       ].filter(Boolean);
+      const line = `${idx + 1}.  ${parts.join('  ·  ') || 'Vehicle'}`;
+      const y = doc.y;
       doc
-        .font('Helvetica-Bold')
-        .fontSize(10)
+        .roundedRect(left, y, contentWidth(doc), 24, 6)
+        .fillColor(PALETTE.cardBg)
+        .fill();
+      doc
+        .font('Helvetica')
+        .fontSize(9.5)
         .fillColor(PALETTE.text)
-        .text(`${idx + 1}. ${parts.join(' • ') || 'Vehicle'}`, { continued: false });
-      doc.moveDown(0.3);
+        .text(line, left + 10, y + 7, {
+          width: contentWidth(doc) - 20,
+          ellipsis: true,
+          lineBreak: false,
+        });
+      doc.y = y + 30;
+      doc.x = left;
     });
   }
-
-  /* ───── Status snapshot ──────────────────────────────────────── */
 
   sectionHeading(doc, 'Status & ratings');
   infoGrid(doc, [
     { label: 'Onboarding step', value: `Step ${driver.onboardingStep || 1} of 6` },
     { label: 'Currently online', value: driver.isOnline ? 'Yes' : 'No' },
     { label: 'On a trip right now', value: driver.isOnTrip ? 'Yes' : 'No' },
-    { label: 'Rating', value: driver.rating ? Number(driver.rating).toFixed(2) : '0.00' },
+    {
+      label: 'Rating',
+      value: driver.rating ? Number(driver.rating).toFixed(2) : '0.00',
+    },
     { label: 'Total ratings', value: driver.ratingCount || 0 },
     { label: 'Last online', value: fmtDateTime(driver.lastOnlineAt) },
   ]);
 
-  /* ───── Documents (every image) ──────────────────────────────── */
-
-  doc.addPage();
-  sectionHeading(doc, 'Documents');
-  if (documents.length === 0) {
-    doc
-      .font('Helvetica')
-      .fontSize(10)
-      .fillColor(PALETTE.muted)
-      .text('No documents have been uploaded.');
-  } else {
-    const cellGap = 12;
-    const cellsPerRow = 2;
-    const cellW =
-      (pageRight - pageLeft - cellGap * (cellsPerRow - 1)) / cellsPerRow;
-    const cellH = 230;
-
-    for (let i = 0; i < documents.length; i += 1) {
-      const row = Math.floor(i / cellsPerRow);
-      const col = i % cellsPerRow;
-      if (col === 0) ensureSpace(doc, cellH + 16);
-      const cellY = doc.y + (col === 0 ? 0 : -(cellH + 0));
-      // Re-compute the y for the current row only on the first cell.
-      // eslint-disable-next-line no-await-in-loop
-      await drawImageCell({
-        doc,
-        x: pageLeft + col * (cellW + cellGap),
-        y: cellY,
-        w: cellW,
-        h: cellH,
-        url: documents[i].fileUrl,
-        caption: docLabel(documents[i].type),
-        hint: documents[i].uploadedAt
-          ? `Uploaded ${fmtDate(documents[i].uploadedAt)}`
-          : null,
-      });
-      if (col === cellsPerRow - 1 || i === documents.length - 1) {
-        doc.y = cellY + cellH + cellGap;
-      }
-      // Don't advance row counter on individual cells.
-      void row;
-    }
-  }
-
-  /* ───── Live verification ────────────────────────────────────── */
+  // Documents — new page only when current page is already crowded
+  ensureSpace(doc, 260);
+  sectionHeading(doc, `Documents (${documents.length})`);
+  await drawDocumentsGrid(doc, documents);
 
   if (driver.liveVerificationVideo?.videoUrl) {
     sectionHeading(doc, 'Live identity verification');
+    ensureSpace(doc, 70);
+    const left = pageLeft(doc);
+    const boxY = doc.y;
+    const boxH = 64;
+    doc
+      .roundedRect(left, boxY, contentWidth(doc), boxH, 8)
+      .fillColor(PALETTE.accentSoft)
+      .fill();
     doc
       .font('Helvetica')
-      .fontSize(10)
+      .fontSize(9)
       .fillColor(PALETTE.text)
       .text(
         `Recorded ${fmtDateTime(driver.liveVerificationVideo.recordedAt)}` +
           (driver.liveVerificationVideo.durationSeconds
-            ? ` • ${driver.liveVerificationVideo.durationSeconds}s`
+            ? `  ·  ${driver.liveVerificationVideo.durationSeconds}s`
             : ''),
+        left + 12,
+        boxY + 12,
+        { width: contentWidth(doc) - 24 },
       );
-    doc.moveDown(0.4);
-    doc
-      .font('Helvetica')
-      .fontSize(9)
-      .fillColor(PALETTE.muted)
-      .text('Video link (paste into a browser to play):');
-    doc
-      .font('Helvetica')
-      .fontSize(9)
-      .fillColor(PALETTE.accent)
-      .text(driver.liveVerificationVideo.videoUrl, {
-        link: driver.liveVerificationVideo.videoUrl,
-        underline: true,
-      });
-  }
-
-  /* ───── Footer with timestamp on every page ──────────────────── */
-
-  const range = doc.bufferedPageRange();
-  for (let i = range.start; i < range.start + range.count; i += 1) {
-    doc.switchToPage(i);
-    const footerY = doc.page.height - doc.page.margins.bottom + 12;
     doc
       .font('Helvetica')
       .fontSize(8)
-      .fillColor(PALETTE.muted)
-      .text(
-        `Generated ${fmtDateTime(new Date())} • SpareDriver Admin • Page ${i + 1} of ${range.count}`,
-        doc.page.margins.left,
-        footerY,
-        { align: 'center', width: pageRight - doc.page.margins.left },
-      );
+      .fillColor(PALETTE.accent)
+      .text(driver.liveVerificationVideo.videoUrl, left + 12, boxY + 32, {
+        width: contentWidth(doc) - 24,
+        link: driver.liveVerificationVideo.videoUrl,
+        underline: true,
+      });
+    doc.y = boxY + boxH + 12;
+    doc.x = left;
   }
-  // Reset to the last page so the caller's `end()` finalises everything.
-  doc.switchToPage(range.start + range.count - 1);
 
-  void statusPill; // silence unused-export warning if helper is trimmed later
-
+  addPageChrome(doc);
   doc.end();
   return doc;
 }
 
-// Silence eslint about the unused export when only buildDriverProfilePdf is consumed.
 export const _internals = { fetchAsBuffer };

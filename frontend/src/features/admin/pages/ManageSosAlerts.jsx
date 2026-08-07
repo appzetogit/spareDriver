@@ -2,15 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapPin, Phone, ShieldCheck, Eye, Search, Filter, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Badge from '../../../components/Badge';
-import Button from '../../../components/Button';
 import Card from '../../../components/Card';
 import Select from '../../../components/Select';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
-import { useAdminSosStore, resolveSosAlert, fetchSosDetail } from '../../../store/admin/useAdminSosStore';
+import {
+  useAdminSosStore,
+  resolveSosAlert,
+  fetchSosDetail,
+  assignSosAlert,
+} from '../../../store/admin/useAdminSosStore';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageTaskAssignment } from '../../../constants/staffRoles';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import SosLiveMapModal from '../components/SosLiveMapModal';
 import RowActionsMenu from '../components/RowActionsMenu';
+import AssigneeBadge from '../components/AssigneeBadge';
+import AssignToTeamMemberControl from '../components/AssignToTeamMemberControl';
 import { useSocketEvent } from '../../../hooks/useSocket';
 import { SOS_SOCKET_EVENTS } from '../../../constants/sos';
 
@@ -20,6 +28,8 @@ const STATUS_BADGE = {
 };
 
 const ManageSosAlerts = () => {
+  const { admin } = useAdminAuthStore();
+  const canAssign = canManageTaskAssignment(admin?.role);
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
   const [statusFilter, setStatusFilter] = useState('ACTIVE');
@@ -28,6 +38,7 @@ const ManageSosAlerts = () => {
   const [mapAlert, setMapAlert] = useState(null);
   const [mapLoading, setMapLoading] = useState(false);
   const [resolvingId, setResolvingId] = useState(null);
+  const [assigningId, setAssigningId] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -106,6 +117,19 @@ const ManageSosAlerts = () => {
     }
   };
 
+  const handleAssign = async (alert, assigneeId) => {
+    setAssigningId(alert._id);
+    try {
+      await assignSosAlert(alert._id, { assigneeId });
+      toast.success('SOS assigned');
+      refetch();
+    } catch (err) {
+      throw err;
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
   const columns = useMemo(
     () => [
       {
@@ -130,6 +154,22 @@ const ManageSosAlerts = () => {
         label: 'Trip ID',
         render: (_val, row) => (
           <span className="font-mono text-xs">{row.bookingNumber || String(row.tripId).slice(-8)}</span>
+        ),
+      },
+      {
+        key: 'assignedTo',
+        label: 'Assignee',
+        render: (_val, row) => (
+          <div className="space-y-2 min-w-[160px]">
+            <AssigneeBadge assignedTo={row.assignedTo} compact />
+            {canAssign && row.status === 'ACTIVE' && (
+              <AssignToTeamMemberControl
+                compact
+                disabled={assigningId === row._id}
+                onAssign={(assigneeId) => handleAssign(row, assigneeId)}
+              />
+            )}
+          </div>
         ),
       },
       {
@@ -215,7 +255,7 @@ const ManageSosAlerts = () => {
         },
       },
     ],
-    [resolvingId, mapLoading],
+    [resolvingId, mapLoading, canAssign, assigningId],
   );
 
   return (
@@ -231,7 +271,6 @@ const ManageSosAlerts = () => {
 
       <Card padding="p-4" className="bg-white border border-slate-100 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-3 w-full">
-          {/* SEARCH */}
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -243,7 +282,6 @@ const ManageSosAlerts = () => {
             />
           </div>
 
-          {/* STATUS/STATE SELECT */}
           <div className="w-full sm:w-56">
             <Select
               value={statusFilter}
@@ -258,7 +296,6 @@ const ManageSosAlerts = () => {
             />
           </div>
 
-          {/* REFRESH BUTTON */}
           <button
             type="button"
             onClick={refetch}

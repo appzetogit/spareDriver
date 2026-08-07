@@ -18,7 +18,9 @@ import {
   emitToAdmins,
 } from '../utils/socketEmitters.js';
 import { notifyDriverOrderAssigned } from '../utils/notificationDispatch.js';
-import { hasOperationalStaffAccess } from '../constants/staffPermissions.js';
+import {
+  isSuperAdmin,
+} from '../constants/staffPermissions.js';
 import {
   estimateBookingWindow,
   applyBuffer,
@@ -36,6 +38,11 @@ import { creditWalletService, releaseWalletHoldService } from './wallet.service.
 import { creditDriverWalletService } from './driverWallet.service.js';
 import { clearPendingExtensionsOnTerminate } from './bookingExtension.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
+import {
+  issueBookingRefundService,
+  REFUND_INITIATED_BY,
+  REFUND_PAYOUT_METHOD,
+} from './refund.service.js';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 /**
@@ -88,7 +95,7 @@ async function resolveBufferMinutesFor(serviceType) {
 
 function zoneScopeForStaff(staff) {
   if (!staff) return [];
-  if (hasOperationalStaffAccess(staff)) return null;
+  if (isSuperAdmin(staff)) return null;
   const ids = (staff.assignedZones || [])
     .map((id) => {
       try {
@@ -129,8 +136,8 @@ function bookingWindowMs(booking) {
 /**
  * Paginated list of outstation bookings sitting in PENDING_ASSIGNMENT.
  *
- *   admin / sub_admin → every row across the platform
- *   team_member       → rows whose `zoneIds` overlap their `assignedZones`
+ *   super admin              → every row across the platform
+ *   sub_admin / team_member  → rows whose `zoneIds` overlap their `assignedZones`
  *                       (returns [] when the staff has no zones)
  *
  * Supported filters (all optional, all combine with AND):
@@ -803,8 +810,8 @@ export async function adminSettleOutstationArrivedService(
     throw new ApiError(400, 'driverPayoutRupees must be a non-negative number');
   }
 
-  // Zone scope for team_members (same gate as detail/assign).
-  if (staff && !hasOperationalStaffAccess(staff)) {
+  // Zone scope for sub_admin / team_member (same gate as detail/assign).
+  if (staff && zoneScopeForStaff(staff) !== null) {
     const detail = await getOutstationAssignmentDetailService(bookingId, staff);
     if (!detail) {
       throw new ApiError(404, 'Outstation booking not found or out of zone');
@@ -926,6 +933,28 @@ export async function adminSettleOutstationArrivedService(
       },
     );
     throw moneyErr;
+  }
+
+  if (userRefund > 0) {
+    try {
+      await issueBookingRefundService(booking, {
+        initiatedBy: REFUND_INITIATED_BY.ADMIN,
+        reason: 'admin_outstation_settlement',
+        breakdown: {
+          amountRupees: userRefund,
+          cancellationFeeRupees: 0,
+          grossPaidRupees: amountPaid,
+        },
+        autoProcessed: true,
+        payoutMethod: REFUND_PAYOUT_METHOD.WALLET,
+        walletTxId: userRefundTxId,
+      });
+    } catch (ledgerErr) {
+      console.warn(
+        '[outstationSettle] refund ledger write failed:',
+        ledgerErr?.message,
+      );
+    }
   }
 
   // Release unused waiting hold (outstation is usually ₹0).

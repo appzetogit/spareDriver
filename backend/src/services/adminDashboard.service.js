@@ -18,6 +18,8 @@ import { SOS_STATUS } from '../constants/sos.js';
 import { WITHDRAWAL_STATUS } from '../constants/withdrawal.js';
 import { KIT_ADMIN_STATUS, PAYMENT_STATUS } from '../constants/kitStatus.js';
 import { SUPPORT_TICKET_STATUS } from '../constants/supportTicket.js';
+import { countEmergencyPoolBookingsService } from './bookingEmergencyPool.service.js';
+import { staffAssigneeListFilter } from '../utils/staffAssignment.util.js';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -342,5 +344,46 @@ export async function getAdminDashboardService() {
           : null,
       })),
     },
+  };
+}
+
+/**
+ * Lightweight badge counts for the admin sidebar.
+ * Emergency pool is zone-scoped for team_members.
+ * SOS / support counts are assignee-scoped for team_members.
+ */
+export async function getAdminSidebarCountsService({ staff } = {}) {
+  const assigneeFilter = staffAssigneeListFilter(staff);
+  const [
+    emergencyPool,
+    pendingDrivers,
+    pendingKitOrders,
+    activeSos,
+    openSupportTickets,
+  ] = await Promise.all([
+    countEmergencyPoolBookingsService({ staff }),
+    Driver.countDocuments({
+      ...DRIVER_FILTER,
+      approvalStatus: { $in: ['pending', 'under_review'] },
+    }),
+    KitOrder.countDocuments({
+      adminStatus: KIT_ADMIN_STATUS.PENDING,
+      paymentStatus: PAYMENT_STATUS.PAID,
+    }),
+    SosAlert.countDocuments({ status: SOS_STATUS.ACTIVE, ...assigneeFilter }),
+    SupportTicket.countDocuments({
+      status: {
+        $in: [SUPPORT_TICKET_STATUS.OPEN, SUPPORT_TICKET_STATUS.IN_PROGRESS],
+      },
+      ...assigneeFilter,
+    }),
+  ]);
+
+  return {
+    emergencyPool,
+    pendingDrivers,
+    pendingKitOrders,
+    activeSos,
+    openSupportTickets,
   };
 }

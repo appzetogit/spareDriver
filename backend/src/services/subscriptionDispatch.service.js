@@ -19,8 +19,17 @@ import {
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import { emitToDriver, emitToAdmins } from '../utils/socketEmitters.js';
 import { notifyDriverSubscriptionAssigned } from '../utils/notificationDispatch.js';
+import { startOfDay } from '../utils/reportDateRange.js';
 
 const SETTINGS_KEY = 'default';
+
+/** True when calendar start day is still today or later (driver inbox eligible). */
+function isSubscriptionStartNotOverdue(startDate, now = new Date()) {
+  if (!startDate) return false;
+  const start = startOfDay(new Date(startDate));
+  if (!Number.isFinite(start.getTime())) return false;
+  return start.getTime() >= startOfDay(now).getTime();
+}
 
 export async function loadSubscriptionDispatchConfig() {
   try {
@@ -171,6 +180,10 @@ export async function broadcastSubscriptionInboxService(subscriptionId, opts = {
   if (sub.dispatch?.escalatedAt) {
     return { ok: false, reason: 'escalated' };
   }
+  // Past start day with no assign → admin only; keep out of driver inbox.
+  if (!isSubscriptionStartNotOverdue(sub.startDate)) {
+    return { ok: false, reason: 'start_overdue' };
+  }
 
   if (
     !rebroadcast
@@ -305,6 +318,12 @@ export async function acceptSubscriptionOfferService(subscriptionId, driverId) {
   }
   if (preview.assignmentStatus !== SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING) {
     throw new ApiError(409, 'Subscription offer is no longer available');
+  }
+  if (!isSubscriptionStartNotOverdue(preview.startDate)) {
+    throw new ApiError(
+      409,
+      'This subscription start date has passed. Contact admin for assignment.',
+    );
   }
 
   const subStartMs = preview.startDate ? new Date(preview.startDate).getTime() : null;
@@ -446,11 +465,14 @@ export async function rejectSubscriptionOfferService(subscriptionId, driverId) {
 export async function listIncomingSubscriptionsForDriverService(driverId) {
   if (!driverId) return [];
 
+  const todayStart = startOfDay(new Date());
   const rows = await UserSubscription.find({
     status: SUBSCRIPTION_STATUS.ACTIVE,
     assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING,
     'dispatch.pendingOfferIds': driverId,
     'dispatch.escalatedAt': null,
+    // Hide overdue (start day already passed) — admin handles those.
+    startDate: { $gte: todayStart },
   })
     .sort({ createdAt: -1 })
     .lean();
@@ -497,20 +519,24 @@ export async function listIncomingSubscriptionsForDriverService(driverId) {
 
 export async function countIncomingSubscriptionsForDriverService(driverId) {
   if (!driverId) return 0;
+  const todayStart = startOfDay(new Date());
   return UserSubscription.countDocuments({
     status: SUBSCRIPTION_STATUS.ACTIVE,
     assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING,
     'dispatch.pendingOfferIds': driverId,
     'dispatch.escalatedAt': null,
+    startDate: { $gte: todayStart },
   });
 }
 
 export async function rebroadcastOpenSubscriptionInboxes() {
   const now = new Date();
+  const todayStart = startOfDay(now);
   const rows = await UserSubscription.find({
     status: SUBSCRIPTION_STATUS.ACTIVE,
     assignmentStatus: SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING,
     assignedDriverId: null,
+    startDate: { $gte: todayStart },
     $or: [
       { 'dispatch.escalateAt': { $gt: now } },
       { 'dispatch.escalateAt': { $exists: false } },

@@ -23,7 +23,10 @@ import Toggle from '../../../components/Toggle';
 import Modal from '../../../components/Modal';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
-import { canManagePlatformSettings } from '../../../constants/staffRoles';
+import {
+  canManagePlatformSettings,
+  canViewPlatformSettings,
+} from '../../../constants/staffRoles';
 
 const EMPTY_SUPPORT_FORM = {
   supportPhone: '',
@@ -195,13 +198,15 @@ const PlatformSettings = () => {
     }
   };
 
-  if (!canManagePlatformSettings(admin?.role)) {
+  if (!canViewPlatformSettings(admin?.role)) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        You do not have permission to manage platform settings.
+        You do not have permission to view platform settings.
       </div>
     );
   }
+
+  const canEdit = canManagePlatformSettings(admin?.role);
 
   return (
     <div className="max-w-6xl space-y-8 animate-fade-in-up pb-10 px-2 sm:px-0">
@@ -212,6 +217,12 @@ const PlatformSettings = () => {
           <p className="text-sm text-slate-500 mt-1">Configure vehicle categories and registration checklists</p>
         </div>
       </div>
+
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          View only — only the super admin can edit platform settings.
+        </div>
+      )}
 
       {/* Tabs - Responsive Container */}
       <div className="overflow-x-auto pb-1 no-scrollbar">
@@ -251,6 +262,7 @@ const PlatformSettings = () => {
             <VehicleCatalogSettings
               carTypes={carTypes}
               onRefresh={() => fetchData({ silent: true })}
+              readOnly={!canEdit}
               categoryModal={{
                 openCreate: () => {
                   setEditingItem(null);
@@ -276,6 +288,7 @@ const PlatformSettings = () => {
             <TrainingVideosTab
               videos={trainingVideos}
               onRefresh={() => fetchData({ silent: true })}
+              readOnly={!canEdit}
               onCreate={(payload) => api.post('/admin/settings/training-videos', payload)}
               onUpdate={(id, payload) => api.put(`/admin/settings/training-videos/${id}`, payload)}
               onDelete={async (id) => {
@@ -287,7 +300,11 @@ const PlatformSettings = () => {
           )}
 
           {activeTab === 'banks' && (
-            <BanksTab banks={banks} onRefresh={() => fetchData({ silent: true })} />
+            <BanksTab
+              banks={banks}
+              onRefresh={() => fetchData({ silent: true })}
+              readOnly={!canEdit}
+            />
           )}
 
           {activeTab === 'support' && (
@@ -305,6 +322,7 @@ const PlatformSettings = () => {
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, supportPhone: e.target.value }))}
                   placeholder="+919876543210"
                   required
+                  disabled={!canEdit}
                 />
                 <Input
                   label="Support WhatsApp"
@@ -312,6 +330,7 @@ const PlatformSettings = () => {
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, supportWhatsapp: e.target.value }))}
                   placeholder="+919876543210"
                   required
+                  disabled={!canEdit}
                 />
                 <Input
                   label="Support Email"
@@ -320,6 +339,7 @@ const PlatformSettings = () => {
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, supportEmail: e.target.value }))}
                   placeholder="support@sparedriver.com"
                   required
+                  disabled={!canEdit}
                 />
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-slate-700">Office Address</label>
@@ -327,7 +347,8 @@ const PlatformSettings = () => {
                     value={supportForm.contactAddress || ''}
                     onChange={(e) => setSupportForm((prev) => ({ ...prev, contactAddress: e.target.value }))}
                     rows={3}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-yellow-400/60"
+                    disabled={!canEdit}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 disabled:bg-slate-50 disabled:text-slate-500"
                     placeholder="Full office address"
                   />
                 </div>
@@ -336,47 +357,54 @@ const PlatformSettings = () => {
                   value={supportForm.supportHours || ''}
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, supportHours: e.target.value }))}
                   placeholder="Mon–Sat, 9:00 AM to 6:00 PM"
+                  disabled={!canEdit}
                 />
                 <Input
                   label="Android App Download URL"
                   value={supportForm.androidAppUrl || ''}
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, androidAppUrl: e.target.value }))}
                   placeholder="https://play.google.com/store/apps/details?id=..."
+                  disabled={!canEdit}
                 />
                 <Input
                   label="iOS App Download URL"
                   value={supportForm.iosAppUrl || ''}
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, iosAppUrl: e.target.value }))}
                   placeholder="https://apps.apple.com/app/..."
+                  disabled={!canEdit}
                 />
-                <Button
-                  type="submit"
-                  loading={supportSaving}
-                  disabled={!supportDirty || loading || supportSaving}
-                >
-                  Save Website & Contact Settings
-                </Button>
+                {canEdit && (
+                  <Button
+                    type="submit"
+                    loading={supportSaving}
+                    disabled={!supportDirty || loading || supportSaving}
+                  >
+                    Save Website & Contact Settings
+                  </Button>
+                )}
               </form>
             </Card>
           )}
 
-          {activeTab === 'legal' && <LegalPagesTab />}
+          {activeTab === 'legal' && <LegalPagesTab readOnly={!canEdit} />}
 
           {/* Checklist Tab */}
           {activeTab === 'conditions' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-800">Registration Checklist</h3>
-                <Button 
-                  onClick={() => {
-                    setEditingItem(null);
-                    setConditionForm({ question: '', key: '', isRequired: false, isActive: true });
-                    setShowConditionModal(true);
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Add Question
-                </Button>
+                {canEdit && (
+                  <Button 
+                    onClick={() => {
+                      setEditingItem(null);
+                      setConditionForm({ question: '', key: '', isRequired: false, isActive: true });
+                      setShowConditionModal(true);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Add Question
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -398,29 +426,31 @@ const PlatformSettings = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button 
-                        onClick={() => {
-                          setEditingItem(cond);
-                          setConditionForm({ 
-                            question: cond.question, 
-                            key: cond.key, 
-                            isRequired: cond.isRequired, 
-                            isActive: cond.isActive 
-                          });
-                          setShowConditionModal(true);
-                        }}
-                        className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => deleteCondition(cond._id)}
-                        className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => {
+                            setEditingItem(cond);
+                            setConditionForm({ 
+                              question: cond.question, 
+                              key: cond.key, 
+                              isRequired: cond.isRequired, 
+                              isActive: cond.isActive 
+                            });
+                            setShowConditionModal(true);
+                          }}
+                          className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => deleteCondition(cond._id)}
+                          className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

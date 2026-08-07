@@ -13,6 +13,7 @@ import {
   rescheduleBookingService,
   sanitizeBookingForDriver,
   listAdminBookingsService,
+  assertStaffCanViewBooking,
 } from '../services/booking.service.js';
 import {
   initiateExtensionService,
@@ -398,9 +399,20 @@ export const driverDismissBookingExtension = asyncHandler(async (req, res) => {
     req.params.id,
     req.body,
   );
-  return res
-    .status(200)
-    .json(new ApiResponse(200, result, 'Extension dismissed'));
+  // Same sanitizer as en-route / arrive / start / complete / cancel —
+  // without it the FE replaces the in-memory trip with a raw
+  // fareSnapshot (no top-level `driverEarning`) and the "Your earning"
+  // tile drops to ₹0 until the next fetch.
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        ...result,
+        booking: sanitizeBookingForDriver(result.booking),
+      },
+      'Extension dismissed',
+    ),
+  );
 });
 
 /**
@@ -472,12 +484,13 @@ export const respondToNoShowPrompt = asyncHandler(async (req, res) => {
 /* ------------------------------------------------------------------ */
 
 export const getAdminBookings = asyncHandler(async (req, res) => {
-  const result = await listAdminBookingsService(req.query);
+  const result = await listAdminBookingsService(req.query, { staff: req.staff });
   return res.status(200).json(new ApiResponse(200, result, 'Bookings fetched'));
 });
 
 export const getAdminBookingById = asyncHandler(async (req, res) => {
   const booking = await getBookingByIdService(req.params.id);
+  assertStaffCanViewBooking(req.staff, booking);
   return res.status(200).json(new ApiResponse(200, { booking }, 'Booking fetched'));
 });
 
@@ -489,7 +502,8 @@ export const getAdminBookingById = asyncHandler(async (req, res) => {
  * Scheduled bookings that have no driver within
  * `SCHEDULED_BOOKING.EMERGENCY_POOL_MINUTES` of pickup escalate here.
  *
- *   - admin / sub_admin   see every entry
+ *   - admin / sub_admin   see entries in their assigned zones
+ *                         (super admin: every entry; sub_admin: assignedZones)
  *   - team_member         see only entries whose pickup falls in a
  *                         zone they're assigned to (`assignedZones`).
  *

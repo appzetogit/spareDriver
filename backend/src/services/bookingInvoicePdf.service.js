@@ -3,6 +3,7 @@ import Booking from '../models/booking.model.js';
 import { ApiError } from '../utils/apiError.js';
 import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 import { SERVICE_TYPE_LABELS } from '../constants/serviceTypes.js';
+import { drawBrandLogo, formatPdfInr } from '../utils/pdfBrand.js';
 
 const PALETTE = {
   text: '#0F172A',
@@ -123,6 +124,7 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
   const doc = new PDFDocument({
     size: 'A4',
     margin: 48,
+    bufferPages: true,
     info: {
       Title: `Invoice ${invoiceNumber}`,
       Author: 'SpareDriver',
@@ -143,11 +145,16 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
   const pageLeft = doc.page.margins.left;
   const pageRight = doc.page.width - doc.page.margins.right;
 
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(22)
-    .fillColor(PALETTE.text)
-    .text('SpareDriver', pageLeft, doc.y);
+  const logo = drawBrandLogo(doc, { x: pageLeft, y: doc.y, height: 36 });
+  if (logo.drawn) {
+    doc.y = doc.y + logo.height + 8;
+  } else {
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(22)
+      .fillColor(PALETTE.text)
+      .text('SpareDriver', pageLeft, doc.y);
+  }
   doc
     .font('Helvetica')
     .fontSize(10)
@@ -198,16 +205,16 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
     .text('Fare breakdown');
   doc.moveDown(0.4);
 
-  if (fare.baseFare != null) drawRow(doc, 'Base fare', `₹${fare.baseFare}`);
-  if (fare.extras) drawRow(doc, 'Extras', `₹${fare.extras}`);
+  if (fare.baseFare != null) drawRow(doc, 'Base fare', formatPdfInr(fare.baseFare));
+  if (fare.extras) drawRow(doc, 'Extras', formatPdfInr(fare.extras));
   if (fare.serviceCharge || fare.platformFee) {
-    drawRow(doc, 'Platform fee', `₹${fare.platformFee || fare.serviceCharge}`);
+    drawRow(doc, 'Platform fee', formatPdfInr(fare.platformFee || fare.serviceCharge));
   }
-  if (fare.gst) drawRow(doc, 'GST', `₹${fare.gst}`);
-  if (fare.discount) drawRow(doc, 'Discount', `-₹${fare.discount}`);
+  if (fare.gst) drawRow(doc, 'GST', formatPdfInr(fare.gst));
+  if (fare.discount) drawRow(doc, 'Discount', `-${formatPdfInr(fare.discount)}`);
   if (fare.couponDiscount) {
     const couponLabel = fare.couponCode ? `Coupon (${fare.couponCode})` : 'Coupon discount';
-    drawRow(doc, couponLabel, `-₹${fare.couponDiscount}`);
+    drawRow(doc, couponLabel, `-${formatPdfInr(fare.couponDiscount)}`);
   }
   const acceptedExtensions = (booking.extensions || []).filter(
     (ext) => ext?.status === 'accepted',
@@ -219,15 +226,15 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
       days > 0
         ? `Trip extension (+${days} day${days === 1 ? '' : 's'})`
         : `Trip extension (+${hours}h)`;
-    drawRow(doc, label, `₹${Number(ext.fareDelta) || 0}`);
+    drawRow(doc, label, formatPdfInr(Number(ext.fareDelta) || 0));
   }
   if (waitingTotal) {
-    drawRow(doc, 'Waiting charge', `₹${waitingTotal}`);
+    drawRow(doc, 'Waiting charge', formatPdfInr(waitingTotal));
   }
 
   doc.moveDown(0.4);
   drawDivider(doc);
-  drawRow(doc, 'Total paid', `₹${grandTotal}`, { bold: true });
+  drawRow(doc, 'Total paid', formatPdfInr(grandTotal), { bold: true });
 
   doc.moveDown(2);
   doc
@@ -238,6 +245,20 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
       width: pageRight - pageLeft,
       align: 'center',
     });
+
+  // Logo already drawn in the header; stamp again on extra pages if any.
+  const range = doc.bufferedPageRange();
+  if (range.count > 1) {
+    for (let i = range.start + 1; i < range.start + range.count; i += 1) {
+      doc.switchToPage(i);
+      drawBrandLogo(doc, {
+        x: pageLeft,
+        y: 16,
+        height: 22,
+      });
+    }
+    doc.switchToPage(range.start + range.count - 1);
+  }
 
   doc.end();
 }

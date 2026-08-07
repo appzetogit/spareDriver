@@ -13,6 +13,7 @@ import {
   getActiveSosForTripService,
   listAdminSosService,
   getAdminSosDetailService,
+  assignSosService,
 } from '../services/sos.service.js';
 import {
   listEmergencyContactsService,
@@ -68,7 +69,7 @@ export const updateSosLocation = asyncHandler(async (req, res) => {
 export const resolveSos = asyncHandler(async (req, res) => {
   const alert = await resolveSosService({
     sosId: req.params.id,
-    staffId: req.staff._id,
+    staff: req.staff,
     ip: req.ip || '',
   });
 
@@ -83,13 +84,20 @@ export const getActiveSosForTrip = asyncHandler(async (req, res) => {
 
 export const listAdminSos = asyncHandler(async (req, res) => {
   const query = listAdminSosSchema.parse(req.query);
-  const data = await listAdminSosService(query);
+  const data = await listAdminSosService(req.staff, query);
   return res.json(new ApiResponse(200, data, 'SOS alerts'));
 });
 
 export const getAdminSosDetail = asyncHandler(async (req, res) => {
-  const data = await getAdminSosDetailService(req.params.id);
+  const data = await getAdminSosDetailService(req.staff, req.params.id);
   return res.json(new ApiResponse(200, data, 'SOS detail'));
+});
+
+export const assignAdminSos = asyncHandler(async (req, res) => {
+  const alert = await assignSosService(req.staff, req.params.id, {
+    assigneeId: req.body?.assigneeId,
+  });
+  return res.json(new ApiResponse(200, { alert }, 'SOS assigned'));
 });
 
 export const listEmergencyContacts = asyncHandler(async (req, res) => {

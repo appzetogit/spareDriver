@@ -27,6 +27,7 @@ const MySubscriptionPage = () => {
   const mySubscriptions = useUserSubscriptionStore((s) => s.mySubscriptions);
   const loading = useUserSubscriptionStore((s) => s.loading);
   const fetchMySubscription = useUserSubscriptionStore((s) => s.fetchMySubscription);
+  const patchMySubscription = useUserSubscriptionStore((s) => s.patchMySubscription);
 
   useEffect(() => {
     fetchMySubscription().catch(() => {});
@@ -66,7 +67,10 @@ const MySubscriptionPage = () => {
           <SubscriptionDetailCard
             key={sub._id}
             sub={sub}
-            onUpdated={() => fetchMySubscription().catch(() => {})}
+            onUpdated={(next) => {
+              if (next?._id) patchMySubscription(next);
+              else fetchMySubscription({ force: true }).catch(() => {});
+            }}
           />
         ))}
 
@@ -186,7 +190,7 @@ function SubscriptionDetailCard({ sub, onUpdated }) {
         open={rescheduleOpen}
         subscription={sub}
         onClose={() => setRescheduleOpen(false)}
-        onSaved={() => onUpdated?.()}
+        onSaved={(next) => onUpdated?.(next)}
       />
     </Card>
   );

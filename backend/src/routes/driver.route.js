@@ -10,6 +10,7 @@ import {
   submitApplication,
   getProfile,
   updateVehicleExperience,
+  updateBankDetails,
   getTraining,
   updateTrainingProgress,
   uploadLiveVerification,
@@ -104,6 +105,7 @@ router.post('/onboarding/submit', protectDriver, submitApplication);
 router.post('/application/reopen', protectDriver, reopenRejectedApplication);
 router.get('/profile', protectDriver, getProfile);
 router.put('/profile/vehicle-experience', protectDriver, updateVehicleExperience);
+router.put('/profile/bank-details', protectDriver, updateBankDetails);
 router.post('/fcm-token', protectDriver, registerDriverFcmToken);
 router.delete('/fcm-token', protectDriver, unregisterDriverFcmToken);
 

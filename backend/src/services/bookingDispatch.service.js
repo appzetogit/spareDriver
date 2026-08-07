@@ -45,6 +45,8 @@ import {
 import {
   notifyUserDriverAssigned,
   notifyUserDriverAccepted,
+  notifyUserNoDriversFound,
+  notifyAdminNoDriversFound,
   notifyDriverNewBookingRequest,
   notifyDriverBookingOfferWithdrawn,
 } from '../utils/notificationDispatch.js';
@@ -278,10 +280,11 @@ function emitUserDispatchUpdate(booking) {
     bookingId: String(booking._id),
     status: booking.status,
     dispatch: {
-      attempt: booking.dispatch.attemptsCount,
-      maxAttempts: booking.dispatch.maxAttempts,
-      radiusMeters: booking.dispatch.currentRadiusMeters,
-      pendingDriverCount: booking.dispatch.pendingOfferIds.length,
+      // Keys must match Booking.dispatch + FE `applyUpdate` / SearchingDriverPage.
+      attemptsCount: booking.dispatch?.attemptsCount || 0,
+      maxAttempts: booking.dispatch?.maxAttempts,
+      currentRadiusMeters: booking.dispatch?.currentRadiusMeters,
+      pendingDriverCount: (booking.dispatch?.pendingOfferIds || []).length,
     },
   });
 }
@@ -327,9 +330,12 @@ async function prepareDispatchCandidates(booking, { excludeAlreadyOffered = true
 
   const bufferMinutes = await resolveRideBufferMinutes(booking.serviceType);
   const newWindow = estimateBookingWindow(booking);
-  const conflictedDriverIds = newWindow
+  const bufferedWindow = newWindow
+    ? applyBuffer(newWindow, bufferMinutes)
+    : null;
+  const conflictedDriverIds = bufferedWindow
     ? await findConflictingDriverIds({
-        window: newWindow,
+        window: bufferedWindow,
         excludeBookingId: booking._id,
         bufferMinutes,
       })
@@ -651,22 +657,46 @@ async function failBookingNoDrivers(bookingId) {
     return { ok: false, reason: 'scheduled_awaiting_emergency_pool' };
   }
 
-  // Instant: soft-park as NO_DRIVERS_FOUND (payment held; user can
-  // search again or cancel for a refund). No auto-refund here.
+  // Instant / outstation soft-park: NO_DRIVERS_FOUND (payment held; user
+  // can search again or cancel for a refund). Scheduled rows escalate
+  // into the emergency pool inside adminMarkNoDriversFoundService.
   const booking = await adminMarkNoDriversFoundService(bookingId);
   const escalated = booking.status === BOOKING_STATUS.IN_EMERGENCY_POOL;
-  emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, {
+  const updatePayload = {
     bookingId: String(booking._id),
     status: booking.status,
-  });
+    cancellation: booking.cancellation || null,
+    dispatch: {
+      attemptsCount: booking.dispatch?.attemptsCount || 0,
+      maxAttempts: booking.dispatch?.maxAttempts,
+      currentRadiusMeters: booking.dispatch?.currentRadiusMeters,
+      pendingDriverCount: 0,
+    },
+  };
+  // Fan out to user + booking room + admins. The searching page can miss
+  // a solo user-room emit if it mounts after this fires; room + poll
+  // recover, and admins need BOOKING_UPDATED to refresh live lists.
+  emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, updatePayload);
+  emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, updatePayload);
+  emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, updatePayload);
   emitToAdmins(S2C_EVENTS.ADMIN_ALERT, {
     kind: escalated ? 'emergency_pool_entered' : 'no_drivers_found',
     severity: 'warn',
     message: escalated
       ? `Scheduled booking ${booking.bookingNumber} needs manual driver assignment`
       : `Booking ${booking.bookingNumber} could not find a driver`,
-    data: { bookingId: String(booking._id) },
+    data: {
+      bookingId: String(booking._id),
+      bookingNumber: booking.bookingNumber || '',
+      path: escalated
+        ? '/admin/bookings/emergency-pool'
+        : '/admin/bookings',
+    },
   });
+  if (!escalated) {
+    notifyUserNoDriversFound(booking.userId, booking).catch(() => null);
+    notifyAdminNoDriversFound(booking).catch(() => null);
+  }
   return {
     ok: false,
     reason: escalated ? 'in_emergency_pool' : 'no_drivers_found',

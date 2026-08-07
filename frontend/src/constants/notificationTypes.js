@@ -7,7 +7,9 @@ export const USER_NOTIFICATION = Object.freeze({
   DRIVER_ASSIGNED: 'driver_assigned',
   DRIVER_ACCEPTED: 'driver_accepted',
   DRIVER_ARRIVED: 'driver_arrived',
+  NO_DRIVERS_FOUND: 'no_drivers_found',
   TRIP_STARTED: 'trip_started',
+  RIDE_ENDING_SOON: 'ride_ending_soon',
   TRIP_COMPLETED: 'trip_completed',
   PAYMENT_SUCCESSFUL: 'payment_successful',
   REFUND_INITIATED: 'refund_initiated',
@@ -34,12 +36,24 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   BOOKING_REMINDER: 'booking_reminder',
 });
 
+export const ADMIN_NOTIFICATION = Object.freeze({
+  NEW_DRIVER_REGISTRATION: 'new_driver_registration',
+  SOS_TRIGGERED: 'sos_triggered',
+  EMERGENCY_POOL_ENTERED: 'emergency_pool_entered',
+  NO_DRIVERS_FOUND: 'no_drivers_found',
+  SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
+  REFUND_REQUEST: 'refund_request',
+  WITHDRAWAL_REQUEST: 'withdrawal_request',
+});
+
 const USER_LIVE_KINDS = new Set([
   USER_NOTIFICATION.DRIVER_SEARCHING,
   USER_NOTIFICATION.DRIVER_ASSIGNED,
   USER_NOTIFICATION.DRIVER_ACCEPTED,
   USER_NOTIFICATION.DRIVER_ARRIVED,
+  USER_NOTIFICATION.NO_DRIVERS_FOUND,
   USER_NOTIFICATION.TRIP_STARTED,
+  USER_NOTIFICATION.RIDE_ENDING_SOON,
   USER_NOTIFICATION.BOOKING_REMINDER,
   USER_NOTIFICATION.PAYMENT_SUCCESSFUL,
 ]);
@@ -63,6 +77,10 @@ function userLiveRoute(kind, bookingId, status) {
 
 /** Resolve in-app navigation path from notification payload */
 export function notificationNavigatePath(kind, data = {}, audience = 'user') {
+  if (data.path && typeof data.path === 'string' && data.path.startsWith('/')) {
+    return data.path;
+  }
+
   const bookingId = data.bookingId ? String(data.bookingId) : null;
   const status = data.status || null;
 
@@ -108,6 +126,27 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
     if (bookingId) return `/driver/trip/${bookingId}`;
     if (kind === DRIVER_NOTIFICATION.EARNINGS_CREDITED) return '/driver/earnings';
     return null;
+  }
+
+  if (audience === 'admin') {
+    switch (kind) {
+      case ADMIN_NOTIFICATION.SOS_TRIGGERED:
+        return '/admin/sos';
+      case ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED:
+        return '/admin/support';
+      case ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED:
+        return '/admin/bookings/emergency-pool';
+      case ADMIN_NOTIFICATION.NO_DRIVERS_FOUND:
+        return '/admin/bookings';
+      case ADMIN_NOTIFICATION.NEW_DRIVER_REGISTRATION:
+        return '/admin/drivers';
+      case ADMIN_NOTIFICATION.REFUND_REQUEST:
+        return '/admin/account/refunds';
+      case ADMIN_NOTIFICATION.WITHDRAWAL_REQUEST:
+        return '/admin/account/withdrawals';
+      default:
+        return null;
+    }
   }
 
   return null;

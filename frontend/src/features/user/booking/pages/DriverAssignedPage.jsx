@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   MapPin,
@@ -100,6 +100,7 @@ function StatusIcon({ icon }) {
 const DriverAssignedPage = () => {
   const navigate = useNavigate();
   const { id: routeBookingId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchById = useUserActiveBookingStore((s) => s.fetchById);
   const refreshCurrentOrActive = useUserActiveBookingStore(
@@ -499,6 +500,26 @@ const DriverAssignedPage = () => {
       duration: 5000,
     });
   }, [rideTimer.shouldPromptExtension, extensionPromptOpen, extensionPromptDismissedAt]);
+
+  // Push / deep-link: `?extend=1` (FCM tap) opens the extend sheet once
+  // the STARTED trip is hydrated.
+  useEffect(() => {
+    if (searchParams.get('extend') !== '1') return;
+    if (booking?.status !== BOOKING_STATUS.STARTED) return;
+    setExtensionPromptOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('extend');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, booking?.status, booking?._id]);
+
+  // Server-side ride-end nudge (same moment as the FCM) — open the sheet
+  // if the local timer was missed or the app was backgrounded.
+  useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_OFFERED, (payload) => {
+    if (!payload?.bookingId || !booking?._id) return;
+    if (String(payload.bookingId) !== String(booking._id)) return;
+    if (booking.status !== BOOKING_STATUS.STARTED) return;
+    setExtensionPromptOpen(true);
+  });
 
   // Pick the most recent extension still in a handshake state. This is
   // what powers both the modal's resume-on-open and the sticky banner

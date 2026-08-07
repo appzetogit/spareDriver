@@ -27,3 +27,8 @@ export async function resolveSosAlert(sosId) {
   const res = await api.patch(`/sos/${sosId}/resolve`);
   return res.data?.data;
 }
+
+export async function assignSosAlert(sosId, { assigneeId }) {
+  const res = await api.patch(`/admin/sos/${sosId}/assign`, { assigneeId });
+  return res.data?.data?.alert ?? null;
+}

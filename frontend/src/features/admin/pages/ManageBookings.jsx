@@ -5,6 +5,9 @@ import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminBookingsStore } from '../../../store/admin/useAdminBookingsStore';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { useSocketEvent } from '../../../hooks/useSocket';
+import { S2C_EVENTS } from '../../../constants/socketEvents';
+import { BOOKING_STATUS } from '../../../constants/bookingStatus';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import BookingDetailsModal from '../components/ManageBookings/BookingDetailsModal';
 import AssignBookingDriverDrawer from '../components/ManageBookings/AssignBookingDriverDrawer';
@@ -17,6 +20,15 @@ import {
 } from '../utils/bookingAssignment';
 
 const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
+
+const LIVE_REFRESH_STATUSES = new Set([
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.NO_DRIVERS_FOUND,
+  BOOKING_STATUS.DRIVER_ASSIGNED,
+  BOOKING_STATUS.IN_EMERGENCY_POOL,
+  BOOKING_STATUS.CANCELLED,
+  BOOKING_STATUS.COMPLETED,
+]);
 
 const ManageBookings = () => {
   const admin = useAdminAuthStore((s) => s.admin);
@@ -82,6 +94,21 @@ const ManageBookings = () => {
     cacheKey,
     queryParams,
   );
+
+  useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
+    if (LIVE_REFRESH_STATUSES.has(payload?.status)) {
+      refetch();
+    }
+  });
+
+  useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
+    if (
+      payload?.kind === 'no_drivers_found'
+      || payload?.kind === 'emergency_pool_entered'
+    ) {
+      refetch();
+    }
+  });
 
   const bookings = data?.bookings ?? [];
   const pagination = data?.pagination ?? { total: 0, pages: 1 };
@@ -252,6 +279,7 @@ const ManageBookings = () => {
     active: 0,
     completed: 0,
     cancelled: 0,
+    noDriversFound: 0,
   };
 
   const detailVehicle =

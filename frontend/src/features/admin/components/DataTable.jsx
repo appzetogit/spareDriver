@@ -21,6 +21,7 @@ const DataTable = ({
   searchPlaceholder = 'Search...',
   pageSize = 8,
   onRowClick,
+  getRowClassName,
   actions,
   showSearch = true,
   showToolbar = true,
@@ -168,6 +169,7 @@ const DataTable = ({
                     className={`
                       border-b border-slate-50 last:border-b-0 transition-colors
                       ${onRowClick ? 'cursor-pointer hover:bg-slate-50' : ''}
+                      ${getRowClassName?.(row) || ''}
                     `}
                   >
                     {columns.map((col) => {

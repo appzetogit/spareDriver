@@ -110,8 +110,16 @@ export function applyBuffer(window, bufferMinutes) {
 /**
  * Flatten current + historical assignment stints on a subscription into
  * concrete `[startMs, endMs]` windows keyed by driver.
+ *
+ * `active: true`  → currently assigned (blocks offers for the whole stint
+ *                   plus the normal ride buffer).
+ * `active: false` → previousAssignments entry (driver already freed).
+ *                   `releasedAt` is the admin "last working day" (EOD) for
+ *                   payroll — once that calendar day is today or earlier,
+ *                   the stint ends at yesterday EOD so NEW booking windows
+ *                   (already buffered backwards) do not still overlap.
  */
-export function listSubscriptionStints(subscription) {
+export function listSubscriptionStints(subscription, { nowMs = Date.now() } = {}) {
   if (!subscription) return [];
   const stints = [];
   const expiryMs = toMs(subscription.expiryDate);
@@ -129,22 +137,40 @@ export function listSubscriptionStints(subscription) {
         driverId: String(subscription.assignedDriverId),
         startMs,
         endMs,
+        active: true,
         subscription,
       });
     }
   }
 
+  const todayStart = new Date(nowMs);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
+
   for (const prev of subscription.previousAssignments || []) {
     if (!prev?.driverId || !prev.assignedAt) continue;
     const startMs = toMs(prev.assignedAt);
-    const endMs = toMs(prev.releasedAt) || expiryMs;
+    let endMs = toMs(prev.releasedAt) || expiryMs;
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
       continue;
     }
+
+    // Freed driver: last-working-day already reached → available for
+    // dispatch immediately. Clamp to end-of-yesterday (not `now - 1`):
+    // new booking windows are already buffered backwards by
+    // RIDE_BUFFER_MINUTES, so ending at `now - 1` still overlaps and
+    // keeps the driver marked conflicting in assign UIs.
+    const endDayStart = new Date(endMs);
+    endDayStart.setHours(0, 0, 0, 0);
+    if (endDayStart.getTime() <= todayStartMs) {
+      endMs = Math.min(endMs, todayStartMs - 1);
+    }
+
     stints.push({
       driverId: String(prev.driverId),
       startMs,
       endMs,
+      active: false,
       subscription,
     });
   }
@@ -281,8 +307,12 @@ export async function findConflictingDriverIds({
 
   for (const sub of subscriptions) {
     for (const stint of listSubscriptionStints(sub)) {
-      const paddedStart = stint.startMs - bufferMs;
-      const paddedEnd = stint.endMs + bufferMs;
+      // Active assignment: pad with the ride buffer. Previous (freed)
+      // stints: no end-buffer — otherwise "released today" stays blocked
+      // until tonight + RIDE_BUFFER_MINUTES.
+      const pad = stint.active ? bufferMs : 0;
+      const paddedStart = stint.startMs - pad;
+      const paddedEnd = stint.endMs + pad;
       if (paddedStart <= newEnd && paddedEnd >= newStart) {
         conflicted.add(stint.driverId);
       }
@@ -398,8 +428,9 @@ export async function getDriverConflictMap({
   for (const sub of subscriptions) {
     for (const stint of listSubscriptionStints(sub)) {
       if (!wanted.has(stint.driverId)) continue;
-      const paddedStart = stint.startMs - bufferMs;
-      const paddedEnd = stint.endMs + bufferMs;
+      const pad = stint.active ? bufferMs : 0;
+      const paddedStart = stint.startMs - pad;
+      const paddedEnd = stint.endMs + pad;
       if (paddedStart <= newEnd && paddedEnd >= newStart) {
         if (!out[stint.driverId]) out[stint.driverId] = [];
         out[stint.driverId].push(subscriptionConflictRow(stint));

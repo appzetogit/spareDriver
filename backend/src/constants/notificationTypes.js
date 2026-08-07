@@ -18,7 +18,10 @@ export const USER_NOTIFICATION = Object.freeze({
   DRIVER_ACCEPTED: 'driver_accepted',
   DRIVER_REJECTED: 'driver_rejected',
   DRIVER_ARRIVED: 'driver_arrived',
+  NO_DRIVERS_FOUND: 'no_drivers_found',
   TRIP_STARTED: 'trip_started',
+  /** Hourly ride nearing booked end — offer to extend. */
+  RIDE_ENDING_SOON: 'ride_ending_soon',
   TRIP_COMPLETED: 'trip_completed',
   ORDER_PICKED_UP: 'order_picked_up',
   ORDER_DELIVERED: 'order_delivered',
@@ -79,6 +82,7 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   PAYMENT_MISMATCH: 'payment_mismatch',
   ACCOUNTING_MISMATCH: 'accounting_mismatch',
   EMERGENCY_POOL_ENTERED: 'emergency_pool_entered',
+  NO_DRIVERS_FOUND: 'no_drivers_found',
   SCHEDULED_DISPATCH_RETRY: 'scheduled_dispatch_retry',
   SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
 });
@@ -106,6 +110,7 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
     ADMIN_NOTIFICATION.PAYMENT_MISMATCH,
     ADMIN_NOTIFICATION.ACCOUNTING_MISMATCH,
     ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
+    ADMIN_NOTIFICATION.NO_DRIVERS_FOUND,
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
   ]),
 );
@@ -114,5 +119,7 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
 export const ADMIN_FCM_NOTIFICATION_TYPES = Object.freeze(
   new Set([
     ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
+    ADMIN_NOTIFICATION.SOS_TRIGGERED,
+    ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
   ]),
 );

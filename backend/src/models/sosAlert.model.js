@@ -73,6 +73,18 @@ const sosAlertSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    assignedAt: { type: Date, default: null },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     timeline: { type: [timelineEventSchema], default: [] },
   },
   { timestamps: true },
@@ -83,6 +95,7 @@ sosAlertSchema.index(
   { unique: true, partialFilterExpression: { status: SOS_STATUS.ACTIVE } },
 );
 sosAlertSchema.index({ status: 1, createdAt: -1 });
+sosAlertSchema.index({ assignedTo: 1, status: 1 });
 
 const SosAlert = mongoose.models.SosAlert || mongoose.model('SosAlert', sosAlertSchema);
 export default SosAlert;

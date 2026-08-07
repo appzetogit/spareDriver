@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Card from '../../../../components/Card';
@@ -12,6 +12,7 @@ import DriverAccountSubPage from '../components/DriverAccountSubPage';
 import {
   vehiclesFromProfile,
   validateVehicles,
+  vehiclesSignature,
 } from '../utils/vehicleExperienceForm';
 
 const DriverVehiclePreferencesPage = () => {
@@ -24,17 +25,27 @@ const DriverVehiclePreferencesPage = () => {
   );
 
   const [vehicles, setVehicles] = useState([]);
+  const [baselineSignature, setBaselineSignature] = useState('');
   const [vehicleErrors, setVehicleErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     if (!profile || hydrated) return;
-    setVehicles(vehiclesFromProfile(profile));
+    const initial = vehiclesFromProfile(profile);
+    setVehicles(initial);
+    setBaselineSignature(vehiclesSignature(initial));
     setHydrated(true);
   }, [profile, hydrated]);
 
+  const isDirty = useMemo(
+    () => hydrated && vehiclesSignature(vehicles) !== baselineSignature,
+    [hydrated, vehicles, baselineSignature],
+  );
+
   const handleSave = async () => {
+    if (!isDirty) return;
+
     const { valid, fieldErrors } = validateVehicles(vehicles);
     setVehicleErrors(fieldErrors);
     if (!valid) return;
@@ -57,8 +68,12 @@ const DriverVehiclePreferencesPage = () => {
       useDriverProfileStore.getState().invalidate(profileKey);
       const freshProfile = (await refetchProfile()) || savedProfile;
       if (freshProfile) {
-        setVehicles(vehiclesFromProfile(freshProfile));
+        const next = vehiclesFromProfile(freshProfile);
+        setVehicles(next);
+        setBaselineSignature(vehiclesSignature(next));
         setHydrated(true);
+      } else {
+        setBaselineSignature(vehiclesSignature(vehicles));
       }
       toast.success('Vehicle experience updated');
     } catch (error) {
@@ -87,7 +102,7 @@ const DriverVehiclePreferencesPage = () => {
           type="button"
           onClick={handleSave}
           loading={isSaving}
-          disabled={isSaving}
+          disabled={isSaving || !isDirty}
           className="w-full"
         >
           Save vehicle experience

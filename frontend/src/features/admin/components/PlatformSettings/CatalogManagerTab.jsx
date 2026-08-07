@@ -35,6 +35,7 @@ const CatalogManagerTab = ({
   onMutate,
   brandFilter = false,
   embedded = false,
+  readOnly = false,
 }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -204,7 +205,11 @@ const CatalogManagerTab = ({
         <CatalogSectionHeader
           title={title}
           description={description}
-          action={<CatalogAddButton label={`Add ${itemLabel}`} onClick={openCreate} />}
+          action={
+            !readOnly ? (
+              <CatalogAddButton label={`Add ${itemLabel}`} onClick={openCreate} />
+            ) : null
+          }
         />
       )}
 
@@ -235,8 +240,8 @@ const CatalogManagerTab = ({
               ? `Add your first ${itemLabel.toLowerCase()} for driver and user onboarding.`
               : 'Try a different search term or clear filters.'
           }
-          actionLabel={items.length === 0 ? `Add ${itemLabel}` : undefined}
-          onAction={items.length === 0 ? openCreate : undefined}
+          actionLabel={!readOnly && items.length === 0 ? `Add ${itemLabel}` : undefined}
+          onAction={!readOnly && items.length === 0 ? openCreate : undefined}
         />
       ) : (
         <CatalogTable columns={columns} empty={false}>
@@ -278,10 +283,12 @@ const CatalogManagerTab = ({
                 <CatalogStatusBadge active={item.isActive !== false} />
               </CatalogCell>
               <CatalogCell className="text-right">
-                <CatalogRowActions
-                  onEdit={() => openEdit(item)}
-                  onDelete={() => handleDelete(item._id)}
-                />
+                {!readOnly && (
+                  <CatalogRowActions
+                    onEdit={() => openEdit(item)}
+                    onDelete={() => handleDelete(item._id)}
+                  />
+                )}
               </CatalogCell>
             </CatalogRow>
           ))}

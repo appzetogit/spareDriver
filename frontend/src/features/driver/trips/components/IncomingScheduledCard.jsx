@@ -86,15 +86,15 @@ export default function IncomingScheduledCard({
 
   return (
     <>
-      <Card className={className} style={style}>
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="min-w-0">
+      <Card className={`w-full min-w-0 overflow-hidden ${className}`} style={style}>
+        <div className="flex items-start justify-between gap-2 sm:gap-3 mb-2">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${badgeClass}`}>
-                <CalendarClock className="w-3 h-3" />
+                <CalendarClock className="w-3 h-3 shrink-0" />
                 {badgeLabel}
               </span>
-              <span className="text-[11px] text-text-muted truncate">
+              <span className="text-[11px] text-text-muted min-w-0 break-words">
                 {serviceLabel}
                 {request.bookingNumber
                   ? ` · #${request.bookingNumber}`
@@ -105,27 +105,27 @@ export default function IncomingScheduledCard({
             </div>
             <p className="text-sm font-semibold text-text mt-1.5 flex items-start gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-              <span className="line-clamp-2">{pickupLabel}</span>
+              <span className="min-w-0 break-words line-clamp-2">{pickupLabel}</span>
             </p>
             {dropLabel && (
-              <p className="text-xs text-text-muted mt-1 pl-5 line-clamp-1">{dropLabel}</p>
+              <p className="text-xs text-text-muted mt-1 pl-5 break-words line-clamp-2">{dropLabel}</p>
             )}
           </div>
           {earning != null && (
-            <div className="text-right shrink-0">
+            <div className="text-right shrink-0 max-w-[40%]">
               <p className="text-[10px] text-text-muted uppercase tracking-wide">Earn</p>
-              <p className="text-sm font-bold text-text inline-flex items-center gap-0.5">
-                <IndianRupee className="w-3.5 h-3.5" />
-                {formatCurrency(earning).replace('₹', '')}
+              <p className="text-sm font-bold text-text inline-flex items-center gap-0.5 tabular-nums">
+                <IndianRupee className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{formatCurrency(earning).replace('₹', '')}</span>
               </p>
             </div>
           )}
         </div>
 
-        <div className="rounded-xl bg-bg/80 border border-border-light px-3 py-2 space-y-1.5 mb-3">
-          <div className="flex items-center gap-2 text-xs text-text">
-            <Clock className="w-3.5 h-3.5 text-text-muted shrink-0" />
-            <span>
+        <div className="rounded-xl bg-bg/80 border border-border-light px-3 py-2 space-y-1.5 mb-3 min-w-0">
+          <div className="flex items-start gap-2 text-xs text-text">
+            <Clock className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
+            <span className="min-w-0 break-words leading-snug">
               {whenPrimary}
               {whenSecondary ? ` · ${whenSecondary}` : ''}
               {durationHrs != null ? ` · ${Number(durationHrs)} h` : ''}
@@ -136,13 +136,13 @@ export default function IncomingScheduledCard({
             </span>
           </div>
           {customer?.name && (
-            <div className="flex items-center gap-2 text-xs text-text">
+            <div className="flex items-center gap-2 text-xs text-text min-w-0">
               <UserIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
               <span className="truncate">{customer.name}</span>
             </div>
           )}
           {car && (
-            <div className="flex items-center gap-2 text-xs text-text">
+            <div className="flex items-center gap-2 text-xs text-text min-w-0">
               <CarIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
               <span className="truncate">
                 {[car.brandName, car.modelName, car.vehicleNumber]
@@ -158,32 +158,35 @@ export default function IncomingScheduledCard({
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button
-            variant="outline"
-            className="shrink-0 px-3"
-            disabled={busy}
-            onClick={() => setDetailsOpen(true)}
-            aria-label="View trip details"
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            View
-          </Button>
-          <Button
-            className="flex-1"
+            size="md"
+            className="w-full min-w-0"
             disabled={busy}
             onClick={() => onAccept?.(request)}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Accept'}
           </Button>
           <Button
+            size="md"
             variant="ghost"
-            className="flex-1"
+            className="w-full min-w-0"
             disabled={busy}
             onClick={() => onIgnore?.(request)}
           >
-            <SkipForward className="w-4 h-4 mr-1" />
+            <SkipForward className="w-4 h-4 shrink-0" />
             Ignore
+          </Button>
+          <Button
+            size="md"
+            variant="outline"
+            className="col-span-2 w-full"
+            disabled={busy}
+            onClick={() => setDetailsOpen(true)}
+            aria-label="View trip details"
+          >
+            <Eye className="w-4 h-4 shrink-0" />
+            View details
           </Button>
         </div>
       </Card>

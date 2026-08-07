@@ -47,7 +47,7 @@ const TAB_COPY = {
   },
 };
 
-function CategoriesSection({ carTypes, categoryModal, search }) {
+function CategoriesSection({ carTypes, categoryModal, search, readOnly = false }) {
   const { openCreate, openEdit, deleteCarType } = categoryModal;
 
   const filtered = useMemo(() => {
@@ -72,8 +72,8 @@ function CategoriesSection({ carTypes, categoryModal, search }) {
       <CatalogEmpty
         title="No categories yet"
         description="Create categories so drivers and customers can describe their vehicles."
-        actionLabel="Add category"
-        onAction={openCreate}
+        actionLabel={!readOnly ? 'Add category' : undefined}
+        onAction={!readOnly ? openCreate : undefined}
       />
     );
   }
@@ -107,10 +107,12 @@ function CategoriesSection({ carTypes, categoryModal, search }) {
               <CatalogStatusBadge active={car.isActive !== false} />
             </CatalogCell>
             <CatalogCell className="text-right">
-              <CatalogRowActions
-                onEdit={() => openEdit(car)}
-                onDelete={() => deleteCarType(car._id)}
-              />
+              {!readOnly && (
+                <CatalogRowActions
+                  onEdit={() => openEdit(car)}
+                  onDelete={() => deleteCarType(car._id)}
+                />
+              )}
             </CatalogCell>
           </CatalogRow>
         ))}
@@ -122,7 +124,7 @@ function CategoriesSection({ carTypes, categoryModal, search }) {
   );
 }
 
-const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal }) => {
+const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal, readOnly = false }) => {
   const [subTab, setSubTab] = useState(() => {
     const saved = sessionStorage.getItem(SUB_TAB_STORAGE_KEY);
     return ['categories', 'fuel', 'brands', 'models'].includes(saved) ? saved : 'categories';
@@ -201,7 +203,11 @@ const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal }) => {
           <CatalogSectionHeader
             title={copy.title}
             description={copy.description}
-            action={<CatalogAddButton label="Add category" onClick={categoryModal.openCreate} />}
+            action={
+              !readOnly ? (
+                <CatalogAddButton label="Add category" onClick={categoryModal.openCreate} />
+              ) : null
+            }
           />
           <CatalogToolbar
             search={search}
@@ -212,6 +218,7 @@ const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal }) => {
             carTypes={carTypes}
             categoryModal={categoryModal}
             search={search}
+            readOnly={readOnly}
           />
         </>
       )}
@@ -224,6 +231,7 @@ const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal }) => {
           itemLabel="Fuel type"
           formType="simple"
           onMutate={handleCatalogMutate}
+          readOnly={readOnly}
         />
       )}
 
@@ -235,6 +243,7 @@ const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal }) => {
           itemLabel="Brand"
           formType="simple"
           onMutate={handleCatalogMutate}
+          readOnly={readOnly}
         />
       )}
 
@@ -249,6 +258,7 @@ const VehicleCatalogSettings = ({ carTypes, onRefresh, categoryModal }) => {
           brands={brands}
           onMutate={handleCatalogMutate}
           brandFilter
+          readOnly={readOnly}
         />
       )}
 

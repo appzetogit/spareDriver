@@ -41,9 +41,9 @@ const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
  * Admin "Emergency Pool" dashboard.
  *
  *   - Every staff role can view this page.
- *   - admin / sub_admin see every booking in the pool (server scopes).
- *   - team_member sees only entries whose pickup falls in a zone they
- *     are assigned to (also server-scoped via `assignedZones`).
+ *   - super admin sees every booking in the pool (server scopes).
+ *   - sub_admin / team_member see only entries whose pickup falls in a
+ *     zone they are assigned to (also server-scoped via `assignedZones`).
  *   - Only OPERATIONS roles get the "Assign driver" CTA; team_members
  *     see a read-only "view-only — escalate to admin" pill.
  *
@@ -258,10 +258,10 @@ const ManageEmergencyPool = () => {
             <h1 className="text-lg font-bold">Emergency Pool</h1>
             <p className="text-[12px] text-white/80 mt-0.5 leading-snug">
               Scheduled rides we couldn&apos;t auto-assign{' '}
-              {admin?.role === 'team_member' ? (
-                <>in your zones</>
-              ) : (
+              {admin?.role === 'admin' ? (
                 <>across the platform</>
+              ) : (
+                <>in your zones</>
               )}{' '}
               within the safety window. {canAssign ? 'Pick a nearby driver to take them off the queue.' : 'Admins will assign drivers manually.'}
             </p>

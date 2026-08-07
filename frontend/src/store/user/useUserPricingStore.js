@@ -65,6 +65,21 @@ export const useUserSubscriptionStore = create((set, get) => ({
     return subscriptionInflight;
   },
 
+  /** Soft-merge one subscription after reschedule / assign without refetch. */
+  patchMySubscription(subscription) {
+    if (!subscription?._id) return;
+    const prev = get().mySubscriptions || [];
+    const next = prev.map((s) =>
+      String(s._id) === String(subscription._id) ? { ...s, ...subscription } : s,
+    );
+    const exists = next.some((s) => String(s._id) === String(subscription._id));
+    const list = exists ? next : [subscription, ...prev];
+    set({
+      mySubscriptions: list,
+      mySubscription: list[0] || null,
+    });
+  },
+
   async createPurchaseOrder(planId, zoneId, carId, { termsAccepted = false, dailyPickup, dailyDropoff, couponCode } = {}) {
     set({ purchaseLoading: true });
     try {

@@ -9,7 +9,7 @@ import api from '../../../../utils/api';
 
 const emptyForm = { name: '', isActive: true, sortOrder: 0 };
 
-const BanksTab = ({ banks, onRefresh }) => {
+const BanksTab = ({ banks, onRefresh, readOnly = false }) => {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -81,9 +81,11 @@ const BanksTab = ({ banks, onRefresh }) => {
             Bank names shown in the driver onboarding bank-details dropdown.
           </p>
         </div>
-        <Button onClick={openCreate} className="flex items-center gap-2 shrink-0">
-          <Plus className="w-4 h-4" /> Add Bank
-        </Button>
+        {!readOnly && (
+          <Button onClick={openCreate} className="flex items-center gap-2 shrink-0">
+            <Plus className="w-4 h-4" /> Add Bank
+          </Button>
+        )}
       </div>
 
       {banks.length === 0 ? (
@@ -117,22 +119,24 @@ const BanksTab = ({ banks, onRefresh }) => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => openEdit(bank)}
-                  className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(bank._id)}
-                  className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(bank)}
+                    className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(bank._id)}
+                    className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

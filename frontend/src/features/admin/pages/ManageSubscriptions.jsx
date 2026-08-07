@@ -11,6 +11,8 @@ import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminSubscriptionsStore } from '../../../store/admin/useAdminSubscriptionsStore';
 import { SUBSCRIPTION_DISCOUNT_TYPES } from '../../../constants/serviceTypes';
 import { formatCurrency, calculateSubscriptionCheckout } from '../../../utils/fareCalculator';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageSubscriptionPlans } from '../../../constants/staffRoles';
 
 const emptyForm = {
   name: '',
@@ -38,6 +40,8 @@ const emptyDispatch = {
 };
 
 const ManageSubscriptions = () => {
+  const { admin } = useAdminAuthStore();
+  const canEdit = canManageSubscriptionPlans(admin?.role);
   const cacheKey = buildCacheKey('admin-subscription-plans', {});
   const { data, loading, refetch } = useCachedQuery(
     useAdminSubscriptionsStore,
@@ -204,10 +208,18 @@ const ManageSubscriptions = () => {
             additional (non-dedicated) bookings.
           </p>
         </div>
-        <Button variant="admin" size="md" onClick={openCreate} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add plan
-        </Button>
+        {canEdit && (
+          <Button variant="admin" size="md" onClick={openCreate} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add plan
+          </Button>
+        )}
       </div>
+
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          View only — only the super admin can edit subscription plans.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading && plans.length === 0 && (
@@ -283,26 +295,28 @@ const ManageSubscriptions = () => {
               </ul>
             )}
 
-            <div className="flex gap-1 mt-auto pt-1">
-              <button
-                type="button"
-                onClick={() => openEdit(plan)}
-                className="flex-1 p-2 hover:bg-slate-100 rounded-xl text-slate-600 hover:text-slate-900 transition-colors flex items-center justify-center gap-1.5 text-xs font-semibold"
-              >
-                <Edit2 className="w-3.5 h-3.5" /> Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(plan)}
-                disabled={deletingId === plan._id}
-                className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-50"
-                title="Delete plan"
-              >
-                <Trash2
-                  className={`w-4 h-4 ${deletingId === plan._id ? 'animate-pulse' : ''}`}
-                />
-              </button>
-            </div>
+            {canEdit && (
+              <div className="flex gap-1 mt-auto pt-1">
+                <button
+                  type="button"
+                  onClick={() => openEdit(plan)}
+                  className="flex-1 p-2 hover:bg-slate-100 rounded-xl text-slate-600 hover:text-slate-900 transition-colors flex items-center justify-center gap-1.5 text-xs font-semibold"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(plan)}
+                  disabled={deletingId === plan._id}
+                  className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-50"
+                  title="Delete plan"
+                >
+                  <Trash2
+                    className={`w-4 h-4 ${deletingId === plan._id ? 'animate-pulse' : ''}`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -370,7 +384,7 @@ const ManageSubscriptions = () => {
                 }
               />
             </div>
-            <Button variant="admin" onClick={saveDispatch} disabled={dispatchSaving}>
+            <Button variant="admin" onClick={saveDispatch} disabled={dispatchSaving || !canEdit}>
               {dispatchSaving ? 'Saving…' : 'Save search settings'}
             </Button>
           </div>
@@ -396,6 +410,7 @@ const ManageSubscriptions = () => {
               value={termsForm.title}
               onChange={(e) => setTermsForm((f) => ({ ...f, title: e.target.value }))}
               placeholder="Subscription Terms & Conditions"
+              disabled={!canEdit}
             />
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Content</label>
@@ -403,17 +418,21 @@ const ManageSubscriptions = () => {
                 value={termsForm.content}
                 onChange={(e) => setTermsForm((f) => ({ ...f, content: e.target.value }))}
                 rows={10}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={!canEdit}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-slate-50"
                 placeholder="Enter the full terms customers must accept…"
               />
             </div>
-            <Button variant="admin" onClick={saveTerms} disabled={termsSaving}>
-              {termsSaving ? 'Saving…' : 'Save terms'}
-            </Button>
+            {canEdit && (
+              <Button variant="admin" onClick={saveTerms} disabled={termsSaving}>
+                {termsSaving ? 'Saving…' : 'Save terms'}
+              </Button>
+            )}
           </>
         )}
       </div>
 
+      {canEdit && (
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -646,6 +665,7 @@ const ManageSubscriptions = () => {
           </div>
         </form>
       </Modal>
+      )}
     </div>
   );
 };

@@ -102,10 +102,8 @@ const NEXT_ACTION_BY_STATUS = {
     title: 'Trip in progress',
     subtitle: 'Drive safe. Mark complete when the booked duration is over.',
     cta: { label: 'Complete trip', icon: CheckCircle2, action: 'completeTrip' },
-    // Driver-side cancel after STARTED is allowed but the admin-configured
-    // penalty is debited from the driver's wallet (see backend
-    // computeDriverCancellation). The handleCancel confirm-dialog spells
-    // the deduction out so the driver knows before they commit.
+    // Instant rides: cancel is hidden once STARTED (see config memo).
+    // Scheduled / outstation keep mid-trip cancel gated by pickup time.
     canCancel: true,
   },
 };
@@ -327,15 +325,24 @@ const DriverActiveTripPage = () => {
 
   // Resolve the next-action descriptor every render so it tracks the
   // current status without us juggling an effect.
+  // Instant: hide cancel once the trip has started.
   // Scheduled/outstation: hide cancel once pickup time has passed.
   const config = useMemo(() => {
     if (!status) return null;
     const base = NEXT_ACTION_BY_STATUS[status];
     if (!base) return null;
+    if (!base.canCancel) return base;
+
+    const isInstant =
+      !booking?.bookingType || booking.bookingType === BOOKING_TYPE.INSTANT;
+    if (isInstant && status === BOOKING_STATUS.STARTED) {
+      return { ...base, canCancel: false };
+    }
+
     const isScheduledLike =
       booking?.bookingType === BOOKING_TYPE.SCHEDULED ||
       booking?.bookingType === BOOKING_TYPE.OUTSTATION;
-    if (!isScheduledLike || !base.canCancel) return base;
+    if (!isScheduledLike) return base;
     const startRaw =
       booking?.hourly?.scheduledStartAt ||
       booking?.outstation?.pickupAt ||

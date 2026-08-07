@@ -7,13 +7,38 @@ import {
   LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag, Headphones,
   BarChart3, BellRing, Layers,
 } from 'lucide-react';
-import { APP_NAME } from '../../../utils/constants';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
-import useAdminEmergencyPoolStore from '../../../store/admin/useAdminEmergencyPoolStore';
+import useAdminSidebarCountsStore from '../../../store/admin/useAdminSidebarCountsStore';
 import { roleCanAccess } from '../../../constants/staffRoles';
 import { useSocketEvent } from '../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../constants/socketEvents';
 import { BOOKING_STATUS } from '../../../constants/bookingStatus';
+
+/** Paths that show a numeric badge from sidebar counts. */
+const BADGE_BY_PATH = {
+  '/admin/drivers': 'pendingDrivers',
+  '/admin/sos': 'activeSos',
+  '/admin/support': 'openSupportTickets',
+  '/admin/kit-orders': 'pendingKitOrders',
+  '/admin/bookings/emergency-pool': 'emergencyPool',
+};
+
+const SIDEBAR_ALERT_KINDS = new Set([
+  'emergency_pool_entered',
+  'no_drivers_found',
+  'sos_triggered',
+  'support_ticket_received',
+  'new_driver_registration',
+]);
+
+function NavBadge({ count }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
 
 const navItems = [
   {
@@ -30,17 +55,11 @@ const navItems = [
     path: '/admin/push-notifications',
     label: 'Push Notifications',
     icon: BellRing,
-    roles: ['admin', 'sub_admin'],
+    roles: ['admin'],
   },
   // Ads management — admin + sub_admin can publish promotional images
   // and short videos that surface on the user home screen.
   { path: '/admin/ads', label: 'Ads', icon: Megaphone, roles: ['admin', 'sub_admin'] },
-  {
-    path: '/admin/settings/platform',
-    label: 'Vehicle Preferences',
-    icon: Tag,
-    roles: ['admin', 'sub_admin'],
-  },
   { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
   { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
   { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
@@ -57,13 +76,13 @@ const navItems = [
         // `end` so this child doesn't stay highlighted while you're on
         // a deeper /admin/bookings/* page (scheduled-jobs / emergency-pool).
         end: true,
-        roles: ['admin'],
+        roles: ['admin', 'sub_admin'],
       },
       {
         path: '/admin/bookings/scheduled-jobs',
         label: 'Scheduled Bookings',
         icon: Timer,
-        // Team members see/assign only within their assignedZones.
+        // Zone-scoped for sub_admin / team_member via assignedZones.
         roles: ['admin', 'sub_admin', 'team_member'],
       },
       {
@@ -251,10 +270,9 @@ const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { admin, logout } = useAdminAuthStore();
-  const emergencyPoolCount = useAdminEmergencyPoolStore((s) => s.count);
-  const fetchEmergencyPoolCount = useAdminEmergencyPoolStore((s) => s.fetchCount);
-  const bumpEmergencyPool = useAdminEmergencyPoolStore((s) => s.bump);
-  const setEmergencyPoolCount = useAdminEmergencyPoolStore((s) => s.setCount);
+  const counts = useAdminSidebarCountsStore();
+  const fetchCounts = useAdminSidebarCountsStore((s) => s.fetchCounts);
+  const resetCounts = useAdminSidebarCountsStore((s) => s.reset);
   const [expandedItems, setExpandedItems] = useState([
     'Settings',
     'Account',
@@ -265,33 +283,41 @@ const Sidebar = ({ isOpen, onClose }) => {
   const filteredNavItems = filterNavByRole(navItems, admin?.role);
 
   useEffect(() => {
-    fetchEmergencyPoolCount().catch(() => {});
-  }, [fetchEmergencyPoolCount]);
+    fetchCounts().catch(() => {});
+  }, [fetchCounts]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCounts().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchCounts]);
 
   useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
-    if (payload?.kind === 'emergency_pool_entered') {
-      // Prefer a recount so zone-scoped team members stay accurate.
-      fetchEmergencyPoolCount().catch(() => bumpEmergencyPool(1));
+    if (SIDEBAR_ALERT_KINDS.has(payload?.kind)) {
+      fetchCounts().catch(() => {});
     }
   });
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     if (!payload?.status) return;
-    if (payload.status === BOOKING_STATUS.IN_EMERGENCY_POOL) {
-      fetchEmergencyPoolCount().catch(() => {});
-    } else if (
-      payload.status === BOOKING_STATUS.DRIVER_ASSIGNED
+    if (
+      payload.status === BOOKING_STATUS.IN_EMERGENCY_POOL
+      || payload.status === BOOKING_STATUS.NO_DRIVERS_FOUND
+      || payload.status === BOOKING_STATUS.DRIVER_ASSIGNED
       || payload.status === BOOKING_STATUS.CANCELLED
       || payload.status === BOOKING_STATUS.COMPLETED
     ) {
-      // Assign/cancel out of pool — recount rather than guess.
-      fetchEmergencyPoolCount().catch(() => {});
+      fetchCounts().catch(() => {});
     }
   });
 
   const handleLogout = () => {
     logout();
-    setEmergencyPoolCount(0);
+    resetCounts();
     navigate('/admin/login');
   };
 
@@ -299,6 +325,11 @@ const Sidebar = ({ isOpen, onClose }) => {
     setExpandedItems((prev) =>
       prev.includes(label) ? prev.filter((i) => i !== label) : [...prev, label],
     );
+  };
+
+  const badgeFor = (path) => {
+    const key = BADGE_BY_PATH[path];
+    return key ? counts[key] : 0;
   };
 
   return (
@@ -383,6 +414,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                           className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-primary' : ''}`}
                         />
                         <span className="flex-1">{item.label}</span>
+                        <NavBadge count={badgeFor(item.path)} />
                         {active && <ChevronRight className="w-4 h-4 opacity-60" />}
                       </>
                     )}
@@ -391,11 +423,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
                 {hasChildren && isExpanded && (
                   <div className="ml-9 space-y-1">
-                    {item.children.map((child) => {
-                      const showBadge =
-                        child.path === '/admin/bookings/emergency-pool'
-                        && emergencyPoolCount > 0;
-                      return (
+                    {item.children.map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}
@@ -408,14 +436,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                       >
                         {child.icon && <child.icon className="w-3.5 h-3.5" />}
                         <span className="flex-1">{child.label}</span>
-                        {showBadge && (
-                          <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-danger rounded-full">
-                            {emergencyPoolCount > 99 ? '99+' : emergencyPoolCount}
-                          </span>
-                        )}
+                        <NavBadge count={badgeFor(child.path)} />
                       </NavLink>
-                      );
-                    })}
+                    ))}
                   </div>
                 )}
               </div>

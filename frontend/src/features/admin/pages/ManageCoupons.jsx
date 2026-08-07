@@ -14,6 +14,8 @@ import {
   COUPON_APPLICABLE_SERVICE_LIST,
   COUPON_APPLICABLE_SERVICE_LABELS,
 } from '../../../constants/couponTypes';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { canManageCoupons } from '../../../constants/staffRoles';
 
 const emptyForm = {
   code: '',
@@ -42,6 +44,8 @@ function formatApplicable(coupon) {
 }
 
 const ManageCoupons = () => {
+  const { admin } = useAdminAuthStore();
+  const canEdit = canManageCoupons(admin?.role);
   const cacheKey = buildCacheKey('admin-coupons', {});
   const { data, loading, refetch } = useCachedQuery(useAdminCouponsStore, cacheKey, {});
   const coupons = Array.isArray(data) ? data : [];
@@ -171,17 +175,27 @@ const ManageCoupons = () => {
             Create flat or percentage discounts for hourly, outstation, or subscription purchases.
           </p>
         </div>
-        <Button onClick={openCreate} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          New Coupon
-        </Button>
+        {canEdit && (
+          <Button onClick={openCreate} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            New Coupon
+          </Button>
+        )}
       </div>
+
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          View only — only the super admin can create or edit coupons.
+        </div>
+      )}
 
       <div className="bg-surface rounded-2xl border border-border-light overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-text-muted">Loading coupons…</div>
         ) : coupons.length === 0 ? (
-          <div className="p-8 text-center text-text-muted">No coupons yet. Create one to get started.</div>
+          <div className="p-8 text-center text-text-muted">
+            {canEdit ? 'No coupons yet. Create one to get started.' : 'No coupons yet.'}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -212,7 +226,13 @@ const ManageCoupons = () => {
                         : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <Toggle checked={coupon.isActive} onChange={() => toggleActive(coupon)} />
+                      {canEdit ? (
+                        <Toggle checked={coupon.isActive} onChange={() => toggleActive(coupon)} />
+                      ) : (
+                        <span className="text-sm text-text-secondary">
+                          {coupon.isActive ? 'Yes' : 'No'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
@@ -225,23 +245,27 @@ const ManageCoupons = () => {
                         >
                           <BarChart3 className="w-4 h-4" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(coupon)}
-                          className="p-2 rounded-lg hover:bg-surface-secondary text-text-secondary"
-                          aria-label="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(coupon)}
-                          disabled={deletingId === coupon._id}
-                          className="p-2 rounded-lg hover:bg-danger/10 text-danger disabled:opacity-50"
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canEdit && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEdit(coupon)}
+                              className="p-2 rounded-lg hover:bg-surface-secondary text-text-secondary"
+                              aria-label="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(coupon)}
+                              disabled={deletingId === coupon._id}
+                              className="p-2 rounded-lg hover:bg-danger/10 text-danger disabled:opacity-50"
+                              aria-label="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -252,6 +276,7 @@ const ManageCoupons = () => {
         )}
       </div>
 
+      {canEdit && (
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -365,6 +390,7 @@ const ManageCoupons = () => {
           </div>
         </form>
       </Modal>
+      )}
 
       <Modal
         isOpen={!!analyticsCoupon}
