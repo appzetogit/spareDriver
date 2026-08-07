@@ -1,41 +1,47 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileText,
+  User,
   Building2,
   Car,
-  HelpCircle,
   LogOut,
   ChevronRight,
   Package,
   ShoppingBag,
   History,
-  Circle,
-  Trash2,
   GraduationCap,
+  IdCard,
+  FileText,
+  Headphones,
+  Star,
 } from 'lucide-react';
-import Card from '../../../../components/Card';
 import Avatar from '../../../../components/Avatar';
-import Badge from '../../../../components/Badge';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
-import { useDriverHomeSummaryStore } from '../../../../store/driver/useDriverTripsStore';
+import { useDriverTripsListStore } from '../../../../store/driver/useDriverTripsStore';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
-import { formatCurrency, formatPhone } from '../../../../utils/formatters';
 import DriverScreenShell from '../../components/DriverScreenShell';
 import DeleteAccountSheet from '../../../../components/DeleteAccountSheet';
 import useDriverAccountDeletionStore from '../../../../store/driver/useDriverAccountDeletionStore';
 
-const APPROVAL_BADGE = {
-  approved: { variant: 'success', label: 'Approved' },
-  pending: { variant: 'warning', label: 'Onboarding' },
-  under_review: { variant: 'info', label: 'Under review' },
-  rejected: { variant: 'danger', label: 'Rejected' },
-  suspended: { variant: 'danger', label: 'Suspended' },
+const APPROVAL_LABEL = {
+  approved: 'Approved',
+  pending: 'Onboarding',
+  under_review: 'Under review',
+  rejected: 'Rejected',
+  suspended: 'Suspended',
 };
 
 const MENU_GROUPS = [
+  {
+    title: 'Profile',
+    items: [
+      { icon: User, label: 'Profile Info', path: '/driver/account/info' },
+      { icon: IdCard, label: 'SpareDriver ID Card', path: '/driver/account/id-card' },
+      { icon: FileText, label: 'Documents', path: '/driver/account/documents' },
+    ],
+  },
   {
     title: 'Vehicle & kit',
     items: [
@@ -47,19 +53,27 @@ const MENU_GROUPS = [
   {
     title: 'Account',
     items: [
-      { icon: FileText, label: 'Profile & Documents', path: '/driver/account/documents' },
       { icon: Building2, label: 'Bank Details', path: '/driver/account/bank' },
       { icon: GraduationCap, label: 'Training & Certification', path: '/driver/register/training' },
       { icon: History, label: 'Payment History', path: '/driver/payments' },
     ],
   },
-  {
-    title: 'Help',
-    items: [
-      { icon: HelpCircle, label: 'Help & Support', path: '/driver/help-support' },
-    ],
-  },
 ];
+
+function tenureYears(date) {
+  if (!date) return '—';
+  const start = new Date(date).getTime();
+  if (Number.isNaN(start)) return '—';
+  const years = (Date.now() - start) / (365.25 * 24 * 60 * 60 * 1000);
+  if (years < 0) return '—';
+  if (years < 0.1) return '0';
+  return years.toFixed(1);
+}
+
+function short(id) {
+  const s = String(id);
+  return s.slice(0, 6).toUpperCase();
+}
 
 const DriverAccountPage = () => {
   const navigate = useNavigate();
@@ -69,6 +83,17 @@ const DriverAccountPage = () => {
 
   const profileKey = buildCacheKey('driver-profile', {});
   const { data: profile } = useCachedQuery(useDriverProfileStore, profileKey, {});
+
+  const tripsKey = buildCacheKey('driver-trips-list', {
+    tab: 'completed',
+    page: 1,
+    limit: 1,
+  });
+  const { data: trips } = useCachedQuery(useDriverTripsListStore, tripsKey, {
+    tab: 'completed',
+    page: 1,
+    limit: 1,
+  });
 
   const deletionRequest = useDriverAccountDeletionStore((s) => s.request);
   const deletionLoading = useDriverAccountDeletionStore((s) => s.loading);
@@ -99,15 +124,20 @@ const DriverAccountPage = () => {
     [profile, cachedDriver],
   );
   const displayName = driver?.name || 'Driver';
-  const phone = formatPhone(driver?.phone || '');
-  const approval = APPROVAL_BADGE[driver?.approvalStatus] || {
-    variant: 'default',
-    label: '—',
-  };
   const avatarSrc =
     driver?.profilePicture ||
     driver?.documents?.find((d) => d.type === 'selfie')?.fileUrl ||
     undefined;
+  const approvalLabel =
+    APPROVAL_LABEL[driver?.approvalStatus] || (driver?.approvalStatus ? driver.approvalStatus : null);
+
+  const ratingValue = Number(driver?.rating || 0);
+  const ratingLabel = ratingValue > 0 ? ratingValue.toFixed(1) : '—';
+  const tripCount = trips?.pagination?.total ?? null;
+  const years = useMemo(
+    () => tenureYears(driver?.approvedAt || driver?.createdAt),
+    [driver?.approvedAt, driver?.createdAt],
+  );
 
   const handleLogout = () => {
     logout();
@@ -116,97 +146,147 @@ const DriverAccountPage = () => {
 
   return (
     <DriverScreenShell
+      className="bg-white"
       header={
-        <header className="bg-dark px-4 pt-5 pb-5 rounded-b-3xl">
-          <div className="flex items-center gap-3">
+        <header className="bg-white px-3 pt-3 pb-2 flex items-center gap-2">
+          <h1 className="flex-1 text-base font-bold text-text px-1">My Profile</h1>
+          <button
+            type="button"
+            onClick={() => navigate('/driver/help-support')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-text"
+          >
+            <Headphones className="w-4 h-4" />
+            Help
+          </button>
+        </header>
+      }
+      bodyClassName="pb-8"
+    >
+      <div className="relative px-4 pt-2">
+        <div className="h-28 rounded-2xl overflow-hidden bg-gradient-to-br from-primary via-primary-dark to-amber-500 relative">
+          <div
+            className="absolute inset-0 opacity-30"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle at 20% 80%, rgba(0,0,0,0.25) 0%, transparent 45%), radial-gradient(circle at 85% 25%, rgba(255,255,255,0.35) 0%, transparent 40%)',
+            }}
+          />
+          <svg
+            className="absolute bottom-0 left-0 right-0 w-full h-16 text-black/15"
+            viewBox="0 0 400 80"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <path
+              fill="currentColor"
+              d="M0 80 V48 Q40 20 80 40 T160 35 T240 45 T320 28 T400 50 V80 Z"
+            />
+          </svg>
+        </div>
+
+        <div className="flex flex-col items-center -mt-10">
+          <div className="rounded-full ring-4 ring-white bg-white relative">
             <Avatar
               src={avatarSrc}
               name={displayName}
-              size="lg"
+              size="xl"
               online={driver?.isOnline}
-              className="ring-2 ring-white/20"
             />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-white truncate">
-                  {displayName}
-                </h1>
-                <Badge variant={approval.variant}>{approval.label}</Badge>
-              </div>
-              {phone && (
-                <p className="text-xs text-white/70 mt-0.5">{phone}</p>
-              )}
-              <div className="flex items-center gap-3 mt-1.5">
-                <span className="inline-flex items-center gap-1 text-[11px] text-white/80">
-                  <Circle
-                    className={`w-2 h-2 fill-current ${
-                      driver?.isOnline ? 'text-success' : 'text-white/40'
-                    }`}
-                  />
-                  {driver?.isOnline ? 'Online' : 'Offline'}
+          </div>
+          <h2 className="mt-3 text-xl font-bold text-text text-center">
+            {displayName}
+          </h2>
+          {approvalLabel && (
+            <p className="mt-1 text-xs font-medium text-text-muted">
+              {approvalLabel}
+              {driver?.isOnline != null && (
+                <span className="text-text-muted">
+                  {' · '}
+                  {driver.isOnline ? 'Online' : 'Offline'}
                 </span>
-              </div>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5 px-6 grid grid-cols-3 gap-2">
+        <div className="text-center">
+          <p className="text-lg font-bold text-text inline-flex items-center justify-center gap-1">
+            {ratingLabel}
+            <Star className="w-4 h-4 fill-primary text-primary" />
+          </p>
+          <p className="text-[11px] font-semibold tracking-wide text-text-muted mt-0.5">
+            RATING
+          </p>
+        </div>
+        <div className="text-center border-x border-border-light">
+          <p className="text-lg font-bold text-text">
+            {tripCount == null ? '—' : tripCount}
+          </p>
+          <p className="text-[11px] font-semibold tracking-wide text-text-muted mt-0.5">
+            TRIPS
+          </p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-text">{years}</p>
+          <p className="text-[11px] font-semibold tracking-wide text-text-muted mt-0.5">
+            YEARS
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 px-4 space-y-5">
+        {MENU_GROUPS.map((group) => (
+          <div key={group.title}>
+            <p className="px-1 mb-2 text-[11px] uppercase tracking-wide font-semibold text-text-muted">
+              {group.title}
+            </p>
+            <div className="space-y-2.5">
+              {group.items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => navigate(item.path)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-bg hover:bg-border-light transition-colors text-left"
+                >
+                  <item.icon className="w-5 h-5 text-text shrink-0" />
+                  <span className="flex-1 text-sm font-medium text-text">
+                    {item.label}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-text-muted" />
+                </button>
+              ))}
             </div>
           </div>
-        </header>
-      }
-      bodyClassName="p-4 pb-8 space-y-4"
-    >
-      {MENU_GROUPS.map((group) => (
-        <div key={group.title}>
-          <p className="px-1 mb-2 text-[11px] uppercase tracking-wide font-semibold text-text-muted">
-            {group.title}
-          </p>
-          <Card padding="p-0">
-            <ul className="divide-y divide-border-light">
-              {group.items.map((item) => (
-                <li key={item.label}>
-                  <button
-                    type="button"
-                    onClick={() => item.path && navigate(item.path)}
-                    disabled={!item.path}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-default text-left"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-bg flex items-center justify-center shrink-0">
-                      <item.icon className="w-4.5 h-4.5 text-text-secondary" />
-                    </div>
-                    <span className="flex-1 text-sm font-medium text-text">
-                      {item.label}
-                    </span>
-                    {item.path && (
-                      <ChevronRight className="w-4 h-4 text-text-muted" />
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-      ))}
+        ))}
+      </div>
 
       {/*
       <button
         type="button"
         onClick={() => setDeleteOpen(true)}
-        className="w-full flex items-center justify-center gap-2 py-3.5 bg-white rounded-2xl shadow-card text-danger font-medium text-sm hover:bg-danger-light transition-colors"
+        className="mx-4 mt-4 w-[calc(100%-2rem)] flex items-center justify-center gap-2 py-3.5 bg-bg rounded-xl text-danger font-medium text-sm hover:bg-danger-light transition-colors"
       >
         <Trash2 className="w-4 h-4" />
         Delete account
       </button>
       */}
 
-      <button
-        type="button"
-        onClick={handleLogout}
-        className="w-full flex items-center justify-center gap-2 py-3.5 bg-white rounded-2xl shadow-card text-danger font-medium text-sm hover:bg-danger-light transition-colors"
-      >
-        <LogOut className="w-4 h-4" />
-        Logout
-      </button>
+      <div className="px-4 mt-4 space-y-3">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-bg text-danger font-medium text-sm hover:bg-danger-light transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Logout
+        </button>
 
-      <p className="text-center text-[11px] text-text-muted pt-1">
-        Driver ID {driver?._id ? short(driver._id) : '—'}
-      </p>
+        <p className="text-center text-[11px] text-text-muted">
+          Driver ID {driver?._id ? short(driver._id) : '—'}
+        </p>
+      </div>
 
       <DeleteAccountSheet
         isOpen={deleteOpen}
@@ -221,13 +301,5 @@ const DriverAccountPage = () => {
     </DriverScreenShell>
   );
 };
-
-
-
-
-function short(id) {
-  const s = String(id);
-  return s.slice(0, 6).toUpperCase();
-}
 
 export default DriverAccountPage;

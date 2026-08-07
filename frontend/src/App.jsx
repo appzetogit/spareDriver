@@ -132,7 +132,8 @@ const DriverAccountPage = lazy(() => import('./features/driver/account/pages/Dri
 const DriverOrdersPage = lazy(() => import('./features/driver/account/pages/DriverOrdersPage'));
 const DriverOrderDetailPage = lazy(() => import('./features/driver/account/pages/DriverOrderDetailPage'));
 const DriverPaymentHistoryPage = lazy(() => import('./features/driver/account/pages/DriverPaymentHistoryPage'));
-const DriverMyProfilePage = lazy(() => import('./features/driver/account/pages/DriverMyProfilePage'));
+const DriverProfileInfoPage = lazy(() => import('./features/driver/account/pages/DriverProfileInfoPage'));
+const DriverIdCardPage = lazy(() => import('./features/driver/account/pages/DriverIdCardPage'));
 const DriverDocumentsPage = lazy(() => import('./features/driver/account/pages/DriverDocumentsPage'));
 const DriverBankDetailsPage = lazy(() => import('./features/driver/account/pages/DriverBankDetailsPage'));
 const DriverVehiclePreferencesPage = lazy(() => import('./features/driver/account/pages/DriverVehiclePreferencesPage'));
@@ -323,9 +324,12 @@ function App() {
             <Route path="/driver/orders/:orderId" element={<DriverOrderDetailPage />} />
             <Route path="/driver/payments" element={<DriverPaymentHistoryPage />} />
             <Route path="/driver/withdraw" element={<DriverWithdrawPage />} />
-            <Route path="/driver/account/profile" element={<DriverMyProfilePage />} />
+            <Route path="/driver/account/info" element={<DriverProfileInfoPage />} />
+            <Route path="/driver/account/id-card" element={<DriverIdCardPage />} />
             <Route path="/driver/account/documents" element={<DriverDocumentsPage />} />
             <Route path="/driver/account/bank" element={<DriverBankDetailsPage />} />
+            <Route path="/driver/account/profile" element={<Navigate to="/driver/account" replace />} />
+            <Route path="/driver/account/profile/info" element={<Navigate to="/driver/account/info" replace />} />
             <Route path="/driver/vehicle-preferences" element={<DriverVehiclePreferencesPage />} />
             <Route path="/driver/help-support" element={<HelpSupportPage audience="driver" />} />
 

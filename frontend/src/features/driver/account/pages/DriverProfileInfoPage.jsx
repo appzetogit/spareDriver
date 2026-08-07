@@ -9,7 +9,7 @@ import DriverAccountSubPage from '../components/DriverAccountSubPage';
 
 const capitalise = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
 
-const DriverMyProfilePage = () => {
+const DriverProfileInfoPage = () => {
   const navigate = useNavigate();
   const profileKey = buildCacheKey('driver-profile', {});
   const { data: driver } = useCachedQuery(useDriverProfileStore, profileKey, {});
@@ -27,7 +27,7 @@ const DriverMyProfilePage = () => {
 
   return (
     <DriverAccountSubPage
-      title="My Profile"
+      title="Profile Info"
       onBack={() => navigate('/driver/account')}
     >
       <p className="text-xs text-text-muted px-1">
@@ -52,4 +52,4 @@ const DriverMyProfilePage = () => {
   );
 };
 
-export default DriverMyProfilePage;
+export default DriverProfileInfoPage;
