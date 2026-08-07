@@ -6,6 +6,7 @@ import Button from '../../../components/Button';
 import Card from '../../../components/Card';
 import Modal from '../../../components/Modal';
 import Select from '../../../components/Select';
+import ImageLightbox from '../../../components/ImageLightbox';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import {
@@ -73,6 +74,7 @@ const ManageSupport = () => {
   const [saving, setSaving] = useState(false);
   const [reply, setReply] = useState('');
   const [status, setStatus] = useState('open');
+  const [imagePreview, setImagePreview] = useState(null);
 
   const queryParams = useMemo(() => ({ status: statusFilter }), [statusFilter]);
   const cacheKey = buildCacheKey('admin-support', queryParams);
@@ -289,13 +291,22 @@ const ManageSupport = () => {
               {selectedTicket.screenshot && (
                 <div>
                   <p className="text-text-muted text-xs mb-2">Screenshot</p>
-                  <a href={selectedTicket.screenshot} target="_blank" rel="noreferrer">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setImagePreview({
+                        url: selectedTicket.screenshot,
+                        alt: 'Ticket screenshot',
+                      })
+                    }
+                    className="block text-left"
+                  >
                     <img
                       src={selectedTicket.screenshot}
                       alt="Screenshot"
                       className="rounded-lg border border-border-light max-h-56 object-contain"
                     />
-                  </a>
+                  </button>
                 </div>
               )}
             </Card>
@@ -339,6 +350,11 @@ const ManageSupport = () => {
           </div>
         )}
       </Modal>
+      <ImageLightbox
+        src={imagePreview?.url}
+        alt={imagePreview?.alt}
+        onClose={() => setImagePreview(null)}
+      />
     </div>
   );
 };

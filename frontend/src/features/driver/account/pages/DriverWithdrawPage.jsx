@@ -17,6 +17,7 @@ import Button from '../../../../components/Button';
 import Badge from '../../../../components/Badge';
 import Input from '../../../../components/Input';
 import Select from '../../../../components/Select';
+import ImageLightbox from '../../../../components/ImageLightbox';
 import DriverAccountSubPage from '../components/DriverAccountSubPage';
 import useDriverWithdrawalStore from '../../../../store/driver/useDriverWithdrawalStore';
 import { formatCurrency } from '../../../../utils/formatters';
@@ -53,6 +54,7 @@ const DriverWithdrawPage = () => {
   const [bankErrors, setBankErrors] = useState(emptyBankForm);
   const [bankOptions, setBankOptions] = useState([]);
   const [bankPrefillDone, setBankPrefillDone] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
 
   const limits = useDriverWithdrawalStore((s) => s.limits);
   const withdrawals = useDriverWithdrawalStore((s) => s.withdrawals);
@@ -455,15 +457,16 @@ const DriverWithdrawPage = () => {
                   )}
                   {w.paymentProof?.url && (
                     <div className="flex justify-end pt-1">
-                      <a
-                        href={w.paymentProof.url}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setImagePreview({ url: w.paymentProof.url, alt: 'Payment proof' })
+                        }
                         className="inline-flex items-center gap-1 text-[11px] text-primary font-bold hover:underline"
                       >
                         <ImageIcon className="w-3.5 h-3.5" />
                         View payment proof
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -480,6 +483,11 @@ const DriverWithdrawPage = () => {
           ))}
         </div>
       </div>
+      <ImageLightbox
+        src={imagePreview?.url}
+        alt={imagePreview?.alt}
+        onClose={() => setImagePreview(null)}
+      />
     </DriverAccountSubPage>
   );
 };

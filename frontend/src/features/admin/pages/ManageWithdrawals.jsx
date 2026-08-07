@@ -8,11 +8,12 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  ExternalLink,
   Eye,
+  Image as ImageIcon,
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import ImageLightbox from '../../../components/ImageLightbox';
 import RowActionsMenu from '../components/RowActionsMenu';
 import AdminTransactionFields, { EMPTY_TXN_FORM } from '../components/AdminTransactionFields';
 import WithdrawalDetailModal from '../components/WithdrawalDetailModal';
@@ -65,6 +66,7 @@ const ManageWithdrawals = () => {
   const [txnForm, setTxnForm] = useState(EMPTY_TXN_FORM);
   const [proofFile, setProofFile] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   useEffect(() => {
     fetchWithdrawals().catch(() => {});
@@ -254,8 +256,9 @@ const ManageWithdrawals = () => {
                               ? [
                                   {
                                     label: 'QR Code',
-                                    icon: ExternalLink,
-                                    onClick: () => window.open(w.qrImage.url, '_blank'),
+                                    icon: ImageIcon,
+                                    onClick: () =>
+                                      setImagePreview({ url: w.qrImage.url, alt: 'Driver payment QR' }),
                                   },
                                 ]
                               : []),
@@ -287,8 +290,9 @@ const ManageWithdrawals = () => {
                               ? [
                                   {
                                     label: 'Proof',
-                                    icon: ExternalLink,
-                                    onClick: () => window.open(w.paymentProof.url, '_blank'),
+                                    icon: ImageIcon,
+                                    onClick: () =>
+                                      setImagePreview({ url: w.paymentProof.url, alt: 'Payment proof' }),
                                   },
                                 ]
                               : []),
@@ -409,14 +413,15 @@ const ManageWithdrawals = () => {
             {processTarget?.qrImage?.url && (
               <div className="mb-4">
                 <p className="text-xs font-semibold uppercase text-text-muted mb-2">Driver payment QR</p>
-                <a
-                  href={processTarget.qrImage.url}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImagePreview({ url: processTarget.qrImage.url, alt: 'Driver payment QR' })
+                  }
                   className="inline-flex items-center gap-1.5 text-sm text-primary font-medium"
                 >
-                  Open QR image <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                  View QR image <ImageIcon className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
             {processTarget?.bankDetails?.accountNumber && (
@@ -460,6 +465,12 @@ const ManageWithdrawals = () => {
           </div>
         </div>
       </AdminDetailModal>
+
+      <ImageLightbox
+        src={imagePreview?.url}
+        alt={imagePreview?.alt}
+        onClose={() => setImagePreview(null)}
+      />
     </div>
   );
 };

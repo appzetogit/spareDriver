@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Banknote,
-  ExternalLink,
+  Image as ImageIcon,
   Loader2,
   Mail,
   Phone,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import AdminDetailModal from './AdminDetailModal';
 import Badge from '../../../components/Badge';
+import ImageLightbox from '../../../components/ImageLightbox';
 import api from '../../../utils/api';
 import { MIN_DRIVER_WALLET_BALANCE, WITHDRAWAL_STATUS_LABELS } from '../../../constants/withdrawal';
 import StatusBadge from './StatusBadge';
@@ -50,6 +51,7 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
   const [driverProfile, setDriverProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   const driverId = withdrawal?.driverId;
 
@@ -164,14 +166,15 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
           {withdrawal.qrImage?.url && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Driver payment QR</p>
-              <a
-                href={withdrawal.qrImage.url}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() =>
+                  setImagePreview({ url: withdrawal.qrImage.url, alt: 'Driver payment QR' })
+                }
                 className="inline-flex items-center gap-1.5 text-sm text-primary font-medium"
               >
-                Open QR image <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+                View QR image <ImageIcon className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
           {withdrawal.bankDetails?.accountNumber && (
@@ -193,14 +196,15 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
           {withdrawal.paymentProof?.url && (
             <div className="mt-3">
               <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Payment proof</p>
-              <a
-                href={withdrawal.paymentProof.url}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() =>
+                  setImagePreview({ url: withdrawal.paymentProof.url, alt: 'Payment proof' })
+                }
                 className="inline-flex items-center gap-1.5 text-sm text-primary font-medium"
               >
-                View proof <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+                View proof <ImageIcon className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>
@@ -307,6 +311,11 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
           )}
         </div>
       </div>
+      <ImageLightbox
+        src={imagePreview?.url}
+        alt={imagePreview?.alt}
+        onClose={() => setImagePreview(null)}
+      />
     </AdminDetailModal>
   );
 }

@@ -143,8 +143,11 @@ import {
 } from '../controllers/accountDeletion.controller.js';
 import {
   getAdminNotifications,
+  getAdminUnreadNotifications,
   markAdminNotificationRead,
   markAllAdminNotificationsRead,
+  deleteAdminNotification,
+  deleteAdminNotifications,
 } from '../controllers/notification.controller.js';
 import {
   listFailedJobs,
@@ -695,8 +698,11 @@ router.post(
 );
 
 router.get('/notifications', protectStaff, restrictTo(...ALL_STAFF), getAdminNotifications);
+router.get('/notifications/unread', protectStaff, restrictTo(...ALL_STAFF), getAdminUnreadNotifications);
 router.patch('/notifications/read-all', protectStaff, restrictTo(...ALL_STAFF), markAllAdminNotificationsRead);
 router.patch('/notifications/:id/read', protectStaff, restrictTo(...ALL_STAFF), markAdminNotificationRead);
+router.delete('/notifications', protectStaff, restrictTo(...ALL_STAFF), deleteAdminNotifications);
+router.delete('/notifications/:id', protectStaff, restrictTo(...ALL_STAFF), deleteAdminNotification);
 
 router.get('/failed-jobs', protectStaff, restrictTo(...SUPER_ADMIN), listFailedJobs);
 router.post('/failed-jobs/:id/retry', protectStaff, restrictTo(...SUPER_ADMIN), retryFailedJob);

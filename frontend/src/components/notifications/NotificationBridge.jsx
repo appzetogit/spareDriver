@@ -12,7 +12,7 @@ export function UserNotificationBridge() {
   useFcmRegistration({ enabled: isAuthenticated, audience: 'user' });
   useNotificationListener({
     enabled: isAuthenticated,
-    onNotification: () => fetchUnread().catch(() => null),
+    onNotification: () => fetchUnread({ force: true }).catch(() => null),
   });
 
   return null;
@@ -25,7 +25,7 @@ export function DriverNotificationBridge() {
   useFcmRegistration({ enabled: isAuthenticated, audience: 'driver' });
   useNotificationListener({
     enabled: isAuthenticated,
-    onNotification: () => fetchUnread().catch(() => null),
+    onNotification: () => fetchUnread({ force: true }).catch(() => null),
   });
 
   return null;
@@ -38,7 +38,7 @@ export function AdminNotificationBridge() {
   useFcmRegistration({ enabled: isAuthenticated, audience: 'admin' });
   useNotificationListener({
     enabled: isAuthenticated,
-    onNotification: () => fetchUnread().catch(() => null),
+    onNotification: () => fetchUnread({ force: true }).catch(() => null),
   });
 
   return null;

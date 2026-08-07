@@ -354,19 +354,12 @@ export async function sendAdminNotification({
     },
   };
 
-  emitAdminAlert({
-    kind: type,
-    severity: severity === 'error' ? 'critical' : severity,
-    message: body || title,
-    data: payload.data,
-  });
-  await emitAdminNotificationScoped(payload, zones);
-
   const shouldPersist =
     typeof persist === 'boolean'
       ? persist
       : ADMIN_PERSISTED_NOTIFICATION_TYPES.has(type);
 
+  // Persist before socket emit so clients refetching unread see the row.
   if (shouldPersist) {
     try {
       await createNotificationRecord({
@@ -382,6 +375,14 @@ export async function sendAdminNotification({
       console.warn('[push] failed to persist admin notification:', err?.message);
     }
   }
+
+  emitAdminAlert({
+    kind: type,
+    severity: severity === 'error' ? 'critical' : severity,
+    message: body || title,
+    data: payload.data,
+  });
+  await emitAdminNotificationScoped(payload, zones);
 
   const shouldSendFcm =
     typeof sendFcm === 'boolean'

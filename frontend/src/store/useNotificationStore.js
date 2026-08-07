@@ -96,6 +96,39 @@ function makeNotificationStore(basePath) {
         unreadCount: 0,
       }));
     },
+
+    async remove(id) {
+      await api.delete(`${basePath}/notifications/${id}`);
+      set((state) => {
+        const target = state.notifications.find((n) => n._id === id);
+        const wasUnread = target && !target.isRead;
+        return {
+          notifications: state.notifications.filter((n) => n._id !== id),
+          total: Math.max(0, state.total - 1),
+          unreadCount: wasUnread
+            ? Math.max(0, state.unreadCount - 1)
+            : state.unreadCount,
+        };
+      });
+    },
+
+    async removeMany(ids) {
+      const idList = [...new Set((ids || []).map(String).filter(Boolean))];
+      if (!idList.length) return { deletedCount: 0 };
+      const res = await api.delete(`${basePath}/notifications`, { data: { ids: idList } });
+      const data = res?.data?.data || {};
+      set((state) => {
+        const idSet = new Set(idList);
+        const removed = state.notifications.filter((n) => idSet.has(String(n._id)));
+        const unreadRemoved = removed.filter((n) => !n.isRead).length;
+        return {
+          notifications: state.notifications.filter((n) => !idSet.has(String(n._id))),
+          total: Math.max(0, state.total - removed.length),
+          unreadCount: Math.max(0, state.unreadCount - unreadRemoved),
+        };
+      });
+      return data;
+    },
   }));
 }
 

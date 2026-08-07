@@ -165,6 +165,41 @@ export async function markAllNotificationsReadService({ audience, userId, driver
   return { modifiedCount: result.modifiedCount || 0 };
 }
 
+export async function deleteNotificationService(notificationId, { audience, userId, driverId }) {
+  const filter = { _id: notificationId, audience };
+  if (userId) filter.userId = userId;
+  if (driverId) filter.driverId = driverId;
+  const deleted = await Notification.findOneAndDelete(filter).lean();
+  if (!deleted) throw new ApiError(404, 'Notification not found');
+  return deleted;
+}
+
+function normalizeNotificationIds(ids) {
+  const list = Array.isArray(ids) ? ids : [];
+  const unique = [...new Set(list.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!unique.length) throw new ApiError(400, 'No notifications selected');
+  if (unique.length > 100) throw new ApiError(400, 'Too many notifications selected');
+  return unique.map((id) => {
+    try {
+      return new mongoose.Types.ObjectId(id);
+    } catch {
+      throw new ApiError(400, 'Invalid notification id');
+    }
+  });
+}
+
+export async function deleteNotificationsService(ids, { audience, userId, driverId }) {
+  const objectIds = normalizeNotificationIds(ids);
+  const filter = {
+    _id: { $in: objectIds },
+    audience,
+  };
+  if (userId) filter.userId = userId;
+  if (driverId) filter.driverId = driverId;
+  const result = await Notification.deleteMany(filter);
+  return { deletedCount: result.deletedCount || 0 };
+}
+
 export async function listAdminNotificationsService({
   staff,
   page = 1,
@@ -185,6 +220,18 @@ export async function listAdminNotificationsService({
   return { notifications, total, unreadCount, page: safePage, limit: safeLimit };
 }
 
+export async function listAdminUnreadNotificationsService(staff) {
+  const filter = buildAdminNotificationFilter(staff, { isRead: false });
+  const [notifications, unreadCount] = await Promise.all([
+    Notification.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean(),
+    Notification.countDocuments(filter),
+  ]);
+  return { notifications, unreadCount };
+}
+
 export async function markAdminNotificationReadService(notificationId, staff) {
   const scoped = buildAdminNotificationFilter(staff);
   const updated = await Notification.findOneAndUpdate(
@@ -202,4 +249,24 @@ export async function markAllAdminNotificationsReadService(staff) {
     $set: { isRead: true, readAt: new Date() },
   });
   return { modifiedCount: result.modifiedCount || 0 };
+}
+
+export async function deleteAdminNotificationService(notificationId, staff) {
+  const scoped = buildAdminNotificationFilter(staff);
+  const deleted = await Notification.findOneAndDelete({
+    _id: notificationId,
+    ...scoped,
+  }).lean();
+  if (!deleted) throw new ApiError(404, 'Notification not found');
+  return deleted;
+}
+
+export async function deleteAdminNotificationsService(ids, staff) {
+  const objectIds = normalizeNotificationIds(ids);
+  const scoped = buildAdminNotificationFilter(staff);
+  const result = await Notification.deleteMany({
+    _id: { $in: objectIds },
+    ...scoped,
+  });
+  return { deletedCount: result.deletedCount || 0 };
 }

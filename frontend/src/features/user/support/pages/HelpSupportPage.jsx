@@ -18,6 +18,7 @@ import Input from '../../../../components/Input';
 import Select from '../../../../components/Select';
 import Modal from '../../../../components/Modal';
 import Badge from '../../../../components/Badge';
+import ImageLightbox from '../../../../components/ImageLightbox';
 import DocumentUploadField from '../../../../components/DocumentUploadField';
 import { uploadImage } from '../../../../utils/upload';
 import {
@@ -105,6 +106,7 @@ const HelpSupportPage = ({ audience = 'user' }) => {
   const [success, setSuccess] = useState(false);
   const [detailTicket, setDetailTicket] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -411,11 +413,22 @@ const HelpSupportPage = ({ audience = 'user' }) => {
             {detailTicket.screenshot && (
               <div>
                 <p className="text-text-muted text-xs mb-2">Screenshot</p>
-                <img
-                  src={detailTicket.screenshot}
-                  alt="Complaint screenshot"
-                  className="rounded-lg border border-border-light max-h-48 object-contain"
-                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImagePreview({
+                      url: detailTicket.screenshot,
+                      alt: 'Complaint screenshot',
+                    })
+                  }
+                  className="block text-left"
+                >
+                  <img
+                    src={detailTicket.screenshot}
+                    alt="Complaint screenshot"
+                    className="rounded-lg border border-border-light max-h-48 object-contain"
+                  />
+                </button>
               </div>
             )}
             {detailTicket.adminReply && (
@@ -427,6 +440,11 @@ const HelpSupportPage = ({ audience = 'user' }) => {
           </div>
         )}
       </Modal>
+      <ImageLightbox
+        src={imagePreview?.url}
+        alt={imagePreview?.alt}
+        onClose={() => setImagePreview(null)}
+      />
     </div>
   );
 };

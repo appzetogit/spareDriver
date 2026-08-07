@@ -23,6 +23,8 @@ import {
   getDriverUnreadNotifications,
   markDriverNotificationRead,
   markAllDriverNotificationsRead,
+  deleteDriverNotification,
+  deleteDriverNotifications,
 } from '../controllers/notification.controller.js';
 import {
   googleSignInDriver,
@@ -113,6 +115,8 @@ router.get('/notifications', protectDriver, getDriverNotifications);
 router.get('/notifications/unread', protectDriver, getDriverUnreadNotifications);
 router.patch('/notifications/read-all', protectDriver, markAllDriverNotificationsRead);
 router.patch('/notifications/:id/read', protectDriver, markDriverNotificationRead);
+router.delete('/notifications', protectDriver, deleteDriverNotifications);
+router.delete('/notifications/:id', protectDriver, deleteDriverNotification);
 // Driver-side preferences \u2014 currently only the outstation opt-in
 // for the admin-managed outstation queue.
 router.put(

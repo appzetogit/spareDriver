@@ -46,6 +46,8 @@ import {
   getUserUnreadNotifications,
   markUserNotificationRead,
   markAllUserNotificationsRead,
+  deleteUserNotification,
+  deleteUserNotifications,
 } from '../controllers/notification.controller.js';
 import { getNearbyDriversForUser } from '../controllers/driverLocation.controller.js';
 import {
@@ -133,6 +135,8 @@ router.get('/notifications', getUserNotifications);
 router.get('/notifications/unread', getUserUnreadNotifications);
 router.patch('/notifications/read-all', markAllUserNotificationsRead);
 router.patch('/notifications/:id/read', markUserNotificationRead);
+router.delete('/notifications', deleteUserNotifications);
+router.delete('/notifications/:id', deleteUserNotification);
 
 // Booking lifecycle (Phase 4)
 router.post('/bookings', createBooking);
