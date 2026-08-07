@@ -1,19 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Headphones,
   Check,
-  Share2,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Avatar from '../../../../components/Avatar';
-import Modal from '../../../../components/Modal';
-import Button from '../../../../components/Button';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
 import { formatPhone, formatDate } from '../../../../utils/formatters';
+import api from '../../../../utils/api';
 
 const APPROVAL_LABEL = {
   approved: 'Approved',
@@ -25,7 +25,7 @@ const APPROVAL_LABEL = {
 
 const DriverIdCardPage = () => {
   const navigate = useNavigate();
-  const [declarationOpen, setDeclarationOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const profileKey = buildCacheKey('driver-profile', {});
   const { data: driver } = useCachedQuery(useDriverProfileStore, profileKey, {});
 
@@ -46,43 +46,32 @@ const DriverIdCardPage = () => {
     driver?.documents?.find((d) => d.type === 'selfie')?.fileUrl ||
     undefined;
 
-  const declaration = useMemo(() => {
-    const agreed = !!driver?.safetyDeclaration?.agreed;
-    return {
-      agreed,
-      agreedAt: driver?.safetyDeclaration?.agreedAt
-        ? formatDate(driver.safetyDeclaration.agreedAt)
-        : null,
-    };
-  }, [driver?.safetyDeclaration]);
-
-  const handleShare = async () => {
-    const text = [
-      `${displayName} — SpareDriver Captain`,
-      `Mobile: ${phone}`,
-      `License: ${licenseNumber}`,
-      `Valid till: ${licenseValidity}`,
-      `Status: ${approvalLabel}`,
-    ].join('\n');
-
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'SpareDriver ID Card',
-          text,
-        });
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      toast.success('ID card details copied');
+      const res = await api.get('/driver/id-card/pdf', {
+        responseType: 'blob',
+      });
+      const filenameSafe =
+        displayName
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9-]/g, '') || 'captain';
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sparedriver-id-card-${filenameSafe}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5_000);
+      toast.success('ID card downloaded');
     } catch (err) {
-      if (err?.name === 'AbortError') return;
-      try {
-        await navigator.clipboard.writeText(text);
-        toast.success('ID card details copied');
-      } catch {
-        toast.error('Unable to share right now');
-      }
+      toast.error(err?.response?.data?.message || 'Could not download PDF');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -170,60 +159,20 @@ const DriverIdCardPage = () => {
 
             <button
               type="button"
-              onClick={handleShare}
-              className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-text hover:bg-bg transition-colors"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-border text-sm font-semibold text-text hover:bg-bg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Share2 className="w-4 h-4" />
-              Share
+              {downloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloading ? 'Downloading…' : 'Download'}
             </button>
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setDeclarationOpen(true)}
-          className="mt-5 w-full text-center text-sm font-medium text-info"
-        >
-          view declaration
-        </button>
       </div>
-
-      <Modal
-        isOpen={declarationOpen}
-        onClose={() => setDeclarationOpen(false)}
-        title="Safety declaration"
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-text-secondary leading-relaxed">
-            As a SpareDriver captain, you agree to follow traffic laws, treat
-            customers with respect, keep your documents valid, and never share
-            trip OTPs or personal customer data.
-          </p>
-          <div className="rounded-xl bg-bg px-4 py-3">
-            <p className="text-[11px] font-semibold tracking-wide text-text-muted uppercase">
-              Status
-            </p>
-            <p className="text-sm font-semibold text-text mt-0.5">
-              {declaration.agreed
-                ? `Agreed${declaration.agreedAt ? ` on ${declaration.agreedAt}` : ''}`
-                : 'Not completed'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/terms-and-conditions')}
-            className="w-full text-center text-sm font-medium text-info py-1"
-          >
-            Read terms & conditions
-          </button>
-          <Button
-            fullWidth
-            onClick={() => setDeclarationOpen(false)}
-          >
-            Got it
-          </Button>
-        </div>
-      </Modal>
     </div>
   );
 };

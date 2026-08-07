@@ -17,6 +17,7 @@ import {
   reopenRejectedApplication,
   updateOutstationAvailability,
 } from '../controllers/driver.controller.js';
+import { downloadDriverIdCardPdf } from '../controllers/driverPdf.controller.js';
 import { registerDriverFcmToken, unregisterDriverFcmToken } from '../controllers/fcmToken.controller.js';
 import {
   getDriverNotifications,
@@ -106,6 +107,7 @@ router.put('/training/progress', protectDriver, updateTrainingProgress);
 router.post('/onboarding/submit', protectDriver, submitApplication);
 router.post('/application/reopen', protectDriver, reopenRejectedApplication);
 router.get('/profile', protectDriver, getProfile);
+router.get('/id-card/pdf', protectDriver, downloadDriverIdCardPdf);
 router.put('/profile/vehicle-experience', protectDriver, updateVehicleExperience);
 router.put('/profile/bank-details', protectDriver, updateBankDetails);
 router.post('/fcm-token', protectDriver, registerDriverFcmToken);

@@ -1,5 +1,6 @@
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { buildDriverProfilePdf } from '../services/driverPdf.service.js';
+import { buildDriverIdCardPdf } from '../services/driverIdCardPdf.service.js';
 
 /**
  * Stream a one-click PDF dossier for a driver.
@@ -10,4 +11,12 @@ import { buildDriverProfilePdf } from '../services/driverPdf.service.js';
  */
 export const downloadDriverProfilePdf = asyncHandler(async (req, res) => {
   await buildDriverProfilePdf(req.params.id, { res });
+});
+
+/**
+ * GET /driver/id-card/pdf — authenticated driver downloads their own
+ * SpareDriver captain ID card as a PDF.
+ */
+export const downloadDriverIdCardPdf = asyncHandler(async (req, res) => {
+  await buildDriverIdCardPdf(req.driver._id, { res });
 });
