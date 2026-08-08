@@ -22,20 +22,6 @@ export function appendDriverFilterParams(params, filters, { outstation = true } 
   }
 }
 
-export function applyClientDriverFilters(drivers, filters, { outstation = true } = {}) {
-  let rows = drivers;
-  if (!outstation && filters.onlineOnly) {
-    rows = rows.filter((d) => d.isOnline);
-  }
-  if (!outstation && filters.minRating) {
-    const min = Number(filters.minRating);
-    if (Number.isFinite(min)) {
-      rows = rows.filter((d) => Number(d.rating || 0) >= min);
-    }
-  }
-  return rows;
-}
-
 function OutstationDriverFilterBar({
   filters,
   onChange,

@@ -6,6 +6,14 @@ const SCHEDULED_ASSIGN_STATUSES = new Set([
   'no_drivers_found',
 ]);
 
+/** Outstation pool statuses that still need a driver. */
+const OUTSTATION_ASSIGN_STATUSES = new Set([
+  'pending_assignment',
+  'searching',
+  'in_emergency_pool',
+  'no_drivers_found',
+]);
+
 /** Pre-trip statuses where admin can swap an already-assigned driver. */
 const REASSIGN_STATUSES = new Set([
   'driver_assigned',
@@ -29,10 +37,17 @@ export function getBookingAssignmentMode(booking) {
 
   if (hasDriver(booking)) return null;
 
-  // Outstation pool has its own conflict-aware assign path.
-  if (booking.status === 'pending_assignment' && booking.serviceType === 'outstation') {
+  // Outstation has its own conflict-aware assign path (opted-in drivers).
+  if (
+    booking.serviceType === 'outstation' &&
+    OUTSTATION_ASSIGN_STATUSES.has(booking.status)
+  ) {
     return 'outstation';
   }
+
+  // Prefer the emergency-pool path whenever the booking is in the pool,
+  // including scheduled rides that timed out of auto-dispatch.
+  if (booking.status === 'in_emergency_pool') return 'emergency_pool';
 
   const isScheduled =
     booking.bookingType === 'scheduled' ||
@@ -43,7 +58,6 @@ export function getBookingAssignmentMode(booking) {
     return 'scheduled';
   }
 
-  if (booking.status === 'in_emergency_pool') return 'emergency_pool';
   return null;
 }
 
@@ -72,7 +86,7 @@ export const BOOKING_ASSIGN_CONFIG = {
   emergency_pool: {
     driversPath: (id) => `/admin/emergency-pool/${id}/available-drivers`,
     assignPath: (id) => `/admin/emergency-pool/${id}/assign-driver`,
-    label: 'Scheduled ride',
+    label: 'Emergency pool',
   },
   outstation: {
     driversPath: (id) => `/admin/outstation-assignments/${id}/available-drivers`,
@@ -84,6 +98,46 @@ export const BOOKING_ASSIGN_CONFIG = {
     driversPath: (id) => `/admin/bookings/${id}/available-drivers`,
     assignPath: (id) => `/admin/bookings/${id}/assign-driver`,
     label: 'Reassign driver',
+  },
+};
+
+/** Short copy explaining who appears in the assign picker for each mode. */
+export const DRIVER_ELIGIBILITY_GUIDE = {
+  scheduled: {
+    title: 'Who appears here',
+    points: [
+      'Approved drivers who are not currently on a trip',
+      'Matched to this booking’s vehicle car type (when set)',
+      'Nearest to pickup first when location is available',
+      'Schedule conflicts are flagged — you cannot assign those',
+    ],
+  },
+  emergency_pool: {
+    title: 'Who appears here',
+    points: [
+      'Approved drivers who are not currently on a trip',
+      'Matched to this booking’s vehicle car type (when set)',
+      'Nearest to pickup first when location is available',
+      'Online is optional — use the Online only filter if needed',
+    ],
+  },
+  outstation: {
+    title: 'Who appears here',
+    points: [
+      'Approved drivers who opted in for outstation trips',
+      'Preferred zones overlap this booking’s zones',
+      'Car-type match, online, rating, and All-India filters apply when set',
+      'On-trip drivers may appear but conflicts are blocked',
+    ],
+  },
+  reassign: {
+    title: 'Who appears here',
+    points: [
+      'Approved drivers who are not currently on a trip',
+      'Current assigned driver is hidden from this list',
+      'Matched to this booking’s vehicle car type (when set)',
+      'Nearest to pickup first when location is available',
+    ],
   },
 };
 

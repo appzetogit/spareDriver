@@ -17,10 +17,13 @@ export function useLiveVerification({ onSuccess } = {}) {
     try {
       const res = await api.get('/driver/profile');
       const video = res.data.data?.liveVerificationVideo;
-      setSavedVideo(video?.videoUrl ? video : null);
+      const next = video?.videoUrl ? video : null;
+      setSavedVideo(next);
+      return next;
     } catch (err) {
       console.error('Failed to load verification video', err);
       toast.error('Could not load verification status');
+      return null;
     } finally {
       setLoading(false);
     }

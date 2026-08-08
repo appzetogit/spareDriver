@@ -34,6 +34,13 @@ import { TASK_TYPE } from '../constants/adminTask.js';
 import AdminTask from '../models/adminTask.model.js';
 import { resolveAuthFcm } from './fcmToken.service.js';
 import {
+  DRIVER_REVIEW_STEPS,
+  DRIVER_REVIEW_STEP_STATUS,
+  DRIVER_REVIEW_STEP_LABELS,
+  areAllReviewStepsApproved,
+  createEmptyStepReviews,
+} from '../constants/driverOnboarding.js';
+import {
   notifyDriverAccountApproved,
   notifyDriverAccountRejected,
   notifyDriverAccountSuspended,
@@ -44,17 +51,42 @@ function staffDisplayName(staff) {
   return staff?.name || staff?.email || 'Staff';
 }
 
-function appendApprovalHistory(driver, { status, by, byName = '', note = '' }) {
+function appendApprovalHistory(driver, { status, by, byName = '', note = '', stepReviews = null, submissionAttempt = null }) {
   if (!Array.isArray(driver.approvalHistory)) {
     driver.approvalHistory = [];
   }
-  driver.approvalHistory.push({
+  const entry = {
     status,
     note: (note || '').trim(),
     by: by || null,
     byName: byName || '',
     at: new Date(),
-  });
+  };
+  if (submissionAttempt != null) {
+    entry.submissionAttempt = submissionAttempt;
+  }
+  if (stepReviews) {
+    entry.stepReviews = stepReviews;
+  }
+  driver.approvalHistory.push(entry);
+}
+
+function ensureStepReviews(driver) {
+  if (!driver.onboardingStepReviews) {
+    driver.onboardingStepReviews = createEmptyStepReviews();
+    return;
+  }
+  for (const key of DRIVER_REVIEW_STEPS) {
+    if (!driver.onboardingStepReviews[key]) {
+      driver.onboardingStepReviews[key] = {
+        status: DRIVER_REVIEW_STEP_STATUS.PENDING,
+        note: '',
+        reviewedBy: null,
+        reviewedByName: '',
+        reviewedAt: null,
+      };
+    }
+  }
 }
 
 /** If history was never written, surface the current approvedBy stamp once. */
@@ -250,11 +282,72 @@ export const getDriverByIdService = async (staff, driverId) => {
   const videos = await getActiveTrainingVideos();
   const training = mergeTrainingProgress(videos, doc.trainingProgress);
   const trainingComplete = await isDriverTrainingComplete(driver);
+  const allStepsApproved = areAllReviewStepsApproved(doc.onboardingStepReviews);
 
   return {
     driver: doc,
     training,
     trainingComplete,
+    allStepsApproved,
+    reviewSteps: DRIVER_REVIEW_STEPS.map((key) => ({
+      key,
+      label: DRIVER_REVIEW_STEP_LABELS[key],
+      ...(doc.onboardingStepReviews?.[key] || { status: 'pending' }),
+    })),
+  };
+};
+
+export const updateDriverStepReviewService = async (staff, driverId, data) => {
+  const { step, status, note = '' } = data || {};
+
+  if (!DRIVER_REVIEW_STEPS.includes(step)) {
+    throw new ApiError(400, 'Invalid review step');
+  }
+  if (![DRIVER_REVIEW_STEP_STATUS.APPROVED, DRIVER_REVIEW_STEP_STATUS.REJECTED].includes(status)) {
+    throw new ApiError(400, 'Step status must be approved or rejected');
+  }
+
+  const trimmedNote = String(note || '').trim();
+  if (status === DRIVER_REVIEW_STEP_STATUS.REJECTED && trimmedNote.length < 10) {
+    throw new ApiError(400, 'A note (minimum 10 characters) is required when rejecting a step');
+  }
+
+  await assertStaffCanActOnResource(staff, TASK_TYPE.DRIVER_REVIEW, driverId);
+
+  const driver = await Driver.findById(driverId);
+  if (!driver) {
+    throw new ApiError(404, 'Driver not found');
+  }
+
+  if (!['pending', 'under_review'].includes(driver.approvalStatus)) {
+    throw new ApiError(400, 'Only applications under review can have steps verified');
+  }
+
+  ensureStepReviews(driver);
+
+  const actorName = staffDisplayName(staff);
+  driver.onboardingStepReviews[step] = {
+    status,
+    note: trimmedNote,
+    reviewedBy: staff._id,
+    reviewedByName: actorName,
+    reviewedAt: new Date(),
+  };
+  driver.markModified('onboardingStepReviews');
+
+  if (driver.approvalStatus === 'pending') {
+    driver.approvalStatus = 'under_review';
+  }
+
+  await driver.save();
+
+  return {
+    step,
+    label: DRIVER_REVIEW_STEP_LABELS[step],
+    review: driver.onboardingStepReviews[step],
+    allStepsApproved: areAllReviewStepsApproved(driver.onboardingStepReviews),
+    onboardingStepReviews: driver.onboardingStepReviews,
+    approvalStatus: driver.approvalStatus,
   };
 };
 
@@ -266,8 +359,8 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
   }
 
   const note = (approvalNote || '').trim();
-  if (['approved', 'rejected'].includes(approvalStatus) && note.length < 10) {
-    throw new ApiError(400, 'Approval note is required (minimum 10 characters) for approve or reject actions');
+  if (['approved', 'rejected', 'suspended'].includes(approvalStatus) && note.length < 10) {
+    throw new ApiError(400, 'Approval note is required (minimum 10 characters) for approve, reject, or suspend actions');
   }
 
   if (['approved', 'rejected'].includes(approvalStatus)) {
@@ -279,6 +372,16 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
     throw new ApiError(404, 'Driver not found');
   }
 
+  if (approvalStatus === 'approved') {
+    ensureStepReviews(driver);
+    if (!areAllReviewStepsApproved(driver.onboardingStepReviews)) {
+      throw new ApiError(
+        400,
+        'Verify and approve all onboarding steps before final approval',
+      );
+    }
+  }
+
   driver.approvalStatus = approvalStatus;
   driver.approvalNote = note;
 
@@ -287,20 +390,30 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
   if (approvalStatus === 'approved') {
     driver.approvedAt = new Date();
     driver.approvedBy = staff._id;
+    driver.revisionInProgress = false;
     appendApprovalHistory(driver, {
       status: 'approved',
       by: staff._id,
       byName: actorName,
       note,
+      submissionAttempt: driver.submissionCount || null,
+      stepReviews: driver.onboardingStepReviews
+        ? JSON.parse(JSON.stringify(driver.onboardingStepReviews))
+        : null,
     });
   } else if (approvalStatus === 'rejected') {
     driver.approvedAt = null;
     driver.approvedBy = staff._id;
+    driver.revisionInProgress = false;
     appendApprovalHistory(driver, {
       status: 'rejected',
       by: staff._id,
       byName: actorName,
       note,
+      submissionAttempt: driver.submissionCount || null,
+      stepReviews: driver.onboardingStepReviews
+        ? JSON.parse(JSON.stringify(driver.onboardingStepReviews))
+        : null,
     });
   } else if (approvalStatus === 'suspended') {
     driver.isOnline = false;
@@ -310,6 +423,7 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
       by: staff._id,
       byName: actorName,
       note,
+      submissionAttempt: driver.submissionCount || null,
     });
   }
 
@@ -322,6 +436,11 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
     });
   } else if (approvalStatus === 'suspended') {
     await upsertDriverReviewTask(driver);
+  }
+
+  if (approvalStatus === 'approved') {
+    const { syncDriverKitEligibility } = await import('../utils/kitEligibility.util.js');
+    await syncDriverKitEligibility(driverId);
   }
 
   const driverIdStr = String(driver._id);
@@ -352,10 +471,15 @@ export const suspendDriverService = async (staffOrId, driverId, data = {}) => {
   }
 
   const note = (data.note || data.approvalNote || '').trim();
+  if (note.length < 10) {
+    throw new ApiError(400, 'Suspension reason is required (minimum 10 characters)');
+  }
+
   driver.approvalStatus = 'suspended';
-  if (note) driver.approvalNote = note;
+  driver.approvalNote = note;
   driver.isOnline = false;
   driver.isOnTrip = false;
+  driver.canGoOnline = false;
 
   let byName = staffOrId?.name || staffOrId?.email || '';
   if (!byName && staffId) {
@@ -394,6 +518,7 @@ export const unsuspendDriverService = async (staffOrId, driverId) => {
   driver.approvalStatus = 'approved';
   driver.approvedAt = new Date();
   driver.approvedBy = staffId;
+  driver.approvalNote = '';
   appendApprovalHistory(driver, {
     status: 'unsuspended',
     by: staffId,

@@ -93,6 +93,45 @@ export function createQueryStore(fetcher) {
 
     refresh: (cacheKey, params) => get().fetch(cacheKey, params, { force: true }),
 
+    /** Soft-update one cached entry without a network refetch. */
+    patchEntry: (cacheKey, updater) => {
+      set((state) => {
+        const current = state.entries[cacheKey];
+        if (!current?.isFetched) return state;
+        const nextData =
+          typeof updater === 'function' ? updater(current.data) : updater;
+        if (nextData === current.data) return state;
+        return {
+          entries: {
+            ...state.entries,
+            [cacheKey]: { ...current, data: nextData },
+          },
+        };
+      });
+    },
+
+    /** Soft-update every matching cached entry (prefix string or predicate). */
+    patchMatching: (matcher, updater) => {
+      set((state) => {
+        const entries = { ...state.entries };
+        let changed = false;
+        Object.keys(entries).forEach((key) => {
+          const match =
+            typeof matcher === 'string'
+              ? key.startsWith(matcher)
+              : matcher(key);
+          const current = entries[key];
+          if (!match || !current?.isFetched) return;
+          const nextData =
+            typeof updater === 'function' ? updater(current.data, key) : updater;
+          if (nextData === current.data) return;
+          entries[key] = { ...current, data: nextData };
+          changed = true;
+        });
+        return changed ? { entries } : state;
+      });
+    },
+
     invalidate: (matcher) => {
       set((state) => {
         const entries = { ...state.entries };

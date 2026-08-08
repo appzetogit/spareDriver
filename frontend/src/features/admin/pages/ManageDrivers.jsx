@@ -207,35 +207,38 @@ const ManageDrivers = () => {
       {
         key: 'actions',
         label: 'Actions',
-        width: '160px',
+        width: '72px',
         unclamp: true,
         align: 'right',
         sortable: false,
         render: (_val, row) => (
-          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap min-w-max" data-row-action onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => navigate(`/admin/drivers/${row._id}/analytics`)}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary/10 text-primary-dark text-xs font-semibold hover:bg-primary/15 transition-colors shrink-0"
-              aria-label="Analytics"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Analytics</span>
-            </button>
-            <DriverSuspendActions driver={row} onSuccess={refetch} compact />
+          <div
+            className="flex items-center justify-end"
+            data-row-action
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DriverSuspendActions
+              driver={row}
+              variant="menu"
+              extraMenuItems={[
+                {
+                  label: 'Analytics',
+                  icon: BarChart3,
+                  onClick: () => navigate(`/admin/drivers/${row._id}/analytics`),
+                },
+              ]}
+            />
           </div>
         ),
       },
     ],
-    [refetch, navigate, canAssign, selected],
+    [navigate, canAssign, selected],
   );
 
   const stats = useMemo(
     () => ({
       total: pagination.total,
-      pending: drivers.filter(
-        (d) => d.approvalStatus === 'pending' || d.approvalStatus === 'under_review',
-      ).length,
+  pending: drivers.filter((d) => d.approvalStatus === 'under_review').length,
       approved: drivers.filter((d) => d.approvalStatus === 'approved').length,
       rejected: drivers.filter((d) => d.approvalStatus === 'rejected').length,
       suspended: drivers.filter((d) => d.approvalStatus === 'suspended').length,

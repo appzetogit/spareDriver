@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import {
   AlertTriangle,
   CheckCircle2,
+  Info,
   Loader2,
   MapPin,
   Navigation,
@@ -15,24 +16,25 @@ import api from '../../../../utils/api';
 import OutstationDriverFilterBar, {
   DEFAULT_DRIVER_FILTERS,
   appendDriverFilterParams,
-  applyClientDriverFilters,
 } from '../OutstationDriverFilterBar';
 import AssignDriverPickerRow from '../AssignDriverPickerRow';
 import AssignBookingTripSummary from './AssignBookingTripSummary';
 import {
   BOOKING_ASSIGN_CONFIG,
+  DRIVER_ELIGIBILITY_GUIDE,
   getBookingAssignmentMode,
 } from '../../utils/bookingAssignment';
 
-const EMERGENCY_LIMIT = 20;
+const DEFAULT_LIMIT = 20;
 const OUTSTATION_LIMIT = 50;
 
 const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
   const mode = getBookingAssignmentMode(booking);
   const config = BOOKING_ASSIGN_CONFIG[mode] || null;
+  const eligibility = DRIVER_ELIGIBILITY_GUIDE[mode] || null;
   const isOutstation = mode === 'outstation';
   const isReassign = mode === 'reassign';
-  const limit = isOutstation ? OUTSTATION_LIMIT : EMERGENCY_LIMIT;
+  const limit = isOutstation ? OUTSTATION_LIMIT : DEFAULT_LIMIT;
 
   const [fullBooking, setFullBooking] = useState(null);
   const [bookingLoading, setBookingLoading] = useState(true);
@@ -84,14 +86,11 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
   const buildDriverParams = useCallback(
     (pageNum) => {
       const params = new URLSearchParams({ limit, page: pageNum });
-      const query = isOutstation ? debouncedSearch : search.trim();
-      if (query) params.append('search', query);
-      if (isOutstation) {
-        appendDriverFilterParams(params, driverFilters, { outstation: true });
-      }
+      if (debouncedSearch.trim()) params.append('search', debouncedSearch.trim());
+      appendDriverFilterParams(params, driverFilters, { outstation: isOutstation });
       return params;
     },
-    [limit, isOutstation, debouncedSearch, search, driverFilters],
+    [limit, isOutstation, debouncedSearch, driverFilters],
   );
 
   useEffect(() => {
@@ -178,20 +177,15 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
     }
   };
 
-  const visibleDrivers = useMemo(() => {
-    if (isOutstation) return drivers;
-    return applyClientDriverFilters(drivers, driverFilters, { outstation: false });
-  }, [drivers, driverFilters, isOutstation]);
-
   const selectedDriver = useMemo(
-    () => visibleDrivers.find((d) => String(d._id) === String(selectedDriverId)) || null,
-    [visibleDrivers, selectedDriverId],
+    () => drivers.find((d) => String(d._id) === String(selectedDriverId)) || null,
+    [drivers, selectedDriverId],
   );
 
   const vehicleConflicts = outstationDetail?.vehicleConflicts || [];
   const hasVehicleConflict = isOutstation && vehicleConflicts.length > 0;
-  const availableCount = visibleDrivers.filter((d) => !d.hasConflict).length;
-  const conflictCount = visibleDrivers.filter((d) => d.hasConflict).length;
+  const availableCount = drivers.filter((d) => !d.hasConflict).length;
+  const conflictCount = drivers.filter((d) => d.hasConflict).length;
   const bufferMinutes = outstationDetail?.bufferMinutes ?? null;
   const extraCar = outstationDetail?.car || null;
 
@@ -331,7 +325,7 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
                 Choose driver
               </p>
               <div className="flex items-center gap-2">
-                {visibleDrivers.length > 0 && isOutstation ? (
+                {drivers.length > 0 ? (
                   <>
                     <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
                       <CheckCircle2 className="w-3 h-3" />
@@ -355,6 +349,20 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
                 )}
               </div>
             </div>
+
+            {eligibility ? (
+              <div className="rounded-xl bg-sky-50 border border-sky-100 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-sky-700">
+                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  {eligibility.title}
+                </div>
+                <ul className="text-[11px] text-sky-800/90 space-y-1 pl-5 list-disc">
+                  {eligibility.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {isOutstation && bookingZones.length > 0 ? (
               <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-100">
@@ -406,13 +414,15 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
                 </div>
               ) : error ? (
                 <div className="p-3 rounded-xl bg-rose-50 text-rose-700 text-sm">{error}</div>
-              ) : visibleDrivers.length === 0 ? (
+              ) : drivers.length === 0 ? (
                 <div className="p-6 rounded-xl bg-slate-50 text-slate-500 text-sm text-center">
                   <AlertTriangle className="w-5 h-5 mx-auto mb-2 text-amber-500" />
-                  No drivers match your filters.
+                  {isOutstation && bookingZones.length > 0
+                    ? 'No outstation-opted drivers match this booking’s zones and filters.'
+                    : 'No drivers match your filters.'}
                 </div>
               ) : (
-                visibleDrivers.map((d) => (
+                drivers.map((d) => (
                   <AssignDriverPickerRow
                     key={d._id}
                     driver={d}
@@ -422,7 +432,7 @@ const AssignBookingDriverDrawer = ({ booking, onClose, onAssigned }) => {
                 ))
               )}
 
-              {!loading && hasMore && !search.trim() && !debouncedSearch.trim() ? (
+              {!loading && hasMore && !debouncedSearch.trim() ? (
                 <button
                   type="button"
                   onClick={loadMore}

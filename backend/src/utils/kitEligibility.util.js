@@ -2,9 +2,20 @@ import { Driver } from '../models/driverModels/driver.model.js';
 import DriverKit from '../models/driverKit.model.js';
 import KitOrder from '../models/kitOrder.model.js';
 import { PAYMENT_STATUS, KIT_ADMIN_STATUS } from '../constants/kitStatus.js';
+import { isDriverTrainingComplete } from './driverTraining.util.js';
 
 export async function getActiveKits() {
   return DriverKit.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 }).lean();
+}
+
+function eligibilityCode(reasons, { hasKitGap = false, trainingComplete = true, noKits = false } = {}) {
+  if (!reasons.length) return noKits ? 'NO_KIT_REQUIRED' : 'ELIGIBLE';
+  const onlyTraining =
+    reasons.length === 1 && reasons[0].toLowerCase().includes('training');
+  if (onlyTraining) return 'TRAINING_REQUIRED';
+  if (hasKitGap && !trainingComplete) return 'KIT_AND_TRAINING_REQUIRED';
+  if (hasKitGap) return 'KIT_REQUIRED';
+  return 'NOT_ELIGIBLE';
 }
 
 export async function getDriverKitEligibility(driverId) {
@@ -25,14 +36,20 @@ export async function getDriverKitEligibility(driverId) {
     reasons.push('Your account is suspended');
   }
 
+  const trainingComplete = await isDriverTrainingComplete(driver);
+  if (!trainingComplete) {
+    reasons.push('Complete all required training videos before going online');
+  }
+
   const activeKits = await getActiveKits();
   if (!activeKits.length) {
     return {
       allowed: reasons.length === 0,
-      code: reasons.length ? 'NOT_ELIGIBLE' : 'NO_KIT_REQUIRED',
+      code: eligibilityCode(reasons, { trainingComplete, noKits: true }),
       reasons,
       activeKits: [],
       activeOrder: null,
+      trainingComplete,
     };
   }
 
@@ -50,10 +67,11 @@ export async function getDriverKitEligibility(driverId) {
   if (approvedOrder) {
     return {
       allowed: reasons.length === 0,
-      code: reasons.length ? 'NOT_ELIGIBLE' : 'ELIGIBLE',
+      code: eligibilityCode(reasons, { trainingComplete }),
       reasons,
       activeKits,
       activeOrder: approvedOrder,
+      trainingComplete,
     };
   }
 
@@ -79,10 +97,11 @@ export async function getDriverKitEligibility(driverId) {
 
   return {
     allowed: false,
-    code: 'KIT_REQUIRED',
+    code: eligibilityCode(reasons, { hasKitGap: true, trainingComplete }),
     reasons,
     activeKits,
     activeOrder: pendingOrder,
+    trainingComplete,
   };
 }
 

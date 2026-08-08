@@ -52,7 +52,7 @@ export const ADMIN_REASSIGN_STATUSES = Object.freeze([
  */
 export async function listAvailableDriversForAdminBookingService(
   bookingId,
-  { page, limit } = {},
+  { page, limit, search, onlineOnly, minRating, carTypeMatch } = {},
 ) {
   const booking = await Booking.findOne({ _id: bookingId, isDeleted: false })
     .select('pickup driverId status carId serviceType bookingType hourly outstation timeline')
@@ -77,6 +77,10 @@ export async function listAvailableDriversForAdminBookingService(
     pickupCoords,
     page,
     limit,
+    search,
+    onlineOnly,
+    minRating,
+    carTypeMatch,
   });
 
   // Hide the currently assigned driver from the picker.

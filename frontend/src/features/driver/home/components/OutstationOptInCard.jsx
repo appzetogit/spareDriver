@@ -14,6 +14,8 @@ const OutstationOptInCard = ({
   preferencesCompleted = false,
   initialAllIndiaOk = false,
   initialMaxHours = 10,
+  canEnable = true,
+  onBlocked,
 }) => {
   const refetchProfile = useDriverProfileStore((s) => s.fetch);
   const profileKey = buildCacheKey('driver-profile', {});
@@ -41,7 +43,16 @@ const OutstationOptInCard = ({
   useEffect(() => { setMaxHours(initialMaxHours || 10); }, [initialMaxHours]);
   useEffect(() => { setPrefsDone(!!preferencesCompleted); }, [preferencesCompleted]);
 
+  const showGoOnlineBlock = () => {
+    onBlocked?.();
+  };
+
   const persist = async ({ nextAvailable, zoneIds, allIndiaOk: india, maxDrivingHoursPerDay }) => {
+    if (nextAvailable && !canEnable) {
+      showGoOnlineBlock();
+      return false;
+    }
+
     setSaving(true);
     try {
       const payload = { available: nextAvailable };
@@ -56,10 +67,15 @@ const OutstationOptInCard = ({
       setMaxHours(updated?.outstationMaxDrivingHoursPerDay || maxHours);
       setPrefsDone(!!updated?.outstationPreferencesCompletedAt);
       refetchProfile?.(profileKey, {}, { force: true });
-      toast.success(nextAvailable ? "You're visible for outstation trips" : "Opted out of outstation");
+      toast.success(nextAvailable ? "You're visible for outstation trips" : 'Opted out of outstation');
       return true;
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Couldn't update outstation preference");
+      const data = err?.response?.data;
+      if (err?.response?.status === 403) {
+        showGoOnlineBlock();
+      } else {
+        toast.error(data?.message || "Couldn't update outstation preference");
+      }
       return false;
     } finally {
       setSaving(false);
@@ -72,6 +88,10 @@ const OutstationOptInCard = ({
       setAvailable(false);
       const ok = await persist({ nextAvailable: false });
       if (!ok) setAvailable(true);
+      return;
+    }
+    if (!canEnable) {
+      showGoOnlineBlock();
       return;
     }
     if (!initialZoneIds.length || !prefsDone) {
@@ -90,6 +110,10 @@ const OutstationOptInCard = ({
   };
 
   const handleSettingsConfirm = async ({ zoneIds, allIndiaOk: india, maxDrivingHoursPerDay }) => {
+    if (!canEnable && (pendingEnable || !available)) {
+      showGoOnlineBlock();
+      return;
+    }
     const enabling = pendingEnable || !available;
     const ok = await persist({
       nextAvailable: enabling ? true : available,
@@ -169,7 +193,14 @@ const OutstationOptInCard = ({
         {!available && zoneChips.length === 0 && (
           <button
             type="button"
-            onClick={() => { setPendingEnable(true); setSettingsOpen(true); }}
+            onClick={() => {
+              if (!canEnable) {
+                showGoOnlineBlock();
+                return;
+              }
+              setPendingEnable(true);
+              setSettingsOpen(true);
+            }}
             className="mt-2 w-full text-[11px] font-semibold text-primary py-1.5 rounded-lg bg-primary/5"
           >
             Set up outstation preferences

@@ -27,5 +27,13 @@ export const ONBOARDING_STEP_LABELS = {
   3: 'Bank details',
   4: 'Safety & documents',
   5: 'Live verification',
-  6: 'Training / submitted',
+  6: 'Submitted for review',
+};
+
+export const DRIVER_REVIEW_STEP_LABELS = {
+  identity: 'Identity',
+  credentials: 'Credentials',
+  bank: 'Bank details',
+  safety: 'Safety & documents',
+  liveVerification: 'Live verification',
 };

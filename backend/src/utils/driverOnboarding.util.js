@@ -32,3 +32,8 @@ export function hasCompletedLiveVerification(driver) {
   if (isLegacySubmittedDriver(driver)) return true;
   return driver.onboardingStep >= DRIVER_ONBOARDING_STEP.LIVE_VERIFICATION;
 }
+
+/** Rejected driver who tapped "Update my application" and is editing before re-submit. */
+export function isDriverRevising(driver) {
+  return driver?.approvalStatus === 'rejected' && Boolean(driver?.revisionInProgress);
+}

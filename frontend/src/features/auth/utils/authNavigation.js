@@ -34,6 +34,17 @@ export function navigateDriverAfterAuth(navigate, driver, needsPhone) {
     return;
   }
 
+  if (driver.approvalStatus === 'suspended') {
+    navigate('/driver/suspended', { replace: true });
+    return;
+  }
+
+  if (driver.approvalStatus === 'rejected' && driver.revisionInProgress) {
+    const route = DRIVER_ONBOARDING_ROUTES[driver.onboardingStep] || '/driver/register/identity';
+    navigate(route, { replace: true });
+    return;
+  }
+
   if (driver.approvalStatus === 'rejected' || driver.approvalStatus === 'under_review') {
     navigate('/driver/register/approval', { replace: true });
     return;

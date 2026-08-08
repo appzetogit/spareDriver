@@ -3,6 +3,7 @@ import documentSchema from './document.schema.js';
 import bankDetailsSchema from './bankDetails.schema.js';
 import trainingProgressSchema from './trainingProgress.schema.js';
 import vehicleExperienceSchema from './vehicleExperience.schema.js';
+import stepReviewSchema from './stepReview.schema.js';
 
 // ─── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ const driverSchema = new mongoose.Schema(
       durationSeconds: { type: Number, default: 0, min: 0 },
     },
 
-    // ── Step 6: Training & certification (required videos) ───────────────────
+    // ── Training & certification (post-approval, required to go online) ───────
     trainingProgress: {
       type: [trainingProgressSchema],
       default: [],
@@ -163,6 +164,26 @@ const driverSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    /** True while a rejected driver is editing before re-submit (not shown as pending). */
+    revisionInProgress: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    /** How many times the driver has submitted for review (1 = first submission). */
+    submissionCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    /** Per-section review before final approve (identity → live verification). */
+    onboardingStepReviews: {
+      identity: { type: stepReviewSchema, default: () => ({}) },
+      credentials: { type: stepReviewSchema, default: () => ({}) },
+      bank: { type: stepReviewSchema, default: () => ({}) },
+      safety: { type: stepReviewSchema, default: () => ({}) },
+      liveVerification: { type: stepReviewSchema, default: () => ({}) },
     },
     approvedAt: {
       type: Date,
@@ -189,6 +210,10 @@ const driverSchema = new mongoose.Schema(
         },
         byName: { type: String, default: '', trim: true },
         at: { type: Date, default: Date.now },
+        /** Which application attempt this decision belonged to. */
+        submissionAttempt: { type: Number, default: null },
+        /** Snapshot of per-section reviews at decision time (esp. reject reasons). */
+        stepReviews: { type: mongoose.Schema.Types.Mixed, default: null },
       },
     ],
 

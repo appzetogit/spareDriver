@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Flag,
   Car,
+  GraduationCap,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
@@ -114,14 +115,27 @@ const DriverHomePage = () => {
   ).filter((b) => b && DRIVER_HOME_ACTIVE_STATUSES.includes(b.status));
   const cancellationChances = summary?.cancellationChances || null;
 
-  const { setOnline, toggling, blocked, clearBlocked } = useDriverOnlineToggle();
+  const { setOnline, toggling, blocked, showBlocked, clearBlocked, refreshStatus } =
+    useDriverOnlineToggle();
 
   const isOnline = onlineStatus?.isOnline ?? false;
   const canGoOnline = onlineStatus?.canGoOnline ?? false;
   const blocker = onlineStatus && !canGoOnline ? onlineStatus : null;
-  const needsKitAction = blocker?.code === 'KIT_REQUIRED';
-  const hasOtherBlocker = Boolean(blocker) && !needsKitAction;
+  const needsKitAction =
+    blocker?.code === 'KIT_REQUIRED' || blocker?.code === 'KIT_AND_TRAINING_REQUIRED';
+  const needsTrainingAction =
+    blocker?.code === 'TRAINING_REQUIRED' || blocker?.code === 'KIT_AND_TRAINING_REQUIRED';
+  const hasOtherBlocker = Boolean(blocker) && !needsKitAction && !needsTrainingAction;
   const primaryReason = blocker?.reasons?.[0] || null;
+
+  const openGoOnlineBlocker = async () => {
+    const status = await refreshStatus().catch(() => null);
+    showBlocked({
+      message: 'Cannot go online',
+      code: status?.code || blocker?.code,
+      reasons: status?.reasons || blocker?.reasons || [],
+    });
+  };
 
   const location = useDriverLocationStatus();
 
@@ -169,6 +183,10 @@ const DriverHomePage = () => {
 
   const handleToggle = async (next) => {
     if (next) {
+      if (!canGoOnline) {
+        await openGoOnlineBlocker();
+        return;
+      }
       const result = await setOnline(true);
       if (result.success) {
         window.dispatchEvent(new CustomEvent('sd:prime-offer-audio'));
@@ -292,6 +310,24 @@ const DriverHomePage = () => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-8">
         {needsKitAction && <DriverKitHomeCard onUpdate={handleKitUpdate} />}
 
+        {needsTrainingAction && (
+          <Card className="border-l-4 border-l-primary bg-primary/5 animate-fade-in-up">
+            <button
+              type="button"
+              onClick={() => navigate('/driver/register/training')}
+              className="w-full flex items-start gap-3 text-left"
+            >
+              <GraduationCap className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-text">Complete training videos</p>
+                <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                  Watch all required training videos before you can go online.
+                </p>
+              </div>
+            </button>
+          </Card>
+        )}
+
         {hasOtherBlocker && (
           <Card className="border-l-4 border-l-amber-500 bg-amber-50/40 animate-fade-in-up">
             <div className="flex items-start gap-3">
@@ -316,6 +352,8 @@ const DriverHomePage = () => {
           preferencesCompleted={!!driverProfile?.outstationPreferencesCompletedAt}
           initialAllIndiaOk={!!driverProfile?.outstationAllIndiaOk}
           initialMaxHours={driverProfile?.outstationMaxDrivingHoursPerDay || 10}
+          canEnable={canGoOnline}
+          onBlocked={openGoOnlineBlocker}
         />
 
         {isOnline && (

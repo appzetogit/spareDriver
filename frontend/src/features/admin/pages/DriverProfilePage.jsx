@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -24,17 +24,26 @@ import StatusBadge from '../components/StatusBadge';
 import DocumentGallery from '../components/DocumentGallery';
 import { SectionCard, InfoGrid } from '../components/DetailBlocks';
 import DriverProfileActions from '../components/ManageDrivers/DriverProfileActions';
+import DriverStepReviewControls, {
+  StepReviewStatusBadge,
+} from '../components/ManageDrivers/DriverStepReviewControls';
+import DriverApprovalHistory from '../components/ManageDrivers/DriverApprovalHistory';
 import {
   formatDate,
   formatAvailability,
   getCarTypeLabel,
   ONBOARDING_STEP_LABELS,
 } from '../components/ManageDrivers/driverProfileUtils';
+import { DRIVER_REVIEW_STEPS, areAllReviewStepsApproved, formatSubmissionAttempt } from '../../../utils/driverOnboarding';
 import { formatVehicleExperienceLabel } from '../../../utils/vehicleCatalog';
+
+const REVIEWABLE = ['pending', 'under_review'];
 
 const DriverProfilePage = () => {
   const { driverId } = useParams();
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [submitting, setSubmitting] = useState(null);
+  const [stepReviews, setStepReviews] = useState({});
 
   const queryParams = useMemo(() => ({ driverId }), [driverId]);
   const cacheKey = buildCacheKey('driver-profile', queryParams);
@@ -46,12 +55,10 @@ const DriverProfilePage = () => {
     { enabled: Boolean(driverId) },
   );
 
-  /**
-   * Fetch the driver dossier as a binary blob and trigger a download
-   * via a synthetic anchor click. We deliberately bypass `window.open`
-   * because the endpoint requires the auth-bearing axios instance —
-   * a fresh window load wouldn't carry the staff JWT cookie/header.
-   */
+  useEffect(() => {
+    setStepReviews(profile?.driver?.onboardingStepReviews || {});
+  }, [profile?.driver?.onboardingStepReviews]);
+
   const handleDownloadPdf = async () => {
     if (!driverId) return;
     setDownloadingPdf(true);
@@ -60,8 +67,11 @@ const DriverProfilePage = () => {
         responseType: 'blob',
       });
       const filenameSafe =
-        (profile?.driver?.name || 'driver').toString().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') ||
-        'driver';
+        (profile?.driver?.name || 'driver')
+          .toString()
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9-]/g, '') || 'driver';
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -70,7 +80,6 @@ const DriverProfilePage = () => {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      // Revoke after the browser has had a chance to start the download.
       setTimeout(() => URL.revokeObjectURL(url), 5_000);
       toast.success('PDF downloaded');
     } catch (err) {
@@ -86,10 +95,55 @@ const DriverProfilePage = () => {
     useAdminTasksListStore.getState().invalidate('admin-tasks');
   };
 
-  const handleStatusUpdated = () => {
+  const handleStatusUpdated = (updatedDriver) => {
+    if (updatedDriver?._id) {
+      // Soft update from suspend/unsuspend — avoid full-page refetch flash.
+      return;
+    }
     invalidateAfterReview();
     refetch();
   };
+
+  const runStepReview = async (step, status, note = '') => {
+    if (!profile?.driver?._id) return;
+    setSubmitting(`step:${step}:${status}`);
+    try {
+      const res = await api.put(`/admin/drivers/${profile.driver._id}/step-review`, {
+        step,
+        status,
+        note,
+      });
+      const data = res.data.data;
+      // Update in place — do not invalidate/refetch (avoids full-page loading flash).
+      setStepReviews(data.onboardingStepReviews || {});
+      const label = DRIVER_REVIEW_STEPS.find((s) => s.key === step)?.label || step;
+      toast.success(status === 'approved' ? `${label} approved` : `${label} rejected`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update step review');
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const sectionReviewActions = (stepKey) => {
+    if (!profile?.driver) return null;
+    const canReview = REVIEWABLE.includes(profile.driver.approvalStatus);
+    const review = stepReviews?.[stepKey] || { status: 'pending' };
+    return (
+      <DriverStepReviewControls
+        stepKey={stepKey}
+        review={review}
+        canReview={canReview}
+        submitting={submitting}
+        onApprove={(key) => runStepReview(key, 'approved')}
+        onReject={(key, note) => runStepReview(key, 'rejected', note)}
+      />
+    );
+  };
+
+  const sectionStatus = (stepKey) => (
+    <StepReviewStatusBadge review={stepReviews?.[stepKey]} />
+  );
 
   if (loading && !profile) {
     return (
@@ -112,6 +166,8 @@ const DriverProfilePage = () => {
   }
 
   const { driver, training, trainingComplete } = profile;
+  const canReview = REVIEWABLE.includes(driver.approvalStatus);
+  const allStepsApproved = areAllReviewStepsApproved(stepReviews);
   const selfie = driver.documents?.find((d) => d.type === 'selfie')?.fileUrl;
   const carLabels = (driver.carTypeExperience || []).map(getCarTypeLabel).filter(Boolean);
   const vehicleExperience = driver.vehicleExperience || [];
@@ -120,7 +176,7 @@ const DriverProfilePage = () => {
     <div className="space-y-6 animate-fade-in-up pb-8">
       <div className="flex items-center justify-between gap-4">
         <BackLink />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <Link
             to={`/admin/drivers/${driverId}/analytics`}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark"
@@ -180,26 +236,55 @@ const DriverProfilePage = () => {
                 {driver.isOnline ? (driver.isOnTrip ? 'On trip' : 'Online') : 'Offline'}
               </span>
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                Onboarding: {ONBOARDING_STEP_LABELS[driver.onboardingStep] || `Step ${driver.onboardingStep}`}
+                Onboarding:{' '}
+                {ONBOARDING_STEP_LABELS[driver.onboardingStep] || `Step ${driver.onboardingStep}`}
               </span>
+              {(driver.submissionCount > 0 || canReview) && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                  {formatSubmissionAttempt(driver.submissionCount)}
+                  {driver.submissionCount > 1 ? ' (resubmitted)' : ''}
+                </span>
+              )}
+              {canReview && (
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    allStepsApproved
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-amber-50 text-amber-700'
+                  }`}
+                >
+                  {allStepsApproved ? 'All sections verified' : 'Sections pending verification'}
+                </span>
+              )}
+              {driver.revisionInProgress && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                  Driver editing (not re-submitted)
+                </span>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {['pending', 'under_review'].includes(driver.approvalStatus) && (
-        <DriverProfileActions
-          driver={driver}
-          onSuccess={handleStatusUpdated}
-          onReviewComplete={invalidateAfterReview}
-        />
+      {canReview && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Verify each section with Approve / Reject next to it. Final approval is at the bottom
+          after all five sections are approved.
+        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SectionCard title="Driver information">
+      <div className="space-y-6">
+        <SectionCard
+          title="1. Identity"
+          status={sectionStatus('identity')}
+          actions={sectionReviewActions('identity')}
+        >
           <InfoGrid
             items={[
               { label: 'Driver ID', value: driver._id },
+              { label: 'Name', value: driver.name },
+              { label: 'Phone', value: driver.phone },
+              { label: 'Email', value: driver.email || '—' },
               { label: 'Experience', value: `${driver.experienceYears ?? 0} years` },
               {
                 label: 'Availability',
@@ -207,14 +292,6 @@ const DriverProfilePage = () => {
                 capitalize: true,
               },
               { label: 'Joined', value: formatDate(driver.createdAt) },
-              {
-                label: 'Safety declaration',
-                value: driver.safetyDeclaration?.agreed ? 'Agreed' : 'Not completed',
-              },
-              {
-                label: 'Training',
-                value: trainingComplete ? 'Complete' : 'Incomplete',
-              },
             ]}
           />
           {(vehicleExperience.length > 0 || carLabels.length > 0) && (
@@ -249,7 +326,11 @@ const DriverProfilePage = () => {
           )}
         </SectionCard>
 
-        <SectionCard title="Driving credentials">
+        <SectionCard
+          title="2. Credentials"
+          status={sectionStatus('credentials')}
+          actions={sectionReviewActions('credentials')}
+        >
           <InfoGrid
             items={[
               { label: 'License number', value: driver.drivingLicense?.number },
@@ -259,96 +340,16 @@ const DriverProfilePage = () => {
                   ? formatDate(driver.drivingLicense.expiryDate)
                   : '—',
               },
-              {
-                label:
-                  driver.approvalStatus === 'rejected'
-                    ? 'Rejected by'
-                    : 'Approved by',
-                value: (() => {
-                  const by =
-                    driver.approvedBy?.name ||
-                    driver.approvedBy?.email ||
-                    null;
-                  if (!by && !driver.approvedAt) return '—';
-                  if (driver.approvalStatus === 'rejected') {
-                    return by || '—';
-                  }
-                  if (by && driver.approvedAt) {
-                    return `${by} on ${formatDate(driver.approvedAt)}`;
-                  }
-                  if (by) return by;
-                  return driver.approvedAt ? formatDate(driver.approvedAt) : '—';
-                })(),
-              },
             ]}
           />
         </SectionCard>
 
-        {Array.isArray(driver.approvalHistory) && driver.approvalHistory.length > 0 && (
-          <SectionCard title="Approval history">
-            <ul className="space-y-3">
-              {driver.approvalHistory.map((entry, idx) => {
-                const by =
-                  entry.byName ||
-                  entry.by?.name ||
-                  entry.by?.email ||
-                  'Staff';
-                const statusLabel =
-                  entry.status === 'unsuspended'
-                    ? 'Unsuspended'
-                    : entry.status
-                      ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
-                      : 'Updated';
-                const tone =
-                  entry.status === 'approved' || entry.status === 'unsuspended'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                    : entry.status === 'rejected'
-                      ? 'bg-rose-50 text-rose-800 border-rose-100'
-                      : entry.status === 'suspended'
-                        ? 'bg-amber-50 text-amber-800 border-amber-100'
-                        : 'bg-slate-50 text-slate-700 border-slate-100';
-                return (
-                  <li
-                    key={entry._id || `${entry.at}-${idx}`}
-                    className="flex gap-3 items-start"
-                  >
-                    <span
-                      className={`mt-0.5 shrink-0 inline-flex px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${tone}`}
-                    >
-                      {statusLabel}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-slate-800">
-                        <span className="font-semibold">{by}</span>
-                        {entry.at ? (
-                          <span className="text-slate-500 font-normal">
-                            {' '}
-                            ·{' '}
-                            {new Date(entry.at).toLocaleString('en-GB', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        ) : null}
-                      </p>
-                      {entry.note ? (
-                        <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">
-                          {entry.note}
-                        </p>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </SectionCard>
-        )}
-
-        {driver.bankDetails && (
-          <SectionCard title="Bank details">
+        <SectionCard
+          title="3. Bank details"
+          status={sectionStatus('bank')}
+          actions={sectionReviewActions('bank')}
+        >
+          {driver.bankDetails ? (
             <InfoGrid
               items={[
                 { label: 'Account holder', value: driver.bankDetails.accountHolderName },
@@ -358,10 +359,71 @@ const DriverProfilePage = () => {
                 { label: 'UPI ID', value: driver.bankDetails.upiId },
               ]}
             />
-          </SectionCard>
-        )}
+          ) : (
+            <p className="text-sm text-slate-500">No bank details submitted.</p>
+          )}
+        </SectionCard>
 
-        <SectionCard title="Training progress">
+        <SectionCard
+          title="4. Safety & documents"
+          status={sectionStatus('safety')}
+          actions={sectionReviewActions('safety')}
+        >
+          <InfoGrid
+            items={[
+              {
+                label: 'Safety declaration',
+                value: driver.safetyDeclaration?.agreed ? 'Agreed' : 'Not completed',
+              },
+            ]}
+          />
+          <div className="pt-2">
+            <DocumentGallery documents={driver.documents} />
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="5. Live identity verification"
+          status={sectionStatus('liveVerification')}
+          actions={sectionReviewActions('liveVerification')}
+        >
+          {driver.liveVerificationVideo?.videoUrl ? (
+            <>
+              <p className="text-xs text-slate-500 mb-3">
+                Recorded{' '}
+                {driver.liveVerificationVideo.recordedAt
+                  ? formatDate(driver.liveVerificationVideo.recordedAt)
+                  : '—'}
+                {driver.liveVerificationVideo.durationSeconds
+                  ? ` · ${driver.liveVerificationVideo.durationSeconds}s`
+                  : ''}
+              </p>
+              <video
+                src={driver.liveVerificationVideo.videoUrl}
+                controls
+                playsInline
+                className="w-full max-h-[420px] rounded-xl bg-black"
+              />
+              <p className="text-xs text-slate-500 mt-3">
+                Driver should show Aadhaar and driving licence in this recording.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">No live verification video uploaded.</p>
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SectionCard title="Training progress (post-approval)">
+          <InfoGrid
+            items={[
+              {
+                label: 'Status',
+                value: trainingComplete ? 'Complete' : 'Incomplete / after approval',
+              },
+            ]}
+          />
           {!training?.length ? (
             <p className="text-sm text-slate-500">No training videos configured.</p>
           ) : (
@@ -390,39 +452,19 @@ const DriverProfilePage = () => {
         </SectionCard>
       </div>
 
-        {driver.liveVerificationVideo?.videoUrl && (
-          <SectionCard title="Live identity verification">
-            <p className="text-xs text-slate-500 mb-3">
-              Recorded {driver.liveVerificationVideo.recordedAt
-                ? formatDate(driver.liveVerificationVideo.recordedAt)
-                : '—'}
-              {driver.liveVerificationVideo.durationSeconds
-                ? ` · ${driver.liveVerificationVideo.durationSeconds}s`
-                : ''}
-            </p>
-            <video
-              src={driver.liveVerificationVideo.videoUrl}
-              controls
-              playsInline
-              className="w-full max-h-[420px] rounded-xl bg-black"
-            />
-            <p className="text-xs text-slate-500 mt-3">
-              Driver should show Aadhaar and driving licence in this recording.
-            </p>
-          </SectionCard>
-        )}
+      <DriverApprovalHistory
+        history={driver.approvalHistory}
+        submissionCount={driver.submissionCount || 0}
+      />
 
-      <SectionCard title="Documents">
-        <DocumentGallery documents={driver.documents} />
-      </SectionCard>
-
-      {!['pending', 'under_review'].includes(driver.approvalStatus) && (
-        <DriverProfileActions
-          driver={driver}
-          onSuccess={handleStatusUpdated}
-          onReviewComplete={invalidateAfterReview}
-        />
-      )}
+      <DriverProfileActions
+        driver={driver}
+        stepReviews={stepReviews}
+        submitting={submitting}
+        setSubmitting={setSubmitting}
+        onSuccess={handleStatusUpdated}
+        onReviewComplete={invalidateAfterReview}
+      />
     </div>
   );
 };

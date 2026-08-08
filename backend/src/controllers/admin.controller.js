@@ -81,6 +81,11 @@ export const updateDriverStatus = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, result, `Driver status updated successfully`));
 });
 
+export const updateDriverStepReview = asyncHandler(async (req, res) => {
+  const result = await adminService.updateDriverStepReviewService(req.staff, req.params.id, req.body);
+  return res.status(200).json(new ApiResponse(200, result, 'Step review updated successfully'));
+});
+
 export const suspendDriver = asyncHandler(async (req, res) => {
   const result = await adminService.suspendDriverService(req.staff, req.params.id, req.body);
   return res.status(200).json(new ApiResponse(200, result, 'Driver suspended successfully'));

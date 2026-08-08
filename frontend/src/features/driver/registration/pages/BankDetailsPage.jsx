@@ -190,7 +190,7 @@ const BankDetailsPage = () => {
         <p className="text-xs text-text-muted mt-3">Payout routing setup</p>
       </div>
       <form className="flex-1 flex flex-col px-6 pb-8">
-        <div className="flex-1 space-y-4 animate-fade-in-up">
+        <div className="flex-1 space-y-4 animate-fade-in-up relative z-10">
           <Input 
             label="Account holder name" 
             placeholder="Name as in bank" 

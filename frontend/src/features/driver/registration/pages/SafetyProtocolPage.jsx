@@ -141,7 +141,7 @@ const SafetyProtocolPage = () => {
             onClick={handleSubmit}
             className="rounded-full py-4 text-base font-bold shadow-lg shadow-primary/20"
           >
-            {isSubmitting || isAnyUploading ? 'UPLOADING...' : 'CONTINUE TO TRAINING'}
+            {isSubmitting || isAnyUploading ? 'UPLOADING...' : 'CONTINUE'}
           </Button>
         </div>
       </div>

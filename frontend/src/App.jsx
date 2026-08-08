@@ -110,6 +110,7 @@ const SafetyProtocolPage = lazy(() => import('./features/driver/registration/pag
 const LiveVerificationPage = lazy(() => import('./features/driver/registration/pages/LiveVerificationPage'));
 const TrainingPage = lazy(() => import('./features/driver/registration/pages/TrainingPage'));
 const ProfileUnderReviewPage = lazy(() => import('./features/driver/registration/pages/ProfileUnderReviewPage'));
+const DriverSuspendedPage = lazy(() => import('./features/driver/registration/pages/DriverSuspendedPage'));
 
 // Driver Home & Trips
 const DriverHomePage = lazy(() => import('./features/driver/home/pages/DriverHomePage'));
@@ -297,6 +298,7 @@ function App() {
           <Route path="/driver/forgot-password" element={<DriverForgotPasswordPage />} />
           <Route path="/driver/signup" element={<DriverSignUpPage />} />
           <Route path="/driver/register/identity" element={<IdentityDetailsPage />} />
+          <Route path="/driver/suspended" element={<DriverSuspendedPage />} />
 
           <Route element={<OnboardingGuard />}>
             <Route path="/driver/register/credentials" element={<DrivingCredentialsPage />} />

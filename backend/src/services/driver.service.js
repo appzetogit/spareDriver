@@ -19,8 +19,8 @@ import {
   isWatchComplete,
   getWatchThresholdSeconds,
 } from '../utils/driverTraining.util.js';
-import { syncDriverKitEligibility } from '../utils/kitEligibility.util.js';
-import { DRIVER_ONBOARDING_STEP } from '../constants/driverOnboarding.js';
+import { syncDriverKitEligibility, getDriverKitEligibility } from '../utils/kitEligibility.util.js';
+import { DRIVER_ONBOARDING_STEP, createEmptyStepReviews } from '../constants/driverOnboarding.js';
 import {
   hasCompletedLiveVerification,
   isApplicationSubmitted,
@@ -208,6 +208,16 @@ export const updateOnboardingStepService = async (driverId, data) => {
     throw new ApiError(404, 'Driver not found');
   }
 
+  if (driver.approvalStatus === 'under_review') {
+    throw new ApiError(400, 'Application is under review and cannot be edited');
+  }
+  if (driver.approvalStatus === 'rejected' && !driver.revisionInProgress) {
+    throw new ApiError(400, 'Reopen your application before updating details');
+  }
+  if (driver.approvalStatus === 'approved') {
+    throw new ApiError(400, 'Approved profiles cannot use onboarding update');
+  }
+
   if (stepNumber === 2) {
     const licenseNumber = stepData.drivingLicense?.number || '';
     if (licenseNumber.includes('-')) {
@@ -269,6 +279,9 @@ export const uploadLiveVerificationService = async (driverId, file, durationSeco
   if (isApplicationSubmitted(driver)) {
     throw new ApiError(400, 'Application already submitted');
   }
+  if (driver.approvalStatus === 'rejected' && !driver.revisionInProgress) {
+    throw new ApiError(400, 'Reopen your application before updating live verification');
+  }
 
   if (driver.onboardingStep < DRIVER_ONBOARDING_STEP.SAFETY) {
     throw new ApiError(400, 'Complete safety documents before live verification');
@@ -323,17 +336,21 @@ export const reopenRejectedApplicationService = async (driverId) => {
     throw new ApiError(400, 'Only rejected applications can be updated');
   }
 
-  driver.approvalStatus = 'pending';
-  driver.approvalNote = '';
-  driver.onboardingStep = DRIVER_ONBOARDING_STEP.SAFETY;
-  driver.trainingProgress = [];
+  // Stay rejected until they re-submit — avoids admin "pending" while editing.
+  driver.revisionInProgress = true;
+  // Step 1 = identity already done; resume from credentials and allow free back/forward while revising.
+  driver.onboardingStep = DRIVER_ONBOARDING_STEP.IDENTITY;
   await driver.save();
 
   return {
     id: driver._id,
     onboardingStep: driver.onboardingStep,
     approvalStatus: driver.approvalStatus,
+    revisionInProgress: driver.revisionInProgress,
+    approvalNote: driver.approvalNote,
+    onboardingStepReviews: driver.onboardingStepReviews,
     liveVerificationVideo: driver.liveVerificationVideo,
+    submissionCount: driver.submissionCount || 0,
   };
 };
 
@@ -351,10 +368,7 @@ export const getDriverTrainingService = async (driverId) => {
   return {
     videos: items,
     allRequiredComplete,
-    canSubmit:
-      hasCompletedLiveVerification(driver) &&
-      driver.onboardingStep >= DRIVER_ONBOARDING_STEP.LIVE_VERIFICATION &&
-      allRequiredComplete,
+    canTrain: driver.approvalStatus === 'approved',
   };
 };
 
@@ -368,23 +382,18 @@ export const updateTrainingProgressService = async (driverId, data) => {
   const driver = await Driver.findById(driverId);
   if (!driver) throw new ApiError(404, 'Driver not found');
 
-  if (!hasCompletedLiveVerification(driver)) {
-    throw new ApiError(400, 'Complete live verification before training');
-  }
-
-  // Approved legacy drivers may complete training added after their approval.
-  // Their approval status and onboarding submission must remain unchanged.
-  if (isApplicationSubmitted(driver) && driver.approvalStatus !== 'approved') {
-    throw new ApiError(400, 'Application already submitted');
+  if (driver.approvalStatus !== 'approved') {
+    throw new ApiError(400, 'Complete verification and get approved before training');
   }
 
   const video = await TrainingVideo.findOne({ _id: trainingVideoId, isActive: true });
   if (!video) throw new ApiError(404, 'Training video not found');
 
   const safeWatched = Math.max(0, Math.min(Number(watchedSeconds) || 0, video.durationSeconds || Number.MAX_SAFE_INTEGER));
-  const markComplete = Boolean(completed);
+  const autoComplete = isWatchComplete(safeWatched, video.durationSeconds);
+  const markComplete = Boolean(completed) || autoComplete;
 
-  if (markComplete && !isWatchComplete(safeWatched, video.durationSeconds)) {
+  if (Boolean(completed) && !autoComplete) {
     throw new ApiError(
       400,
       `Please watch at least ${getWatchThresholdSeconds(video.durationSeconds)} seconds before completing this video`,
@@ -413,9 +422,16 @@ export const updateTrainingProgressService = async (driverId, data) => {
   }
 
   await driver.save();
+  const eligibility = await syncDriverKitEligibility(driverId);
 
   const merged = mergeTrainingProgress([video.toObject()], driver.trainingProgress)[0];
-  return merged;
+  return {
+    ...merged,
+    allRequiredComplete: await isDriverTrainingComplete(driver),
+    canGoOnline: eligibility.allowed,
+    eligibilityReasons: eligibility.reasons,
+    eligibilityCode: eligibility.code,
+  };
 };
 
 export const submitApplicationService = async (driverId) => {
@@ -428,6 +444,14 @@ export const submitApplicationService = async (driverId) => {
     throw new ApiError(400, 'Please complete live identity verification first');
   }
 
+  // Revision resets onboardingStep; keep the prior recording if the driver does not re-record.
+  if (
+    driver.liveVerificationVideo?.videoUrl &&
+    driver.onboardingStep < DRIVER_ONBOARDING_STEP.LIVE_VERIFICATION
+  ) {
+    driver.onboardingStep = DRIVER_ONBOARDING_STEP.LIVE_VERIFICATION;
+  }
+
   if (driver.onboardingStep < DRIVER_ONBOARDING_STEP.LIVE_VERIFICATION) {
     throw new ApiError(400, 'Please complete all onboarding steps before submitting');
   }
@@ -436,13 +460,25 @@ export const submitApplicationService = async (driverId) => {
     throw new ApiError(400, 'Please complete the safety declaration first');
   }
 
-  const trainingComplete = await isDriverTrainingComplete(driver);
-  if (!trainingComplete) {
-    throw new ApiError(400, 'Please complete all required training videos before submitting');
+  if (isApplicationSubmitted(driver) || driver.approvalStatus === 'under_review') {
+    throw new ApiError(400, 'Application already submitted');
+  }
+
+  if (driver.approvalStatus === 'approved') {
+    throw new ApiError(400, 'Application is already approved');
+  }
+
+  if (driver.approvalStatus === 'rejected' && !driver.revisionInProgress) {
+    throw new ApiError(400, 'Reopen your application before submitting again');
   }
 
   driver.approvalStatus = 'under_review';
   driver.onboardingStep = DRIVER_ONBOARDING_STEP.SUBMITTED;
+  driver.revisionInProgress = false;
+  driver.submissionCount = (driver.submissionCount || 0) + 1;
+  driver.approvalNote = '';
+  driver.onboardingStepReviews = createEmptyStepReviews();
+  driver.markModified('onboardingStepReviews');
   await driver.save();
 
   const { upsertDriverReviewTask } = await import('./adminTask.service.js');
@@ -511,6 +547,21 @@ export const updateOutstationAvailabilityService = async (
     .select('preferredOutstationZones outstationPreferencesCompletedAt')
     .lean();
   if (!existing) throw new ApiError(404, 'Driver not found');
+
+  // Same eligibility as going online: kit + training (and approval).
+  if (next) {
+    const eligibility = await getDriverKitEligibility(driverId);
+    if (!eligibility.allowed) {
+      throw new ApiError(
+        403,
+        eligibility.reasons?.[0] || 'Complete kit purchase and training before enabling outstation',
+        {
+          code: eligibility.code,
+          reasons: eligibility.reasons,
+        },
+      );
+    }
+  }
 
   const update = {
     availableForOutstation: next,

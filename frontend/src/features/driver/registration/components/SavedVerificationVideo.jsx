@@ -1,15 +1,20 @@
 import { CheckCircle2, RotateCcw } from 'lucide-react';
 import Button from '../../../../components/Button';
 
-const SavedVerificationVideo = ({ video, onRerecord, onContinue, continuing = false }) => (
+const SavedVerificationVideo = ({
+  video,
+  onRerecord,
+  onContinue,
+  continuing = false,
+  continueLabel = 'Submit application',
+  continueHint = 'You can submit for verification or re-record if you want to replace this video.',
+}) => (
   <div className="space-y-5">
     <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
       <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
       <div>
         <p className="text-sm font-semibold text-emerald-900">Verification video saved</p>
-        <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
-          You can continue to training or re-record if you want to replace this video.
-        </p>
+        <p className="text-xs text-emerald-800 mt-1 leading-relaxed">{continueHint}</p>
       </div>
     </div>
 
@@ -33,12 +38,13 @@ const SavedVerificationVideo = ({ video, onRerecord, onContinue, continuing = fa
 
     <div className="flex flex-col gap-3">
       <Button fullWidth onClick={onContinue} loading={continuing} className="rounded-full py-4">
-        Continue to training
+        {continueLabel}
       </Button>
       <Button
         fullWidth
         variant="outline"
         onClick={onRerecord}
+        disabled={continuing}
         className="rounded-full py-4 border-slate-300 text-slate-800"
       >
         <RotateCcw className="w-4 h-4 mr-2 inline" />

@@ -1,7 +1,13 @@
-export function SectionCard({ title, children, className = '' }) {
+export function SectionCard({ title, children, className = '', actions = null, status = null }) {
   return (
     <div className={`bg-white rounded-xl border border-slate-100 p-5 min-w-0 ${className}`}>
-      <h3 className="text-sm font-semibold text-slate-800 mb-4 tracking-wide">{title}</h3>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <h3 className="text-sm font-semibold text-slate-800 tracking-wide">{title}</h3>
+          {status}
+        </div>
+        {actions ? <div className="shrink-0 w-full sm:w-auto">{actions}</div> : null}
+      </div>
       <div className="space-y-3 min-w-0">{children}</div>
     </div>
   );

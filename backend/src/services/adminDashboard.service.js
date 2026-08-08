@@ -365,7 +365,7 @@ export async function getAdminSidebarCountsService({ staff } = {}) {
     countEmergencyPoolBookingsService({ staff }),
     Driver.countDocuments({
       ...DRIVER_FILTER,
-      approvalStatus: { $in: ['pending', 'under_review'] },
+      approvalStatus: { $in: ['under_review'] },
     }),
     KitOrder.countDocuments({
       adminStatus: KIT_ADMIN_STATUS.PENDING,

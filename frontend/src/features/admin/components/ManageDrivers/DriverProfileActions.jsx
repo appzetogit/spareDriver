@@ -1,29 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Button from '../../../../components/Button';
 import ApprovalNoteForm, { isApprovalNoteValid } from '../ApprovalNoteForm';
 import DriverSuspendActions from './DriverSuspendActions';
+import { areAllReviewStepsApproved } from '../../../../utils/driverOnboarding';
 import api from '../../../../utils/api';
 
 const REVIEWABLE = ['pending', 'under_review'];
 
-const DriverProfileActions = ({ driver, onSuccess, onReviewComplete }) => {
+/** Final approve / reject + suspend controls (shown at bottom of profile). */
+const DriverProfileActions = ({
+  driver,
+  stepReviews,
+  submitting,
+  setSubmitting,
+  onSuccess,
+  onReviewComplete,
+}) => {
   const navigate = useNavigate();
   const [approvalNote, setApprovalNote] = useState(driver?.approvalNote || '');
   const [noteError, setNoteError] = useState('');
   const [actionError, setActionError] = useState('');
-  const [submitting, setSubmitting] = useState(null);
+
+  useEffect(() => {
+    setApprovalNote(driver?.approvalNote || '');
+  }, [driver?.approvalNote]);
 
   if (!driver) return null;
 
   const canReview = REVIEWABLE.includes(driver.approvalStatus);
   const canSuspend = driver.approvalStatus === 'approved';
   const canUnsuspend = driver.approvalStatus === 'suspended';
+  const allStepsApproved = areAllReviewStepsApproved(stepReviews);
 
   const runAction = async (approvalStatus) => {
-    const needsNote = ['approved', 'rejected'].includes(approvalStatus);
-    if (needsNote && !isApprovalNoteValid(approvalNote)) {
+    if (approvalStatus === 'approved' && !allStepsApproved) {
+      setActionError('Approve all onboarding sections before final approval.');
+      return;
+    }
+
+    if (['approved', 'rejected'].includes(approvalStatus) && !isApprovalNoteValid(approvalNote)) {
       setNoteError('Please provide a brief explanation (minimum 10 characters).');
       return;
     }
@@ -61,7 +78,14 @@ const DriverProfileActions = ({ driver, onSuccess, onReviewComplete }) => {
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
-      <h2 className="text-sm font-semibold text-slate-800">Driver actions</h2>
+      <div>
+        <h2 className="text-sm font-semibold text-slate-800">Final decision</h2>
+        {canReview && (
+          <p className="text-xs text-slate-500 mt-1">
+            Review each section above, then approve or reject the full application here.
+          </p>
+        )}
+      </div>
 
       {actionError && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -70,43 +94,50 @@ const DriverProfileActions = ({ driver, onSuccess, onReviewComplete }) => {
       )}
 
       {canReview && (
-        <ApprovalNoteForm
-          value={approvalNote}
-          onChange={(val) => {
-            setApprovalNote(val);
-            if (noteError && isApprovalNoteValid(val)) setNoteError('');
-          }}
-          error={noteError}
-        />
-      )}
+        <div className="space-y-4">
+          <ApprovalNoteForm
+            value={approvalNote}
+            onChange={(val) => {
+              setApprovalNote(val);
+              if (noteError && isApprovalNoteValid(val)) setNoteError('');
+            }}
+            error={noteError}
+          />
 
-      {canReview && (
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Button
-            variant="admin"
-            size="md"
-            fullWidth
-            loading={submitting === 'approved'}
-            disabled={Boolean(submitting)}
-            onClick={() => runAction('approved')}
-          >
-            Approve driver
-          </Button>
-          <Button
-            variant="danger"
-            size="md"
-            fullWidth
-            loading={submitting === 'rejected'}
-            disabled={Boolean(submitting)}
-            onClick={() => runAction('rejected')}
-          >
-            Reject driver
-          </Button>
+          {!allStepsApproved && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+              Final approve unlocks after Identity, Credentials, Bank, Safety &amp; documents, and
+              Live verification are all approved.
+            </p>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              variant="admin"
+              size="md"
+              fullWidth
+              loading={submitting === 'approved'}
+              disabled={Boolean(submitting) || !allStepsApproved}
+              onClick={() => runAction('approved')}
+            >
+              Final approve driver
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              fullWidth
+              loading={submitting === 'rejected'}
+              disabled={Boolean(submitting)}
+              onClick={() => runAction('rejected')}
+            >
+              Reject application
+            </Button>
+          </div>
         </div>
       )}
 
       {(canSuspend || canUnsuspend) && (
-        <div className="pt-4 border-t border-slate-100">
+        <div className={canReview ? 'pt-4 border-t border-slate-100' : ''}>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
             Account access
           </p>
@@ -116,7 +147,9 @@ const DriverProfileActions = ({ driver, onSuccess, onReviewComplete }) => {
 
       {!canReview && driver.approvalNote && (
         <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Review note</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            Review note
+          </p>
           <p className="text-sm text-slate-700 whitespace-pre-wrap">{driver.approvalNote}</p>
         </div>
       )}

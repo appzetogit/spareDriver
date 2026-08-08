@@ -25,10 +25,15 @@ const IdentityDetailsPage = () => {
       navigate('/driver/link-phone', { replace: true });
       return;
     }
+    // Revising after rejection starts at credentials (identity signup is already done).
+    if (driver.approvalStatus === 'rejected' && driver.revisionInProgress) {
+      navigate('/driver/register/credentials', { replace: true });
+      return;
+    }
     if (driver.onboardingStep >= 1) {
       navigateDriverAfterAuth(navigate, driver);
     }
-  }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, navigate]);
+  }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.revisionInProgress, navigate]);
 
   const [form, setForm] = useState({ name: '', phone: '', password: '' });
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);

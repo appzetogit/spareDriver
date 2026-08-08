@@ -565,6 +565,10 @@ export async function listAvailableDriversForAssignmentService({
   pickupCoords,   // { lng, lat } from booking.pickup
   page = 1,
   limit = 20,
+  search,
+  onlineOnly,
+  minRating,
+  carTypeMatch = 'true',
 } = {}) {
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
@@ -576,17 +580,43 @@ export async function listAvailableDriversForAssignmentService({
     Number.isFinite(pickupCoords.lat) &&
     !(pickupCoords.lng === 0 && pickupCoords.lat === 0);
 
-  // Base match conditions shared by both geo + flat paths.
+  // Base match — approved, not deleted, not currently on a trip.
   const matchStage = {
     approvalStatus: 'approved',
     isDeleted: { $ne: true },
     isOnTrip: false,
   };
-  if (carTypeId) {
+  if (carTypeId && carTypeMatch !== 'false') {
     try {
       matchStage.carTypeExperience = new mongoose.Types.ObjectId(String(carTypeId));
     } catch { /* ignore bad id */ }
   }
+  if (onlineOnly === 'true' || onlineOnly === true) {
+    matchStage.isOnline = true;
+  }
+  if (minRating != null && minRating !== '') {
+    const rating = Number(minRating);
+    if (Number.isFinite(rating) && rating > 0) {
+      matchStage.rating = { $gte: rating };
+    }
+  }
+  const searchQ = String(search || '').trim();
+  if (searchQ) {
+    matchStage.$or = [
+      { name: { $regex: searchQ, $options: 'i' } },
+      { phone: { $regex: searchQ, $options: 'i' } },
+    ];
+  }
+
+  const driverFields = {
+    name: 1,
+    phone: 1,
+    rating: 1,
+    experienceYears: 1,
+    isOnline: 1,
+    location: 1,
+    lastLocationAt: 1,
+  };
 
   if (hasGeo) {
     // $geoNear must be the first stage in an aggregation pipeline.
@@ -608,13 +638,7 @@ export async function listAvailableDriversForAssignmentService({
       },
       {
         $project: {
-          name: 1,
-          phone_no: 1,
-          rating: 1,
-          experienceYears: 1,
-          isOnline: 1,
-          location: 1,
-          lastLocationAt: 1,
+          ...driverFields,
           distanceKm: 1,
           distanceMeters: 1,
         },
@@ -637,7 +661,7 @@ export async function listAvailableDriversForAssignmentService({
   // Flat fallback — no valid pickup coordinates.
   const [drivers, total] = await Promise.all([
     Driver.find(matchStage)
-      .select('name phone_no rating experienceYears isOnline location lastLocationAt')
+      .select('name phone rating experienceYears isOnline location lastLocationAt')
       .sort({ isOnline: -1, rating: -1, experienceYears: -1 })
       .skip(skip)
       .limit(limitNum)

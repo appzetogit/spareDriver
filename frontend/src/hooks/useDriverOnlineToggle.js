@@ -29,11 +29,12 @@ export function useDriverOnlineToggle() {
         const payload = err.response?.data;
         if (err.response?.status === 403) {
           setBlocked({
-            message: payload?.message || 'Cannot go online',
+            message: 'Cannot go online',
             code: payload?.data?.code,
-            reasons: payload?.data?.reasons || [],
+            reasons: payload?.data?.reasons || [payload?.message].filter(Boolean),
           });
           useDriverKitActiveStore.getState().invalidate('driver-kit-active');
+          useDriverOnlineStore.getState().invalidate('driver-online-status');
         }
         return { success: false, error: payload?.message };
       } finally {
@@ -43,5 +44,17 @@ export function useDriverOnlineToggle() {
     [updateDriver],
   );
 
-  return { setOnline, toggling, blocked, clearBlocked: () => setBlocked(null), refreshStatus };
+  return {
+    setOnline,
+    toggling,
+    blocked,
+    showBlocked: (payload) =>
+      setBlocked({
+        message: payload?.message || 'Cannot go online',
+        code: payload?.code,
+        reasons: payload?.reasons || [],
+      }),
+    clearBlocked: () => setBlocked(null),
+    refreshStatus,
+  };
 }

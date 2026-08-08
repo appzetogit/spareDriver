@@ -10,6 +10,7 @@ import {
   getDrivers,
   getDriverById,
   updateDriverStatus,
+  updateDriverStepReview,
   suspendDriver,
   unsuspendDriver,
   addAdminMember,
@@ -456,6 +457,7 @@ router.get(
   downloadDriverProfilePdf,
 );
 router.put('/drivers/:id/status', protectStaff, restrictTo(...ALL_STAFF), updateDriverStatus);
+router.put('/drivers/:id/step-review', protectStaff, restrictTo(...ALL_STAFF), updateDriverStepReview);
 router.patch('/drivers/:id/suspend', protectStaff, restrictTo(...ALL_STAFF), suspendDriver);
 router.patch('/drivers/:id/unsuspend', protectStaff, restrictTo(...ALL_STAFF), unsuspendDriver);
 

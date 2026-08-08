@@ -549,6 +549,10 @@ export const getEmergencyPoolAvailableDrivers = asyncHandler(async (req, res) =>
     pickupCoords,
     page: req.query?.page,
     limit: req.query?.limit,
+    search: req.query?.search,
+    onlineOnly: req.query?.onlineOnly,
+    minRating: req.query?.minRating,
+    carTypeMatch: req.query?.carTypeMatch,
   });
   await attachScheduleConflictsToDrivers(booking, result);
   return res
@@ -700,6 +704,10 @@ export const getScheduledBookingAvailableDrivers = asyncHandler(async (req, res)
       page: req.query?.page,
       limit: req.query?.limit,
       carTypeId: req.query?.carTypeId,
+      search: req.query?.search,
+      onlineOnly: req.query?.onlineOnly,
+      minRating: req.query?.minRating,
+      carTypeMatch: req.query?.carTypeMatch,
     },
   );
   return res
@@ -759,6 +767,10 @@ export const getAdminBookingAvailableDrivers = asyncHandler(async (req, res) => 
   const result = await listAvailableDriversForAdminBookingService(req.params.id, {
     page: req.query.page,
     limit: req.query.limit,
+    search: req.query.search,
+    onlineOnly: req.query.onlineOnly,
+    minRating: req.query.minRating,
+    carTypeMatch: req.query.carTypeMatch,
   });
   return res
     .status(200)

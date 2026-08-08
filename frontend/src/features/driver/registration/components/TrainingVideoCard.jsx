@@ -24,14 +24,23 @@ const TrainingVideoCard = ({ video, active, onProgress, saving, onSelect }) => {
     const seconds = Math.floor(el.currentTime);
     setLocalWatched(seconds);
 
-    if (seconds - lastSentRef.current < 3) return;
+    const threshold = video.durationSeconds
+      ? Math.max(1, Math.floor(video.durationSeconds * 0.9))
+      : 0;
+    const reachedEnd = threshold > 0 && seconds >= threshold;
+
+    if (!reachedEnd && seconds - lastSentRef.current < 3) return;
     lastSentRef.current = seconds;
-    onProgress({ watchedSeconds: seconds, completed: false });
+    onProgress({ watchedSeconds: seconds, completed: reachedEnd });
   };
 
   const handleEnded = () => {
-    const duration = video.durationSeconds || Math.floor(videoRef.current?.currentTime || 0);
-    onProgress({ watchedSeconds: duration, completed: true });
+    const el = videoRef.current;
+    const played = Math.floor(el?.currentTime || 0);
+    const duration = video.durationSeconds || played;
+    // Prefer DB duration so backend 90% threshold matches; fall back to played time.
+    const watchedSeconds = Math.max(played, duration);
+    onProgress({ watchedSeconds, completed: true });
   };
 
   const progressPct = video.durationSeconds

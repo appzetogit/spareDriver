@@ -933,7 +933,16 @@ export async function listScheduledBookingsForAdminService({ staff, query = {} }
  */
 export async function listAvailableDriversForScheduledBookingService(
   bookingId,
-  { staff, page, limit, carTypeId } = {},
+  {
+    staff,
+    page,
+    limit,
+    carTypeId,
+    search,
+    onlineOnly,
+    minRating,
+    carTypeMatch,
+  } = {},
 ) {
   const booking = await Booking.findOne({
     _id: bookingId,
@@ -963,6 +972,10 @@ export async function listAvailableDriversForScheduledBookingService(
     pickupCoords,
     page,
     limit,
+    search,
+    onlineOnly,
+    minRating,
+    carTypeMatch,
   });
 
   const bufferMinutes = await resolveBufferMinutesForBooking(booking);
