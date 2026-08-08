@@ -19,6 +19,14 @@ export function isNightRideAt(date, nightConfig) {
   return start < end ? cur >= start && cur < end : cur >= start || cur < end;
 }
 
+/** Mirror of backend `isLongDurationNight` — night charge via duration threshold. */
+export function isLongDurationNight(bookedHours, nightConfig) {
+  if (!nightConfig?.enabled) return false;
+  const threshold = Number(nightConfig.thresholdHours) || 0;
+  if (threshold <= 0) return false;
+  return Number(bookedHours) >= threshold;
+}
+
 function applyCouponDiscount(subtotal, coupon) {
   if (!coupon) return 0;
   const minAmount = Number(coupon.minOrderAmount) || 0;
@@ -105,14 +113,14 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
     resolvePlatformFeeConfig(pricing || {});
   const platformFee =
     platformFeeType === 'flat'
-      ? platformFeeAmount
-      : (netSubtotal * platformFeeAmount) / 100;
-  const gstPercent = pricing.gstPercent || 0;
+      ? round2(platformFeeAmount)
+      : round2((netSubtotal * platformFeeAmount) / 100);
+  const gstPercent = Number(pricing?.gstPercent) || 0;
   const gstAmount = ((netSubtotal + platformFee) * gstPercent) / 100;
   const subscriptionDiscount = applySubscriptionDiscount(netSubtotal, subscription);
   const totalPayable = Math.max(0, netSubtotal + platformFee + gstAmount - subscriptionDiscount);
 
-  const platformCommissionPercent = pricing.platformCommissionPercent || 0;
+  const platformCommissionPercent = Number(pricing?.platformCommissionPercent) || 0;
   const passThrough = Math.max(0, Math.min(Number(allowancePassThrough) || 0, subtotal));
   const commissionableSubtotal = Math.max(0, subtotal - passThrough);
   const platformCommission = (commissionableSubtotal * platformCommissionPercent) / 100;
@@ -145,17 +153,35 @@ function applyPlatformLayers(subtotal, pricing, subscription, allowancePassThrou
 export function calculateHourlyFare({
   pricing,
   slab = null,
+  isCustomDuration = false,
   actualDurationMin = null,
   bookedHours = null,
   isNightRide = false,
   waitingMinutes = 0,
   tollParking = 0,
+  /**
+   * User overrides for long-booking driver allowances. Default `true`
+   * means "customer is providing it" — no extra charge unless the
+   * threshold is crossed AND they did not opt out.
+   */
+  foodProvided = true,
+  stayProvided = true,
   subscription = null,
+  coupon = null,
 } = {}) {
   if (!pricing) return null;
 
-  const slabPrice = slab?.price ?? 0;
-  const slabMaxHours = slab?.maxHours ?? bookedHours ?? 0;
+  let packagePrice = 0;
+  let slabMaxHours = 0;
+  if (isCustomDuration) {
+    const rate = pricing.customHours?.ratePerHour || 0;
+    const hours = Math.max(1, Math.ceil(bookedHours || 0));
+    packagePrice = rate * hours;
+    slabMaxHours = hours;
+  } else {
+    packagePrice = slab?.price ?? 0;
+    slabMaxHours = slab?.maxHours ?? bookedHours ?? 0;
+  }
 
   let extraHours = 0;
   let extraHourCharge = 0;
@@ -171,26 +197,83 @@ export function calculateHourlyFare({
   const waitingCharge = billableWait * perMin;
 
   let nightCharge = 0;
-  if (isNightRide && pricing.nightCharge?.enabled) {
-    nightCharge =
-      pricing.nightCharge.type === 'percentage'
-        ? (slabPrice * (pricing.nightCharge.amount || 0)) / 100
-        : pricing.nightCharge.amount || 0;
+  let nightChargeTriggered = false;
+  if (pricing.nightCharge?.enabled) {
+    const longRide = isLongDurationNight(bookedHours, pricing.nightCharge);
+    if (isNightRide || longRide) {
+      nightChargeTriggered = true;
+      nightCharge =
+        pricing.nightCharge.type === 'percentage'
+          ? (packagePrice * (pricing.nightCharge.amount || 0)) / 100
+          : pricing.nightCharge.amount || 0;
+    }
+  }
+
+  // Hourly food allowance is notice-only — never billed.
+  const foodAllowance = 0;
+  const foodCfg = pricing.foodAllowance;
+  const foodThresholdHours = foodCfg?.thresholdHours || 0;
+  const foodRequired =
+    !!foodCfg?.enabled &&
+    bookedHours != null &&
+    foodThresholdHours > 0 &&
+    Number(bookedHours) >= foodThresholdHours;
+  const foodEligible = foodRequired;
+
+  let stayAllowance = 0;
+  const stayCfg = pricing.stayAllowance;
+  const stayThresholdHours = stayCfg?.thresholdHours || 0;
+  const stayEligible =
+    !!stayCfg?.enabled &&
+    bookedHours != null &&
+    stayThresholdHours > 0 &&
+    Number(bookedHours) >= stayThresholdHours;
+  const stayOptedOut = stayCfg?.userOptOut && stayProvided === true;
+  if (stayEligible && !stayOptedOut) {
+    stayAllowance = stayCfg.amount || 0;
   }
 
   const toll = pricing.tollParkingEnabled ? Math.max(0, tollParking || 0) : 0;
 
-  const subtotal = slabPrice + extraHourCharge + waitingCharge + nightCharge + toll;
-  const layers = applyPlatformLayers(subtotal, pricing, subscription);
+  const subtotal =
+    packagePrice +
+    extraHourCharge +
+    waitingCharge +
+    nightCharge +
+    foodAllowance +
+    stayAllowance +
+    toll;
+  const layers = applyPlatformLayers(
+    subtotal,
+    pricing,
+    subscription,
+    foodAllowance + stayAllowance,
+    coupon,
+  );
 
   return {
     serviceType: SERVICE_TYPES.HOURLY,
-    packagePrice: round2(slabPrice),
+    isCustomDuration: !!isCustomDuration,
+    bookedHours: bookedHours || 0,
+    packagePrice: round2(packagePrice),
     extraHours,
     extraHourCharge: round2(extraHourCharge),
     waitingMinutes: waitingMinutes || 0,
     waitingCharge: round2(waitingCharge),
     nightCharge: round2(nightCharge),
+    nightChargeTriggered,
+    nightChargeThresholdHours: pricing.nightCharge?.thresholdHours || 0,
+    foodAllowance: round2(foodAllowance),
+    foodThresholdHours,
+    foodEligible,
+    foodRequired,
+    foodProvided: true,
+    foodOptOutAvailable: false,
+    stayAllowance: round2(stayAllowance),
+    stayThresholdHours,
+    stayEligible,
+    stayProvided: !!stayProvided,
+    stayOptOutAvailable: !!(stayCfg?.userOptOut && stayEligible),
     tollParking: round2(toll),
     subtotal: round2(subtotal),
     ...layers,
@@ -221,11 +304,12 @@ export function calculateOutstationFare({
   stayProvided = true,
   tollParking: _tollParking = 0, // eslint-disable-line no-unused-vars
   subscription = null,
+  coupon = null,
 } = {}) {
   if (!pricing) return null;
   const o = pricing.outstation || {};
 
-  const tripDays = Math.max(1, Math.ceil(days));
+  const tripDays = Math.max(1, Math.ceil(Number(days) || 0));
   const nights = Math.max(0, tripDays - 1);
 
   const dailyRate = Number(o.dailyRate) || 0;
@@ -262,6 +346,7 @@ export function calculateOutstationFare({
     pricing,
     subscription,
     allowanceTotal,
+    coupon,
   );
 
   return {

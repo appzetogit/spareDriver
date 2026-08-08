@@ -5,6 +5,7 @@ import {
   listAdminUserSubscriptionsService,
 } from './adminUserActivity.service.js';
 import { stampBrandLogoOnAllPages } from '../utils/pdfBrand.js';
+import { localDateKey } from '../utils/reportDateRange.js';
 
 const PALETTE = {
   text: '#0F172A',
@@ -255,24 +256,34 @@ function drawTable(doc, columns, rows, { emptyText = 'No records.' } = {}) {
 function drawTrendChart(doc, points, valueKey, { title, formatValue = (v) => String(v) } = {}) {
   if (!points?.length) return;
 
-  const slice = points.length > 21 ? points.slice(-21) : points;
-  const chartH = 72;
+  // Match on-screen charts: use the full filled series (already capped at 90 days).
+  const slice = points;
+  const chartH = 78;
   const chartW = pageContentWidth(doc);
   const left = doc.page.margins.left;
+  const padX = 8;
+  const innerW = chartW - padX * 2;
 
-  ensureSpace(doc, chartH + 36);
+  ensureSpace(doc, chartH + 44);
 
   doc
     .font('Helvetica-Bold')
     .fontSize(9)
     .fillColor(PALETTE.text)
     .text(title, left, doc.y);
-  doc.moveDown(0.4);
+
+  const max = Math.max(...slice.map((p) => Number(p[valueKey]) || 0), 1);
+  const rangeLabel = `${fmtDate(slice[0].date)} – ${fmtDate(slice[slice.length - 1].date)}`;
+  doc
+    .font('Helvetica')
+    .fontSize(7.5)
+    .fillColor(PALETTE.muted)
+    .text(`${rangeLabel}  ·  ${slice.length} days  ·  peak ${formatValue(max)}`, left, doc.y);
+  doc.moveDown(0.35);
 
   const y0 = doc.y;
-  const max = Math.max(...slice.map((p) => Number(p[valueKey]) || 0), 1);
-  const barGap = 3;
-  const barW = (chartW - barGap * (slice.length - 1)) / slice.length;
+  const barGap = slice.length > 45 ? 1 : slice.length > 21 ? 1.5 : 2.5;
+  const barW = Math.max(1.2, (innerW - barGap * Math.max(slice.length - 1, 0)) / slice.length);
 
   doc
     .roundedRect(left, y0, chartW, chartH, 6)
@@ -282,15 +293,15 @@ function drawTrendChart(doc, points, valueKey, { title, formatValue = (v) => Str
   slice.forEach((point, i) => {
     const value = Number(point[valueKey]) || 0;
     const barHeight = Math.max(value > 0 ? 4 : 2, (value / max) * (chartH - 18));
-    const x = left + 8 + i * (barW + barGap);
+    const x = left + padX + i * (barW + barGap);
     const barY = y0 + chartH - 10 - barHeight;
     doc
-      .roundedRect(x, barY, Math.max(barW - 2, 2), barHeight, 2)
+      .roundedRect(x, barY, Math.max(barW - 0.4, 1), barHeight, 1)
       .fillColor(value > 0 ? PALETTE.accent : '#CBD5E1')
       .fill();
   });
 
-  doc.y = y0 + chartH + 12;
+  doc.y = y0 + chartH + 10;
 }
 
 function tripFare(booking) {
@@ -300,8 +311,8 @@ function tripFare(booking) {
 function filterDateParams(filters) {
   if (!filters?.from && !filters?.to) return {};
   return {
-    from: filters.from ? new Date(filters.from).toISOString().slice(0, 10) : undefined,
-    to: filters.to ? new Date(filters.to).toISOString().slice(0, 10) : undefined,
+    from: filters.from ? localDateKey(filters.from) || undefined : undefined,
+    to: filters.to ? localDateKey(filters.to) || undefined : undefined,
   };
 }
 

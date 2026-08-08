@@ -9,6 +9,7 @@ import {
   bookingGstExpr,
   subscriptionGstExpr,
   buildFiltersMeta,
+  mongoDayBucket
 } from '../utils/reportDateRange.js';
 
 const BOOKING_FILTER = { isDeleted: false };
@@ -170,7 +171,7 @@ export async function getAdminGstReportService(query = {}) {
           { $match: bookingMatch },
           {
             $group: {
-              _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+              _id: mongoDayBucket('$createdAt'),
               amount: { $sum: bookingGstExpr() },
             },
           },
@@ -182,7 +183,7 @@ export async function getAdminGstReportService(query = {}) {
           { $match: subscriptionMatch },
           {
             $group: {
-              _id: { $dateToString: { format: '%Y-%m-%d', date: '$paidAt' } },
+              _id: mongoDayBucket('$paidAt'),
               amount: { $sum: subscriptionGstExpr() },
             },
           },

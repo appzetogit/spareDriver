@@ -30,7 +30,11 @@ import RowActionsMenu from '../components/RowActionsMenu';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
-import { SUBSCRIPTION_ASSIGNMENT_STATUS, SUBSCRIPTION_STATUS } from '../../../constants/serviceTypes';
+import {
+  SUBSCRIPTION_ASSIGNMENT_STATUS,
+  SUBSCRIPTION_CANCEL_REQUEST_STATUS,
+  SUBSCRIPTION_STATUS,
+} from '../../../constants/serviceTypes';
 import { formatDateTime12 } from '../../../utils/datetime';
 import {
   DriverCarExperienceChips,
@@ -214,13 +218,20 @@ const ManageUserSubscriptions = () => {
       key: 'status',
       label: 'Status',
       render: (_, row) => {
+        const cancelPending =
+          row.cancellationRequest?.status === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
         const variant =
           row.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED
             ? 'success'
             : row.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.RELEASED
               ? 'default'
               : 'warning';
-        return <Badge variant={variant}>{row.assignmentStatus || 'pending'}</Badge>;
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <Badge variant={variant}>{row.assignmentStatus || 'pending'}</Badge>
+            {cancelPending && <Badge variant="danger">Cancel requested</Badge>}
+          </div>
+        );
       },
     },
     {
@@ -433,7 +444,12 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [subscriptionStatusReason, setSubscriptionStatusReason] = useState('');
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [settlementConfirmed, setSettlementConfirmed] = useState(false);
+  const [createRefundOnCancel, setCreateRefundOnCancel] = useState(true);
+  const [approveCancelOpen, setApproveCancelOpen] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const cancelRequestPending =
+    subscription.cancellationRequest?.status === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
   const [periodStartDraft, setPeriodStartDraft] = useState(() => toDateInputValue(subscription.startDate));
   const [periodSaving, setPeriodSaving] = useState(false);
   const searchRef = useRef(null);
@@ -622,13 +638,62 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         status: SUBSCRIPTION_STATUS.CANCELLED,
         reason: subscriptionStatusReason.trim() || 'Cancelled by admin',
         settlementConfirmed: true,
+        createRefund: createRefundOnCancel,
       });
-      toast.success('Subscription cancelled');
+      toast.success(
+        createRefundOnCancel
+          ? 'Subscription cancelled — refund queued for processing'
+          : 'Subscription cancelled',
+      );
       setCancelConfirmOpen(false);
       setSettlementConfirmed(false);
+      setCreateRefundOnCancel(true);
       onUpdated();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Could not cancel subscription');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleApproveCancelRequest = async () => {
+    if (!settlementConfirmed) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/admin/subscriptions/users/${subscription._id}/cancel-request/review`, {
+        action: 'approve',
+        reviewNote: rejectNote.trim() || subscriptionStatusReason.trim() || undefined,
+        settlementConfirmed: true,
+        createRefund: createRefundOnCancel,
+      });
+      toast.success(
+        createRefundOnCancel
+          ? 'Cancellation approved — refund queued for processing'
+          : 'Cancellation approved',
+      );
+      setApproveCancelOpen(false);
+      setSettlementConfirmed(false);
+      setCreateRefundOnCancel(true);
+      onUpdated();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not approve cancellation');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRejectCancelRequest = async () => {
+    setSubmitting(true);
+    try {
+      await api.post(`/admin/subscriptions/users/${subscription._id}/cancel-request/review`, {
+        action: 'reject',
+        reviewNote: rejectNote.trim() || subscriptionStatusReason.trim() || undefined,
+      });
+      toast.success('Cancellation request rejected');
+      setRejectNote('');
+      onUpdated();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not reject cancellation request');
     } finally {
       setSubmitting(false);
     }
@@ -671,7 +736,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   return (
     <Drawer
       isOpen
-      onClose={() => !submitting && !cancelConfirmOpen && onClose()}
+      onClose={() => !submitting && !cancelConfirmOpen && !approveCancelOpen && onClose()}
       header={(
         <div className="px-5 py-4 border-b border-slate-100">
           <h2 className="text-lg font-bold text-slate-900">Assign dedicated driver</h2>
@@ -682,6 +747,61 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
       )}
     >
       <div className="p-5 space-y-4">
+        {cancelRequestPending && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-rose-900">Customer cancellation request</p>
+                <p className="text-xs text-rose-800 mt-1">
+                  {subscription.cancellationRequest?.reason
+                    ? `Reason: ${subscription.cancellationRequest.reason}`
+                    : 'No reason provided.'}
+                </p>
+                {subscription.cancellationRequest?.requestedAt && (
+                  <p className="text-[11px] text-rose-700 mt-1">
+                    Requested {formatDateTime12(subscription.cancellationRequest.requestedAt)}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-rose-800">
+              Approve to cancel and queue a refund, or reject to keep the subscription active.
+              Driver assignment is blocked while this request is pending.
+            </p>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Review note (optional)</label>
+              <input
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="Note for approve / reject"
+                className="mt-1 w-full h-10 px-3 rounded-xl border border-rose-200 text-sm bg-white"
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submitting}
+                onClick={handleRejectCancelRequest}
+              >
+                Reject request
+              </Button>
+              <Button
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  setSettlementConfirmed(false);
+                  setCreateRefundOnCancel(true);
+                  setApproveCancelOpen(true);
+                }}
+              >
+                Approve &amp; cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl bg-slate-50 p-4 text-sm space-y-3">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Subscription details</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
@@ -1078,6 +1198,18 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               <span className="font-semibold">₹{remainingDriverShare.toLocaleString('en-IN')}</span>
             </div>
           </div>
+          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
+            <input
+              type="checkbox"
+              checked={createRefundOnCancel}
+              onChange={(e) => setCreateRefundOnCancel(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Create a pending refund for ₹{(Number(subscription.amount) || 0).toLocaleString('en-IN')}
+              {' '}(process later under Account → Refunds)
+            </span>
+          </label>
           <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-900">
             <input
               type="checkbox"
@@ -1088,6 +1220,48 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
             <span>
               I confirm all customer payments, driver payouts, refunds, working-day
               obligations, and other settlement items have been completed.
+            </span>
+          </label>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={approveCancelOpen}
+        onClose={() => {
+          if (submitting) return;
+          setApproveCancelOpen(false);
+          setSettlementConfirmed(false);
+        }}
+        onConfirm={handleApproveCancelRequest}
+        title="Approve cancellation?"
+        description="This cancels the subscription and can queue a refund for the customer."
+        confirmLabel="Approve & cancel"
+        variant="danger"
+        loading={submitting}
+        confirmDisabled={!settlementConfirmed}
+      >
+        <div className="space-y-3">
+          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
+            <input
+              type="checkbox"
+              checked={createRefundOnCancel}
+              onChange={(e) => setCreateRefundOnCancel(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Create a pending refund for ₹{(Number(subscription.amount) || 0).toLocaleString('en-IN')}
+              {' '}(process later under Account → Refunds)
+            </span>
+          </label>
+          <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-900">
+            <input
+              type="checkbox"
+              checked={settlementConfirmed}
+              onChange={(e) => setSettlementConfirmed(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              I confirm settlements are complete and it is safe to cancel this subscription.
             </span>
           </label>
         </div>

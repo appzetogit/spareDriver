@@ -34,6 +34,7 @@ const REFUND_STATUS = Object.freeze({
 
 const REFUND_KIND = Object.freeze({
   BOOKING_CANCELLATION: 'booking_cancellation',
+  SUBSCRIPTION_CANCELLATION: 'subscription_cancellation',
   WALLET_SETTLEMENT: 'wallet_settlement',
   ADMIN_MANUAL: 'admin_manual',
 });
@@ -81,6 +82,13 @@ const refundSchema = new mongoose.Schema(
       index: true,
     },
     bookingNumber: { type: String, default: '', trim: true, index: true },
+    subscriptionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'UserSubscription',
+      default: null,
+      index: true,
+    },
+    subscriptionNumber: { type: String, default: '', trim: true, index: true },
     subjectType: {
       type: String,
       enum: Object.values(REFUND_SUBJECT_TYPE),

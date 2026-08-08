@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Calculator } from 'lucide-react';
 import {
   calculateHourlyFare,
@@ -34,19 +34,34 @@ const ShellHeader = () => (
   </div>
 );
 
-// ─── Hourly preview ───────────────────────────────────────────────────────────
+function waitingBufferRupees(pricing) {
+  const wc = pricing?.waitingCharge || {};
+  const perMin = Math.max(0, Number(wc.chargePerMinute) || 0);
+  const maxBillable = Math.max(0, Number(wc.maxBillableMinutes) || 0);
+  return Math.round(maxBillable * perMin * 100) / 100;
+}
+
+// ─── Hourly / scheduled preview ───────────────────────────────────────────────
 const HourlyPreview = ({ form }) => {
   const previewSlab = useMemo(() => {
     if (!form.slabs?.length) return null;
     return [...form.slabs].sort((a, b) => a.maxHours - b.maxHours)[0];
   }, [form.slabs]);
 
+  const slabHours = Number(previewSlab?.maxHours) || 0;
   const [actualMin, setActualMin] = useState(() =>
-    previewSlab ? Math.round(previewSlab.maxHours * 60) : 60,
+    slabHours > 0 ? Math.round(slabHours * 60) : 60,
   );
   const [waitMin, setWaitMin] = useState(0);
   const [toll, setToll] = useState(0);
   const [night, setNight] = useState(false);
+  const [stayProvided, setStayProvided] = useState(true);
+
+  // Keep simulation duration aligned with the active slab so editing
+  // maxHours doesn't leave a stale actual-min that invents extra hours.
+  useEffect(() => {
+    if (slabHours > 0) setActualMin(Math.round(slabHours * 60));
+  }, [slabHours, previewSlab?.label, previewSlab?.price]);
 
   const breakdown = useMemo(
     () =>
@@ -54,14 +69,21 @@ const HourlyPreview = ({ form }) => {
         ? calculateHourlyFare({
             pricing: form,
             slab: previewSlab,
-            actualDurationMin: Number(actualMin),
+            bookedHours: slabHours,
+            actualDurationMin: Number(actualMin) || 0,
             isNightRide: night,
-            waitingMinutes: Number(waitMin),
-            tollParking: Number(toll),
+            waitingMinutes: Number(waitMin) || 0,
+            tollParking: Number(toll) || 0,
+            stayProvided,
           })
         : null,
-    [form, previewSlab, actualMin, waitMin, toll, night],
+    [form, previewSlab, slabHours, actualMin, waitMin, toll, night, stayProvided],
   );
+
+  const buffer = waitingBufferRupees(form);
+  const totalWithBuffer = breakdown
+    ? Math.round((Number(breakdown.totalPayable) + buffer) * 100) / 100
+    : 0;
 
   if (!previewSlab) {
     return (
@@ -75,16 +97,28 @@ const HourlyPreview = ({ form }) => {
     <>
       <div className="space-y-2 mb-3">
         <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-          Hourly simulation
+          Hourly / scheduled simulation
         </p>
         <div className="grid grid-cols-2 gap-2">
           <SimInput label="Actual min" value={actualMin} onChange={setActualMin} />
           <SimInput label="Waiting min" value={waitMin} onChange={setWaitMin} />
           <SimInput label="Toll ₹" value={toll} onChange={setToll} />
-          <FlagToggle label="Night" active={night} onClick={() => setNight((v) => !v)} />
+          <FlagToggle label="Night window" active={night} onClick={() => setNight((v) => !v)} />
+          {breakdown?.stayEligible ? (
+            <FlagToggle
+              label={stayProvided ? 'Customer hosts stay' : 'Charge stay'}
+              active={stayProvided}
+              onClick={() => setStayProvided((v) => !v)}
+            />
+          ) : null}
         </div>
         <p className="text-[10px] text-slate-400">
-          Slab used: <strong>{previewSlab.label}</strong> ({formatCurrency(previewSlab.price)})
+          Slab used: <strong>{previewSlab.label}</strong> ({formatCurrency(previewSlab.price)}
+          {' · '}
+          {slabHours}h)
+          {breakdown?.nightChargeTriggered && !night
+            ? ' · night charge via duration threshold'
+            : null}
         </p>
       </div>
 
@@ -103,11 +137,29 @@ const HourlyPreview = ({ form }) => {
         {breakdown.nightCharge > 0 && (
           <Row label="Night charge" value={formatCurrency(breakdown.nightCharge)} sub />
         )}
+        {breakdown.stayAllowance > 0 && (
+          <Row label="Stay allowance" value={formatCurrency(breakdown.stayAllowance)} sub />
+        )}
         {breakdown.tollParking > 0 && (
           <Row label="Toll & parking" value={formatCurrency(breakdown.tollParking)} sub />
         )}
         <Divider />
         <PlatformRows breakdown={breakdown} />
+        {buffer > 0 && (
+          <>
+            <Divider />
+            <Row
+              label="Waiting buffer (held)"
+              value={formatCurrency(buffer)}
+              muted
+            />
+            <Row
+              label="Wallet required"
+              value={formatCurrency(totalWithBuffer)}
+              highlight
+            />
+          </>
+        )}
       </div>
     </>
   );
@@ -126,14 +178,20 @@ const HourlyPreview = ({ form }) => {
 // fallback. Toll & parking are paid by the customer to the driver and
 // are not added to the fare here.
 const OutstationPreview = ({ form }) => {
-  const [days, setDays] = useState(3);
+  const minDays = Math.max(1, Number(form.outstation?.minDays) || 1);
+  const [days, setDays] = useState(minDays > 1 ? minDays : 3);
   const [customerArrangesAll, setCustomerArrangesAll] = useState(false);
+
+  useEffect(() => {
+    const next = Math.max(1, Number(form.outstation?.minDays) || 1);
+    if (next > 1) setDays(next);
+  }, [form.outstation?.minDays]);
 
   const breakdown = useMemo(
     () =>
       calculateOutstationFare({
         pricing: form,
-        days: Number(days),
+        days: Number(days) || 1,
         // The customer's UI surfaces a single all-or-nothing toggle —
         // we mirror that here by flipping both flags together.
         foodProvided: customerArrangesAll,
@@ -142,7 +200,7 @@ const OutstationPreview = ({ form }) => {
     [form, days, customerArrangesAll],
   );
 
-  if (!breakdown || !(form.outstation?.dailyRate > 0)) {
+  if (!breakdown || !(Number(form.outstation?.dailyRate) > 0)) {
     return (
       <p className="text-sm text-slate-500 p-4 bg-white rounded-xl text-center">
         Set a daily rate to preview the fare.
@@ -163,14 +221,19 @@ const OutstationPreview = ({ form }) => {
         <div className="grid grid-cols-2 gap-2">
           <SimInput label="Days" value={days} onChange={setDays} min={1} />
           <FlagToggle
-            label={customerArrangesAll ? 'Customer arranges all' : 'We arrange'}
-            active={customerArrangesAll}
+            label={
+              customerArrangesAll
+                ? 'Customer arranges food & stay'
+                : 'Include food & stay allowances'
+            }
+            active={!customerArrangesAll}
             onClick={() => setCustomerArrangesAll((v) => !v)}
           />
         </div>
         <p className="text-[10px] text-slate-400">
           {breakdown.days} day(s) · {breakdown.nights} night(s) · toll &amp;
           parking paid directly to driver
+          {customerArrangesAll ? ' · allowances waived' : ''}
         </p>
       </div>
 
@@ -215,7 +278,10 @@ const SimInput = ({ label, value, onChange, min }) => (
       type="number"
       value={value}
       min={min}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        onChange(raw === '' ? '' : Number(raw));
+      }}
       className="w-full mt-1 h-9 px-2 bg-white border border-slate-200 rounded-lg text-sm"
     />
   </label>

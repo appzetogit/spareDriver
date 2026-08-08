@@ -11,104 +11,16 @@ import { ApiError } from '../utils/apiError.js';
 import { USER_ROLES } from '../constants/roles.js';
 import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 import { SUBSCRIPTION_STATUS } from '../constants/serviceTypes.js';
-
-const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-
-function startOfDay(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
-function addDays(d, n) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
-function resolveDateRange(query = {}) {
-  const { period, from, to } = query;
-  const now = new Date();
-
-  if (from || to) {
-    const range = {};
-    if (from) {
-      const fromDate = new Date(from);
-      if (!Number.isNaN(fromDate.getTime())) range.from = startOfDay(fromDate);
-    }
-    if (to) {
-      const toDate = new Date(to);
-      if (!Number.isNaN(toDate.getTime())) range.to = endOfDay(toDate);
-    }
-    if (range.from || range.to) {
-      if (!range.to) range.to = endOfDay(now);
-      if (!range.from) range.from = new Date(0);
-      return range;
-    }
-  }
-
-  switch (period) {
-    case '7d':
-      return { from: addDays(startOfDay(now), -6), to: endOfDay(now) };
-    case '90d':
-      return { from: addDays(startOfDay(now), -89), to: endOfDay(now) };
-    case '365d':
-      return { from: addDays(startOfDay(now), -364), to: endOfDay(now) };
-    case 'all':
-      return { from: null, to: null };
-    case '30d':
-    default:
-      return { from: addDays(startOfDay(now), -29), to: endOfDay(now) };
-  }
-}
-
-function mongoDateRange(range) {
-  if (!range?.from && !range?.to) return null;
-  const filter = {};
-  if (range.from) filter.$gte = range.from;
-  if (range.to) filter.$lte = range.to;
-  return filter;
-}
-
-function fillDailyTrend(rawPoints, valueKey, range) {
-  const map = new Map(
-    rawPoints.map((p) => [p._id || p.date, Number(p[valueKey]) || 0]),
-  );
-
-  const end = range?.to ? startOfDay(range.to) : startOfDay();
-  const start = range?.from ? startOfDay(range.from) : addDays(end, -29);
-
-  const points = [];
-  let cursor = new Date(start);
-  const last = new Date(end);
-
-  while (cursor <= last) {
-    const key = cursor.toISOString().slice(0, 10);
-    points.push({ date: key, [valueKey]: map.get(key) ?? 0 });
-    cursor = addDays(cursor, 1);
-  }
-
-  if (points.length > 90) {
-    return points.slice(points.length - 90);
-  }
-  return points;
-}
-
-function bookingFareExpr() {
-  return {
-    $cond: [
-      { $gt: [{ $ifNull: ['$payment.amountPaidRupees', 0] }, 0] },
-      '$payment.amountPaidRupees',
-      { $ifNull: ['$fareSnapshot.total', 0] },
-    ],
-  };
-}
+import {
+  round2,
+  startOfDay,
+  endOfDay,
+  resolveDateRange,
+  mongoDateRange,
+  fillDailyTrend,
+  bookingFareExpr,
+  mongoDayBucket,
+} from '../utils/reportDateRange.js';
 
 function buildDateRangeFilter(from, to) {
   if (!from && !to) return null;
@@ -189,20 +101,20 @@ export async function getAdminUserAnalyticsService(userId, query = {}) {
   const user = await assertCustomerUser(userId);
   const { serviceType, status, subscriptionStatus } = query;
   const dateRange = resolveDateRange(query);
-  const createdAtFilter = mongoDateRange(dateRange);
+  const createdAtClause = mongoDateRange(dateRange);
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
   const bookingMatch = { userId: userObjectId, isDeleted: false };
   if (serviceType) bookingMatch.serviceType = serviceType;
   if (status) bookingMatch.status = status;
-  if (createdAtFilter) bookingMatch.createdAt = createdAtFilter;
+  if (createdAtClause) Object.assign(bookingMatch, createdAtClause);
 
   const subscriptionMatch = { userId: userObjectId };
   if (subscriptionStatus) subscriptionMatch.status = subscriptionStatus;
-  if (createdAtFilter) subscriptionMatch.createdAt = createdAtFilter;
+  if (createdAtClause) Object.assign(subscriptionMatch, createdAtClause);
 
   const walletMatch = { userId: userObjectId };
-  if (createdAtFilter) walletMatch.createdAt = createdAtFilter;
+  if (createdAtClause) Object.assign(walletMatch, createdAtClause);
 
   const [
     carsCount,
@@ -267,7 +179,7 @@ export async function getAdminUserAnalyticsService(userId, query = {}) {
       { $match: bookingMatch },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },
@@ -277,7 +189,7 @@ export async function getAdminUserAnalyticsService(userId, query = {}) {
       { $match: { ...bookingMatch, status: BOOKING_STATUS.COMPLETED } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           amount: { $sum: bookingFareExpr() },
         },
       },
@@ -295,15 +207,15 @@ export async function getAdminUserAnalyticsService(userId, query = {}) {
     ]),
     SupportTicket.countDocuments({
       userId: userObjectId,
-      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+      ...(createdAtClause || {}),
     }),
     SosAlert.countDocuments({
       userId: userObjectId,
-      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+      ...(createdAtClause || {}),
     }),
     Refund.countDocuments({
       userId: userObjectId,
-      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+      ...(createdAtClause || {}),
     }),
   ]);
 

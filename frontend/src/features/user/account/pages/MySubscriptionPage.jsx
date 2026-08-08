@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   ArrowLeft,
   Calendar,
@@ -12,15 +13,21 @@ import {
   Percent,
   Clock,
   Car,
+  XCircle,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import Badge from '../../../../components/Badge';
+import ConfirmDialog from '../../../../components/ConfirmDialog';
 import { useUserSubscriptionStore } from '../../../../store/user/useUserPricingStore';
-import { SUBSCRIPTION_ASSIGNMENT_STATUS } from '../../../../constants/serviceTypes';
+import {
+  SUBSCRIPTION_ASSIGNMENT_STATUS,
+  SUBSCRIPTION_CANCEL_REQUEST_STATUS,
+} from '../../../../constants/serviceTypes';
 import { formatCurrency } from '../../../../utils/fareCalculator';
 import { formatCarLabel } from '../../../admin/components/DriverCarExperienceChips';
 import RescheduleSubscriptionSheet from '../components/RescheduleSubscriptionSheet';
+import api from '../../../../utils/api';
 
 const MySubscriptionPage = () => {
   const navigate = useNavigate();
@@ -84,19 +91,48 @@ const MySubscriptionPage = () => {
 
 function SubscriptionDetailCard({ sub, onUpdated }) {
   const assigned = sub.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED;
-  const canReschedule = sub.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING;
+  const cancelPending =
+    sub.cancellationRequest?.status === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
+  const canReschedule =
+    sub.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING && !cancelPending;
+  const canCancel =
+    sub.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING && !cancelPending;
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const isFullTime = sub.includedHoursPerDay === 0;
   const fmt = (d) =>
     d
       ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
       : '—';
 
+  const handleCancelRequest = async () => {
+    setCancelling(true);
+    try {
+      const res = await api.post(`/auth/subscriptions/${sub._id}/cancel-request`, {
+        reason: cancelReason.trim() || undefined,
+      });
+      const updated = res?.data?.data;
+      toast.success('Cancellation request sent. We will review and process your refund.');
+      setCancelOpen(false);
+      setCancelReason('');
+      onUpdated?.(updated || { ...sub, cancellationRequest: { status: 'pending' } });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not submit cancellation request');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   return (
     <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 to-white space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <Badge variant="primary">Active</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="primary">Active</Badge>
+            {cancelPending && <Badge variant="warning">Cancel requested</Badge>}
+          </div>
           <h2 className="text-lg font-extrabold text-text mt-2">
             {sub.planNameSnapshot || sub.planId?.name || 'Subscription'}
           </h2>
@@ -137,6 +173,15 @@ function SubscriptionDetailCard({ sub, onUpdated }) {
         <InfoTile icon={IndianRupee} label="Paid" value={formatCurrency(sub.amount)} />
       </div>
 
+      {cancelPending && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          Your cancellation request is under review. Refund will be processed after admin approval.
+          {sub.cancellationRequest?.reason ? (
+            <p className="text-xs text-amber-800 mt-1">Reason: {sub.cancellationRequest.reason}</p>
+          ) : null}
+        </div>
+      )}
+
       {canReschedule && (
         <button
           type="button"
@@ -146,6 +191,23 @@ function SubscriptionDetailCard({ sub, onUpdated }) {
           <Pencil className="w-3.5 h-3.5" />
           Change start date
         </button>
+      )}
+
+      {canCancel && (
+        <button
+          type="button"
+          onClick={() => setCancelOpen(true)}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 font-semibold text-sm py-2.5 hover:bg-rose-100 transition"
+        >
+          <XCircle className="w-3.5 h-3.5" />
+          Request cancellation
+        </button>
+      )}
+
+      {assigned && (
+        <p className="text-xs text-text-muted text-center">
+          After a driver is assigned, only support can cancel this subscription.
+        </p>
       )}
 
       {(sub.bookingDiscountValue > 0) && (
@@ -192,6 +254,25 @@ function SubscriptionDetailCard({ sub, onUpdated }) {
         onClose={() => setRescheduleOpen(false)}
         onSaved={(next) => onUpdated?.(next)}
       />
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => !cancelling && setCancelOpen(false)}
+        onConfirm={handleCancelRequest}
+        title="Request cancellation?"
+        description="Your request will be reviewed by our team. Refund is issued after approval."
+        confirmLabel="Submit request"
+        variant="danger"
+        loading={cancelling}
+      >
+        <textarea
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+          rows={3}
+          placeholder="Reason (optional)"
+          className="w-full rounded-xl border border-border-light px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+        />
+      </ConfirmDialog>
     </Card>
   );
 }

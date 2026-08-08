@@ -8,6 +8,7 @@ import {
   fillDailyTrend,
   bookingFareExpr,
   buildFiltersMeta,
+  mongoDayBucket
 } from '../utils/reportDateRange.js';
 
 const BOOKING_FILTER = { isDeleted: false };
@@ -109,7 +110,7 @@ export async function getAdminBookingReportsService(query = {}) {
       { $match: bookingMatch },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },
@@ -124,7 +125,7 @@ export async function getAdminBookingReportsService(query = {}) {
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           amount: { $sum: bookingFareExpr() },
         },
       },

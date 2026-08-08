@@ -29,6 +29,13 @@ export const SUBSCRIPTION_ASSIGNMENT_STATUS = Object.freeze({
   RELEASED: 'released', // assignment ended (e.g. user/admin released the driver)
 });
 
+/** User-initiated cancel before driver assignment — admin reviews + refunds. */
+export const SUBSCRIPTION_CANCEL_REQUEST_STATUS = Object.freeze({
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+});
+
 /**
  * Defaults for subscription dedicated-driver auto-search (inbox broadcast).
  * Overridable via AppSettings.subscriptionDispatch.

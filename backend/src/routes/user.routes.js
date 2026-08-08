@@ -37,6 +37,7 @@ import {
   verifySubscriptionPayment,
   getMySubscription,
   rescheduleMySubscription,
+  cancelMySubscriptionRequest,
 } from '../controllers/pricing.controller.js';
 import { validateCoupon } from '../controllers/coupon.controller.js';
 import { getSubscriptionTerms } from '../controllers/legalDocument.controller.js';
@@ -125,6 +126,7 @@ router.post('/coupons/validate', validateCoupon);
 // Subscriptions — purchase + active subscription read
 router.get('/subscriptions/me', getMySubscription);
 router.post('/subscriptions/:id/reschedule', rescheduleMySubscription);
+router.post('/subscriptions/:id/cancel-request', cancelMySubscriptionRequest);
 router.post('/subscriptions/purchase', purchaseSubscription);
 router.post('/subscriptions/verify-payment', verifySubscriptionPayment);
 

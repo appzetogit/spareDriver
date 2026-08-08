@@ -13,6 +13,7 @@ import {
   fillDailyTrend,
   bookingFareExpr,
   buildFiltersMeta,
+  mongoDayBucket
 } from '../utils/reportDateRange.js';
 
 const DRIVER_FILTER = { isDeleted: false };
@@ -54,7 +55,7 @@ export async function getAdminDriverReportsService(query = {}) {
       { $match: { ...DRIVER_FILTER, ...driverDate } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },

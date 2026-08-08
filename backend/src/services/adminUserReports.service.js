@@ -14,6 +14,7 @@ import {
   fillDailyTrend,
   bookingFareExpr,
   buildFiltersMeta,
+  mongoDayBucket
 } from '../utils/reportDateRange.js';
 
 const USER_FILTER = { role: USER_ROLES.USER, isDeleted: false };
@@ -50,7 +51,7 @@ export async function getAdminUserReportsService(query = {}) {
       { $match: { ...USER_FILTER, ...userDate } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },

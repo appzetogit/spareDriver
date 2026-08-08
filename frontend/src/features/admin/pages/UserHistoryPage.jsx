@@ -204,6 +204,7 @@ const UserHistoryPage = () => {
         render: (_, row) => (
           <div>
             <p className="font-medium">{row.planNameSnapshot || '—'}</p>
+            <p className="text-xs font-mono text-slate-500">{row.subscriptionNumber || '—'}</p>
             <p className="text-xs text-slate-500">{row.zoneId?.name || '—'}</p>
           </div>
         ),
@@ -224,9 +225,19 @@ const UserHistoryPage = () => {
         key: 'status',
         label: 'Status',
         render: (_, row) => (
-          <Badge variant={SUB_STATUS_VARIANT[row.status] || 'secondary'}>
-            {row.status?.replace(/_/g, ' ')}
-          </Badge>
+          <div className="flex flex-col items-start gap-1">
+            <Badge variant={SUB_STATUS_VARIANT[row.status] || 'secondary'}>
+              {row.status?.replace(/_/g, ' ')}
+            </Badge>
+            {row.cancellationRequest?.status === 'pending' && (
+              <Badge variant="danger">Cancel requested</Badge>
+            )}
+            {row.assignmentStatus && (
+              <span className="text-[10px] text-slate-500 capitalize">
+                {row.assignmentStatus.replace(/_/g, ' ')}
+              </span>
+            )}
+          </div>
         ),
       },
       {
@@ -478,57 +489,158 @@ const UserHistoryPage = () => {
 };
 
 function SubscriptionDetailDrawer({ subscription, onClose }) {
+  if (!subscription) return null;
+
+  const periodLabel = (() => {
+    const start = subscription.startDate ? formatDate(subscription.startDate) : '—';
+    const end = subscription.expiryDate ? formatDate(subscription.expiryDate) : '—';
+    return `${start} → ${end}`;
+  })();
+
+  const hoursLabel =
+    subscription.includedHoursPerDay === 0
+      ? 'Full-time'
+      : `${subscription.includedHoursPerDay}h/day`;
+
+  const cancelReq = subscription.cancellationRequest;
+
   return (
     <div className="fixed inset-0 z-[9999] flex justify-end bg-black/40" onClick={onClose}>
       <div
         className="w-full max-w-md bg-white h-full shadow-xl overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-slate-900 mb-4">Subscription detail</h2>
-        <dl className="space-y-3 text-sm">
-          <div>
-            <dt className="text-slate-500">Plan</dt>
-            <dd className="font-medium">{subscription.planNameSnapshot || '—'}</dd>
+        <h2 className="text-lg font-bold text-slate-900 mb-1">Subscription detail</h2>
+        <p className="text-xs text-slate-500 mb-4 font-mono">
+          {subscription.subscriptionNumber || '—'}
+        </p>
+
+        <div className="rounded-2xl bg-slate-50 p-4 text-sm space-y-3 mb-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Subscription details
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700">
+            <DetailLine label="Subscription ID" value={subscription.subscriptionNumber || '—'} />
+            <DetailLine
+              label="Plan"
+              value={subscription.planNameSnapshot || subscription.planId?.name || '—'}
+            />
+            <DetailLine
+              label="Zone"
+              value={`${subscription.zoneId?.name || '—'}${subscription.zoneId?.city ? ` · ${subscription.zoneId.city}` : ''}`}
+            />
+            <DetailLine label="Car" value={formatCarLabel(subscription.carId)} />
+            <DetailLine label="Driver hours" value={hoursLabel} />
+            <DetailLine
+              label="Duration"
+              value={`${subscription.durationMonths || '—'} month(s)`}
+            />
+            <DetailLine label="Subscription period" value={periodLabel} />
+            <DetailLine
+              label="Status"
+              value={subscription.status?.replace(/_/g, ' ') || '—'}
+            />
+            <DetailLine
+              label="Assignment"
+              value={subscription.assignmentStatus?.replace(/_/g, ' ') || '—'}
+            />
+            <DetailLine
+              label="Driver"
+              value={subscription.assignedDriverId?.name || '—'}
+            />
           </div>
-          <div>
-            <dt className="text-slate-500">Vehicle</dt>
-            <dd className="font-medium">{formatCarLabel(subscription.carId)}</dd>
+          {(subscription.dailyPickup || subscription.dailyDropoff) && (
+            <div className="pt-2 border-t border-slate-200 space-y-1.5">
+              <DetailLine
+                label="Daily pickup"
+                value={subscription.dailyPickup?.address || '—'}
+              />
+              <DetailLine
+                label="Daily drop-off"
+                value={subscription.dailyDropoff?.address || '—'}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 text-sm space-y-3 mb-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Payment</p>
+          <div className="grid grid-cols-2 gap-3">
+            <DetailLine label="Amount paid" value={formatCurrency(subscription.amount)} />
+            <DetailLine label="Base price" value={formatCurrency(subscription.basePrice)} />
+            <DetailLine label="Service charge" value={formatCurrency(subscription.serviceCharge)} />
+            <DetailLine label="GST" value={formatCurrency(subscription.gstAmount)} />
+            <DetailLine
+              label="Coupon"
+              value={
+                subscription.couponCode
+                  ? `${subscription.couponCode} (−${formatCurrency(subscription.couponDiscount)})`
+                  : '—'
+              }
+            />
+            <DetailLine label="Paid at" value={formatDateTime12(subscription.paidAt)} />
+            <DetailLine
+              label="Payment method"
+              value={subscription.paymentMethod || '—'}
+            />
+            <DetailLine
+              label="Razorpay payment"
+              value={subscription.razorpayPaymentId || '—'}
+            />
           </div>
-          <div>
-            <dt className="text-slate-500">Zone</dt>
-            <dd className="font-medium">{subscription.zoneId?.name || '—'}</dd>
+        </div>
+
+        {(Number(subscription.platformShareRupees) > 0
+          || Number(subscription.driverShareRupees) > 0) && (
+          <div className="rounded-2xl border border-slate-200 p-4 text-sm space-y-3 mb-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Revenue split</p>
+            <div className="grid grid-cols-2 gap-3">
+              <DetailLine
+                label="Platform share"
+                value={formatCurrency(subscription.platformShareRupees)}
+              />
+              <DetailLine
+                label="Driver share pool"
+                value={formatCurrency(subscription.driverShareRupees)}
+              />
+            </div>
           </div>
-          <div>
-            <dt className="text-slate-500">Driver</dt>
-            <dd className="font-medium">{subscription.assignedDriverId?.name || '—'}</dd>
+        )}
+
+        {cancelReq?.status && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm space-y-2 mb-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-rose-800">
+              Cancellation request
+            </p>
+            <DetailLine label="Status" value={cancelReq.status.replace(/_/g, ' ')} />
+            <DetailLine label="Reason" value={cancelReq.reason || '—'} />
+            <DetailLine label="Requested" value={formatDateTime12(cancelReq.requestedAt)} />
+            {cancelReq.reviewedAt && (
+              <DetailLine label="Reviewed" value={formatDateTime12(cancelReq.reviewedAt)} />
+            )}
+            {cancelReq.reviewNote && (
+              <DetailLine label="Review note" value={cancelReq.reviewNote} />
+            )}
           </div>
-          <div>
-            <dt className="text-slate-500">Status</dt>
-            <dd className="font-medium capitalize">{subscription.status?.replace(/_/g, ' ')}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Amount</dt>
-            <dd className="font-medium">{formatCurrency(subscription.amount)}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Period</dt>
-            <dd className="font-medium">
-              {formatDate(subscription.startDate)} – {formatDate(subscription.expiryDate)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Paid at</dt>
-            <dd className="font-medium">{formatDateTime12(subscription.paidAt)}</dd>
-          </div>
-        </dl>
+        )}
+
         <button
           type="button"
           onClick={onClose}
-          className="mt-6 w-full h-10 rounded-xl border text-sm font-semibold hover:bg-slate-50"
+          className="mt-2 w-full h-10 rounded-xl border text-sm font-semibold hover:bg-slate-50"
         >
           Close
         </button>
       </div>
+    </div>
+  );
+}
+
+function DetailLine({ label, value }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase text-slate-400 font-semibold">{label}</p>
+      <p className="text-sm font-medium text-slate-800 break-words">{value}</p>
     </div>
   );
 }

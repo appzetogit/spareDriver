@@ -725,9 +725,29 @@ export function notifyAdminRefundRequest(refund) {
     type: ADMIN_NOTIFICATION.REFUND_REQUEST,
     data: {
       refundId: String(refund._id),
-      bookingId: String(refund.bookingId),
+      bookingId: refund.bookingId ? String(refund.bookingId) : undefined,
+      subscriptionId: refund.subscriptionId ? String(refund.subscriptionId) : undefined,
       amountRupees: refund.amountRupees,
+      path: '/admin/account/refunds',
     },
+  });
+}
+
+export function notifyAdminSubscriptionCancelRequest(subscription) {
+  const zoneIds = subscription.zoneId ? [String(subscription.zoneId)] : [];
+  const number = subscription.subscriptionNumber || String(subscription._id).slice(-6);
+  return sendAdminNotification({
+    title: 'Subscription cancel request',
+    body: `Customer requested cancellation for ${number}. Review and issue refund.`,
+    severity: 'warn',
+    type: ADMIN_NOTIFICATION.SUBSCRIPTION_CANCEL_REQUEST,
+    data: {
+      subscriptionId: String(subscription._id),
+      subscriptionNumber: subscription.subscriptionNumber || '',
+      userId: String(subscription.userId),
+      path: '/admin/bookings/subscription-requests',
+    },
+    zoneIds,
   });
 }
 

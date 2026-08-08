@@ -104,6 +104,7 @@ import {
   adminPaySubscriptionDrivers,
   adminUpdateUserSubscriptionStatus,
   adminRescheduleUserSubscription,
+  adminReviewSubscriptionCancellation,
 } from '../controllers/pricing.controller.js';
 import {
   adminListCoupons,
@@ -691,6 +692,12 @@ router.patch(
   protectStaff,
   restrictTo(...OPERATIONS),
   adminUpdateUserSubscriptionStatus,
+);
+router.post(
+  '/subscriptions/users/:id/cancel-request/review',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  adminReviewSubscriptionCancellation,
 );
 router.post(
   '/subscriptions/users/:id/reschedule',

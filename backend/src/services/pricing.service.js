@@ -446,6 +446,9 @@ export async function rescheduleUserSubscriptionService(userId, subscriptionId, 
   if (subscription.assignmentStatus !== SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING) {
     throw new ApiError(400, 'This subscription can no longer be rescheduled');
   }
+  if (subscription.cancellationRequest?.status === 'pending') {
+    throw new ApiError(400, 'Cannot change start date while a cancellation request is pending');
+  }
 
   const nextStart = new Date(body.startDate);
   if (!Number.isFinite(nextStart.getTime())) {
@@ -1634,6 +1637,7 @@ export function serializeSubscriptionForUser(subscription) {
     termsAcceptedAt: doc.termsAcceptedAt,
     termsVersionSnapshot: doc.termsVersionSnapshot,
     termsTitleSnapshot: doc.termsTitleSnapshot,
+    cancellationRequest: doc.cancellationRequest || null,
   };
 }
 
@@ -2067,6 +2071,12 @@ export const assignDriverToSubscriptionService = async (
   if (!sub) throw new ApiError(404, 'Subscription not found');
   if (sub.status !== SUBSCRIPTION_STATUS.ACTIVE) {
     throw new ApiError(400, 'Cannot assign a driver to an inactive subscription');
+  }
+  if (sub.cancellationRequest?.status === 'pending') {
+    throw new ApiError(
+      400,
+      'Resolve the pending cancellation request before assigning a driver',
+    );
   }
 
   const workStart = assertDateWithinSubscription(

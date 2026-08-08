@@ -12,76 +12,21 @@ import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 import { SUBSCRIPTION_STATUS } from '../constants/serviceTypes.js';
 import { PAYMENT_PURPOSE } from '../constants/kitStatus.js';
 import { listDriverEarningsLedgerService } from './driverTrips.service.js';
-
-const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+import {
+  round2,
+  startOfDay,
+  endOfDay,
+  resolveDateRange,
+  mongoDateRange,
+  fillDailyTrend,
+  mongoDayBucket,
+} from '../utils/reportDateRange.js';
 
 const TRIP_PAYMENT_PURPOSES = [
   PAYMENT_PURPOSE.TRIP_FARE,
   PAYMENT_PURPOSE.TRIP_ALLOWANCE,
   PAYMENT_PURPOSE.TRIP_WAITING,
 ];
-
-function startOfDay(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
-function addDays(d, n) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
-function resolveDateRange(query = {}) {
-  const { period, from, to } = query;
-  const now = new Date();
-
-  if (from || to) {
-    const range = {};
-    if (from) {
-      const fromDate = new Date(from);
-      if (!Number.isNaN(fromDate.getTime())) range.from = startOfDay(fromDate);
-    }
-    if (to) {
-      const toDate = new Date(to);
-      if (!Number.isNaN(toDate.getTime())) range.to = endOfDay(toDate);
-    }
-    if (range.from || range.to) {
-      if (!range.to) range.to = endOfDay(now);
-      if (!range.from) range.from = new Date(0);
-      return range;
-    }
-  }
-
-  switch (period) {
-    case '7d':
-      return { from: addDays(startOfDay(now), -6), to: endOfDay(now) };
-    case '90d':
-      return { from: addDays(startOfDay(now), -89), to: endOfDay(now) };
-    case '365d':
-      return { from: addDays(startOfDay(now), -364), to: endOfDay(now) };
-    case 'all':
-      return { from: null, to: null };
-    case '30d':
-    default:
-      return { from: addDays(startOfDay(now), -29), to: endOfDay(now) };
-  }
-}
-
-function mongoDateRange(range) {
-  if (!range?.from && !range?.to) return null;
-  const filter = {};
-  if (range.from) filter.$gte = range.from;
-  if (range.to) filter.$lte = range.to;
-  return filter;
-}
 
 function buildDateRangeFilter(from, to) {
   if (!from && !to) return null;
@@ -95,30 +40,6 @@ function buildDateRangeFilter(from, to) {
     range.$lte = endOfDay(toDate);
   }
   return Object.keys(range).length ? range : null;
-}
-
-function fillDailyTrend(rawPoints, valueKey, range) {
-  const map = new Map(
-    rawPoints.map((p) => [p._id || p.date, Number(p[valueKey]) || 0]),
-  );
-
-  const end = range?.to ? startOfDay(range.to) : startOfDay();
-  const start = range?.from ? startOfDay(range.from) : addDays(end, -29);
-
-  const points = [];
-  let cursor = new Date(start);
-  const last = new Date(end);
-
-  while (cursor <= last) {
-    const key = cursor.toISOString().slice(0, 10);
-    points.push({ date: key, [valueKey]: map.get(key) ?? 0 });
-    cursor = addDays(cursor, 1);
-  }
-
-  if (points.length > 90) {
-    return points.slice(points.length - 90);
-  }
-  return points;
 }
 
 async function assertDriver(driverId) {
@@ -243,16 +164,16 @@ export async function getAdminDriverAnalyticsService(driverId, query = {}) {
   const driver = await assertDriver(driverId);
   const { serviceType, status } = query;
   const dateRange = resolveDateRange(query);
-  const createdAtFilter = mongoDateRange(dateRange);
+  const createdAtClause = mongoDateRange(dateRange);
   const driverObjectId = new mongoose.Types.ObjectId(driverId);
 
   const bookingMatch = { driverId: driverObjectId, isDeleted: false };
   if (serviceType) bookingMatch.serviceType = serviceType;
   if (status) bookingMatch.status = status;
-  if (createdAtFilter) bookingMatch.createdAt = createdAtFilter;
+  if (createdAtClause) Object.assign(bookingMatch, createdAtClause);
 
   const withdrawalMatch = { driverId: driverObjectId };
-  if (createdAtFilter) withdrawalMatch.createdAt = createdAtFilter;
+  if (createdAtClause) Object.assign(withdrawalMatch, createdAtClause);
 
   const earningsWindow =
     dateRange.from && dateRange.to
@@ -285,7 +206,7 @@ export async function getAdminDriverAnalyticsService(driverId, query = {}) {
       { $match: bookingMatch },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },
@@ -297,12 +218,12 @@ export async function getAdminDriverAnalyticsService(driverId, query = {}) {
           driverId: driverObjectId,
           purpose: { $in: TRIP_PAYMENT_PURPOSES },
           status: 'captured',
-          ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+          ...(createdAtClause || {}),
         },
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           amount: { $sum: '$amount' },
         },
       },

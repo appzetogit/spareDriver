@@ -1,5 +1,31 @@
 export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
+/** IANA timezone used for day buckets (matches Node's local TZ when TZ is set). */
+export function appTimeZone() {
+  return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+/** Server-local YYYY-MM-DD — do not use toISOString() (UTC drift on IST). */
+export function localDateKey(d) {
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return '';
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, '0');
+  const day = String(x.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Mongo `$dateToString` day bucket aligned with `localDateKey`. */
+export function mongoDayBucket(dateField = '$createdAt') {
+  return {
+    $dateToString: {
+      format: '%Y-%m-%d',
+      date: dateField,
+      timezone: appTimeZone(),
+    },
+  };
+}
+
 export function startOfDay(d = new Date()) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -90,7 +116,7 @@ export function fillDailyTrend(rawPoints, valueKey, range) {
   const last = new Date(end);
 
   while (cursor <= last) {
-    const key = cursor.toISOString().slice(0, 10);
+    const key = localDateKey(cursor);
     points.push({ date: key, [valueKey]: round2(map.get(key) ?? 0) });
     cursor = addDays(cursor, 1);
   }

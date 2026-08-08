@@ -35,3 +35,9 @@ export const SUBSCRIPTION_ASSIGNMENT_STATUS = Object.freeze({
   ASSIGNED: 'assigned',
   RELEASED: 'released',
 });
+
+export const SUBSCRIPTION_CANCEL_REQUEST_STATUS = Object.freeze({
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+});

@@ -7,6 +7,7 @@ import {
   percentChange,
   fillDailyTrend,
   buildFiltersMeta,
+  mongoDayBucket
 } from '../utils/reportDateRange.js';
 
 const SOURCE_LABELS = {
@@ -66,7 +67,7 @@ export async function getAdminRevenueReportsService(query = {}) {
       { $match: revenueMatch },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt' } },
+          _id: mongoDayBucket('$occurredAt'),
           amount: { $sum: '$amountRupees' },
         },
       },

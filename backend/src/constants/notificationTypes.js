@@ -89,6 +89,7 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   NO_DRIVERS_FOUND: 'no_drivers_found',
   SCHEDULED_DISPATCH_RETRY: 'scheduled_dispatch_retry',
   SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
+  SUBSCRIPTION_CANCEL_REQUEST: 'subscription_cancel_request',
 });
 
 export const NOTIFICATION_AUDIENCE = Object.freeze({
@@ -116,6 +117,7 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
     ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
     ADMIN_NOTIFICATION.NO_DRIVERS_FOUND,
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
+    ADMIN_NOTIFICATION.SUBSCRIPTION_CANCEL_REQUEST,
   ]),
 );
 

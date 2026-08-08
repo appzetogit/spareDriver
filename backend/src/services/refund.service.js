@@ -220,6 +220,62 @@ export async function issueBookingRefundService(booking, options = {}) {
 }
 
 /**
+ * Create a pending refund ledger row for a cancelled subscription.
+ * Admin processes money on Account → Refunds (same as booking cancels).
+ * Idempotent per subscription for non-failed rows.
+ */
+export async function issueSubscriptionRefundService(subscription, options = {}) {
+  if (!subscription?._id) throw new ApiError(400, 'Subscription is required');
+
+  const paid = Math.max(0, round2(Number(subscription.amount) || 0));
+  const fee = Math.max(0, round2(Number(options.cancellationFeeRupees) || 0));
+  const amountRupees = Math.max(0, round2(paid - fee));
+
+  const existing = await Refund.findOne({
+    subscriptionId: subscription._id,
+    status: { $in: [REFUND_STATUS.PENDING, REFUND_STATUS.APPROVED, REFUND_STATUS.PROCESSED] },
+  }).sort({ createdAt: -1 });
+  if (existing) return existing.toObject();
+
+  if (amountRupees <= 0) {
+    return Refund.create({
+      kind: REFUND_KIND.SUBSCRIPTION_CANCELLATION,
+      subscriptionId: subscription._id,
+      subscriptionNumber: subscription.subscriptionNumber || '',
+      userId: subscription.userId,
+      amountRupees: 0,
+      cancellationFeeRupees: fee,
+      grossPaidRupees: paid,
+      razorpayPaymentId: subscription.razorpayPaymentId || '',
+      payoutMethod: options.payoutMethod || REFUND_PAYOUT_METHOD.BANK_ACCOUNT,
+      status: REFUND_STATUS.PROCESSED,
+      initiatedBy: options.initiatedBy || REFUND_INITIATED_BY.ADMIN,
+      reason: options.reason || 'no_refund_due',
+      processedAt: new Date(),
+    }).then((doc) => doc.toObject());
+  }
+
+  const refund = await Refund.create({
+    kind: REFUND_KIND.SUBSCRIPTION_CANCELLATION,
+    subscriptionId: subscription._id,
+    subscriptionNumber: subscription.subscriptionNumber || '',
+    userId: subscription.userId,
+    amountRupees,
+    cancellationFeeRupees: fee,
+    grossPaidRupees: paid,
+    razorpayPaymentId: subscription.razorpayPaymentId || '',
+    payoutMethod: options.payoutMethod || REFUND_PAYOUT_METHOD.BANK_ACCOUNT,
+    status: REFUND_STATUS.PENDING,
+    initiatedBy: options.initiatedBy || REFUND_INITIATED_BY.ADMIN,
+    reason: options.reason || 'subscription_cancellation',
+  });
+
+  notifyUserRefundInitiated(subscription.userId, refund).catch(() => null);
+  notifyAdminRefundRequest(refund).catch(() => null);
+  return refund.toObject();
+}
+
+/**
  * Admin → update a refund's status manually after they've handled the
  * refund on the Razorpay dashboard (or after they confirm the Razorpay
  * attempt failed).
@@ -330,7 +386,13 @@ export async function listRefundsService({
   }
   if (search) {
     const q = new RegExp(String(search).trim(), 'i');
-    filter.$or = [{ bookingNumber: q }, { reason: q }, { 'transactionDetails.transactionId': q }, { 'transactionDetails.utr': q }];
+    filter.$or = [
+      { bookingNumber: q },
+      { subscriptionNumber: q },
+      { reason: q },
+      { 'transactionDetails.transactionId': q },
+      { 'transactionDetails.utr': q },
+    ];
   }
   if (from || to) {
     filter.createdAt = {};

@@ -16,6 +16,7 @@ import {
   bookingGstExpr,
   subscriptionGstExpr,
   buildFiltersMeta,
+  mongoDayBucket
 } from '../utils/reportDateRange.js';
 
 const USER_FILTER = { role: USER_ROLES.USER, isDeleted: false };
@@ -173,7 +174,7 @@ export async function getAdminReportsOverviewService(query = {}) {
       { $match: { ...BOOKING_FILTER, ...bookingDate } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },
@@ -183,7 +184,7 @@ export async function getAdminReportsOverviewService(query = {}) {
       { $match: { ...TRIP_REVENUE_MATCH, ...revenueDate } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt' } },
+          _id: mongoDayBucket('$occurredAt'),
           amount: { $sum: '$amountRupees' },
         },
       },
@@ -199,7 +200,7 @@ export async function getAdminReportsOverviewService(query = {}) {
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           amount: { $sum: bookingGstExpr() },
         },
       },

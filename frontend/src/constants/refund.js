@@ -1,5 +1,6 @@
 export const REFUND_KIND_LABELS = {
   booking_cancellation: 'Booking refund',
+  subscription_cancellation: 'Subscription refund',
   wallet_settlement: 'Wallet settlement',
   admin_manual: 'Admin refund',
 };

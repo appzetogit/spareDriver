@@ -178,6 +178,39 @@ export const rescheduleMySubscription = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, subscription, 'Subscription start date updated'));
 });
 
+export const cancelMySubscriptionRequest = asyncHandler(async (req, res) => {
+  const { requestSubscriptionCancellationService } = await import(
+    '../services/adminSubscriptionOps.service.js'
+  );
+  const subscription = await requestSubscriptionCancellationService(
+    req.user._id,
+    req.params.id,
+    { reason: req.body?.reason || '' },
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, subscription, 'Cancellation request submitted'));
+});
+
+export const adminReviewSubscriptionCancellation = asyncHandler(async (req, res) => {
+  const { reviewSubscriptionCancellationService } = await import(
+    '../services/adminSubscriptionOps.service.js'
+  );
+  const result = await reviewSubscriptionCancellationService(
+    req.params.id,
+    {
+      action: req.body?.action,
+      reviewNote: req.body?.reviewNote || req.body?.reason || '',
+      settlementConfirmed: req.body?.settlementConfirmed === true,
+      createRefund: req.body?.createRefund !== false,
+    },
+    req.staff,
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Cancellation request reviewed'));
+});
+
 export const adminListSubscriptionRevenue = asyncHandler(async (req, res) => {
   const result = await pricingService.listSubscriptionRevenueService({
     page: Number(req.query.page) || 1,
@@ -208,13 +241,14 @@ export const adminUpdateUserSubscriptionStatus = asyncHandler(async (req, res) =
   const { adminUpdateUserSubscriptionStatusService } = await import(
     '../services/adminSubscriptionOps.service.js'
   );
-  const { status, reason, settlementConfirmed } = req.body || {};
+  const { status, reason, settlementConfirmed, createRefund } = req.body || {};
   const result = await adminUpdateUserSubscriptionStatusService(
     req.params.id,
     {
       status,
       reason,
       settlementConfirmed,
+      createRefund: createRefund === true,
     },
     req.staff,
   );

@@ -48,6 +48,7 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
   REFUND_REQUEST: 'refund_request',
   WITHDRAWAL_REQUEST: 'withdrawal_request',
+  SUBSCRIPTION_CANCEL_REQUEST: 'subscription_cancel_request',
 });
 
 const USER_LIVE_KINDS = new Set([
@@ -160,6 +161,8 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
         return '/admin/account/refunds';
       case ADMIN_NOTIFICATION.WITHDRAWAL_REQUEST:
         return '/admin/account/withdrawals';
+      case ADMIN_NOTIFICATION.SUBSCRIPTION_CANCEL_REQUEST:
+        return data.path || '/admin/subscriptions/users';
       default:
         return null;
     }

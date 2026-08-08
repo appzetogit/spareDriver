@@ -3,6 +3,7 @@ import {
   SUBSCRIPTION_DISCOUNT_TYPES,
   SUBSCRIPTION_STATUS,
   SUBSCRIPTION_ASSIGNMENT_STATUS,
+  SUBSCRIPTION_CANCEL_REQUEST_STATUS,
 } from '../constants/serviceTypes.js';
 import { generateSubscriptionNumber } from '../utils/orderNumber.util.js';
 
@@ -130,6 +131,32 @@ const userSubscriptionSchema = new mongoose.Schema(
         ref: 'User',
         default: null,
       },
+    },
+    /**
+     * User cancel before driver assignment. Present only after a request;
+     * status is pending until admin approves (cancel + refund) or rejects.
+     */
+    cancellationRequest: {
+      type: new mongoose.Schema(
+        {
+          status: {
+            type: String,
+            enum: Object.values(SUBSCRIPTION_CANCEL_REQUEST_STATUS),
+            required: true,
+          },
+          reason: { type: String, default: '', trim: true, maxlength: 500 },
+          requestedAt: { type: Date, default: null },
+          reviewedAt: { type: Date, default: null },
+          reviewedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            default: null,
+          },
+          reviewNote: { type: String, default: '', trim: true, maxlength: 500 },
+        },
+        { _id: false },
+      ),
+      default: null,
     },
     /** History of previously-assigned drivers (when reassignment happens). */
     previousAssignments: {

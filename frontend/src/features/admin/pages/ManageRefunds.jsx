@@ -401,11 +401,11 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
             ? 'Wallet settlement'
             : isAdminManual
               ? 'Admin refund'
-              : refund.bookingNumber || '—'}
+              : refund.subscriptionNumber || refund.bookingNumber || '—'}
         </p>
-        {!isWalletSettlement && !isAdminManual && refund.bookingId && (
+        {!isWalletSettlement && !isAdminManual && (refund.bookingId || refund.subscriptionId) && (
           <p className="text-[10px] text-text-muted mt-0.5 font-mono">
-            {String(refund.bookingId).slice(-8)}
+            {String(refund.subscriptionId || refund.bookingId).slice(-8)}
           </p>
         )}
         {(isAdminManual || isAutoWallet) && refund.reason ? (

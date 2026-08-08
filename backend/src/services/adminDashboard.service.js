@@ -20,6 +20,7 @@ import { KIT_ADMIN_STATUS, PAYMENT_STATUS } from '../constants/kitStatus.js';
 import { SUPPORT_TICKET_STATUS } from '../constants/supportTicket.js';
 import { countEmergencyPoolBookingsService } from './bookingEmergencyPool.service.js';
 import { staffAssigneeListFilter } from '../utils/staffAssignment.util.js';
+import { localDateKey, mongoDayBucket } from '../utils/reportDateRange.js';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -63,7 +64,7 @@ function fillLast7Days(rawPoints, valueKey) {
   const points = [];
   for (let i = 6; i >= 0; i -= 1) {
     const d = addDays(today, -i);
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     points.push({ date: key, [valueKey]: map.get(key) ?? 0 });
   }
   return points;
@@ -169,7 +170,7 @@ export async function getAdminDashboardService() {
       { $match: { ...BOOKING_FILTER, createdAt: { $gte: sevenDaysAgo } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: mongoDayBucket('$createdAt'),
           count: { $sum: 1 },
         },
       },
@@ -214,7 +215,7 @@ export async function getAdminDashboardService() {
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt' } },
+          _id: mongoDayBucket('$occurredAt'),
           amount: { $sum: '$amountRupees' },
         },
       },
