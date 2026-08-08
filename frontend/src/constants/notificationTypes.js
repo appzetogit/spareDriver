@@ -34,6 +34,10 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   BOOKING_CANCELLED: 'booking_cancelled',
   EARNINGS_CREDITED: 'earnings_credited',
   BOOKING_REMINDER: 'booking_reminder',
+  ACCOUNT_APPROVED: 'account_approved',
+  ACCOUNT_REJECTED: 'account_rejected',
+  ACCOUNT_SUSPENDED: 'account_suspended',
+  ACCOUNT_UNSUSPENDED: 'account_unsuspended',
 });
 
 export const ADMIN_NOTIFICATION = Object.freeze({
@@ -122,6 +126,18 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
     }
     if (kind === DRIVER_NOTIFICATION.SUBSCRIPTION_ASSIGNED || data.kind === 'subscription_assigned') {
       return '/driver/account';
+    }
+    if (
+      kind === DRIVER_NOTIFICATION.ACCOUNT_APPROVED ||
+      kind === DRIVER_NOTIFICATION.ACCOUNT_UNSUSPENDED
+    ) {
+      return '/driver/home';
+    }
+    if (
+      kind === DRIVER_NOTIFICATION.ACCOUNT_REJECTED ||
+      kind === DRIVER_NOTIFICATION.ACCOUNT_SUSPENDED
+    ) {
+      return '/driver/register/approval';
     }
     if (bookingId) return `/driver/trip/${bookingId}`;
     if (kind === DRIVER_NOTIFICATION.EARNINGS_CREDITED) return '/driver/earnings';

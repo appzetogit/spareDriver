@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Eye, UserPlus, UserRoundCog } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
@@ -31,12 +32,14 @@ const LIVE_REFRESH_STATUSES = new Set([
 ]);
 
 const ManageBookings = () => {
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('search') || '';
   const admin = useAdminAuthStore((s) => s.admin);
   const canAssign = OPERATIONS_ROLES.has(admin?.role);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState('');
   const [bookingTypeFilter, setBookingTypeFilter] = useState('');
   const [serviceTypeFilter, setServiceTypeFilter] = useState('');
@@ -45,6 +48,13 @@ const ManageBookings = () => {
   const [toDate, setToDate] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [assignBooking, setAssignBooking] = useState(null);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('search') || '';
+    setSearch(fromUrl);
+    setDebouncedSearch(fromUrl);
+    setPage(1);
+  }, [searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);

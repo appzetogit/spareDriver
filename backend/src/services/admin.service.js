@@ -2,10 +2,15 @@ import mongoose from 'mongoose';
 import { Driver } from '../models/driverModels/driver.model.js';
 import User from '../models/user.model.js';
 import Car from '../models/user/car.model.js';
+import Booking from '../models/booking.model.js';
 import bcrypt from 'bcryptjs';
 import { ApiError } from '../utils/apiError.js';
 import { USER_ROLES } from '../constants/roles.js';
-import { STAFF_ROLES, usesAssignedZoneScope } from '../constants/staffPermissions.js';
+import {
+  STAFF_ROLES,
+  getStaffZoneScopeIds,
+  usesAssignedZoneScope,
+} from '../constants/staffPermissions.js';
 import { dedupeDocumentsByType } from '../utils/driverDocuments.util.js';
 import {
   getActiveTrainingVideos,
@@ -28,6 +33,12 @@ import {
 import { TASK_TYPE } from '../constants/adminTask.js';
 import AdminTask from '../models/adminTask.model.js';
 import { resolveAuthFcm } from './fcmToken.service.js';
+import {
+  notifyDriverAccountApproved,
+  notifyDriverAccountRejected,
+  notifyDriverAccountSuspended,
+  notifyDriverAccountUnsuspended,
+} from '../utils/notificationDispatch.js';
 
 function staffDisplayName(staff) {
   return staff?.name || staff?.email || 'Staff';
@@ -313,6 +324,15 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
     await upsertDriverReviewTask(driver);
   }
 
+  const driverIdStr = String(driver._id);
+  if (approvalStatus === 'approved') {
+    notifyDriverAccountApproved(driverIdStr, { note }).catch(() => null);
+  } else if (approvalStatus === 'rejected') {
+    notifyDriverAccountRejected(driverIdStr, { note }).catch(() => null);
+  } else if (approvalStatus === 'suspended') {
+    notifyDriverAccountSuspended(driverIdStr, { note }).catch(() => null);
+  }
+
   return driver;
 };
 
@@ -350,6 +370,7 @@ export const suspendDriverService = async (staffOrId, driverId, data = {}) => {
   });
 
   await driver.save();
+  notifyDriverAccountSuspended(String(driver._id), { note }).catch(() => null);
   return driver;
 };
 
@@ -381,6 +402,7 @@ export const unsuspendDriverService = async (staffOrId, driverId) => {
   });
 
   await driver.save();
+  notifyDriverAccountUnsuspended(String(driver._id)).catch(() => null);
   return driver;
 };
 
@@ -570,4 +592,138 @@ export const deleteAdminMemberService = async (id) => {
 
   await User.findByIdAndDelete(id);
   return { id };
+};
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Global admin header search — light results across users, drivers, bookings.
+ * Min query length is enforced by the controller; this assumes a trimmed q.
+ */
+export const adminGlobalSearchService = async (staff, query = {}) => {
+  const q = String(query.q || '').trim();
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 5, 1), 10);
+
+  if (!q || q.length < 2) {
+    return { users: [], drivers: [], bookings: [] };
+  }
+
+  const escaped = escapeRegex(q);
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(q);
+
+  const userFilter = {
+    role: USER_ROLES.USER,
+    isDeleted: false,
+    $or: [
+      { name: { $regex: escaped, $options: 'i' } },
+      { email: { $regex: escaped, $options: 'i' } },
+      { phone_no: { $regex: escaped, $options: 'i' } },
+      ...(isObjectId ? [{ _id: q }] : []),
+    ],
+  };
+
+  const driverFilter = {
+    isDeleted: { $ne: true },
+    $or: [
+      { name: { $regex: escaped, $options: 'i' } },
+      { phone: { $regex: escaped, $options: 'i' } },
+      ...(isObjectId ? [{ _id: q }] : []),
+    ],
+  };
+
+  const bookingFilter = { isDeleted: false };
+  const zoneScope = getStaffZoneScopeIds(staff);
+  let bookingsPromise = Promise.resolve([]);
+
+  if (zoneScope !== null && !zoneScope.length) {
+    bookingsPromise = Promise.resolve([]);
+  } else {
+    if (zoneScope !== null) {
+      bookingFilter.zoneIds = { $in: zoneScope };
+    }
+
+    const bookingOr = [{ bookingNumber: { $regex: escaped, $options: 'i' } }];
+    if (isObjectId) bookingOr.push({ _id: q });
+
+    const [matchingUsersForBookings, matchingDriversForBookings] = await Promise.all([
+      User.find({
+        role: USER_ROLES.USER,
+        isDeleted: false,
+        $or: [
+          { name: { $regex: escaped, $options: 'i' } },
+          { phone_no: { $regex: escaped, $options: 'i' } },
+        ],
+      })
+        .select('_id')
+        .limit(50)
+        .lean(),
+      Driver.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { name: { $regex: escaped, $options: 'i' } },
+          { phone: { $regex: escaped, $options: 'i' } },
+        ],
+      })
+        .select('_id')
+        .limit(50)
+        .lean(),
+    ]);
+
+    if (matchingUsersForBookings.length) {
+      bookingOr.push({ userId: { $in: matchingUsersForBookings.map((u) => u._id) } });
+    }
+    if (matchingDriversForBookings.length) {
+      bookingOr.push({ driverId: { $in: matchingDriversForBookings.map((d) => d._id) } });
+    }
+
+    bookingFilter.$or = bookingOr;
+    bookingsPromise = Booking.find(bookingFilter)
+      .select('bookingNumber status serviceType bookingType userId driverId createdAt')
+      .populate('userId', 'name phone_no')
+      .populate('driverId', 'name phone')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+  }
+
+  const [users, drivers, bookings] = await Promise.all([
+    User.find(userFilter)
+      .select('name email phone_no profilePicture')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean(),
+    Driver.find(driverFilter)
+      .select('name phone approvalStatus profilePicture')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean(),
+    bookingsPromise,
+  ]);
+
+  return {
+    users: users.map((u) => ({
+      _id: u._id,
+      name: u.name || '',
+      email: u.email || '',
+      phone: u.phone_no || '',
+      profilePicture: u.profilePicture || null,
+    })),
+    drivers: drivers.map((d) => ({
+      _id: d._id,
+      name: d.name || '',
+      phone: d.phone || '',
+      approvalStatus: d.approvalStatus || '',
+      profilePicture: d.profilePicture || null,
+    })),
+    bookings: bookings.map((b) => ({
+      _id: b._id,
+      bookingNumber: b.bookingNumber || '',
+      status: b.status || '',
+      serviceType: b.serviceType || '',
+      bookingType: b.bookingType || '',
+      customerName: b.userId?.name || '',
+      customerPhone: b.userId?.phone_no || '',
+      driverName: b.driverId?.name || '',
+    })),
+  };
 };

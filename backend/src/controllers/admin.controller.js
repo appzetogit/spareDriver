@@ -117,3 +117,8 @@ export const getAdminTeamMemberAnalytics = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, result, 'Team member analytics fetched successfully'));
 });
+
+export const adminGlobalSearch = asyncHandler(async (req, res) => {
+  const result = await adminService.adminGlobalSearchService(req.staff, req.query);
+  return res.status(200).json(new ApiResponse(200, result, 'Search results fetched'));
+});

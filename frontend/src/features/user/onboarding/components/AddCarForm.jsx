@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Button from '../../../../components/Button';
 import DocumentUploadField from '../../../../components/DocumentUploadField';
 import VehicleDetailsForm, {
@@ -19,6 +19,14 @@ import SafetyChecklistQuestion from './SafetyChecklistQuestion';
 const ADD_CAR_DRAFT_KEY = 'user-onboarding:add-car';
 const CAR_IMAGE_DOC_TYPES = ['car_image'];
 
+/** Draft shape: vehicle fields + durable Cloudinary image + checklist answers. */
+const emptyAddCarDraft = {
+  ...emptyVehicleFormValues,
+  imageUrl: null,
+  imagePublicId: null,
+  answers: {},
+};
+
 /**
  * Self-contained "Add a car" form. Handles validation, image upload, per-car
  * safety checklist, and the `POST /auth/cars` call. Used by both the standalone
@@ -36,10 +44,12 @@ const AddCarForm = ({
   const setOnboarding = useUserAuthStore((s) => s.setOnboarding);
   const [loading, setLoading] = useState(false);
 
-  const [draftData, setDraftData, clearDraft] = useFormDraft(ADD_CAR_DRAFT_KEY, emptyVehicleFormValues);
+  const [draftData, setDraftData, clearDraft] = useFormDraft(ADD_CAR_DRAFT_KEY, emptyAddCarDraft, {
+    storage: 'local',
+  });
 
   // In edit mode we keep a local copy of the car fields so the draft
-  // (sessionStorage) for the "add" flow is never corrupted.
+  // (localStorage) for the "add" flow is never corrupted.
   const [localData, setLocalData] = useState(() => {
     if (!editCar) return null;
     return {
@@ -81,7 +91,10 @@ const AddCarForm = ({
   });
 
   const [errors, setErrors] = useState({});
-  const [answers, setAnswers] = useState({});
+  const [localAnswers, setLocalAnswers] = useState({});
+
+  // Add mode: checklist answers live in the session draft so they survive refresh.
+  const answers = editCar ? localAnswers : (draftData.answers || {});
 
   const {
     documents,
@@ -91,34 +104,65 @@ const AddCarForm = ({
     isAnyUploading,
     allRequiredUploaded,
     toPayloadArray,
-  } = useDocumentsManager(CAR_IMAGE_DOC_TYPES);
+  } = useDocumentsManager(CAR_IMAGE_DOC_TYPES, { deferUpload: false });
 
+  const restoredImageRef = useRef(false);
   useEffect(() => {
+    if (restoredImageRef.current) return;
     if (editCar?.image) {
+      restoredImageRef.current = true;
       loadFromApiDocuments([{ type: 'car_image', fileUrl: editCar.image }]);
+      return;
     }
-  }, [editCar?._id, editCar?.image, loadFromApiDocuments]);
+    if (!editCar && draftData.imageUrl) {
+      restoredImageRef.current = true;
+      loadFromApiDocuments([
+        {
+          type: 'car_image',
+          fileUrl: draftData.imageUrl,
+          cloudinaryPublicId: draftData.imagePublicId || undefined,
+        },
+      ]);
+    }
+  }, [editCar, editCar?.image, draftData.imageUrl, draftData.imagePublicId, loadFromApiDocuments]);
 
   useEffect(() => {
     if (!conditions.length) return;
-    const initialAnswers = {};
-    conditions.forEach((c) => {
-      const fromConditions = editCar?.conditions?.find(
-        (ec) => String(ec.conditionId?._id || ec.conditionId) === String(c._id),
-      );
-      const fromChecklist = editCar?.checklist?.find(
-        (item) => String(item._id) === String(c._id),
-      );
-      if (fromConditions && (fromConditions.value === true || fromConditions.value === false)) {
-        initialAnswers[c._id] = fromConditions.value;
-      } else if (fromChecklist && (fromChecklist.value === true || fromChecklist.value === false)) {
-        initialAnswers[c._id] = fromChecklist.value;
-      } else {
-        initialAnswers[c._id] = null;
-      }
+    if (editCar) {
+      const initialAnswers = {};
+      conditions.forEach((c) => {
+        const fromConditions = editCar.conditions?.find(
+          (ec) => String(ec.conditionId?._id || ec.conditionId) === String(c._id),
+        );
+        const fromChecklist = editCar.checklist?.find(
+          (item) => String(item._id) === String(c._id),
+        );
+        if (fromConditions && (fromConditions.value === true || fromConditions.value === false)) {
+          initialAnswers[c._id] = fromConditions.value;
+        } else if (fromChecklist && (fromChecklist.value === true || fromChecklist.value === false)) {
+          initialAnswers[c._id] = fromChecklist.value;
+        } else {
+          initialAnswers[c._id] = null;
+        }
+      });
+      setLocalAnswers(initialAnswers);
+      return;
+    }
+
+    // Add mode: ensure every condition has a key; keep answers already in the draft.
+    setDraftData((prev) => {
+      const nextAnswers = { ...(prev.answers || {}) };
+      let changed = false;
+      conditions.forEach((c) => {
+        if (!(c._id in nextAnswers)) {
+          nextAnswers[c._id] = null;
+          changed = true;
+        }
+      });
+      if (!changed) return prev;
+      return { ...prev, answers: nextAnswers };
     });
-    setAnswers(initialAnswers);
-  }, [conditions, editCar?._id, editCar?.conditions, editCar?.checklist]);
+  }, [conditions, editCar, editCar?._id, editCar?.conditions, editCar?.checklist, setDraftData]);
 
   const checklistProgress = useMemo(
     () => countChecklistProgress(conditions, answers),
@@ -131,11 +175,35 @@ const AddCarForm = ({
   );
 
   const setAnswer = (id, value) => {
-    setAnswers((prev) => ({ ...prev, [id]: value }));
+    if (editCar) {
+      setLocalAnswers((prev) => ({ ...prev, [id]: value }));
+    } else {
+      setDraftData((prev) => ({
+        ...prev,
+        answers: { ...(prev.answers || {}), [id]: value },
+      }));
+    }
     setErrors((prev) => {
       if (!prev.checklist) return prev;
       const next = { ...prev };
       delete next.checklist;
+      return next;
+    });
+  };
+
+  const handlePhotoUpload = async (file) => {
+    const result = await uploadDocument('car_image', file);
+    if (!editCar && result?.url) {
+      setDraftData((prev) => ({
+        ...prev,
+        imageUrl: result.url,
+        imagePublicId: result.publicId || null,
+      }));
+    }
+    setErrors((prev) => {
+      if (!prev.image) return prev;
+      const next = { ...prev };
+      delete next.image;
       return next;
     });
   };
@@ -244,7 +312,7 @@ const AddCarForm = ({
       <DocumentUploadField
         label="CAR PHOTO"
         doc={documents.car_image}
-        onUpload={(file) => uploadDocument('car_image', file)}
+        onUpload={handlePhotoUpload}
         hint="Clear photo of the car"
         disabled={fieldsDisabled}
         compact

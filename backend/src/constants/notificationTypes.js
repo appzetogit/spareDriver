@@ -68,6 +68,10 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   SUPPORT_REPLY: 'support_reply',
   EMERGENCY_ALERT: 'emergency_alert',
   BOOKING_REMINDER: 'booking_reminder',
+  ACCOUNT_APPROVED: 'account_approved',
+  ACCOUNT_REJECTED: 'account_rejected',
+  ACCOUNT_SUSPENDED: 'account_suspended',
+  ACCOUNT_UNSUSPENDED: 'account_unsuspended',
 });
 
 /** Admin inbox kinds (socket + DB; FCM only for ADMIN_FCM_NOTIFICATION_TYPES) */

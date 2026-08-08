@@ -570,6 +570,83 @@ export function notifyDriverEmergencyAlert(driverId, { title, body, data }) {
   );
 }
 
+export function notifyDriverAccountApproved(driverId, { note = '' } = {}) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Account approved',
+      body: note
+        ? `Your driver account has been approved. ${note}`
+        : 'Your driver account has been approved. You can now go online and accept rides.',
+      severity: 'success',
+      type: DRIVER_NOTIFICATION.ACCOUNT_APPROVED,
+      data: {
+        kind: DRIVER_NOTIFICATION.ACCOUNT_APPROVED,
+        approvalStatus: 'approved',
+        path: '/driver/home',
+        note,
+      },
+    },
+  );
+}
+
+export function notifyDriverAccountRejected(driverId, { note = '' } = {}) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Account rejected',
+      body: note
+        ? `Your driver application was rejected. ${note}`
+        : 'Your driver application was rejected. Please review the note and resubmit.',
+      severity: 'error',
+      type: DRIVER_NOTIFICATION.ACCOUNT_REJECTED,
+      data: {
+        kind: DRIVER_NOTIFICATION.ACCOUNT_REJECTED,
+        approvalStatus: 'rejected',
+        path: '/driver/register/approval',
+        note,
+      },
+    },
+  );
+}
+
+export function notifyDriverAccountSuspended(driverId, { note = '' } = {}) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Account suspended',
+      body: note
+        ? `Your driver account has been suspended. ${note}`
+        : 'Your driver account has been suspended. Contact support for help.',
+      severity: 'error',
+      type: DRIVER_NOTIFICATION.ACCOUNT_SUSPENDED,
+      data: {
+        kind: DRIVER_NOTIFICATION.ACCOUNT_SUSPENDED,
+        approvalStatus: 'suspended',
+        path: '/driver/register/approval',
+        note,
+      },
+    },
+  );
+}
+
+export function notifyDriverAccountUnsuspended(driverId) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Account reinstated',
+      body: 'Your driver account suspension has been lifted. You can go online again.',
+      severity: 'success',
+      type: DRIVER_NOTIFICATION.ACCOUNT_UNSUSPENDED,
+      data: {
+        kind: DRIVER_NOTIFICATION.ACCOUNT_UNSUSPENDED,
+        approvalStatus: 'approved',
+        path: '/driver/home',
+      },
+    },
+  );
+}
+
 export function notifyUserPromotional(userId, { title, body }) {
   return sendPushNotification(
     { userId },

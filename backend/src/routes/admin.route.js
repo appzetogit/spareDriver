@@ -17,6 +17,7 @@ import {
   updateAdminMember,
   deleteAdminMember,
   getAdminTeamMemberAnalytics,
+  adminGlobalSearch,
 } from '../controllers/admin.controller.js';
 import { protectStaff, restrictTo } from '../middlewares/authMiddleware.js';
 import { ROUTE_ROLES } from '../constants/staffPermissions.js';
@@ -240,6 +241,7 @@ router.post('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), registerStaffF
 router.delete('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), unregisterStaffFcmToken);
 router.get('/dashboard', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDashboard);
 router.get('/sidebar-counts', protectStaff, restrictTo(...ALL_STAFF), getAdminSidebarCounts);
+router.get('/search', protectStaff, restrictTo(...ALL_STAFF), adminGlobalSearch);
 
 /* ---- Reports & Analytics (super-admin only) --------------------------- */
 router.get('/reports/overview', protectStaff, restrictTo(...SUPER_ADMIN), getAdminReportsOverview);

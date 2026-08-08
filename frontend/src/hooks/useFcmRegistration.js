@@ -53,15 +53,11 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
         await postToken(path, token, platform);
 
         const messaging = getMessaging(app);
+        // Foreground: hydrate offers from FCM data. Do not call `new Notification` —
+        // socket toasts already cover in-app alerts; a second system push looks like a duplicate.
         unsubscribeOnMessage = onMessage(messaging, (payload) => {
-          if (audience === 'driver' && handleDriverFcmPayload(payload)) {
-            return;
-          }
-
-          const title = payload?.notification?.title || 'SpareDriver';
-          const body = payload?.notification?.body || '';
-          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            new Notification(title, { body, data: payload?.data });
+          if (audience === 'driver') {
+            handleDriverFcmPayload(payload);
           }
         });
 
