@@ -29,6 +29,8 @@ const buildDefaultForm = (serviceType) => ({
     chargePerMinute: 2,
     noShowPromptMinutes: 15,
     noShowGraceMinutes: 5,
+    noShowFeeType: 'percentage',
+    noShowFeeAmount: 20,
     maxNoShowPrompts: 2,
     maxBillableMinutes: 45,
   },
@@ -399,6 +401,55 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                     }
                   />
                 </div>
+                <div className="mt-3 p-3 bg-slate-50 rounded-xl space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      No-show fee
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Charged when the customer misses the final prompt or
+                      taps &quot;not coming&quot;. Rest of the paid fare is
+                      refunded. If amount is 0 / unset, defaults to 20% of paid.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium text-text">Type</span>
+                      <select
+                        className="h-12 px-3 bg-white border border-border rounded-xl text-sm"
+                        value={form.waitingCharge.noShowFeeType || 'percentage'}
+                        onChange={(e) =>
+                          updateNested('waitingCharge', {
+                            noShowFeeType: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="flat">Flat {'\u20B9'}</option>
+                        <option value="percentage">% of paid amount</option>
+                      </select>
+                    </label>
+                    <Input
+                      label={
+                        form.waitingCharge.noShowFeeType === 'flat'
+                          ? `Amount (\u20B9)`
+                          : 'Amount (%)'
+                      }
+                      type="number"
+                      min={0}
+                      max={
+                        form.waitingCharge.noShowFeeType === 'flat'
+                          ? undefined
+                          : 100
+                      }
+                      value={form.waitingCharge.noShowFeeAmount ?? 20}
+                      onChange={(e) =>
+                        updateNested('waitingCharge', {
+                          noShowFeeAmount: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
                 {/*
                   Buffer + cadence preview. The buffer (= maxBillable ×
                   perMinute) is debited from the user's wallet at booking
@@ -427,7 +478,7 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
                       <p className="text-text-muted mt-1">
                         Free wait {wc.freeWaitingMinutes || 0} min → reminder
                         every {promptM} min (up to {maxP} re-prompts) →
-                        final {graceM} min grace → auto-complete. Worst-case
+                        final {graceM} min grace → no-show fee. Worst-case
                         billable wait: <span className="font-medium text-text">{worstCase} min</span>.
                       </p>
                       <p

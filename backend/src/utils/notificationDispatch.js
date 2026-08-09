@@ -129,6 +129,31 @@ export function notifyUserRideEndingSoon(userId, booking) {
   );
 }
 
+export function notifyUserNoShowPrompt(userId, booking, { isFinal = false } = {}) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  return sendPushNotification(
+    { userId },
+    {
+      title: isFinal
+        ? 'Last reminder — are you coming?'
+        : 'Are you on your way?',
+      body: isFinal
+        ? 'Respond now or the trip will be auto-closed as a no-show.'
+        : 'Your driver is waiting at the pickup. Tap to respond.',
+      severity: isFinal ? 'warn' : 'info',
+      type: USER_NOTIFICATION.NOSHOW_PROMPT,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'arrived',
+        isFinal: isFinal ? '1' : '0',
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}`
+          : '/user/book/assigned',
+      },
+    },
+  );
+}
+
 export function notifyUserTripCompleted(userId, booking) {
   return sendPushNotification(
     { userId },

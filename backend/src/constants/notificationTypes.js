@@ -22,6 +22,8 @@ export const USER_NOTIFICATION = Object.freeze({
   TRIP_STARTED: 'trip_started',
   /** Hourly ride nearing booked end — offer to extend. */
   RIDE_ENDING_SOON: 'ride_ending_soon',
+  /** Driver waiting at pickup — "are you on your way?" no-show prompt. */
+  NOSHOW_PROMPT: 'noshow_prompt',
   TRIP_COMPLETED: 'trip_completed',
   ORDER_PICKED_UP: 'order_picked_up',
   ORDER_DELIVERED: 'order_delivered',

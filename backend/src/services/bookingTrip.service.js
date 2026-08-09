@@ -260,14 +260,13 @@ async function resolveEnRouteLeadMinutes(serviceType) {
 
 /**
  * Authoritative "are we close enough to pickup time?" guard for
- * **Start to pickup** (en_route). Drivers may head out once pickup is
- * within `RIDE_BUFFER_MINUTES` (default 2h). Arrival / start use the
- * stricter `assertScheduledStartReached` instead — billing must not
- * begin before the customer's booked time.
+ * **Start to pickup** (en_route) on scheduled / outstation bookings.
+ * Drivers may head out once pickup is within `RIDE_BUFFER_MINUTES`
+ * (default 2h). Callers must skip this for instant rides — their
+ * `scheduledStartAt` (+15m dispatch seed) is not an en-route gate.
  *
- * Uses `resolveBookingSearchStartAt` so hourly (`scheduledStartAt`) and
- * outstation (`pickupAt`) share the same gate. Instant bookings get
- * `scheduledStartAt = now` at creation, so the guard is a no-op for them.
+ * Arrival / start use the stricter `assertScheduledStartReached`
+ * instead — billing must not begin before the customer's booked time.
  */
 async function assertWithinScheduledLead(booking, verb) {
   const pickupDate = resolveBookingSearchStartAt(booking);
@@ -349,10 +348,15 @@ export async function markDriverEnRouteService(driverId, bookingId) {
     );
   }
 
-  // Time gate — hourly scheduledStartAt / outstation pickupAt via
-  // resolveBookingSearchStartAt. Instant bookings sail through (their
-  // scheduled time is "now") so the check is free for the hot path.
-  await assertWithinScheduledLead(booking, 'head out');
+  // Time gate — scheduled/outstation only. Instant rides keep a +15m
+  // scheduledStartAt as a dispatch seed; drivers must be able to head
+  // to pickup immediately after accept.
+  if (
+    booking.bookingType === BOOKING_TYPE.SCHEDULED ||
+    booking.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    await assertWithinScheduledLead(booking, 'head out');
+  }
 
   booking.status = BOOKING_STATUS.EN_ROUTE;
   booking.timeline.enRouteAt = new Date();

@@ -220,82 +220,7 @@ const DriverAssignedPage = () => {
     });
   });
 
-  // No-show prompt: backend pings us when the driver has been at the
-  // pickup past the free-wait window and the user hasn't shown up. The
-  // modal renders a server-anchored deadline countdown. Cadence is:
-  //   prompt 1 → user says yes → prompt 2 → … → prompt N+1 (final) →
-  //   grace → auto-complete. `isFinal: true` switches the copy to a
-  //   terminal warning since a "yes" no longer resets the cycle.
-  const [noShowPrompt, setNoShowPrompt] = useState(null);
-  useSocketEvent(S2C_EVENTS.BOOKING_NOSHOW_PROMPT, (payload) => {
-    if (!payload?.bookingId) return;
-    // Outstation never uses the hourly no-show / auto-complete flow.
-    if (booking?.serviceType === SERVICE_TYPES.OUTSTATION) return;
-    if (booking?._id && String(booking._id) !== String(payload.bookingId)) {
-      return;
-    }
-    setNoShowPrompt({
-      promptDeadlineAt: payload.promptDeadlineAt,
-      graceMinutes: payload.graceMinutes,
-      promptIndex: payload.promptIndex,
-      maxPrompts: payload.maxPrompts,
-      isFinal: !!payload.isFinal,
-    });
-  });
-  // Re-attach the prompt on page reload — backend already stamped the
-  // booking with `noShow.promptDeadlineAt` so we can rehydrate the
-  // modal without waiting for a fresh socket event.
-  useEffect(() => {
-    if (booking?.serviceType === SERVICE_TYPES.OUTSTATION) {
-      if (noShowPrompt) setNoShowPrompt(null);
-      return;
-    }
-    const deadline = booking?.noShow?.promptDeadlineAt;
-    const response = booking?.noShow?.customerResponse;
-    if (!deadline || response) {
-      // Customer already answered → hide.
-      if (response && noShowPrompt) setNoShowPrompt(null);
-      return;
-    }
-    const remaining = new Date(deadline).getTime() - Date.now();
-    if (remaining <= 0) {
-      // Deadline already passed; backend will auto-complete momentarily.
-      setNoShowPrompt(null);
-      return;
-    }
-    if (!noShowPrompt) {
-      const firedFor = Number(booking?.noShow?.firedFor || 0);
-      setNoShowPrompt({
-        promptDeadlineAt: deadline,
-        graceMinutes: null,
-        promptIndex: firedFor || null,
-        maxPrompts: null,
-        // Without the live payload we can't tell isFinal for sure;
-        // the modal copy degrades gracefully (no terminal warning).
-        isFinal: false,
-      });
-    }
-  }, [booking?.serviceType, booking?.noShow?.promptDeadlineAt, booking?.noShow?.customerResponse, booking?.noShow?.firedFor]);
-
-  const respondToNoShow = useUserActiveBookingStore((s) => s.respondToNoShow);
-  const handleNoShowAnswer = async (answer) => {
-    if (booking?.serviceType === SERVICE_TYPES.OUTSTATION) return;
-    try {
-      await respondToNoShow(answer);
-      setNoShowPrompt(null);
-      if (answer === 'on_my_way') {
-        toast.success('Thanks — we let your driver know.');
-      } else {
-        toast('Trip closed out. Driver has been paid for waiting.', {
-          icon: '\u26A0\uFE0F',
-        });
-      }
-    } catch (err) {
-      toast.error(
-        err?.response?.data?.message || err?.message || 'Could not send response',
-      );
-    }
-  };
+  // No-show "are you coming?" alert is global (`UserBookingAlertsBridge`).
 
   const bookingStatus = booking?.status;
   const cancellationReason = booking?.cancellation?.reason;
@@ -326,6 +251,7 @@ const DriverAssignedPage = () => {
           toast('Driver cancelled the ride.', { icon: 'ℹ️', duration: 5000 });
         }
       }
+      // customer_no_show toast is handled by UserBookingAlertsBridge
       // Cancellation refund (wallet) settles on the backend the moment
       // the booking flips — pull a fresh wallet snapshot so the home /
       // wallet pages render the new balance without a manual refresh.
@@ -1199,16 +1125,6 @@ const DriverAssignedPage = () => {
         minDays={1}
         maxDays={14}
       />
-
-      <NoShowPromptModal
-        open={Boolean(noShowPrompt) && booking?.serviceType !== SERVICE_TYPES.OUTSTATION}
-        deadline={noShowPrompt?.promptDeadlineAt}
-        promptIndex={noShowPrompt?.promptIndex}
-        maxPrompts={noShowPrompt?.maxPrompts}
-        isFinal={noShowPrompt?.isFinal}
-        onYes={() => handleNoShowAnswer('on_my_way')}
-        onNo={() => handleNoShowAnswer('not_coming')}
-      />
     </div>
   );
 };
@@ -1380,118 +1296,6 @@ function formatOutstationRemaining(seconds) {
     return `${hours}h ${String(minutes).padStart(2, '0')}m`;
   }
   return `${minutes}m`;
-}
-
-/**
- * "Are you coming?" modal. Fires when the driver has been at the
- * pickup past the no-show prompt minutes. Shows a live countdown to
- * the auto-complete deadline so the customer understands the
- * urgency, and forces an explicit Yes / No answer (no overlay-click
- * dismiss — silence is what triggers auto-complete).
- */
-function NoShowPromptModal({
-  open,
-  deadline,
-  promptIndex,
-  maxPrompts,
-  isFinal,
-  onYes,
-  onNo,
-}) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!open) return undefined;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [open]);
-
-  if (!open) return null;
-
-  const remainingMs = deadline
-    ? Math.max(0, new Date(deadline).getTime() - now)
-    : null;
-  const remainingSec = remainingMs != null ? Math.floor(remainingMs / 1000) : null;
-  const m = remainingSec != null ? Math.floor(remainingSec / 60) : null;
-  const s = remainingSec != null ? remainingSec % 60 : null;
-  const countdown =
-    remainingSec != null
-      ? `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-      : '—';
-
-  // The final prompt is terminal — saying yes no longer resets the
-  // cycle, so we swap to a warning theme and reword the copy.
-  //
-  // Clamp the displayed index so a misbehaving (or pre-fix) backend
-  // never shows a nonsensical "Reminder 5 of 3". Any prompt beyond the
-  // final one is rendered as the final.
-  const showProgress = Number.isFinite(promptIndex) && Number.isFinite(maxPrompts);
-  const totalPrompts = showProgress ? Number(maxPrompts) + 1 : null;
-  const displayIndex = showProgress
-    ? Math.min(Number(promptIndex), totalPrompts)
-    : null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl animate-fade-in-up">
-        <div className="flex items-center gap-3 mb-4">
-          <div
-            className={`w-12 h-12 rounded-full flex items-center justify-center ${
-              isFinal ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-            }`}
-          >
-            <Clock className="w-6 h-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-base font-bold text-text">
-              {isFinal ? 'Last reminder — are you coming?' : 'Are you on your way?'}
-            </p>
-            <p className="text-xs text-text-muted mt-0.5">
-              {showProgress
-                ? `Reminder ${displayIndex} of ${totalPrompts}`
-                : 'Your driver has been waiting at the pickup.'}
-            </p>
-          </div>
-        </div>
-        <p className="text-sm text-text-secondary leading-snug">
-          {isFinal
-            ? `If you don't respond in time, the trip will be auto-closed as a no-show. The driver gets paid in full and the waiting time is deducted from your refundable buffer.`
-            : `Tap "Yes" to keep your ride. If you don't respond, we'll check in again. After ${(maxPrompts != null ? maxPrompts : 'a few')} reminders the ride is auto-closed.`}
-        </p>
-        {remainingSec != null && (
-          <div
-            className={`mt-4 rounded-2xl px-4 py-3 flex items-center justify-between ${
-              isFinal
-                ? 'bg-red-50 border border-red-200'
-                : 'bg-amber-50 border border-amber-200'
-            }`}
-          >
-            <span
-              className={`text-xs font-medium ${
-                isFinal ? 'text-red-800' : 'text-amber-800'
-              }`}
-            >
-              {isFinal ? 'Auto-close in' : 'Next reminder in'}
-            </span>
-            <span
-              className={`text-xl font-bold tabular-nums ${
-                isFinal ? 'text-red-700' : 'text-amber-700'
-              }`}
-            >
-              {countdown}
-            </span>
-          </div>
-        )}
-        <div className="mt-5 flex flex-col gap-2">
-          <Button variant="primary" onClick={onYes} className="w-full">
-            Yes, I&rsquo;m on my way
-          </Button>
-          <Button variant="ghost" onClick={onNo} className="w-full">
-            No, I&rsquo;m not coming
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /**

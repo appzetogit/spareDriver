@@ -34,11 +34,24 @@ const waitingChargeSchema = new mongoose.Schema(
     /**
      * Grace minutes the customer has to respond to the FINAL (terminal)
      * no-show prompt. After this window expires (or the customer says
-     * "no") the trip is auto-completed — the driver gets paid in full
-     * plus the accrued waiting charge (capped by the pre-collected
-     * buffer, see below).
+     * "no") the booking is closed as a no-show: a configured fee is
+     * charged (flat ₹ or % of paid; default 20%) and the remainder is
+     * refunded. Waiting buffer is released unused.
      */
     noShowGraceMinutes: { type: Number, default: 5, min: 0 },
+    /**
+     * Fee charged when a booking ends as a customer no-show (missed
+     * prompt / "not coming"). Mirrors cancellation fee knobs:
+     *   'flat'       → `noShowFeeAmount` ₹
+     *   'percentage' → `noShowFeeAmount` % of amount paid
+     * Missing / zero amount falls back to 20% of paid.
+     */
+    noShowFeeType: {
+      type: String,
+      enum: ['flat', 'percentage'],
+      default: 'percentage',
+    },
+    noShowFeeAmount: { type: Number, default: 20, min: 0 },
     /**
      * Hard cap on how many times we re-prompt before the cycle goes
      * terminal. 0 reproduces the legacy single-prompt behaviour

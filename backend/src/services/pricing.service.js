@@ -167,6 +167,8 @@ function ZERO_WAITING_CHARGE() {
     chargePerMinute: 0,
     noShowPromptMinutes: 0,
     noShowGraceMinutes: 0,
+    noShowFeeType: 'percentage',
+    noShowFeeAmount: 0,
     maxNoShowPrompts: 0,
     maxBillableMinutes: 0,
   };
@@ -1589,6 +1591,9 @@ function buildWaitingBufferPreview(pricing) {
     maxNoShowPrompts: Math.max(0, Number(wc.maxNoShowPrompts) || 0),
     noShowPromptMinutes: Math.max(0, Number(wc.noShowPromptMinutes) || 0),
     noShowGraceMinutes: Math.max(0, Number(wc.noShowGraceMinutes) || 0),
+    noShowFeeType:
+      wc.noShowFeeType === 'flat' ? 'flat' : 'percentage',
+    noShowFeeAmount: Math.max(0, Number(wc.noShowFeeAmount) || 0),
   };
 }
 

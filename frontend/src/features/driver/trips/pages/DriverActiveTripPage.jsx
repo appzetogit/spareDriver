@@ -399,14 +399,15 @@ const DriverActiveTripPage = () => {
   const minutesUntilPickup = Number.isFinite(scheduledStartMs)
     ? Math.ceil((scheduledStartMs - Date.now()) / 60_000)
     : null;
-  // Instant: proximity-only for "I've arrived" / start. Scheduled/outstation
-  // keep the pickup-time floor — the +15m scheduledStartAt seed is a
-  // dispatch buffer, not an arrival/start gate.
+  // Instant: no time gate on "Start to pickup" — the +15m scheduledStartAt
+  // seed is only a dispatch buffer. Scheduled/outstation keep the
+  // RIDE_BUFFER unlock window.
   const isScheduledLikeTrip =
     booking?.bookingType === BOOKING_TYPE.SCHEDULED ||
     booking?.bookingType === BOOKING_TYPE.OUTSTATION;
   const enRouteTooEarly =
     status === BOOKING_STATUS.DRIVER_ASSIGNED &&
+    isScheduledLikeTrip &&
     Number.isFinite(scheduledStartMs) &&
     minutesUntilPickup != null &&
     minutesUntilPickup > enRouteUnlockMinutes;

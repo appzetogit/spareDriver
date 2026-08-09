@@ -395,11 +395,13 @@ const useUserActiveBookingStore = create((set, get) => ({
   /**
    * Customer's answer to the "are you coming?" no-show prompt. Posts
    * to the backend which either reschedules the prompt (Yes) or
-   * auto-completes the ride (No).
+   * closes the ride with the configured no-show fee (No).
    *   response: 'on_my_way' | 'not_coming'
+   *   bookingId: optional — used by the global alert bridge when the
+   *              store may not yet hold this booking.
    */
-  async respondToNoShow(response) {
-    const id = get().booking?._id;
+  async respondToNoShow(response, bookingId) {
+    const id = bookingId || get().booking?._id;
     if (!id) throw new Error('No active booking');
     await api.post(`/auth/bookings/${id}/noshow/respond`, { response });
   },

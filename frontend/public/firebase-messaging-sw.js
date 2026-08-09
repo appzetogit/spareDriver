@@ -55,27 +55,44 @@ messaging.onBackgroundMessage(async (payload) => {
   await self.registration.showNotification(title, options);
 });
 
+function resolveNotificationOpenUrl(data) {
+  const path = typeof data.path === 'string' ? data.path.trim() : '';
+  if (path.startsWith('/')) return path;
+  if (data.kind === 'booking_offer' || data.kind === 'new_booking_request') {
+    return '/driver/home';
+  }
+  if (data.bookingId && (
+    data.kind === 'noshow_prompt'
+    || data.kind === 'driver_arrived'
+    || data.kind === 'driver_assigned'
+    || data.kind === 'trip_started'
+    || data.kind === 'ride_ending_soon'
+  )) {
+    return '/user/book/assigned/' + data.bookingId;
+  }
+  return '/';
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  const openUrl = resolveNotificationOpenUrl(data);
   event.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clientsList) {
       client.postMessage({ type: 'SD_BOOKING_OFFER_FCM', payload: data });
+      client.postMessage({ type: 'SD_NOTIFICATION_OPEN', payload: data, url: openUrl });
       if ('focus' in client) {
         await client.focus();
         return;
       }
     }
     if (self.clients.openWindow) {
-      const url = data.kind === 'booking_offer' || data.kind === 'new_booking_request'
-        ? '/driver/home'
-        : '/';
-      const win = await self.clients.openWindow(url);
+      const win = await self.clients.openWindow(openUrl);
       if (win && data) {
-        // Cold start: stash for the app to pick up on boot.
         try {
           await win.postMessage({ type: 'SD_BOOKING_OFFER_FCM', payload: data });
+          await win.postMessage({ type: 'SD_NOTIFICATION_OPEN', payload: data, url: openUrl });
         } catch (_) { /* ignore */ }
       }
     }

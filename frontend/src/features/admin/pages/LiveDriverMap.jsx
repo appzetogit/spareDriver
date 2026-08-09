@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Loader2,
@@ -12,9 +12,11 @@ import {
   Navigation,
   Phone,
   Star,
+  X,
 } from 'lucide-react';
 import { useGoogleMaps } from '../../../hooks/useGoogleMaps';
 import { useFirebaseDriverLocations } from '../../../hooks/useFirebaseDriverLocations';
+import { useDriverMarkers } from '../../../hooks/useDriverMarkers';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { createQueryStore } from '../../../store/lib/createQueryStore';
@@ -23,14 +25,18 @@ import api from '../../../utils/api';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, GOOGLE_MAP_ID } from '../../../constants/mapDefaults';
 import { findZoneForPoint } from '../../../utils/zoneContains';
 import { BOOKING_STATUS } from '../../../constants/bookingStatus';
+import { SERVICE_TYPE_LABELS } from '../../../constants/serviceTypes';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { getAssignedZoneIds } from '../../../constants/staffRoles';
+import TripTrackingMap from '../../../components/maps/TripTrackingMap';
 
 const STATUS_FILTER = Object.freeze({
   ALL: 'all',
   AVAILABLE: 'available',
   ON_TRIP: 'on_trip',
 });
+
+const METADATA_REFRESH_MS = 30_000;
 
 const TRIP_STATUS_LABELS = {
   [BOOKING_STATUS.PENDING_ASSIGNMENT]: 'Pending assignment',
@@ -48,6 +54,21 @@ const useLiveDriverMetadataStore = createQueryStore(async () => {
   return res.data?.data || { items: [], liveLocationReady: false };
 });
 
+function mergeActiveTrip(liveTrip, metaTrip) {
+  if (!liveTrip && !metaTrip) return null;
+  return {
+    ...(metaTrip || {}),
+    ...(liveTrip || {}),
+    // Coords live on the Mongo metadata payload; keep them if Firebase status is leaner.
+    pickupCoords: liveTrip?.pickupCoords || metaTrip?.pickupCoords || null,
+    dropoffCoords: liveTrip?.dropoffCoords || metaTrip?.dropoffCoords || null,
+    pickup: liveTrip?.pickup || metaTrip?.pickup || null,
+    dropoff: liveTrip?.dropoff || metaTrip?.dropoff || null,
+    customerName: liveTrip?.customerName || metaTrip?.customerName || null,
+    customerPhone: liveTrip?.customerPhone || metaTrip?.customerPhone || null,
+  };
+}
+
 function mergeLiveDrivers(firebaseMap, metadataItems, zones) {
   const metaById = new Map(
     (metadataItems || []).map((item) => [String(item.driverId), item]),
@@ -63,7 +84,7 @@ function mergeLiveDrivers(firebaseMap, metadataItems, zones) {
       phone: meta.phone || null,
       rating: meta.rating ?? null,
       isOnTrip: live.isOnTrip ?? meta.isOnTrip ?? false,
-      activeTrip: live.activeTrip || meta.activeTrip || null,
+      activeTrip: mergeActiveTrip(live.activeTrip, meta.activeTrip),
       zoneId: zone?._id ? String(zone._id) : null,
       zoneName: zone?.name || null,
     });
@@ -73,9 +94,9 @@ function mergeLiveDrivers(firebaseMap, metadataItems, zones) {
   return drivers;
 }
 
-function relativeTime(ts) {
+function relativeTime(ts, nowMs = Date.now()) {
   if (!ts) return '—';
-  const diff = Math.max(0, Date.now() - ts);
+  const diff = Math.max(0, nowMs - ts);
   if (diff < 5_000) return 'just now';
   if (diff < 60_000) return `${Math.round(diff / 1000)}s ago`;
   if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
@@ -97,20 +118,25 @@ function matchesSearch(driver, query) {
 const LiveDriverMap = () => {
   const { admin } = useAdminAuthStore();
   const assignedZoneIds = useMemo(() => getAssignedZoneIds(admin), [admin]);
-  const { maps, AdvancedMarkerElement, PinElement, ready, error } = useGoogleMaps();
+  const { maps, ready, error } = useGoogleMaps();
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const markersRef = useRef(new Map());
+  const [mapInstance, setMapInstance] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
   const [zoneFilter, setZoneFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState(STATUS_FILTER.ALL);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const { map: firebaseMap, disabled: firebaseDisabled, error: firebaseError } =
     useFirebaseDriverLocations();
 
   const metadataKey = buildCacheKey('admin-live-drivers-metadata', {});
-  const { data: metadata } = useCachedQuery(useLiveDriverMetadataStore, metadataKey, {});
+  const { data: metadata, refetch: refetchMetadata } = useCachedQuery(
+    useLiveDriverMetadataStore,
+    metadataKey,
+    {},
+  );
 
   const zonesKey = buildCacheKey('admin-zones', {});
   const { data: zonesRaw } = useCachedQuery(useAdminZonesStore, zonesKey, {});
@@ -154,6 +180,50 @@ const LiveDriverMap = () => {
     [filteredDrivers, scopedDrivers, selectedId],
   );
 
+  // Same live point shape user tracking pages build from useFirebaseDriverLocations.
+  const selectedLivePoint = useMemo(() => {
+    if (!selectedDriver) return null;
+    return {
+      lat: selectedDriver.lat,
+      lng: selectedDriver.lng,
+      heading:
+        typeof selectedDriver.heading === 'number' ? selectedDriver.heading : undefined,
+    };
+  }, [selectedDriver]);
+
+  const selectedPickupPoint = useMemo(() => {
+    if (!selectedDriver?.isOnTrip) return null;
+    const trip = selectedDriver.activeTrip;
+    if (trip?.pickupCoords?.lat != null && trip?.pickupCoords?.lng != null) {
+      return { lat: trip.pickupCoords.lat, lng: trip.pickupCoords.lng };
+    }
+    return null;
+  }, [selectedDriver]);
+
+  const selectedDropoffPoint = useMemo(() => {
+    if (!selectedDriver?.isOnTrip) return null;
+    const c = selectedDriver?.activeTrip?.dropoffCoords;
+    if (c?.lat == null || c?.lng == null) return null;
+    return { lat: c.lat, lng: c.lng };
+  }, [selectedDriver]);
+
+  useEffect(() => {
+    if (selectedId && !selectedDriver) setSelectedId(null);
+  }, [selectedId, selectedDriver]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Keep Mongo names / trip labels fresh; positions stay on Firebase.
+  useEffect(() => {
+    const id = setInterval(() => {
+      refetchMetadata().catch(() => {});
+    }, METADATA_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [refetchMetadata]);
+
   useEffect(() => {
     if (!ready || !mapRef.current || mapInstanceRef.current) return;
     mapInstanceRef.current = new maps.Map(mapRef.current, {
@@ -164,56 +234,22 @@ const LiveDriverMap = () => {
       streetViewControl: false,
       mapTypeControl: false,
     });
+    setMapInstance(mapInstanceRef.current);
   }, [ready, maps]);
 
-  useEffect(() => {
-    if (!ready || !mapInstanceRef.current) return;
+  const focusDriver = useCallback((driver) => {
+    setSelectedId(driver.driverId);
+  }, []);
 
-    const seenIds = new Set();
+  const clearSelection = useCallback(() => setSelectedId(null), []);
 
-    for (const d of filteredDrivers) {
-      seenIds.add(d.driverId);
-      let marker = markersRef.current.get(d.driverId);
-      const position = { lat: d.lat, lng: d.lng };
-      const pinColor = d.isOnTrip ? '#f97316' : '#22c55e';
-
-      if (!marker) {
-        const pin = new PinElement({
-          background: pinColor,
-          borderColor: '#0f172a',
-          glyphColor: '#ffffff',
-          scale: 1.0,
-        });
-        marker = new AdvancedMarkerElement({
-          map: mapInstanceRef.current,
-          position,
-          title: d.name,
-          content: pin.element,
-        });
-        marker.__pin = pin;
-        marker.__isOnTrip = d.isOnTrip;
-        marker.addListener('click', () => setSelectedId(d.driverId));
-        markersRef.current.set(d.driverId, marker);
-      } else {
-        marker.position = position;
-        if (marker.__isOnTrip !== d.isOnTrip && marker.__pin) {
-          marker.__pin.background = pinColor;
-          marker.__isOnTrip = d.isOnTrip;
-        }
-      }
-    }
-
-    for (const [id, marker] of markersRef.current.entries()) {
-      if (!seenIds.has(id)) {
-        marker.map = null;
-        markersRef.current.delete(id);
-        if (selectedId === id) setSelectedId(null);
-      }
-    }
-  }, [filteredDrivers, ready, AdvancedMarkerElement, PinElement, selectedId]);
+  useDriverMarkers(selectedId ? null : mapInstance, filteredDrivers, {
+    selectedId,
+    onDriverClick: focusDriver,
+  });
 
   useEffect(() => {
-    if (!ready || !mapInstanceRef.current || filteredDrivers.length === 0) return;
+    if (selectedId || !ready || !mapInstanceRef.current || filteredDrivers.length === 0) return;
     const c = mapInstanceRef.current.getCenter();
     const isDefault =
       Math.abs(c.lat() - DEFAULT_MAP_CENTER.lat) < 0.001 &&
@@ -221,15 +257,7 @@ const LiveDriverMap = () => {
     if (isDefault) {
       mapInstanceRef.current.panTo({ lat: filteredDrivers[0].lat, lng: filteredDrivers[0].lng });
     }
-  }, [filteredDrivers, ready]);
-
-  const focusDriver = (driver) => {
-    setSelectedId(driver.driverId);
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.panTo({ lat: driver.lat, lng: driver.lng });
-      mapInstanceRef.current.setZoom(15);
-    }
-  };
+  }, [filteredDrivers, ready, selectedId]);
 
   const onlineCount = scopedDrivers.length;
   const onTripCount = scopedDrivers.filter((d) => d.isOnTrip).length;
@@ -240,8 +268,8 @@ const LiveDriverMap = () => {
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Live driver map</h1>
         <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-          Positions update in real time from Firebase. Driver names and trip details load once on
-          page open.
+          Positions update in real time from Firebase (same feed as customer tracking). Select a
+          driver to follow their live pin and see the active ride.
         </p>
       </div>
 
@@ -305,28 +333,52 @@ const LiveDriverMap = () => {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 min-h-[480px]">
-          <div ref={mapRef} className="w-full h-[480px] lg:h-[640px]" aria-label="Live driver map" />
-          {!ready && !error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-50/90 z-20">
-              <Loader2 className="w-7 h-7 text-primary animate-spin" />
-              <p className="text-sm text-slate-600">Loading map…</p>
-            </div>
-          )}
-          {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-rose-50 p-4 text-center z-20">
-              <MapPin className="w-8 h-8 text-rose-400" />
-              <p className="text-sm font-medium text-rose-800">{error}</p>
-            </div>
+          {/* Keep fleet map mounted so Google Map instance survives selection toggles. */}
+          <div className={selectedDriver ? 'hidden' : 'relative'}>
+            <div ref={mapRef} className="w-full h-[480px] lg:h-[640px]" aria-label="Live driver map" />
+            {!ready && !error && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-50/90 z-20">
+                <Loader2 className="w-7 h-7 text-primary animate-spin" />
+                <p className="text-sm text-slate-600">Loading map…</p>
+              </div>
+            )}
+            {error && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-rose-50 p-4 text-center z-20">
+                <MapPin className="w-8 h-8 text-rose-400" />
+                <p className="text-sm font-medium text-rose-800">{error}</p>
+              </div>
+            )}
+          </div>
+
+          {selectedDriver && selectedLivePoint && (
+            <TripTrackingMap
+              key={selectedDriver.driverId}
+              driver={selectedLivePoint}
+              pickup={selectedPickupPoint}
+              dropoff={selectedDropoffPoint}
+              height={640}
+              className="!rounded-none h-[480px] lg:h-[640px]"
+              showRoute={Boolean(selectedPickupPoint)}
+              followDriver
+              emphasis="driver"
+              bookingStatus={selectedDriver.activeTrip?.status || null}
+            />
           )}
         </div>
 
         <div className="space-y-4">
           {selectedDriver && (
-            <SelectedDriverCard driver={selectedDriver} onFocus={() => focusDriver(selectedDriver)} />
+            <SelectedDriverCard
+              driver={selectedDriver}
+              nowMs={nowMs}
+              onFocus={() => focusDriver(selectedDriver)}
+              onClear={clearSelection}
+            />
           )}
           <DriverSidePanel
             drivers={filteredDrivers}
             selectedId={selectedId}
+            nowMs={nowMs}
             onSelect={focusDriver}
           />
         </div>
@@ -351,8 +403,11 @@ const StatCard = ({ icon: Icon, label, value, tone = 'muted' }) => (
   </div>
 );
 
-const SelectedDriverCard = ({ driver, onFocus }) => {
+const SelectedDriverCard = ({ driver, nowMs, onFocus, onClear }) => {
   const trip = driver.activeTrip;
+  const serviceLabel = trip?.serviceType
+    ? SERVICE_TYPE_LABELS[trip.serviceType] || trip.serviceType
+    : null;
 
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
@@ -372,14 +427,24 @@ const SelectedDriverCard = ({ driver, onFocus }) => {
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onFocus}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-        >
-          <Navigation className="w-3 h-3" />
-          Center
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={onFocus}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Navigation className="w-3 h-3" />
+            Follow
+          </button>
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Clear selection"
+            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -388,8 +453,16 @@ const SelectedDriverCard = ({ driver, onFocus }) => {
           <p className="font-medium text-slate-800 truncate">{driver.zoneName || 'Outside zones'}</p>
         </div>
         <div className="rounded-lg bg-white/80 px-2 py-1.5 border border-slate-100">
-          <p className="text-slate-500">Updated</p>
-          <p className="font-medium text-slate-800">{relativeTime(driver.updatedAt)}</p>
+          <p className="text-slate-500">Location updated</p>
+          <p className="font-medium text-slate-800">{relativeTime(driver.updatedAt, nowMs)}</p>
+        </div>
+        <div className="rounded-lg bg-white/80 px-2 py-1.5 border border-slate-100 col-span-2">
+          <p className="text-slate-500">Coordinates</p>
+          <p className="font-medium text-slate-800 font-mono text-[11px]">
+            {driver.lat.toFixed(5)}, {driver.lng.toFixed(5)}
+            {typeof driver.heading === 'number' ? ` · ${Math.round(driver.heading)}°` : ''}
+            {typeof driver.speed === 'number' ? ` · ${Math.round(driver.speed)} m/s` : ''}
+          </p>
         </div>
       </div>
 
@@ -404,8 +477,14 @@ const SelectedDriverCard = ({ driver, onFocus }) => {
               {TRIP_STATUS_LABELS[trip.status] || trip.status}
             </span>
           </p>
+          {serviceLabel && (
+            <p className="text-xs text-slate-600">Service: {serviceLabel}</p>
+          )}
           {trip.customerName && (
-            <p className="text-xs text-slate-600">Customer: {trip.customerName}</p>
+            <p className="text-xs text-slate-600">
+              Customer: {trip.customerName}
+              {trip.customerPhone ? ` · ${trip.customerPhone}` : ''}
+            </p>
           )}
           {trip.pickup && (
             <p className="text-xs text-slate-600">
@@ -432,7 +511,7 @@ const SelectedDriverCard = ({ driver, onFocus }) => {
   );
 };
 
-const DriverSidePanel = ({ drivers, selectedId, onSelect }) => (
+const DriverSidePanel = ({ drivers, selectedId, nowMs, onSelect }) => (
   <div className="rounded-xl border border-slate-200 bg-white max-h-[420px] overflow-y-auto custom-scrollbar">
     <div className="px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -472,7 +551,7 @@ const DriverSidePanel = ({ drivers, selectedId, onSelect }) => (
                   >
                     {d.isOnTrip ? 'On trip' : 'Available'}
                   </span>
-                  <p className="text-[10px] text-slate-400 mt-1">{relativeTime(d.updatedAt)}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{relativeTime(d.updatedAt, nowMs)}</p>
                 </div>
               </div>
             </button>

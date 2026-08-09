@@ -55,6 +55,14 @@ function placeLabel(place) {
   return parts.join(', ') || null;
 }
 
+function placeCoords(place) {
+  const c = place?.location?.coordinates;
+  if (!Array.isArray(c) || c.length !== 2) return null;
+  const [lng, lat] = c;
+  if (!isFiniteNum(lat) || !isFiniteNum(lng)) return null;
+  return { lat, lng };
+}
+
 function serializeActiveTrip(booking) {
   if (!booking) return null;
   return {
@@ -63,7 +71,10 @@ function serializeActiveTrip(booking) {
     status: booking.status,
     serviceType: booking.serviceType || null,
     pickup: placeLabel(booking.pickup),
-    dropoff: placeLabel(booking.dropoff),
+    dropoff:
+      placeLabel(booking.dropoff) || booking.outstation?.destinationAddress || null,
+    pickupCoords: placeCoords(booking.pickup),
+    dropoffCoords: placeCoords(booking.dropoff),
     customerName: booking.userId?.name || null,
     customerPhone: booking.userId?.phone_no || null,
   };
@@ -81,7 +92,7 @@ async function loadActiveTripForDriver(driverId) {
     driverId,
     status: { $in: ACTIVE_BOOKING_STATUSES },
   })
-    .select('_id bookingNumber status serviceType pickup dropoff userId')
+    .select('_id bookingNumber status serviceType pickup dropoff outstation userId')
     .populate('userId', 'name phone_no')
     .sort({ updatedAt: -1 })
     .lean();
@@ -288,7 +299,7 @@ export async function listLiveDriverMapMetadata() {
         driverId: { $in: onTripIds },
         status: { $in: ACTIVE_BOOKING_STATUSES },
       })
-        .select('_id driverId bookingNumber status serviceType pickup dropoff userId')
+        .select('_id driverId bookingNumber status serviceType pickup dropoff outstation userId')
         .populate('userId', 'name phone_no')
         .lean()
     : [];
