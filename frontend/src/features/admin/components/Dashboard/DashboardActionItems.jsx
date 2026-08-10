@@ -103,26 +103,26 @@ const DashboardActionItems = ({ items = {} }) => (
           <Link
             key={item.key}
             to={item.href}
-            className={`group flex items-center gap-3 rounded-2xl border p-4 transition-shadow hover:shadow-md ${item.bg} ${item.border} ${
+            className={`group flex items-center gap-2.5 sm:gap-3 rounded-2xl border p-3 sm:p-4 transition-shadow hover:shadow-md ${item.bg} ${item.border} ${
               item.highlight && count > 0 ? 'ring-2 ring-rose-200' : ''
             }`}
           >
             <div
-              className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-white/80`}
+              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 bg-white/80`}
             >
-              <Icon className={`w-5 h-5 ${item.tone}`} />
+              <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${item.tone}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2">
-                <span className={`text-2xl font-bold ${item.tone}`}>{count}</span>
+              <div className="flex items-baseline gap-1.5 sm:gap-2">
+                <span className={`text-xl sm:text-2xl font-bold ${item.tone}`}>{count}</span>
                 {subCount != null && subCount > 0 && (
-                  <span className="text-[10px] font-medium text-slate-500">
+                  <span className="text-[10px] font-medium text-slate-500 truncate">
                     ({subCount} {item.subLabel})
                   </span>
                 )}
               </div>
-              <p className="text-sm font-semibold text-slate-800 truncate">{item.label}</p>
-              <p className="text-[11px] text-slate-500 truncate">{item.description}</p>
+              <p className="text-xs sm:text-sm font-semibold text-slate-800 truncate">{item.label}</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 truncate">{item.description}</p>
             </div>
             <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 shrink-0" />
           </Link>

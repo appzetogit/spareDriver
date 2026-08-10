@@ -59,13 +59,32 @@ const ManageUsers = () => {
       {
         key: 'name',
         label: 'User',
-        width: '34%',
+        unclamp: true,
         render: (val, row) => (
-          <div className="flex items-center gap-3 py-1">
-            <Avatar name={val} size="sm" src={row.profilePicture} />
-            <div>
-              <p className="font-semibold text-sm text-slate-800">{val}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{row.email}</p>
+          <div className="flex items-center gap-1.5 sm:gap-3 py-0 min-w-0">
+            <Avatar name={val} size="sm" src={row.profilePicture} className="shrink-0 scale-75 sm:scale-100 origin-left" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1 min-w-0">
+                <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate">{val || '—'}</p>
+                <span
+                  className={`sm:hidden shrink-0 text-[8px] font-bold px-1 py-0.2 rounded-full ${
+                    row.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                  }`}
+                >
+                  {row.isActive ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[8px] sm:text-xs text-slate-500 truncate mt-0.5">
+                <span className="truncate text-[8px] sm:text-xs text-slate-500 max-w-[110px] sm:max-w-none">{row.email || row.phone_no || '—'}</span>
+                <span className="sm:hidden shrink-0 text-slate-300">·</span>
+                <span
+                  className={`sm:hidden shrink-0 px-1 rounded text-[8px] font-semibold ${
+                    row.carsCount > 0 ? 'bg-primary/10 text-primary-dark' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {row.carsCount} {row.carsCount === 1 ? 'car' : 'cars'}
+                </span>
+              </div>
             </div>
           </div>
         ),
@@ -73,13 +92,13 @@ const ManageUsers = () => {
       {
         key: 'phone_no',
         label: 'Phone',
-        width: '20%',
+        className: 'hidden sm:table-cell',
         render: (val) => <span className="text-sm text-slate-600">{val || '—'}</span>,
       },
       {
         key: 'carsCount',
         label: 'Vehicles',
-        width: '16%',
+        className: 'hidden sm:table-cell',
         render: (val) => (
           <span
             className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
@@ -93,7 +112,7 @@ const ManageUsers = () => {
       {
         key: 'isActive',
         label: 'Status',
-        width: '14%',
+        className: 'hidden sm:table-cell',
         render: (val) => (
           <span
             className={`text-xs font-semibold ${val ? 'text-emerald-600' : 'text-rose-600'}`}
@@ -105,7 +124,6 @@ const ManageUsers = () => {
       {
         key: 'createdAt',
         label: 'Joined',
-        width: '14%',
         className: 'hidden md:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
@@ -115,8 +133,10 @@ const ManageUsers = () => {
       },
       {
         key: 'actions',
-        label: 'Actions',
-        width: '80px',
+        label: <span className="hidden sm:inline">Actions</span>,
+        compact: true,
+        unclamp: true,
+        width: '40px',
         align: 'right',
         render: (_, row) => (
           <div className="flex items-center justify-end w-full" data-row-action onClick={(e) => e.stopPropagation()}>
@@ -137,7 +157,7 @@ const ManageUsers = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up">
+    <div className="min-h-screen bg-slate-50 space-y-3.5 sm:space-y-6 animate-fade-in-up pb-8">
       <UserFilters
         search={search}
         onSearchChange={(val) => {
@@ -156,6 +176,7 @@ const ManageUsers = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={users}
         loading={loading}

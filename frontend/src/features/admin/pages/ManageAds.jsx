@@ -125,39 +125,39 @@ const ManageAds = () => {
   };
 
   return (
-    <div className="space-y-5 animate-fade-in-up pb-10">
-      <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl p-5 shadow-sm flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-            <Megaphone className="w-5 h-5" />
+    <div className="space-y-3.5 sm:space-y-5 animate-fade-in-up pb-10">
+      <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
+        <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+            <Megaphone className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold">Manage Ads</h1>
-            <p className="text-[12px] text-white/80 mt-0.5 leading-snug">
+            <h1 className="text-base sm:text-lg font-bold">Manage Ads</h1>
+            <p className="text-[11px] sm:text-[12px] text-white/80 mt-0.5 leading-snug">
               Upload promotional images or short videos with optional
               click-through links. Active ads appear on the user home
               screen.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
           <button
             type="button"
             onClick={fetchAds}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/15 disabled:opacity-60"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/15 disabled:opacity-60"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <Button size="sm" icon={Plus} onClick={handleNew}>
+          <Button size="sm" icon={Plus} onClick={handleNew} className="flex-1 sm:flex-initial">
             New ad
           </Button>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-sm">
+        <div className="p-3.5 sm:p-4 bg-rose-50 border border-rose-100 rounded-xl sm:rounded-2xl text-rose-600 text-xs sm:text-sm">
           {error}
         </div>
       )}
@@ -167,12 +167,12 @@ const ManageAds = () => {
           <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
         </Card>
       ) : sortedAds.length === 0 ? (
-        <Card className="py-16 text-center">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
-            <Megaphone className="w-7 h-7" />
+        <Card className="py-12 sm:py-16 text-center p-4">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+            <Megaphone className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <p className="text-sm font-semibold text-slate-700">No ads yet</p>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+          <p className="text-xs sm:text-sm font-semibold text-slate-700">No ads yet</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-1 max-w-sm mx-auto">
             Create your first ad — upload an image or short video and
             optionally attach a link. Users will see it on the home screen.
           </p>
@@ -181,7 +181,7 @@ const ManageAds = () => {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {sortedAds.map((ad) => (
             <AdRowCard
               key={ad._id}
@@ -224,68 +224,153 @@ const ManageAds = () => {
 function AdRowCard({ ad, onEdit, onDelete }) {
   const isVideo = ad.mediaType === 'video';
   return (
-    <Card className="!p-0 overflow-hidden flex flex-col">
-      <div className="relative aspect-[16/9] bg-slate-900">
-        {isVideo ? (
-          <video
-            src={ad.mediaUrl}
-            className="w-full h-full object-cover"
-            muted
-            playsInline
-            loop
-            autoPlay
+    <Card className="!p-0 overflow-hidden flex flex-col sm:flex-col">
+      {/* Mobile Card Layout (< sm) */}
+      <div className="sm:hidden flex items-center p-2.5 gap-3 min-w-0">
+        <div className="relative w-24 h-16 rounded-lg overflow-hidden bg-slate-900 shrink-0">
+          {isVideo ? (
+            <video
+              src={ad.mediaUrl}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              loop
+              autoPlay
+            />
+          ) : (
+            <img
+              src={ad.mediaUrl}
+              alt={ad.title || 'Ad creative'}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          )}
+          <span
+            className={`absolute bottom-1 left-1 px-1 py-0.2 rounded text-[8px] font-bold ${
+              isVideo ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'
+            }`}
+          >
+            {isVideo ? 'Vid' : 'Img'}
+          </span>
+          <span
+            className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+              ad.isActive ? 'bg-emerald-400 ring-1 ring-white' : 'bg-slate-400'
+            }`}
           />
-        ) : (
-          <img
-            src={ad.mediaUrl}
-            alt={ad.title || 'Ad creative'}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-        )}
-        <span
-          className={`absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-            isVideo ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
-          }`}
-        >
-          {isVideo ? <Video className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
-          {isVideo ? 'Video' : 'Image'}
-        </span>
-        <span
-          className={`absolute top-2 right-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-            ad.isActive ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-white'
-          }`}
-        >
-          {ad.isActive ? 'Active' : 'Hidden'}
-        </span>
-      </div>
-      <div className="p-4 flex-1 flex flex-col gap-3">
+        </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-slate-900 truncate">
-            {ad.title || <span className="text-slate-400 italic">Untitled</span>}
-          </p>
+          <div className="flex items-center justify-between gap-1.5">
+            <p className="text-xs font-bold text-slate-900 truncate">
+              {ad.title || <span className="text-slate-400 italic">Untitled</span>}
+            </p>
+            <span
+              className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
+                ad.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {ad.isActive ? 'Active' : 'Hidden'}
+            </span>
+          </div>
           {ad.linkUrl ? (
             <a
               href={ad.linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline mt-0.5 truncate max-w-full"
+              className="inline-flex items-center gap-0.5 text-[10px] text-indigo-600 hover:underline mt-0.5 truncate max-w-full"
             >
-              <ExternalLink className="w-3 h-3" />
+              <ExternalLink className="w-2.5 h-2.5 shrink-0" />
               <span className="truncate">{ad.linkUrl}</span>
             </a>
           ) : (
-            <p className="text-[11px] text-slate-400 mt-0.5">No click-through link</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">No link</p>
           )}
-          <p className="text-[10px] text-slate-400 mt-1">Sort order: {ad.sortOrder || 0}</p>
+          <div className="flex items-center justify-between gap-2 mt-1.5">
+            <span className="text-[9px] text-slate-400">Order: {ad.sortOrder || 0}</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md border border-slate-200 bg-white text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Pencil className="w-2.5 h-2.5" />
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" icon={Pencil} onClick={onEdit}>
-            Edit
-          </Button>
-          <Button size="sm" variant="ghost" icon={Trash2} onClick={onDelete}>
-            Delete
-          </Button>
+      </div>
+
+      {/* Desktop Card Layout (sm: and above) */}
+      <div className="hidden sm:block">
+        <div className="relative aspect-[16/9] bg-slate-900">
+          {isVideo ? (
+            <video
+              src={ad.mediaUrl}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              loop
+              autoPlay
+            />
+          ) : (
+            <img
+              src={ad.mediaUrl}
+              alt={ad.title || 'Ad creative'}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          )}
+          <span
+            className={`absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+              isVideo ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+            }`}
+          >
+            {isVideo ? <Video className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
+            {isVideo ? 'Video' : 'Image'}
+          </span>
+          <span
+            className={`absolute top-2 right-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+              ad.isActive ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-white'
+            }`}
+          >
+            {ad.isActive ? 'Active' : 'Hidden'}
+          </span>
+        </div>
+        <div className="p-4 flex-1 flex flex-col gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-900 truncate">
+              {ad.title || <span className="text-slate-400 italic">Untitled</span>}
+            </p>
+            {ad.linkUrl ? (
+              <a
+                href={ad.linkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline mt-0.5 truncate max-w-full"
+              >
+                <ExternalLink className="w-3 h-3 shrink-0" />
+                <span className="truncate">{ad.linkUrl}</span>
+              </a>
+            ) : (
+              <p className="text-[11px] text-slate-400 mt-0.5">No click-through link</p>
+            )}
+            <p className="text-[10px] text-slate-400 mt-1">Sort order: {ad.sortOrder || 0}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" icon={Pencil} onClick={onEdit} className="flex-1 sm:flex-initial">
+              Edit
+            </Button>
+            <Button size="sm" variant="ghost" icon={Trash2} onClick={onDelete} className="flex-1 sm:flex-initial">
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
     </Card>

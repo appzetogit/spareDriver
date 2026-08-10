@@ -27,7 +27,7 @@ const DataTable = ({
   showToolbar = true,
   embedded = false,
   bodyMaxHeight = '28rem',
-  minWidth = 'min-w-[960px]',
+  minWidth = 'min-w-full lg:min-w-[960px]',
 }) => {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
@@ -104,13 +104,13 @@ const DataTable = ({
         }
       >
         <div className="overflow-auto" style={{ maxHeight: bodyMaxHeight }}>
-          <table className={`w-full ${minWidth} table-fixed`}>
+          <table className={`w-full ${minWidth} table-auto md:table-fixed`}>
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-100">
               <tr>
                 {columns.map((col) => {
                   const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
                   const justifyClass = col.align === 'center' ? 'justify-center' : col.align === 'right' ? 'justify-end' : 'justify-start';
-                  const padClass = col.compact ? 'px-2' : 'px-4';
+                  const padClass = col.compact ? 'px-1 sm:px-2' : 'px-1.5 sm:px-4';
                   return (
                     <th
                       key={col.key}
@@ -174,7 +174,7 @@ const DataTable = ({
                   >
                     {columns.map((col) => {
                       const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
-                      const padClass = col.compact ? 'px-2' : 'px-4';
+                      const padClass = col.compact ? 'px-1 sm:px-2' : 'px-1.5 sm:px-4';
                       const cell = col.render ? (
                         col.render(row[col.key], row)
                       ) : (

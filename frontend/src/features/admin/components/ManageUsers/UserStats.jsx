@@ -7,16 +7,16 @@ const UserStats = ({ total, withCars }) => {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
       {stats.map((stat) => (
-        <div key={stat.label} className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm">
+        <div key={stat.label} className="bg-white rounded-xl sm:rounded-3xl border border-slate-200 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{stat.label}</p>
-              <h2 className={`text-3xl font-bold mt-2 ${stat.iconColor}`}>{stat.value}</h2>
+              <p className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-semibold">{stat.label}</p>
+              <h2 className={`text-xl sm:text-3xl font-bold mt-1 sm:mt-2 ${stat.iconColor}`}>{stat.value}</h2>
             </div>
-            <div className={`w-12 h-12 rounded-2xl ${stat.color} flex items-center justify-center`}>
-              <stat.icon className={`w-6 h-6 ${stat.iconColor}`} />
+            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${stat.color} flex items-center justify-center shrink-0`}>
+              <stat.icon className={`w-4 h-4 sm:w-6 sm:h-6 ${stat.iconColor}`} />
             </div>
           </div>
         </div>

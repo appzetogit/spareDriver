@@ -125,12 +125,20 @@ const AdminDashboard = () => {
       {
         key: 'bookingNumber',
         label: 'Booking',
-        render: (val) => <span className="font-mono text-xs">{val || '—'}</span>,
+        render: (val) => (
+          <span className="font-mono text-[10px] sm:text-xs font-semibold block truncate">
+            {val || '—'}
+          </span>
+        ),
       },
       {
         key: 'serviceType',
         label: 'Service',
-        render: (val) => <span className="capitalize">{val?.replace(/_/g, ' ') || '—'}</span>,
+        render: (val) => (
+          <span className="capitalize text-xs sm:text-sm block truncate">
+            {val?.replace(/_/g, ' ') || '—'}
+          </span>
+        ),
       },
       {
         key: 'status',
@@ -141,7 +149,7 @@ const AdminDashboard = () => {
           return (
             <Badge
               variant={BOOKING_STATUS_VARIANTS[statusVal] || 'default'}
-              className="capitalize"
+              className="capitalize text-[9px] sm:text-xs px-1.5 py-0.5 sm:px-2.5 sm:py-1 whitespace-nowrap"
             >
               {label}
             </Badge>
@@ -151,7 +159,12 @@ const AdminDashboard = () => {
       {
         key: 'fare',
         label: 'Fare',
-        render: (val) => <span className="text-sm font-medium">{formatCurrency(val)}</span>,
+        align: 'right',
+        render: (val) => (
+          <span className="text-xs sm:text-sm font-semibold whitespace-nowrap">
+            {formatCurrency(val)}
+          </span>
+        ),
       },
     ],
     [],
@@ -191,10 +204,10 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in-up">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-text-muted">
+          <p className="text-xs sm:text-sm text-text-muted">
             Platform snapshot — one API call, live counts from MongoDB
           </p>
         </div>
@@ -202,9 +215,9 @@ const AdminDashboard = () => {
           type="button"
           onClick={() => refetch()}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+          className="self-start sm:self-auto inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition-colors"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
@@ -215,7 +228,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatsCard
           icon={Users}
           label="Total Users"

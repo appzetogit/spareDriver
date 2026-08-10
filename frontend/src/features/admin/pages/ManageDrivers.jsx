@@ -122,15 +122,16 @@ const ManageDrivers = () => {
       {
         key: 'name',
         label: 'Driver',
-        width: canAssign ? '24%' : '28%',
+        width: '52%',
+        unclamp: true,
         render: (val, row) => {
           const selfie = row.documents?.find((d) => d.type === 'selfie')?.fileUrl;
           return (
-            <div className="flex items-center gap-4 py-1">
-              <Avatar name={val} size="sm" src={selfie} className="ring-2 ring-white shadow-md" />
-              <div>
-                <p className="font-semibold text-sm text-slate-800">{val}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{row.phone}</p>
+            <div className="flex items-center gap-1.5 sm:gap-3 py-1 min-w-0">
+              <Avatar name={val} size="sm" src={selfie} className="ring-1 sm:ring-2 ring-white shadow-sm shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate max-w-[120px] xs:max-w-[170px] sm:max-w-none">{val}</p>
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate max-w-[120px] xs:max-w-[170px] sm:max-w-none">{row.phone}</p>
               </div>
             </div>
           );
@@ -139,20 +140,19 @@ const ManageDrivers = () => {
       {
         key: 'approvalStatus',
         label: 'Status',
-        width: '12%',
+        width: '33%',
+        unclamp: true,
         render: (val) => <StatusBadge status={val} />,
       },
       {
         key: 'reviewTask',
         label: 'Assigned to',
-        width: '14%',
         className: 'hidden md:table-cell',
         render: (_val, row) => <TaskAssigneeBadge task={row.reviewTask} compact />,
       },
       {
         key: 'experienceYears',
         label: 'Experience',
-        width: '12%',
         className: 'hidden md:table-cell',
         render: (val) => (
           <span className="text-sm font-medium text-slate-700">
@@ -163,14 +163,12 @@ const ManageDrivers = () => {
       {
         key: 'isOnline',
         label: 'Activity',
-        width: '12%',
         className: 'hidden lg:table-cell',
         render: (val, row) => <ActivityCell online={val} onTrip={row.isOnTrip} />,
       },
       {
         key: 'carTypeExperience',
         label: 'Vehicle types',
-        width: '22%',
         className: 'hidden xl:table-cell',
         render: (types) => (
           <div className="flex flex-wrap gap-1.5">
@@ -196,7 +194,6 @@ const ManageDrivers = () => {
       {
         key: 'createdAt',
         label: 'Joined',
-        width: '10%',
         className: 'hidden lg:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
@@ -206,8 +203,8 @@ const ManageDrivers = () => {
       },
       {
         key: 'actions',
-        label: 'Actions',
-        width: '72px',
+        label: <span className="hidden sm:inline">Actions</span>,
+        compact: true,
         unclamp: true,
         align: 'right',
         sortable: false,
@@ -238,7 +235,7 @@ const ManageDrivers = () => {
   const stats = useMemo(
     () => ({
       total: pagination.total,
-  pending: drivers.filter((d) => d.approvalStatus === 'under_review').length,
+      pending: drivers.filter((d) => d.approvalStatus === 'under_review').length,
       approved: drivers.filter((d) => d.approvalStatus === 'approved').length,
       rejected: drivers.filter((d) => d.approvalStatus === 'rejected').length,
       suspended: drivers.filter((d) => d.approvalStatus === 'suspended').length,
@@ -301,7 +298,7 @@ const ManageDrivers = () => {
         onRowClick={(row) => navigate(`/admin/drivers/${row._id}/profile`)}
         entityLabel="drivers"
         emptyMessage="No drivers found"
-        minWidth="min-w-[520px] md:min-w-[800px] xl:min-w-[1050px]"
+        minWidth="min-w-full md:min-w-[800px] xl:min-w-[1050px]"
       />
     </div>
   );

@@ -135,16 +135,85 @@ const ManageSosAlerts = () => {
       {
         key: 'passengerName',
         label: 'Passenger',
-        render: (val) => <span className="font-medium">{val || '—'}</span>,
+        unclamp: true,
+        render: (val, row) => (
+          <div className="space-y-1 min-w-0 py-0.5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="font-semibold text-xs sm:text-sm text-slate-900">{val || '—'}</span>
+              {row.passengerPhone && (
+                <span className="text-[11px] text-slate-500 flex items-center gap-0.5 sm:hidden">
+                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                  {row.passengerPhone}
+                </span>
+              )}
+            </div>
+
+            {/* Mobile-only compact details stack */}
+            <div className="sm:hidden space-y-1 pt-1 text-[11px] text-slate-600">
+              <p className="truncate">
+                <span className="text-slate-400">Driver:</span>{' '}
+                <span className="font-medium text-slate-800">{row.driverName || '—'}</span>
+                {row.driverPhone ? <span className="text-slate-500"> ({row.driverPhone})</span> : ''}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {row.vehicleNumber && (
+                  <span className="font-mono bg-slate-100 text-slate-700 px-1 py-0.5 rounded text-[10px]">
+                    {row.vehicleNumber}
+                  </span>
+                )}
+                {(row.bookingNumber || row.tripId) && (
+                  <span className="font-mono text-slate-500 text-[10px]">
+                    #{row.bookingNumber || String(row.tripId).slice(-8)}
+                  </span>
+                )}
+                {row.currentLocation && (
+                  <a
+                    href={`https://maps.google.com/?q=${row.currentLocation.lat},${row.currentLocation.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-0.5 text-blue-600 font-medium hover:underline text-[10px]"
+                  >
+                    <MapPin className="w-3 h-3" />
+                    Map
+                  </a>
+                )}
+                {row.createdAt && (
+                  <span className="text-[10px] text-slate-400">
+                    · {new Date(row.createdAt).toLocaleString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                )}
+              </div>
+              {(row.assignedTo || canAssign) && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <AssigneeBadge assignedTo={row.assignedTo} compact />
+                  {canAssign && row.status === 'ACTIVE' && (
+                    <AssignToTeamMemberControl
+                      compact
+                      disabled={assigningId === row._id}
+                      onAssign={(assigneeId) => handleAssign(row, assigneeId)}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ),
       },
       {
         key: 'driverName',
         label: 'Driver',
+        className: 'hidden sm:table-cell',
         render: (val) => val || '—',
       },
       {
         key: 'vehicleNumber',
         label: 'Vehicle',
+        className: 'hidden md:table-cell',
         render: (val) => (
           <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{val || '—'}</span>
         ),
@@ -152,6 +221,7 @@ const ManageSosAlerts = () => {
       {
         key: 'tripId',
         label: 'Trip ID',
+        className: 'hidden lg:table-cell',
         render: (_val, row) => (
           <span className="font-mono text-xs">{row.bookingNumber || String(row.tripId).slice(-8)}</span>
         ),
@@ -159,6 +229,7 @@ const ManageSosAlerts = () => {
       {
         key: 'assignedTo',
         label: 'Assignee',
+        className: 'hidden md:table-cell',
         render: (_val, row) => (
           <div className="space-y-2 min-w-[160px]">
             <AssigneeBadge assignedTo={row.assignedTo} compact />
@@ -175,6 +246,7 @@ const ManageSosAlerts = () => {
       {
         key: 'currentLocation',
         label: 'Location',
+        className: 'hidden sm:table-cell',
         render: (loc) =>
           loc ? (
             <a
@@ -193,6 +265,7 @@ const ManageSosAlerts = () => {
       {
         key: 'createdAt',
         label: 'Created',
+        className: 'hidden md:table-cell',
         render: (val) =>
           val
             ? new Date(val).toLocaleString([], {
@@ -206,13 +279,16 @@ const ManageSosAlerts = () => {
       {
         key: 'status',
         label: 'Status',
+        unclamp: true,
         render: (val) => <Badge variant={STATUS_BADGE[val] || 'default'}>{val}</Badge>,
       },
       {
         key: 'actions',
-        label: 'Actions',
+        label: <span className="hidden sm:inline">Actions</span>,
+        compact: true,
         sortable: false,
         unclamp: true,
+        align: 'right',
         render: (_val, row) => {
           const actionItems = [
             {
@@ -259,52 +335,54 @@ const ManageSosAlerts = () => {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-3.5 sm:space-y-6 animate-fade-in-up pb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">SOS Management</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-3xl font-bold text-gray-900">SOS Management</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
             Monitor emergency alerts and resolve incidents in real time.
           </p>
         </div>
       </div>
 
-      <Card padding="p-4" className="bg-white border border-slate-100 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-3 w-full">
+      <Card padding="p-2.5 sm:p-4" className="bg-white border border-slate-100 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by passenger, driver, vehicle or booking..."
+              placeholder="Search passenger, driver, vehicle..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full h-10 pl-11 pr-4 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all"
+              className="w-full h-10 pl-10 pr-3 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all"
             />
           </div>
 
-          <div className="w-full sm:w-56">
-            <Select
-              value={statusFilter}
-              onChange={handleStatusChange}
-              placeholder="All States/Statuses"
-              options={[
-                { value: '', label: 'All Statuses' },
-                { value: 'ACTIVE', label: 'Active' },
-                { value: 'RESOLVED', label: 'Resolved' },
-              ]}
-              icon={Filter}
-            />
-          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+            <div className="flex-1 min-w-0 sm:w-56">
+              <Select
+                value={statusFilter}
+                onChange={handleStatusChange}
+                placeholder="All Statuses"
+                options={[
+                  { value: '', label: 'All Statuses' },
+                  { value: 'ACTIVE', label: 'Active' },
+                  { value: 'RESOLVED', label: 'Resolved' },
+                ]}
+                icon={Filter}
+              />
+            </div>
 
-          <button
-            type="button"
-            onClick={refetch}
-            disabled={loading}
-            className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-2 shrink-0 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+            <button
+              type="button"
+              onClick={refetch}
+              disabled={loading}
+              className="h-10 px-2.5 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-1.5 shrink-0 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
         </div>
       </Card>
 

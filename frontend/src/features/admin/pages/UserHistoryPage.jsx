@@ -149,28 +149,47 @@ const UserHistoryPage = () => {
       {
         key: 'booking',
         label: 'Booking',
+        unclamp: true,
         render: (_, row) => (
-          <div>
-            <p className="font-mono text-xs font-semibold">{row.bookingNumber || row._id?.slice(-8)}</p>
-            <p className="text-[10px] text-slate-500 capitalize">{row.serviceType} · {row.bookingType || 'instant'}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <p className="font-mono text-xs font-semibold text-slate-900 truncate">
+                {row.bookingNumber || row._id?.slice(-8)}
+              </p>
+              <span className="sm:hidden shrink-0">
+                <Badge variant={TRIP_STATUS_VARIANT[row.status] || 'secondary'}>
+                  {row.status?.replace(/_/g, ' ')}
+                </Badge>
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-xs text-slate-500 capitalize mt-0.5 truncate">
+              {row.serviceType} · {row.bookingType || 'instant'}
+              <span className="sm:hidden">
+                {row.carId ? ` · ${formatCarLabel(row.carId)}` : ''}
+                {row.driverId?.name ? ` · ${row.driverId.name}` : ''}
+              </span>
+            </p>
           </div>
         ),
       },
       {
         key: 'car',
         label: 'Vehicle',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
+          <span className="text-xs sm:text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
         ),
       },
       {
         key: 'driver',
         label: 'Driver',
-        render: (_, row) => row.driverId?.name || '—',
+        className: 'hidden sm:table-cell',
+        render: (_, row) => <span className="text-xs sm:text-sm">{row.driverId?.name || '—'}</span>,
       },
       {
         key: 'status',
         label: 'Status',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <Badge variant={TRIP_STATUS_VARIANT[row.status] || 'secondary'}>
             {row.status?.replace(/_/g, ' ')}
@@ -180,16 +199,28 @@ const UserHistoryPage = () => {
       {
         key: 'fare',
         label: 'Fare',
+        unclamp: true,
+        align: 'right',
         render: (_, row) => {
           const fareAmount = row?.fareSnapshot?.total ?? row?.payment?.amountPaidRupees ?? row?.pricing?.totalFare ?? row?.fare?.total ?? row?.totalFare ?? (typeof row?.fare === 'number' ? row.fare : 0);
-          return formatCurrency(fareAmount);
+          return (
+            <div className="text-right shrink-0">
+              <span className="text-xs sm:text-sm font-bold text-slate-900 block">
+                {formatCurrency(fareAmount)}
+              </span>
+              <span className="sm:hidden text-[9px] text-slate-400 block mt-0.5">
+                {formatDate(row.createdAt)}
+              </span>
+            </div>
+          );
         },
       },
       {
         key: 'created',
         label: 'Created',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
+          <span className="text-[11px] sm:text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
         ),
       },
     ],
@@ -201,29 +232,45 @@ const UserHistoryPage = () => {
       {
         key: 'plan',
         label: 'Plan',
+        unclamp: true,
         render: (_, row) => (
-          <div>
-            <p className="font-medium">{row.planNameSnapshot || '—'}</p>
-            <p className="text-xs font-mono text-slate-500">{row.subscriptionNumber || '—'}</p>
-            <p className="text-xs text-slate-500">{row.zoneId?.name || '—'}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-medium text-xs sm:text-sm text-slate-900 truncate">
+                {row.planNameSnapshot || '—'}
+              </p>
+              <span className="sm:hidden text-[9px] capitalize px-1.5 py-0.2 rounded-full bg-slate-100 font-semibold text-slate-600">
+                {row.status?.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">
+              {row.subscriptionNumber ? `${row.subscriptionNumber} · ` : ''}
+              {row.zoneId?.name || '—'}
+              <span className="sm:hidden">
+                {row.carId ? ` · ${formatCarLabel(row.carId)}` : ''}
+              </span>
+            </p>
           </div>
         ),
       },
       {
         key: 'car',
         label: 'Vehicle',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
+          <span className="text-xs sm:text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
         ),
       },
       {
         key: 'driver',
         label: 'Driver',
-        render: (_, row) => row.assignedDriverId?.name || '—',
+        className: 'hidden sm:table-cell',
+        render: (_, row) => <span className="text-xs sm:text-sm">{row.assignedDriverId?.name || '—'}</span>,
       },
       {
         key: 'status',
         label: 'Status',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <div className="flex flex-col items-start gap-1">
             <Badge variant={SUB_STATUS_VARIANT[row.status] || 'secondary'}>
@@ -243,13 +290,21 @@ const UserHistoryPage = () => {
       {
         key: 'amount',
         label: 'Paid',
-        render: (_, row) => formatCurrency(row.amount),
+        unclamp: true,
+        align: 'right',
+        render: (_, row) => (
+          <div className="text-right">
+            <span className="text-xs sm:text-sm font-bold text-slate-900 block">{formatCurrency(row.amount)}</span>
+            <span className="sm:hidden text-[9px] text-slate-400 block mt-0.5">{formatDate(row.startDate)}</span>
+          </div>
+        ),
       },
       {
         key: 'period',
         label: 'Period',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-xs text-slate-600">
+          <span className="text-[11px] sm:text-xs text-slate-600">
             {formatDate(row.startDate)} – {formatDate(row.expiryDate)}
           </span>
         ),
@@ -262,33 +317,33 @@ const UserHistoryPage = () => {
   const subStats = subsData?.stats;
 
   return (
-    <div className="space-y-6 pb-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6 pb-8 animate-fade-in-up">
+      <div className="flex items-center justify-between gap-3">
         <Link
           to={`/admin/users/${userId}/profile`}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900"
+          className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           Back to profile
         </Link>
         <button
           type="button"
           onClick={handleRefreshAll}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
-          <History className="w-6 h-6 text-primary" />
+        <h1 className="text-lg sm:text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+          <History className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
           Trip & Subscription History
         </h1>
         {user && (
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             {user.name} · {user.phone_no || user.email}
           </p>
         )}
@@ -298,35 +353,35 @@ const UserHistoryPage = () => {
         <button
           type="button"
           onClick={() => setActiveTab('trips')}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+          className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition-colors ${
             activeTab === 'trips'
               ? 'border-primary text-slate-900'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
           <span className="inline-flex items-center gap-1.5">
-            <Car className="w-4 h-4" />
+            <Car className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Trips
           </span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('subscriptions')}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+          className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition-colors ${
             activeTab === 'subscriptions'
               ? 'border-primary text-slate-900'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
           <span className="inline-flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Subscriptions
           </span>
         </button>
       </div>
 
       {activeTab === 'trips' && tripStats && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
           {[
             { label: 'Total trips', value: tripStats.total },
             { label: 'Active', value: tripStats.active },
@@ -334,16 +389,16 @@ const UserHistoryPage = () => {
             { label: 'Cancelled', value: tripStats.cancelled },
             { label: 'Searching', value: tripStats.searching },
           ].map((s) => (
-            <Card key={s.label} padding="p-4">
-              <p className="text-xs text-slate-500">{s.label}</p>
-              <p className="text-xl font-extrabold text-slate-900 mt-1">{s.value}</p>
+            <Card key={s.label} padding="p-3 sm:p-4">
+              <p className="text-[10px] sm:text-xs text-slate-500">{s.label}</p>
+              <p className="text-lg sm:text-xl font-extrabold text-slate-900 mt-0.5 sm:mt-1">{s.value}</p>
             </Card>
           ))}
         </div>
       )}
 
       {activeTab === 'subscriptions' && subStats && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
           {[
             { label: 'Total', value: subStats.total },
             { label: 'Active', value: subStats.active },
@@ -351,29 +406,29 @@ const UserHistoryPage = () => {
             { label: 'Expired', value: subStats.expired },
             { label: 'Cancelled', value: subStats.cancelled },
           ].map((s) => (
-            <Card key={s.label} padding="p-4">
-              <p className="text-xs text-slate-500">{s.label}</p>
-              <p className="text-xl font-extrabold text-slate-900 mt-1">{s.value}</p>
+            <Card key={s.label} padding="p-3 sm:p-4">
+              <p className="text-[10px] sm:text-xs text-slate-500">{s.label}</p>
+              <p className="text-lg sm:text-xl font-extrabold text-slate-900 mt-0.5 sm:mt-1">{s.value}</p>
             </Card>
           ))}
         </div>
       )}
 
-      <Card padding="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-          <div className="relative md:col-span-2">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <Card padding="p-3 sm:p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="relative col-span-2">
+            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={activeTab === 'trips' ? 'Search booking number' : 'Search plan name'}
-              className="w-full h-10 pl-9 pr-3 rounded-xl border text-sm"
+              className="w-full h-8 sm:h-10 pl-8 sm:pl-9 pr-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 px-3 rounded-xl border text-sm"
+            className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
           >
             <option value="">All statuses</option>
             {activeTab === 'trips' ? (
@@ -397,7 +452,7 @@ const UserHistoryPage = () => {
             <select
               value={serviceTypeFilter}
               onChange={(e) => setServiceTypeFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border text-sm"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
             >
               <option value="">All services</option>
               <option value="hourly">Hourly</option>
@@ -408,19 +463,19 @@ const UserHistoryPage = () => {
             type="date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="h-10 px-3 rounded-xl border text-sm"
+            className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
           />
           <input
             type="date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="h-10 px-3 rounded-xl border text-sm"
+            className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
           />
           {activeTab === 'trips' && (
             <select
               value={bookingTypeFilter}
               onChange={(e) => setBookingTypeFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border text-sm"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
             >
               <option value="">All types</option>
               <option value="instant">Instant</option>
@@ -438,6 +493,7 @@ const UserHistoryPage = () => {
 
       {activeTab === 'trips' ? (
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={tripColumns}
           data={tripsData?.items ?? []}
           loading={tripsLoading}
@@ -454,6 +510,7 @@ const UserHistoryPage = () => {
         />
       ) : (
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={subscriptionColumns}
           data={subsData?.items ?? []}
           loading={subsLoading}

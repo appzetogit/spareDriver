@@ -72,13 +72,13 @@ const Select = ({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           className={`
-            w-full h-10 bg-white !bg-white border rounded-xl pr-10 text-sm text-left
-            transition-all duration-200 flex items-center gap-2
+            w-full h-10 bg-white !bg-white border rounded-xl pr-6 sm:pr-10 text-[11px] sm:text-sm text-left
+            transition-all duration-200 flex items-center gap-1 sm:gap-2
             ${disabled ? 'opacity-60 cursor-not-allowed !bg-slate-50' : ''}
             ${isOpen ? 'border-primary ring-2 ring-primary/20' : 'border-border'}
             ${error ? 'border-danger' : ''}
             ${(!selectedOption && !(value && prefilledLabel)) ? 'text-text-muted' : 'text-text'}
-            ${hasLeadingVisual ? 'pl-2.5' : 'pl-4'}
+            ${hasLeadingVisual ? 'pl-1.5 sm:pl-2.5' : 'pl-2.5 sm:pl-4'}
           `}
           style={{ backgroundColor: disabled ? undefined : '#ffffff' }}
         >
@@ -86,16 +86,16 @@ const Select = ({
             <img
               src={selectedImage}
               alt=""
-              className="w-6 h-6 rounded object-contain bg-white shrink-0"
+              className="w-5 h-5 sm:w-6 sm:h-6 rounded object-contain bg-white shrink-0"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
               }}
             />
           ) : Icon ? (
-            <Icon className="w-4 h-4 text-text-muted shrink-0" />
+            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-text-muted shrink-0" />
           ) : null}
           <span className="truncate leading-none block my-auto flex-1">{displayLabel}</span>
-          <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted shrink-0 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-text-muted shrink-0 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isOpen && (

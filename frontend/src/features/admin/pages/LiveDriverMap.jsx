@@ -264,28 +264,28 @@ const LiveDriverMap = () => {
   const visibleCount = filteredDrivers.length;
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-3.5 sm:space-y-6 animate-fade-in-up pb-8">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Live driver map</h1>
-        <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
+        <h1 className="text-xl sm:text-3xl font-bold text-slate-900">Live driver map</h1>
+        <p className="text-xs sm:text-sm text-slate-600 mt-0.5 sm:mt-1 max-w-2xl leading-relaxed">
           Positions update in real time from Firebase (same feed as customer tracking). Select a
           driver to follow their live pin and see the active ride.
         </p>
       </div>
 
       {firebaseDisabled && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs sm:text-sm text-amber-800">
           Live updates are disabled — set <code className="font-mono">VITE_FIREBASE_*</code> in{' '}
           <code className="font-mono">frontend/.env</code> to enable real-time tracking.
         </div>
       )}
       {firebaseError && !firebaseDisabled && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs sm:text-sm text-rose-800">
           Firebase subscription error: {firebaseError}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
         <StatCard icon={Users} label="Live on map" value={onlineCount} tone="success" />
         <StatCard icon={Car} label="On trip" value={onTripCount} tone="warning" />
         <StatCard
@@ -297,55 +297,57 @@ const LiveDriverMap = () => {
         <StatCard icon={Filter} label="Filtered" value={visibleCount} tone="muted" />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-        <label className="relative block">
+      <div className="flex flex-col md:flex-row md:items-center gap-1.5 sm:gap-3">
+        <label className="relative block w-full md:flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, phone, booking #, customer…"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 sm:py-2.5 pl-9 pr-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </label>
-        <select
-          value={zoneFilter}
-          onChange={(e) => setZoneFilter(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 min-w-[160px]"
-        >
-          <option value="">All zones</option>
-          {zones.map((z) => (
-            <option key={z._id} value={String(z._id)}>
-              {z.name}{z.city ? ` · ${z.city}` : ''}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 min-w-[140px]"
-        >
-          <option value={STATUS_FILTER.ALL}>All drivers</option>
-          <option value={STATUS_FILTER.AVAILABLE}>Available</option>
-          <option value={STATUS_FILTER.ON_TRIP}>On trip</option>
-        </select>
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto">
+          <select
+            value={zoneFilter}
+            onChange={(e) => setZoneFilter(e.target.value)}
+            className="flex-1 min-w-0 md:w-48 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm text-slate-700"
+          >
+            <option value="">All zones</option>
+            {zones.map((z) => (
+              <option key={z._id} value={String(z._id)}>
+                {z.name}{z.city ? ` · ${z.city}` : ''}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="flex-1 min-w-0 md:w-40 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm text-slate-700"
+          >
+            <option value={STATUS_FILTER.ALL}>All drivers</option>
+            <option value={STATUS_FILTER.AVAILABLE}>Available</option>
+            <option value={STATUS_FILTER.ON_TRIP}>On trip</option>
+          </select>
+        </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-        <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 min-h-[480px]">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-[1fr_340px]">
+        <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 min-h-[350px] sm:min-h-[480px]">
           {/* Keep fleet map mounted so Google Map instance survives selection toggles. */}
           <div className={selectedDriver ? 'hidden' : 'relative'}>
-            <div ref={mapRef} className="w-full h-[480px] lg:h-[640px]" aria-label="Live driver map" />
+            <div ref={mapRef} className="w-full h-[350px] sm:h-[480px] lg:h-[640px]" aria-label="Live driver map" />
             {!ready && !error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-50/90 z-20">
                 <Loader2 className="w-7 h-7 text-primary animate-spin" />
-                <p className="text-sm text-slate-600">Loading map…</p>
+                <p className="text-xs sm:text-sm text-slate-600">Loading map…</p>
               </div>
             )}
             {error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-rose-50 p-4 text-center z-20">
                 <MapPin className="w-8 h-8 text-rose-400" />
-                <p className="text-sm font-medium text-rose-800">{error}</p>
+                <p className="text-xs sm:text-sm font-medium text-rose-800">{error}</p>
               </div>
             )}
           </div>
@@ -357,7 +359,7 @@ const LiveDriverMap = () => {
               pickup={selectedPickupPoint}
               dropoff={selectedDropoffPoint}
               height={640}
-              className="!rounded-none h-[480px] lg:h-[640px]"
+              className="!rounded-none h-[350px] sm:h-[480px] lg:h-[640px]"
               showRoute={Boolean(selectedPickupPoint)}
               followDriver
               emphasis="driver"
@@ -366,7 +368,7 @@ const LiveDriverMap = () => {
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {selectedDriver && (
             <SelectedDriverCard
               driver={selectedDriver}
@@ -394,12 +396,12 @@ const TONE_STYLES = {
 };
 
 const StatCard = ({ icon: Icon, label, value, tone = 'muted' }) => (
-  <div className={`rounded-xl border px-3 py-2.5 ${TONE_STYLES[tone]}`}>
-    <div className="flex items-center gap-2">
-      <Icon className="w-4 h-4" />
-      <span className="text-[11px] font-medium uppercase tracking-wider">{label}</span>
+  <div className={`rounded-xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${TONE_STYLES[tone]}`}>
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+      <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wider truncate">{label}</span>
     </div>
-    <p className="text-2xl font-bold mt-1">{value}</p>
+    <p className="text-lg sm:text-2xl font-bold mt-0.5 sm:mt-1 truncate">{value}</p>
   </div>
 );
 

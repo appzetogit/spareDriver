@@ -300,11 +300,25 @@ const UserAnalyticsPage = () => {
       {
         key: 'booking',
         label: 'Booking',
+        unclamp: true,
         render: (_, row) => (
-          <div>
-            <p className="font-mono text-xs font-semibold">{row.bookingNumber || row._id?.slice(-8)}</p>
-            <p className="text-[10px] text-slate-500 capitalize">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <p className="font-mono text-xs font-semibold text-slate-900 truncate">
+                {row.bookingNumber || row._id?.slice(-8)}
+              </p>
+              <span className="sm:hidden shrink-0">
+                <Badge variant={TRIP_STATUS_VARIANT[row.status] || 'secondary'}>
+                  {row.status?.replace(/_/g, ' ')}
+                </Badge>
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-xs text-slate-500 capitalize mt-0.5 truncate">
               {row.serviceType} · {row.bookingType || 'instant'}
+              <span className="sm:hidden">
+                {row.carId ? ` · ${formatCarLabel(row.carId)}` : ''}
+                {row.driverId?.name ? ` · ${row.driverId.name}` : ''}
+              </span>
             </p>
           </div>
         ),
@@ -312,18 +326,21 @@ const UserAnalyticsPage = () => {
       {
         key: 'car',
         label: 'Vehicle',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
+          <span className="text-xs sm:text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
         ),
       },
       {
         key: 'driver',
         label: 'Driver',
-        render: (_, row) => row.driverId?.name || '—',
+        className: 'hidden sm:table-cell',
+        render: (_, row) => <span className="text-xs sm:text-sm">{row.driverId?.name || '—'}</span>,
       },
       {
         key: 'status',
         label: 'Status',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <Badge variant={TRIP_STATUS_VARIANT[row.status] || 'secondary'}>
             {row.status?.replace(/_/g, ' ')}
@@ -333,13 +350,25 @@ const UserAnalyticsPage = () => {
       {
         key: 'fare',
         label: 'Fare',
-        render: (_, row) => formatCurrency(tripFare(row)),
+        unclamp: true,
+        align: 'right',
+        render: (_, row) => (
+          <div className="text-right shrink-0">
+            <span className="text-xs sm:text-sm font-bold text-slate-900 block">
+              {formatCurrency(tripFare(row))}
+            </span>
+            <span className="sm:hidden text-[9px] text-slate-400 block mt-0.5">
+              {formatDate(row.createdAt)}
+            </span>
+          </div>
+        ),
       },
       {
         key: 'created',
         label: 'Date',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
+          <span className="text-[11px] sm:text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
         ),
       },
     ],
@@ -351,42 +380,66 @@ const UserAnalyticsPage = () => {
       {
         key: 'plan',
         label: 'Plan',
+        unclamp: true,
         render: (_, row) => (
-          <div>
-            <p className="font-medium text-sm">{row.planNameSnapshot || '—'}</p>
-            <p className="text-xs text-slate-500">{row.zoneId?.name || '—'}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-medium text-xs sm:text-sm text-slate-900 truncate">
+                {row.planNameSnapshot || '—'}
+              </p>
+              <span className="sm:hidden text-[9px] capitalize px-1.5 py-0.2 rounded-full bg-slate-100 font-semibold text-slate-600">
+                {row.status?.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">
+              {row.zoneId?.name || '—'}
+              <span className="sm:hidden">
+                {row.carId ? ` · ${formatCarLabel(row.carId)}` : ''}
+              </span>
+            </p>
           </div>
         ),
       },
       {
         key: 'car',
         label: 'Vehicle',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
+          <span className="text-xs sm:text-sm text-slate-700">{formatCarLabel(row.carId)}</span>
         ),
       },
       {
         key: 'driver',
         label: 'Driver',
-        render: (_, row) => row.assignedDriverId?.name || '—',
+        className: 'hidden sm:table-cell',
+        render: (_, row) => <span className="text-xs sm:text-sm">{row.assignedDriverId?.name || '—'}</span>,
       },
       {
         key: 'status',
         label: 'Status',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="capitalize text-sm">{row.status?.replace(/_/g, ' ')}</span>
+          <span className="capitalize text-xs sm:text-sm">{row.status?.replace(/_/g, ' ')}</span>
         ),
       },
       {
         key: 'amount',
         label: 'Amount',
-        render: (_, row) => formatCurrency(row.amount),
+        unclamp: true,
+        align: 'right',
+        render: (_, row) => (
+          <div className="text-right">
+            <span className="text-xs sm:text-sm font-bold text-slate-900 block">{formatCurrency(row.amount)}</span>
+            <span className="sm:hidden text-[9px] text-slate-400 block mt-0.5">{formatDate(row.startDate)}</span>
+          </div>
+        ),
       },
       {
         key: 'period',
         label: 'Period',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-xs text-slate-600">
+          <span className="text-[11px] sm:text-xs text-slate-600">
             {formatDate(row.startDate)} – {formatDate(row.expiryDate)}
           </span>
         ),
@@ -399,22 +452,34 @@ const UserAnalyticsPage = () => {
     () => [
       {
         key: 'direction',
-        label: 'Type',
+        label: 'Transaction',
+        unclamp: true,
         render: (_, row) => (
-          <span
-            className={`text-xs font-semibold capitalize ${
-              row.direction === 'credit' ? 'text-emerald-600' : 'text-rose-600'
-            }`}
-          >
-            {row.direction}
-          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`text-xs font-semibold capitalize ${
+                  row.direction === 'credit' ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {row.direction}
+              </span>
+              <span className="sm:hidden text-[10px] text-slate-500 capitalize truncate">
+                · {row.source?.replace(/_/g, ' ') || '—'}
+              </span>
+            </div>
+            <p className="sm:hidden text-[9px] text-slate-400 mt-0.5">
+              {formatDateTime12(row.createdAt)}
+            </p>
+          </div>
         ),
       },
       {
         key: 'source',
         label: 'Source',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-sm text-slate-700 capitalize">
+          <span className="text-xs sm:text-sm text-slate-700 capitalize">
             {row.source?.replace(/_/g, ' ') || '—'}
           </span>
         ),
@@ -422,11 +487,13 @@ const UserAnalyticsPage = () => {
       {
         key: 'amount',
         label: 'Amount',
+        unclamp: true,
+        align: 'right',
         render: (_, row) => {
           const amt = row.amountRupees || 0;
           return (
             <span
-              className={`font-semibold ${
+              className={`text-xs sm:text-sm font-bold ${
                 row.direction === 'credit' ? 'text-emerald-600' : 'text-rose-600'
               }`}
             >
@@ -439,13 +506,15 @@ const UserAnalyticsPage = () => {
       {
         key: 'balance',
         label: 'Balance after',
-        render: (_, row) => formatCurrency(row.balanceAfter),
+        className: 'hidden sm:table-cell',
+        render: (_, row) => <span className="text-xs sm:text-sm">{formatCurrency(row.balanceAfter)}</span>,
       },
       {
         key: 'date',
         label: 'Date',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
-          <span className="text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
+          <span className="text-[11px] sm:text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
         ),
       },
     ],
@@ -477,66 +546,66 @@ const UserAnalyticsPage = () => {
   return (
     <div className="space-y-6 pb-8 animate-fade-in-up">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <BackLink />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <Link
             to={`/admin/users/${userId}/history`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <History className="w-4 h-4" />
+            <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             History
           </Link>
           <button
             type="button"
             onClick={handleDownloadReport}
             disabled={downloading || loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-slate-900 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
           >
             {downloading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin shrink-0" />
             ) : (
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             )}
-            Download report
+            Report
           </button>
           <button
             type="button"
             onClick={handleRefreshAll}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 shrink-0"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
         </div>
       </div>
 
       {/* Profile */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <Avatar name={user.name} size="lg" src={user.profilePicture} className="ring-2 ring-white shadow-md" />
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-3 sm:gap-5">
+          <Avatar name={user.name} size="lg" src={user.profilePicture} className="ring-2 ring-white shadow-md scale-90 sm:scale-100 origin-left shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <BarChart3 className="w-6 h-6 text-primary" />
-                {user.name}
+            <div className="flex items-center gap-2 mb-1 min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold text-slate-900 flex items-center gap-1.5 truncate">
+                <BarChart3 className="w-4 h-4 sm:w-6 sm:h-6 text-primary shrink-0" />
+                <span className="truncate">{user.name}</span>
               </h1>
               <span
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                className={`text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full shrink-0 ${
                   user.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
                 }`}
               >
                 {user.isActive ? 'Active' : 'Inactive'}
               </span>
             </div>
-            <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-              <span className="inline-flex items-center gap-1.5">
-                <Phone className="w-4 h-4" />
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1 sm:gap-4 text-xs sm:text-sm text-slate-600">
+              <span className="inline-flex items-center gap-1.5 truncate">
+                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 {user.phone_no || '—'}
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="w-4 h-4" />
+              <span className="inline-flex items-center gap-1.5 truncate">
+                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 {user.email || '—'}
               </span>
             </div>
@@ -545,8 +614,8 @@ const UserAnalyticsPage = () => {
       </div>
 
       {/* Global filters */}
-      <Card padding="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2">
+      <Card padding="p-3 sm:p-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
@@ -728,21 +797,21 @@ const UserAnalyticsPage = () => {
       {/* Trips — paginated */}
       <div className="space-y-3">
         <h2 className="text-base font-bold text-slate-900">Trips</h2>
-        <Card padding="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div className="relative md:col-span-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Card padding="p-3 sm:p-4">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={tripSearch}
                 onChange={(e) => setTripSearch(e.target.value)}
-                placeholder="Search booking number"
-                className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm"
+                placeholder="Search booking..."
+                className="w-full h-8 sm:h-10 pl-8 sm:pl-9 pr-2 sm:pr-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
               />
             </div>
             <select
               value={tripStatusFilter}
               onChange={(e) => setTripStatusFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white shrink-0 max-w-[110px] sm:max-w-none"
             >
               <option value="">All statuses</option>
               <option value="completed">Completed</option>
@@ -754,7 +823,7 @@ const UserAnalyticsPage = () => {
             <select
               value={tripServiceFilter}
               onChange={(e) => setTripServiceFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white shrink-0 max-w-[110px] sm:max-w-none"
             >
               <option value="">All services</option>
               <option value="hourly">Hourly</option>
@@ -768,6 +837,7 @@ const UserAnalyticsPage = () => {
           </div>
         )}
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={tripColumns}
           data={tripsData?.items ?? []}
           loading={tripsLoading}
@@ -786,21 +856,21 @@ const UserAnalyticsPage = () => {
       {/* Subscriptions — paginated */}
       <div className="space-y-3">
         <h2 className="text-base font-bold text-slate-900">Subscriptions</h2>
-        <Card padding="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Card padding="p-3 sm:p-4">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={subsSearch}
                 onChange={(e) => setSubsSearch(e.target.value)}
-                placeholder="Search plan name"
-                className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm"
+                placeholder="Search plan..."
+                className="w-full h-8 sm:h-10 pl-8 sm:pl-9 pr-2 sm:pr-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
               />
             </div>
             <select
               value={subsStatusFilter}
               onChange={(e) => setSubsStatusFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white shrink-0 max-w-[120px] sm:max-w-none"
             >
               <option value="">All statuses</option>
               <option value="active">Active</option>
@@ -816,6 +886,7 @@ const UserAnalyticsPage = () => {
           </div>
         )}
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={subscriptionColumns}
           data={subsData?.items ?? []}
           loading={subsLoading}
@@ -837,21 +908,21 @@ const UserAnalyticsPage = () => {
           <Wallet className="w-4 h-4 text-slate-500" />
           Wallet transactions
         </h2>
-        <Card padding="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Card padding="p-3 sm:p-4">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={walletSearch}
                 onChange={(e) => setWalletSearch(e.target.value)}
-                placeholder="Search description or reference"
-                className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm"
+                placeholder="Search description..."
+                className="w-full h-8 sm:h-10 pl-8 sm:pl-9 pr-2 sm:pr-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
               />
             </div>
             <select
               value={walletDirection}
               onChange={(e) => setWalletDirection(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white shrink-0 max-w-[100px] sm:max-w-none"
             >
               <option value="">All types</option>
               <option value="credit">Credits</option>
@@ -860,7 +931,7 @@ const UserAnalyticsPage = () => {
             <select
               value={walletSource}
               onChange={(e) => setWalletSource(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+              className="h-8 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white shrink-0 max-w-[110px] sm:max-w-none"
             >
               {WALLET_SOURCES.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -876,6 +947,7 @@ const UserAnalyticsPage = () => {
           </div>
         )}
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={walletColumns}
           data={walletData?.items ?? []}
           loading={walletLoading}

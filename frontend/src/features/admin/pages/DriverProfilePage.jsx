@@ -173,92 +173,91 @@ const DriverProfilePage = () => {
   const vehicleExperience = driver.vehicleExperience || [];
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-8">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-3.5 sm:space-y-6 animate-fade-in-up pb-8">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         <BackLink />
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           <Link
             to={`/admin/drivers/${driverId}/analytics`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-primary text-white text-xs sm:text-sm font-semibold hover:bg-primary-dark"
           >
-            <BarChart3 className="w-4 h-4" />
-            Analytics
+            <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Analytics</span>
           </Link>
           <button
             type="button"
             onClick={handleDownloadPdf}
             disabled={downloadingPdf || loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-slate-900 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
           >
             {downloadingPdf ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin shrink-0" />
             ) : (
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             )}
-            {downloadingPdf ? 'Generating…' : 'Download PDF'}
+            <span className="truncate">{downloadingPdf ? 'Generating…' : <><span className="hidden sm:inline">Download </span>PDF</>}</span>
           </button>
           <button
             type="button"
             onClick={() => refetch()}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 shrink-0"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''} shrink-0`} />
+            <span className="hidden xs:inline truncate">Refresh</span>
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <Avatar name={driver.name} size="lg" src={selfie} className="ring-2 ring-white shadow-md" />
+      <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3.5 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-3 sm:gap-5">
+          <Avatar name={driver.name} size="lg" src={selfie} className="ring-1 sm:ring-2 ring-white shadow-sm sm:shadow-md shrink-0 scale-90 sm:scale-100 origin-left" />
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-slate-900">{driver.name}</h1>
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 mb-0.5 sm:mb-2">
+              <h1 className="text-base sm:text-2xl font-bold text-slate-900 truncate">{driver.name}</h1>
               <StatusBadge status={driver.approvalStatus} />
             </div>
-            <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-              <span className="inline-flex items-center gap-1.5">
-                <Phone className="w-4 h-4" />
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs sm:text-sm text-slate-600">
+              <span className="inline-flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5 text-slate-400" />
                 {driver.phone}
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="w-4 h-4" />
-                {driver.email || '—'}
+              <span className="inline-flex items-center gap-1 truncate">
+                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="truncate max-w-[130px] xs:max-w-none">{driver.email || '—'}</span>
               </span>
             </div>
-            <div className="flex flex-wrap gap-2 mt-3">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">
               <span
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                className={`text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full ${
                   driver.isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {driver.isOnline ? (driver.isOnTrip ? 'On trip' : 'Online') : 'Offline'}
               </span>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                Onboarding:{' '}
-                {ONBOARDING_STEP_LABELS[driver.onboardingStep] || `Step ${driver.onboardingStep}`}
+              <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-100 text-slate-600">
+                Step: {ONBOARDING_STEP_LABELS[driver.onboardingStep] || `Step ${driver.onboardingStep}`}
               </span>
               {(driver.submissionCount > 0 || canReview) && (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-indigo-50 text-indigo-700">
                   {formatSubmissionAttempt(driver.submissionCount)}
                   {driver.submissionCount > 1 ? ' (resubmitted)' : ''}
                 </span>
               )}
               {canReview && (
                 <span
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                  className={`text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full ${
                     allStepsApproved
                       ? 'bg-emerald-50 text-emerald-700'
                       : 'bg-amber-50 text-amber-700'
                   }`}
                 >
-                  {allStepsApproved ? 'All sections verified' : 'Sections pending verification'}
+                  {allStepsApproved ? 'All verified' : 'Pending verification'}
                 </span>
               )}
               {driver.revisionInProgress && (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                  Driver editing (not re-submitted)
+                <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-100 text-slate-600">
+                  Driver editing
                 </span>
               )}
             </div>

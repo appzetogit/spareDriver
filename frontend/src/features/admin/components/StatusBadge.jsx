@@ -2,7 +2,7 @@ import { getApprovalStatusStyles, formatApprovalStatus } from '../utils/approval
 
 const StatusBadge = ({ status, className = '' }) => (
   <span
-    className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium capitalize tracking-wide ${getApprovalStatusStyles(status)} ${className}`}
+    className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-medium capitalize tracking-wide whitespace-nowrap shrink-0 ${getApprovalStatusStyles(status)} ${className}`}
   >
     {formatApprovalStatus(status)}
   </span>

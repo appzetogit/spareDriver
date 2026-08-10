@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  User,
   Wallet,
 } from 'lucide-react';
 import Avatar from '../../../components/Avatar';
@@ -268,9 +269,10 @@ const DriverAnalyticsPage = () => {
       {
         key: 'booking',
         label: 'Booking',
+        unclamp: true,
         render: (_, row) => (
           <div>
-            <p className="font-mono text-xs font-semibold">{row.bookingNumber || row._id?.slice(-8)}</p>
+            <p className="font-mono text-[11px] sm:text-xs font-semibold">{row.bookingNumber || row._id?.slice(-8)}</p>
             <p className="text-[10px] text-slate-500 capitalize">
               {row.serviceType} · {row.bookingType || 'instant'}
             </p>
@@ -280,11 +282,13 @@ const DriverAnalyticsPage = () => {
       {
         key: 'customer',
         label: 'Customer',
+        className: 'hidden sm:table-cell',
         render: (_, row) => row.userId?.name || '—',
       },
       {
         key: 'status',
         label: 'Status',
+        unclamp: true,
         render: (_, row) => (
           <Badge variant={TRIP_STATUS_VARIANT[row.status] || 'secondary'}>
             {row.status?.replace(/_/g, ' ')}
@@ -294,11 +298,15 @@ const DriverAnalyticsPage = () => {
       {
         key: 'fare',
         label: 'Fare',
+        unclamp: true,
+        align: 'right',
         render: (_, row) => formatCurrency(tripFare(row)),
       },
       {
         key: 'created',
         label: 'Date',
+        className: 'hidden md:table-cell',
+        align: 'right',
         render: (_, row) => (
           <span className="text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
         ),
@@ -312,6 +320,7 @@ const DriverAnalyticsPage = () => {
       {
         key: 'amount',
         label: 'Amount',
+        unclamp: true,
         render: (_, row) => (
           <span className="font-semibold text-slate-900">{formatCurrency(row.amountRupees)}</span>
         ),
@@ -319,6 +328,7 @@ const DriverAnalyticsPage = () => {
       {
         key: 'status',
         label: 'Status',
+        unclamp: true,
         render: (_, row) => (
           <Badge variant={WITHDRAWAL_STATUS_VARIANT[row.status] || 'secondary'}>
             {row.status}
@@ -328,11 +338,14 @@ const DriverAnalyticsPage = () => {
       {
         key: 'balance',
         label: 'Balance at request',
+        className: 'hidden sm:table-cell',
         render: (_, row) => formatCurrency(row.walletBalanceAtRequest),
       },
       {
         key: 'date',
         label: 'Requested',
+        className: 'hidden md:table-cell',
+        align: 'right',
         render: (_, row) => (
           <span className="text-xs text-slate-600">{formatDateTime12(row.createdAt)}</span>
         ),
@@ -346,13 +359,15 @@ const DriverAnalyticsPage = () => {
       {
         key: 'kind',
         label: 'Type',
+        unclamp: true,
         render: (_, row) => (
-          <span className="text-sm text-slate-700 capitalize">{formatLedgerKind(row.kind)}</span>
+          <span className="text-xs sm:text-sm text-slate-700 capitalize">{formatLedgerKind(row.kind)}</span>
         ),
       },
       {
         key: 'booking',
         label: 'Reference',
+        unclamp: true,
         render: (_, row) => (
           <div>
             <p className="font-mono text-xs">{row.bookingNumber || row.meta?.planName || '—'}</p>
@@ -365,6 +380,8 @@ const DriverAnalyticsPage = () => {
       {
         key: 'amount',
         label: 'Amount',
+        unclamp: true,
+        align: 'right',
         render: (_, row) => {
           const isCredit = row.direction === 'credit';
           return (
@@ -378,6 +395,8 @@ const DriverAnalyticsPage = () => {
       {
         key: 'date',
         label: 'Date',
+        className: 'hidden sm:table-cell',
+        align: 'right',
         render: (_, row) => (
           <span className="text-xs text-slate-600">{formatDateTime12(row.occurredAt)}</span>
         ),
@@ -410,69 +429,68 @@ const DriverAnalyticsPage = () => {
   const earningsTotals = earningsData?.totals;
 
   return (
-    <div className="space-y-6 pb-8 animate-fade-in-up">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-3.5 sm:space-y-6 pb-8 animate-fade-in-up">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         <BackLink driverId={driverId} />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           <Link
             to={`/admin/drivers/${driverId}/profile`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            View profile
+            <User className="w-3.5 h-3.5 sm:hidden shrink-0" />
+            <span className="truncate"><span className="hidden sm:inline">View </span>Profile</span>
           </Link>
           <button
             type="button"
             onClick={handleDownloadReport}
             disabled={downloading || loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-slate-900 text-white text-xs sm:text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
           >
             {downloading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin shrink-0" />
             ) : (
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             )}
-            Download report
+            <span className="truncate"><span className="hidden sm:inline">Download </span>Report</span>
           </button>
           <button
             type="button"
             onClick={handleRefreshAll}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 shrink-0"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''} shrink-0`} />
+            <span className="hidden xs:inline">Refresh</span>
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <Avatar name={driver.name} size="lg" className="ring-2 ring-white shadow-md" />
+      <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-3 sm:gap-5">
+          <Avatar name={driver.name} size="lg" className="ring-1 sm:ring-2 ring-white shadow-sm sm:shadow-md shrink-0 scale-90 sm:scale-100 origin-left" />
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <BarChart3 className="w-6 h-6 text-primary" />
-                {driver.name}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 mb-0.5 sm:mb-2">
+              <h1 className="text-base sm:text-2xl font-bold text-slate-900 flex items-center gap-1 sm:gap-2 min-w-0">
+                <BarChart3 className="w-4 h-4 sm:w-6 sm:h-6 text-primary shrink-0" />
+                <span className="truncate">{driver.name}</span>
               </h1>
               <StatusBadge status={driver.approvalStatus} />
             </div>
-            <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-              <span className="inline-flex items-center gap-1.5">
-                <Phone className="w-4 h-4" />
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs sm:text-sm text-slate-600">
+              <span className="inline-flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5 text-slate-400" />
                 {driver.phone || '—'}
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="w-4 h-4" />
-                {driver.email || '—'}
+              <span className="inline-flex items-center gap-1 truncate">
+                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="truncate max-w-[130px] xs:max-w-none">{driver.email || '—'}</span>
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Star className="w-4 h-4 text-amber-500" />
-                {profile.rating.value.toFixed(1)} ({profile.rating.count} ratings)
+              <span className="inline-flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                {profile.rating.value.toFixed(1)} ({profile.rating.count})
               </span>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-3">
               <span
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                className={`text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full ${
                   profile.online.isOnline
                     ? profile.online.isOnTrip
                       ? 'bg-blue-50 text-blue-700'
@@ -491,12 +509,12 @@ const DriverAnalyticsPage = () => {
         </div>
       </div>
 
-      <Card padding="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+      <Card padding="p-2.5 sm:p-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-1.5 sm:gap-2">
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            className="h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
           >
             {PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -510,20 +528,20 @@ const DriverAnalyticsPage = () => {
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="h-10 px-3 rounded-xl border border-slate-200 text-sm"
+                className="h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
               />
               <input
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="h-10 px-3 rounded-xl border border-slate-200 text-sm"
+                className="h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
               />
             </>
           )}
           <select
             value={serviceType}
             onChange={(e) => setServiceType(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            className="h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
           >
             <option value="">All services</option>
             <option value="hourly">Hourly</option>
@@ -532,7 +550,7 @@ const DriverAnalyticsPage = () => {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
+            className="h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white col-span-2 lg:col-span-1"
           >
             <option value="">All trip statuses</option>
             <option value="completed">Completed</option>
@@ -543,21 +561,21 @@ const DriverAnalyticsPage = () => {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {[
           { label: 'Total trips', value: summary.trips.total },
           { label: 'Completed', value: summary.trips.completed },
-          { label: 'Net earnings (period)', value: formatCurrency(summary.earnings.net) },
+          { label: 'Net earnings', value: formatCurrency(summary.earnings.net) },
           { label: 'Wallet balance', value: formatCurrency(profile.wallet.balance) },
         ].map((s) => (
-          <Card key={s.label} padding="p-4">
-            <p className="text-xs text-slate-500">{s.label}</p>
-            <p className="text-xl font-extrabold text-slate-900 mt-1">{s.value}</p>
+          <Card key={s.label} padding="p-2.5 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-slate-500 truncate">{s.label}</p>
+            <p className="text-sm sm:text-xl font-bold sm:font-extrabold text-slate-900 mt-0.5 truncate">{s.value}</p>
           </Card>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6 min-w-0">
         <AnalyticsTrendChart
           title="Trips per day"
           subtitle="Daily trip volume"
@@ -576,7 +594,7 @@ const DriverAnalyticsPage = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 min-w-0">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6 min-w-0">
         <SectionCard title="Driver details">
           <InfoGrid
             items={[
@@ -622,7 +640,7 @@ const DriverAnalyticsPage = () => {
         </SectionCard>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 min-w-0">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6 min-w-0">
         <SectionCard title="Cancellation track record">
           <InfoGrid
             items={[
@@ -722,37 +740,39 @@ const DriverAnalyticsPage = () => {
 
       <div className="space-y-3">
         <h2 className="text-base font-bold text-slate-900">Trips</h2>
-        <Card padding="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div className="relative md:col-span-1">
+        <Card padding="p-2.5 sm:p-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-1.5 sm:gap-2">
+            <div className="relative w-full md:w-64">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={tripSearch}
                 onChange={(e) => setTripSearch(e.target.value)}
                 placeholder="Search booking number"
-                className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm"
+                className="w-full h-9 sm:h-10 pl-9 pr-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm"
               />
             </div>
-            <select
-              value={tripStatusFilter}
-              onChange={(e) => setTripStatusFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
-            >
-              <option value="">All statuses</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="started">Started</option>
-              <option value="driver_assigned">Driver assigned</option>
-            </select>
-            <select
-              value={tripServiceFilter}
-              onChange={(e) => setTripServiceFilter(e.target.value)}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white"
-            >
-              <option value="">All services</option>
-              <option value="hourly">Hourly</option>
-              <option value="outstation">Round trip</option>
-            </select>
+            <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto">
+              <select
+                value={tripStatusFilter}
+                onChange={(e) => setTripStatusFilter(e.target.value)}
+                className="flex-1 min-w-0 md:w-48 h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+              >
+                <option value="">All statuses</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="started">Started</option>
+                <option value="driver_assigned">Driver assigned</option>
+              </select>
+              <select
+                value={tripServiceFilter}
+                onChange={(e) => setTripServiceFilter(e.target.value)}
+                className="flex-1 min-w-0 md:w-44 h-9 sm:h-10 px-2 sm:px-3 rounded-lg sm:rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+              >
+                <option value="">All services</option>
+                <option value="hourly">Hourly</option>
+                <option value="outstation">Round trip</option>
+              </select>
+            </div>
           </div>
         </Card>
         {tripsError && (

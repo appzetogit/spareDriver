@@ -102,22 +102,35 @@ const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 lg:px-6">
+    <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-3 sm:px-4 lg:px-6">
       <AdminNotificationBridge />
-      <div className="flex items-center justify-between h-16">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between h-16 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
+            type="button"
             onClick={onMenuToggle}
-            className="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-text-secondary transition-colors"
+            className="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-text-secondary transition-colors shrink-0"
+            aria-label="Toggle menu"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-lg font-bold text-text">{title}</h1>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-text truncate">{title}</h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Mobile search toggle button */}
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="md:hidden p-2 rounded-xl hover:bg-gray-100 text-text-secondary transition-colors"
+            aria-label="Open search"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+
+          {/* Search container - Desktop input (hidden on mobile, block on md+) */}
           <div ref={containerRef} className="hidden md:block relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
             <input
@@ -215,7 +228,7 @@ const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
                                 `/admin/bookings?search=${encodeURIComponent(
                                   booking.bookingNumber || booking._id,
                                 )}`,
-                              )
+                                )
                             }
                           />
                         ))}
@@ -232,6 +245,95 @@ const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
           <AdminUserMenu />
         </div>
       </div>
+
+      {/* Mobile search bar overlay when open on mobile (< md) */}
+      {open && (
+        <div className="md:hidden pb-3 pt-1 border-t border-gray-100">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search users, drivers, bookings…"
+              className="h-10 w-full bg-gray-50 rounded-xl pl-10 pr-9 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 border border-transparent focus:border-primary/30"
+              autoFocus
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-text-muted hover:text-text hover:bg-gray-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : null}
+          </div>
+
+          {debouncedQuery.length >= MIN_QUERY ? (
+            <div className="mt-2 max-h-72 overflow-y-auto bg-white rounded-xl shadow-lg border border-slate-100">
+              {loading ? (
+                <div className="flex items-center gap-2 px-4 py-4 text-sm text-text-muted">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Searching…
+                </div>
+              ) : totalResults === 0 ? (
+                <div className="px-4 py-4 text-sm text-text-muted text-center">
+                  No results for “{debouncedQuery}”
+                </div>
+              ) : (
+                <>
+                  {results.users.length > 0 && (
+                    <ResultSection title="Users">
+                      {results.users.map((user) => (
+                        <ResultRow
+                          key={`m-user-${user._id}`}
+                          icon={User}
+                          primary={user.name || 'Unnamed user'}
+                          secondary={[user.phone, user.email].filter(Boolean).join(' · ')}
+                          onClick={() => goTo(`/admin/users/${user._id}/profile`)}
+                        />
+                      ))}
+                    </ResultSection>
+                  )}
+                  {results.drivers.length > 0 && (
+                    <ResultSection title="Drivers">
+                      {results.drivers.map((driver) => (
+                        <ResultRow
+                          key={`m-driver-${driver._id}`}
+                          icon={Car}
+                          primary={driver.name || 'Unnamed driver'}
+                          secondary={[driver.phone, driver.approvalStatus].filter(Boolean).join(' · ')}
+                          onClick={() => goTo(`/admin/drivers/${driver._id}/profile`)}
+                        />
+                      ))}
+                    </ResultSection>
+                  )}
+                  {results.bookings.length > 0 && (
+                    <ResultSection title="Bookings">
+                      {results.bookings.map((booking) => (
+                        <ResultRow
+                          key={`m-booking-${booking._id}`}
+                          icon={CalendarDays}
+                          primary={booking.bookingNumber || String(booking._id).slice(-8)}
+                          secondary={[booking.customerName, booking.status].filter(Boolean).join(' · ')}
+                          onClick={() =>
+                            goTo(
+                              `/admin/bookings?search=${encodeURIComponent(
+                                booking.bookingNumber || booking._id,
+                              )}`,
+                            )
+                          }
+                        />
+                      ))}
+                    </ResultSection>
+                  )}
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
     </header>
   );
 };

@@ -48,9 +48,9 @@ const ServerPaginatedTable = ({
 
         {/* Pagination Controls */}
         {!loading && pagination.total > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-5 border-t border-slate-100 bg-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-6 py-3 sm:py-5 border-t border-slate-100 bg-white">
             {/* Results info */}
-            <div className="text-sm text-slate-500">
+            <div className="text-xs sm:text-sm text-slate-500">
               Showing{' '}
               <span className="font-medium text-slate-700">{startItem}</span>
               {' '}-{' '}
@@ -63,20 +63,20 @@ const ServerPaginatedTable = ({
             </div>
 
             {/* Pagination buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {/* Previous button */}
               <button
                 type="button"
                 onClick={() => onPageChange(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Previous</span>
               </button>
 
               {/* Page indicator */}
-              <div className="px-4 py-2 rounded-xl bg-slate-50 text-sm font-medium text-slate-700">
+              <div className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-slate-50 text-xs sm:text-sm font-medium text-slate-700">
                 Page {page} of {totalPages}
               </div>
 
@@ -85,7 +85,7 @@ const ServerPaginatedTable = ({
                 type="button"
                 onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                 disabled={page >= totalPages || totalPages === 0}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="hidden sm:inline">Next</span>
                 <ChevronRight className="w-4 h-4" />

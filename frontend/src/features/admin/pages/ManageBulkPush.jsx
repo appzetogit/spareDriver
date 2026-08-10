@@ -280,66 +280,68 @@ const ManageBulkPush = () => {
   const endItem = Math.min(page * limit, pagination.total);
 
   return (
-    <div className="space-y-6 max-w-full min-w-0">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <BellRing className="w-5 h-5 sm:w-6 sm:h-6 text-slate-700 shrink-0" />
+    <div className="space-y-3 sm:space-y-6 max-w-full min-w-0 pb-8 animate-fade-in-up">
+      <div className="flex flex-col gap-0.5 sm:gap-1">
+        <h1 className="text-base sm:text-2xl font-bold text-slate-900 flex items-center gap-1.5 sm:gap-2">
+          <BellRing className="w-4 h-4 sm:w-6 sm:h-6 text-slate-700 shrink-0" />
           Bulk Push Notifications
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-[11px] sm:text-sm text-slate-500">
           Send a promotional push to all or selected users and drivers.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 min-w-0">
-        <div className="xl:col-span-2 space-y-4 min-w-0">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
-            <div>
-              <p className="text-sm font-medium text-slate-800 mb-2">Audience</p>
-              <div className="grid grid-cols-2 gap-2">
-                {AUDIENCE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setAudience(opt.value)}
-                    className={`h-10 rounded-xl text-sm font-semibold border transition-colors ${
-                      audience === opt.value
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 sm:gap-6 min-w-0">
+        <div className="xl:col-span-2 space-y-3 sm:space-y-4 min-w-0">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3 sm:p-5 space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-slate-800 mb-1 sm:mb-2">Audience</p>
+                <div className="grid grid-cols-2 gap-1 sm:gap-2">
+                  {AUDIENCE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setAudience(opt.value)}
+                      className={`h-8 sm:h-10 rounded-lg sm:rounded-xl text-[11px] sm:text-sm font-semibold border transition-colors ${
+                        audience === opt.value
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <p className="text-sm font-medium text-slate-800 mb-2">Recipients</p>
-              <div className="grid grid-cols-2 gap-2">
-                {MODE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setMode(opt.value)}
-                    className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-semibold border transition-colors ${
-                      mode === opt.value
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-slate-800 mb-1 sm:mb-2">Recipients</p>
+                <div className="grid grid-cols-2 gap-1 sm:gap-2">
+                  {MODE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setMode(opt.value)}
+                      className={`h-8 sm:h-10 px-1 rounded-lg sm:rounded-xl text-[10px] sm:text-sm font-semibold border transition-colors ${
+                        mode === opt.value
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2">
-                {statsLoading
-                  ? 'Loading audience stats…'
-                  : mode === 'all'
-                    ? `${stats.withPush} of ${stats.total} ${audience === 'user' ? 'users' : 'approved drivers'} have push enabled.`
-                    : `${selected.length} selected. Recipients without a push token will be skipped.`}
-              </p>
             </div>
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-1">
+              {statsLoading
+                ? 'Loading audience stats…'
+                : mode === 'all'
+                  ? `${stats.withPush} of ${stats.total} ${audience === 'user' ? 'users' : 'approved drivers'} have push enabled.`
+                  : `${selected.length} selected. Recipients without a push token will be skipped.`}
+            </p>
 
             <Input
               label="Title"
@@ -349,17 +351,17 @@ const ManageBulkPush = () => {
               maxLength={100}
             />
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-text">Message</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs sm:text-sm font-medium text-text">Message</label>
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="Write the promotional message…"
                 maxLength={500}
-                rows={5}
-                className="w-full bg-white border rounded-xl px-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200 resize-y min-h-[120px]"
+                rows={3}
+                className="w-full bg-white border rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200 resize-y min-h-[80px]"
               />
-              <p className="text-xs text-slate-400 text-right">{body.length}/500</p>
+              <p className="text-[11px] sm:text-xs text-slate-400 text-right">{body.length}/500</p>
             </div>
 
             <Button
@@ -375,7 +377,7 @@ const ManageBulkPush = () => {
           </div>
 
           {lastResult && (
-            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-sm text-emerald-900">
+            <div className="bg-emerald-50 border border-emerald-100 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm text-emerald-900">
               Last send: {lastResult.sent} sent, {lastResult.skipped} skipped,{' '}
               {lastResult.failed} failed (of {lastResult.total}).
             </div>
@@ -626,23 +628,23 @@ const ManageBulkPush = () => {
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 h-full min-h-[220px] flex flex-col justify-center">
-              <p className="text-lg font-semibold text-slate-900">Send to everyone</p>
-              <p className="text-sm text-slate-500 mt-2 max-w-md">
+            <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3.5 sm:p-8 h-full min-h-[140px] sm:min-h-[220px] flex flex-col justify-center">
+              <p className="text-sm sm:text-lg font-bold text-slate-900">Send to everyone</p>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-2 max-w-md">
                 This will deliver the message to every{' '}
                 {audience === 'user' ? 'active user' : 'approved driver'} who has
                 registered a push notification token.
               </p>
-              <div className="mt-6 grid grid-cols-2 gap-3 max-w-sm">
-                <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                  <p className="text-xs text-slate-500">Total</p>
-                  <p className="text-2xl font-bold text-slate-900 mt-1">
+              <div className="mt-3 sm:mt-6 grid grid-cols-2 gap-2 sm:gap-3 max-w-sm">
+                <div className="rounded-lg sm:rounded-xl bg-slate-50 border border-slate-100 p-2 sm:p-4">
+                  <p className="text-[10px] sm:text-xs text-slate-500">Total</p>
+                  <p className="text-lg sm:text-2xl font-bold text-slate-900 mt-0.5 sm:mt-1">
                     {statsLoading ? '—' : stats.total}
                   </p>
                 </div>
-                <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                  <p className="text-xs text-slate-500">With push</p>
-                  <p className="text-2xl font-bold text-slate-900 mt-1">
+                <div className="rounded-lg sm:rounded-xl bg-slate-50 border border-slate-100 p-2 sm:p-4">
+                  <p className="text-[10px] sm:text-xs text-slate-500">With push</p>
+                  <p className="text-lg sm:text-2xl font-bold text-slate-900 mt-0.5 sm:mt-1">
                     {statsLoading ? '—' : stats.withPush}
                   </p>
                 </div>
@@ -652,60 +654,55 @@ const ManageBulkPush = () => {
         </div>
       </div>
 
-      <section className="space-y-4 min-w-0">
-        <div className="flex items-center gap-2">
-          <History className="w-5 h-5 text-slate-700" />
+      <section className="space-y-2.5 sm:space-y-4 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <History className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700 shrink-0" />
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Send history</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">Send history</h2>
+            <p className="text-xs sm:text-sm text-slate-500">
               Past promotional pushes from the admin panel.
             </p>
           </div>
         </div>
 
         {/* Mobile history cards */}
-        <div className="md:hidden space-y-3">
+        <div className="md:hidden space-y-2">
           {historyQuery.loading && historyRows.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center text-sm text-slate-400">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 text-center text-xs text-slate-400">
               Loading history…
             </div>
           ) : historyRows.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-400">
+            <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-xs text-slate-400">
               No push messages sent yet
             </div>
           ) : (
             historyRows.map((row) => (
               <div
                 key={row._id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2"
+                className="bg-white rounded-xl border border-slate-200 p-2.5 sm:p-4 space-y-1"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 truncate">
+                    <p className="text-xs font-bold text-slate-900 truncate">
                       {row.title}
                     </p>
-                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                       {row.body}
                     </p>
                   </div>
-                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-lg bg-slate-100 text-slate-600">
+                  <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
                     {row.audience}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500">{formatDateTime(row.createdAt)}</p>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
-                  <span>
-                    <span className="font-semibold text-emerald-600">{row.sent}</span> sent
-                  </span>
-                  <span>
-                    <span className="font-semibold text-slate-500">{row.skipped}</span> skipped
-                  </span>
-                  <span>
-                    <span className="font-semibold text-rose-500">{row.failed}</span> failed
-                  </span>
-                  <span className="text-slate-400">of {row.total}</span>
+                <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-slate-500">
+                  <span>{formatDateTime(row.createdAt)}</span>
+                  <span>·</span>
+                  <span><strong className="text-emerald-600 font-semibold">{row.sent}</strong> sent</span>
+                  <span><strong className="text-slate-500 font-semibold">{row.skipped}</strong> skipped</span>
+                  <span><strong className="text-rose-500 font-semibold">{row.failed}</strong> failed</span>
+                  <span className="text-slate-400">(of {row.total})</span>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-[10px] text-slate-400">
                   By {row.sentBy?.name || row.sentBy?.email || '—'} · {row.mode}
                 </p>
               </div>
