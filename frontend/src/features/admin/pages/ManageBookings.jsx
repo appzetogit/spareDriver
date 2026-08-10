@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Eye, UserPlus, UserRoundCog } from 'lucide-react';
+import { Eye, MessageSquare, UserPlus, UserRoundCog } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
@@ -9,12 +9,14 @@ import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useSocketEvent } from '../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../constants/socketEvents';
 import { BOOKING_STATUS } from '../../../constants/bookingStatus';
+import { isChatVisibleForBooking } from '../../../constants/chat';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import BookingDetailsModal from '../components/ManageBookings/BookingDetailsModal';
 import AssignBookingDriverDrawer from '../components/ManageBookings/AssignBookingDriverDrawer';
 import BookingFilters from '../components/ManageBookings/BookingFilters';
 import BookingStats from '../components/ManageBookings/BookingStats';
 import RowActionsMenu from '../components/RowActionsMenu';
+import TripChatEntry from '../../../components/chat/TripChatEntry';
 import {
   canAdminAssignBooking,
   getAssignActionLabel,
@@ -48,6 +50,8 @@ const ManageBookings = () => {
   const [toDate, setToDate] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [assignBooking, setAssignBooking] = useState(null);
+  const [chatBooking, setChatBooking] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     const fromUrl = searchParams.get('search') || '';
@@ -276,6 +280,16 @@ const ManageBookings = () => {
               onClick: () => setAssignBooking(row),
             });
           }
+          if (isChatVisibleForBooking(row)) {
+            items.push({
+              label: 'View chat',
+              icon: MessageSquare,
+              onClick: () => {
+                setChatBooking(row);
+                setChatOpen(true);
+              },
+            });
+          }
           return <RowActionsMenu items={items} />;
         },
       },
@@ -381,6 +395,23 @@ const ManageBookings = () => {
             setAssignBooking(null);
             refetch();
           }}
+        />
+      )}
+
+      {chatBooking && (
+        <TripChatEntry
+          booking={chatBooking}
+          audience="admin"
+          selfId={admin?._id}
+          peerName="Trip chat"
+          subtitle="Customer ↔ Driver (view only)"
+          controlledOpen={chatOpen}
+          onOpenChange={(open) => {
+            setChatOpen(open);
+            if (!open) setChatBooking(null);
+          }}
+          hideButton
+          showSenderLabels
         />
       )}
     </div>

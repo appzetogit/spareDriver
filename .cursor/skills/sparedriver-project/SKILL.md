@@ -42,8 +42,11 @@ backend/src/
   models/                 # mongoose models (one per file, *.model.js)
     user/                 # car.model.js
     driverModels/         # driver.model.js + *.schema.js subdocs
+    # trip chat: chatConversation.model.js, chatMessage.model.js (booking-scoped)
   routes/                 # *.routes.js per audience
   services/               # ALL business logic lives here (*.service.js)
+                          # chat.service.js — booking chat + unread + authz
+  controllers/chat*.js    # chat.controller.js + chatSocket.controller.js
   utils/                  # apiError.js, razorpay.js, asyncHandler, pdfBrand.js, etc.
   assets/                 # brand-logo.png for PDFKit exports (invoice + admin PDFs)
   validations/            # zod schemas per route group
@@ -57,17 +60,17 @@ frontend/src/
     audience  ∈ auth | user | driver | admin | landing | dev
     domain    e.g. booking, tracking, wallet, trips, kit, registration
               landing pages use AppSettings + LegalDocument (privacy/terms/refund/pricing)
-  components/             # shared UI primitives (Button, Modal, BottomSheet, maps/, dialogs/, ...)
+  components/             # shared UI primitives (Button, Modal, BottomSheet, maps/, dialogs/, chat/, ...)
   store/                  # zustand stores
     useUserAuthStore.js, useDriverAuthStore.js, useAdminAuthStore.js, useAuthSessionStore.js, useSocketStore.js
     # Auth stores are in-memory; useAuthSessionStore bootstraps them from JWT (cookie/localStorage)
     user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore, useAdsStore, useNearbyDriversStore
     driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverIncomingScheduledStore (scheduled + outstation + subscription inbox), useDriverSubscriptionsStore (assigned dedicated-driver plans), useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
     admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,OnlineTransactions,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool,SidebarCounts,TeamMemberAnalytics}Store
-  hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...
-  constants/              # mapTheme.js, etc.
+  hooks/                  # useGoogleMaps, useDriverMovementSimulator, useTripChat, ...
+  constants/              # mapTheme.js, chat.js, bookingStatus.js, socketEvents.js, ...
   config/                 # axios, firebase, env
-  lib/, utils/            # helpers
+  lib/, utils/            # helpers (chatApi.js for trip chat REST)
 ```
 
 Admin promotional push: `/admin/push-notifications` → `ManageBulkPush` → `POST /api/v1/admin/notifications/bulk-push` (`adminBulkPush.service.js`) — **super admin only** (sidebar + routes). Audience user|driver, mode all|selected. Recipients picker: `GET .../bulk-push/recipients` (server-paginated). History: `BulkPushCampaign` + `GET .../bulk-push/history`.

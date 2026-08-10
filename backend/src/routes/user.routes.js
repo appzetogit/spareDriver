@@ -86,6 +86,13 @@ import {
   getMyUserAccountDeletionRequest,
   requestUserAccountDeletion,
 } from '../controllers/accountDeletion.controller.js';
+import {
+  getBookingChat,
+  listBookingChatMessages,
+  sendBookingChatMessage,
+  markBookingChatRead,
+  getBookingChatUnread,
+} from '../controllers/chat.controller.js';
 import { protectUser, protectProfileViewer } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -147,6 +154,11 @@ router.get('/bookings/active', getMyActiveBooking);
 router.get('/bookings/active-list', getMyActiveBookings);
 router.get('/bookings/:id', getBookingById);
 router.get('/bookings/:id/invoice/pdf', downloadBookingInvoicePdf);
+router.get('/bookings/:id/chat', getBookingChat);
+router.get('/bookings/:id/chat/messages', listBookingChatMessages);
+router.get('/bookings/:id/chat/unread', getBookingChatUnread);
+router.post('/bookings/:id/chat/messages', sendBookingChatMessage);
+router.patch('/bookings/:id/chat/read', markBookingChatRead);
 router.post('/bookings/:id/cancel', cancelBooking);
 router.post('/bookings/:id/search-again', searchAgainBooking);
 router.post('/bookings/:id/reschedule', rescheduleBooking);

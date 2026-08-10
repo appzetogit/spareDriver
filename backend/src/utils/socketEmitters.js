@@ -3,6 +3,7 @@ import {
   roomForUser,
   roomForDriver,
   roomForBooking,
+  roomForBookingChat,
   ADMIN_ROOM,
   ADMIN_SOS_ROOM,
   OPERATIONS_SOS_ROOM,
@@ -59,6 +60,42 @@ export function emitToBooking(bookingId, event, payload) {
   const id = toRoomId(bookingId);
   if (!id) return false;
   return safeEmit(roomForBooking(id), event, payload);
+}
+
+/** Send to everyone who joined the authorized booking chat room. */
+export function emitToBookingChat(bookingId, event, payload) {
+  const id = toRoomId(bookingId);
+  if (!id) return false;
+  return safeEmit(roomForBookingChat(id), event, payload);
+}
+
+/**
+ * True if any active socket for this principal is currently in the
+ * booking chat room (used to suppress push while viewing chat).
+ */
+export function isPrincipalInBookingChat(bookingId, principalType, principalId) {
+  const io = getIoOrNull();
+  const bid = toRoomId(bookingId);
+  const pid = toRoomId(principalId);
+  if (!io || !bid || !pid) return false;
+
+  const room = roomForBookingChat(bid);
+  const sockets = io.sockets?.adapter?.rooms?.get(room);
+  if (!sockets || sockets.size === 0) return false;
+
+  for (const socketId of sockets) {
+    const sock = io.sockets.sockets.get(socketId);
+    const principal = sock?.data?.principal;
+    if (!principal) continue;
+    if (String(principal.id) !== pid) continue;
+    if (principalType === 'driver' && principal.type === 'driver') return true;
+    if (principalType === 'user' && principal.type === 'user') return true;
+    if (principalType === 'admin' && principal.type === 'user') {
+      // staff use type=user with a staff role
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Broadcast to every staff dashboard. */

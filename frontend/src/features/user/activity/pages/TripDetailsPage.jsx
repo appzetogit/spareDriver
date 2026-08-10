@@ -44,6 +44,9 @@ import { SERVICE_CATALOG } from '../../home/constants/serviceCatalog';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
 import { C2S_EVENTS, S2C_EVENTS } from '../../../../constants/socketEvents';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
+import useUserAuthStore from '../../../../store/useUserAuthStore';
+import TripChatEntry from '../../../../components/chat/TripChatEntry';
+import { isChatVisibleForBooking } from '../../../../constants/chat';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import { formatPickupDateTime } from '../../../../utils/datetime';
 import { maskPersonName } from '../../../../utils/formatters';
@@ -210,6 +213,7 @@ const TripDetailsPage = () => {
   const navigate = useNavigate();
   const { emit, isConnected } = useSocket();
   const setActiveBooking = useUserActiveBookingStore((s) => s.setBooking);
+  const user = useUserAuthStore((s) => s.user);
 
   const [booking, setBooking] = useState(() => {
     const active = useUserActiveBookingStore.getState().booking;
@@ -461,6 +465,18 @@ const TripDetailsPage = () => {
             callHref={driverCallHref}
             rating={driver.rating}
             experienceYears={driver.experienceYears}
+          />
+        )}
+
+        {isChatVisibleForBooking(booking) && (
+          <TripChatEntry
+            booking={booking}
+            audience="user"
+            selfId={user?._id}
+            peerName={displayDriverName || 'Driver'}
+            peerAvatar={driverPhotoUrl}
+            subtitle="Trip chat"
+            buttonClassName="w-full"
           />
         )}
 

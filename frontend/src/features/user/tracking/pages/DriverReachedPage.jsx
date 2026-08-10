@@ -1,13 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Phone, MessageSquare, CheckCircle, Loader2 } from 'lucide-react';
+import { Star, Phone, CheckCircle, Loader2 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import Avatar from '../../../../components/Avatar';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
+import TripChatEntry from '../../../../components/chat/TripChatEntry';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
+import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverLocations';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
+import { isChatVisibleForBooking } from '../../../../constants/chat';
 import { maskPersonName } from '../../../../utils/formatters';
 
 /**
@@ -19,6 +22,7 @@ const DriverReachedPage = () => {
   const navigate = useNavigate();
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchActive = useUserActiveBookingStore((s) => s.fetchActive);
+  const user = useUserAuthStore((s) => s.user);
 
   useEffect(() => {
     if (!booking) fetchActive().catch(() => {});
@@ -148,7 +152,21 @@ const DriverReachedPage = () => {
             >
               Call
             </Button>
-            <Button variant="secondary" size="md" className="flex-1" icon={MessageSquare}>Message</Button>
+            {isChatVisibleForBooking(booking) ? (
+              <TripChatEntry
+                booking={booking}
+                audience="user"
+                selfId={user?._id}
+                peerName={displayDriverName || 'Driver'}
+                peerAvatar={driverObj?.profilePicture || null}
+                subtitle="Trip chat"
+                buttonClassName="flex-1"
+              />
+            ) : (
+              <Button variant="secondary" size="md" className="flex-1" disabled>
+                Chat
+              </Button>
+            )}
           </div>
         </Card>
 

@@ -82,6 +82,13 @@ import {
   getMyDriverAccountDeletionRequest,
   requestDriverAccountDeletion,
 } from '../controllers/accountDeletion.controller.js';
+import {
+  getBookingChat,
+  listBookingChatMessages,
+  sendBookingChatMessage,
+  markBookingChatRead,
+  getBookingChatUnread,
+} from '../controllers/chat.controller.js';
 import { uploadVideo as uploadVideoMiddleware, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
@@ -158,6 +165,11 @@ router.get('/subscriptions/:id', protectDriver, getDriverAssignedSubscriptionByI
 router.post('/subscriptions/:id/accept', protectDriver, driverAcceptSubscription);
 router.post('/subscriptions/:id/reject', protectDriver, driverRejectSubscription);
 router.get('/bookings/:id', protectDriver, driverGetBookingById);
+router.get('/bookings/:id/chat', protectDriver, getBookingChat);
+router.get('/bookings/:id/chat/messages', protectDriver, listBookingChatMessages);
+router.get('/bookings/:id/chat/unread', protectDriver, getBookingChatUnread);
+router.post('/bookings/:id/chat/messages', protectDriver, sendBookingChatMessage);
+router.patch('/bookings/:id/chat/read', protectDriver, markBookingChatRead);
 router.post('/bookings/:id/accept', protectDriver, driverAcceptBooking);
 router.post('/bookings/:id/reject', protectDriver, driverRejectBooking);
 

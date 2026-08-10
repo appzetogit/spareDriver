@@ -45,6 +45,7 @@ export const USER_NOTIFICATION = Object.freeze({
   SOS_UPDATE: 'sos_update',
   BOOKING_REMINDER: 'booking_reminder',
   BOOKING_CANCELLED: 'booking_cancelled',
+  TRIP_CHAT_MESSAGE: 'trip_chat_message',
 });
 
 /** Driver-facing notification kinds */
@@ -74,6 +75,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   ACCOUNT_REJECTED: 'account_rejected',
   ACCOUNT_SUSPENDED: 'account_suspended',
   ACCOUNT_UNSUSPENDED: 'account_unsuspended',
+  TRIP_CHAT_MESSAGE: 'trip_chat_message',
 });
 
 /** Admin inbox kinds (socket + DB; FCM only for ADMIN_FCM_NOTIFICATION_TYPES) */
@@ -92,6 +94,7 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   SCHEDULED_DISPATCH_RETRY: 'scheduled_dispatch_retry',
   SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
   SUBSCRIPTION_CANCEL_REQUEST: 'subscription_cancel_request',
+  TRIP_CHAT_MESSAGE: 'trip_chat_message',
 });
 
 export const NOTIFICATION_AUDIENCE = Object.freeze({
@@ -120,6 +123,7 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
     ADMIN_NOTIFICATION.NO_DRIVERS_FOUND,
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
     ADMIN_NOTIFICATION.SUBSCRIPTION_CANCEL_REQUEST,
+    ADMIN_NOTIFICATION.TRIP_CHAT_MESSAGE,
   ]),
 );
 

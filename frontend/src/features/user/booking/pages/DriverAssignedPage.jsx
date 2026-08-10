@@ -47,6 +47,9 @@ import {
   buildUserCancelConfirmMessage,
 } from '../utils/cancellationPreview';
 import SosEmergencyButton from '../../tracking/components/SosEmergencyButton';
+import TripChatEntry from '../../../../components/chat/TripChatEntry';
+import useUserAuthStore from '../../../../store/useUserAuthStore';
+import { isChatVisibleForBooking } from '../../../../constants/chat';
 
 /** How long the full-size map is shown before it auto-shrinks to the
  * floating preview card. Tuned for "long enough to glance at the driver,
@@ -115,6 +118,7 @@ const DriverAssignedPage = () => {
   const draftReset = useBookingDraftStore((s) => s.reset);
   const fetchWallet = useUserWalletStore((s) => s.fetchWallet);
   const wallet = useUserWalletStore((s) => s.wallet);
+  const user = useUserAuthStore((s) => s.user);
   const { emit, isConnected } = useSocket();
 
   const [cancelling, setCancelling] = useState(false);
@@ -910,24 +914,54 @@ const DriverAssignedPage = () => {
                       </div>
                     </div>
                     {(isBookingContactRevealed(booking) &&
-                      (driver?.phone_no || driver?.phone)) && (
-                      <div className="px-5 py-3 border-t border-gray-100">
-                        <a
-                          href={`tel:+91${String(driver.phone_no || driver.phone).replace(/\D/g, '')}`}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 font-semibold text-sm hover:bg-emerald-100 active:scale-95 transition"
-                          aria-label="Call driver"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                            <path fillRule="evenodd" d="M1.5 4.5a3 3 0 0 1 3-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 0 1-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 0 0 6.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 0 1 1.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 0 1-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5Z" clipRule="evenodd" />
-                          </svg>
-                          Call driver
-                        </a>
+                      (driver?.phone_no || driver?.phone)) ||
+                    isChatVisibleForBooking(booking) ? (
+                      <div
+                        className={`px-5 py-3 border-t border-gray-100 grid gap-2 ${
+                          isBookingContactRevealed(booking) &&
+                          (driver?.phone_no || driver?.phone) &&
+                          isChatVisibleForBooking(booking)
+                            ? 'grid-cols-2'
+                            : 'grid-cols-1'
+                        }`}
+                      >
+                        {isBookingContactRevealed(booking) &&
+                          (driver?.phone_no || driver?.phone) && (
+                          <a
+                            href={`tel:+91${String(driver.phone_no || driver.phone).replace(/\D/g, '')}`}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 font-semibold text-sm hover:bg-emerald-100 active:scale-95 transition"
+                            aria-label="Call driver"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                              <path fillRule="evenodd" d="M1.5 4.5a3 3 0 0 1 3-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 0 1-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 0 0 6.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 0 1 1.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 0 1-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5Z" clipRule="evenodd" />
+                            </svg>
+                            Call driver
+                          </a>
+                        )}
+                        {isChatVisibleForBooking(booking) && (
+                          <TripChatEntry
+                            booking={booking}
+                            audience="user"
+                            selfId={user?._id}
+                            peerName={displayDriverName || 'Driver'}
+                            peerAvatar={driver?.profilePicture || driver?.avatar || null}
+                            subtitle="Trip chat"
+                            buttonVariant="emerald"
+                          />
+                        )}
                       </div>
-                    )}
-                    {driver && !isBookingContactRevealed(booking) && (
+                    ) : null}
+                    {driver && !isBookingContactRevealed(booking) && !isChatVisibleForBooking(booking) && (
                       <div className="px-5 py-3 border-t border-gray-100">
                         <p className="text-xs text-center text-gray-500">
                           Driver contact unlocks when they start heading to pickup
+                        </p>
+                      </div>
+                    )}
+                    {driver && !isBookingContactRevealed(booking) && isChatVisibleForBooking(booking) && (
+                      <div className="px-5 pb-3">
+                        <p className="text-[11px] text-center text-gray-500">
+                          Phone unlocks when driver starts heading to pickup — chat is available now
                         </p>
                       </div>
                     )}

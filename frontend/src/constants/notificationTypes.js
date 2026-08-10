@@ -24,6 +24,7 @@ export const USER_NOTIFICATION = Object.freeze({
   BOOKING_REMINDER: 'booking_reminder',
   BOOKING_CANCELLED: 'booking_cancelled',
   SOS_UPDATE: 'sos_update',
+  TRIP_CHAT_MESSAGE: 'trip_chat_message',
 });
 
 export const DRIVER_NOTIFICATION = Object.freeze({
@@ -39,6 +40,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   ACCOUNT_REJECTED: 'account_rejected',
   ACCOUNT_SUSPENDED: 'account_suspended',
   ACCOUNT_UNSUSPENDED: 'account_unsuspended',
+  TRIP_CHAT_MESSAGE: 'trip_chat_message',
 });
 
 export const ADMIN_NOTIFICATION = Object.freeze({
@@ -50,6 +52,7 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   REFUND_REQUEST: 'refund_request',
   WITHDRAWAL_REQUEST: 'withdrawal_request',
   SUBSCRIPTION_CANCEL_REQUEST: 'subscription_cancel_request',
+  TRIP_CHAT_MESSAGE: 'trip_chat_message',
 });
 
 const USER_LIVE_KINDS = new Set([

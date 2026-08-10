@@ -19,6 +19,13 @@ export const C2S_EVENTS = Object.freeze({
 
   BOOKING_JOIN: 'booking:join',
   BOOKING_LEAVE: 'booking:leave',
+
+  CHAT_JOIN: 'chat:join',
+  CHAT_LEAVE: 'chat:leave',
+  CHAT_MESSAGE_SEND: 'chat:message:send',
+  CHAT_MESSAGE_READ: 'chat:message:read',
+  CHAT_TYPING_START: 'chat:typing:start',
+  CHAT_TYPING_STOP: 'chat:typing:stop',
 });
 
 /** Server → Client */
@@ -55,6 +62,12 @@ export const S2C_EVENTS = Object.freeze({
 
   NOTIFICATION: 'notification:new',
   ADMIN_ALERT: 'admin:alert',
+
+  CHAT_JOINED: 'chat:joined',
+  CHAT_MESSAGE_CREATED: 'chat:message:created',
+  CHAT_MESSAGE_READ: 'chat:message:read',
+  CHAT_TYPING: 'chat:typing',
+  CHAT_ERROR: 'chat:error',
 });
 
 /** SOS realtime events (keep in sync with backend/src/constants/sos.js) */

@@ -13,6 +13,7 @@ import {
 } from '../constants/socketEvents.js';
 import { SOS_SOCKET_ROOMS } from '../constants/sos.js';
 import { attachDriverSocketHandlers } from '../controllers/driverSocket.controller.js';
+import { attachChatSocketHandlers } from '../controllers/chatSocket.controller.js';
 
 /**
  * Socket.IO server bootstrap.
@@ -148,6 +149,11 @@ export function roomForBooking(bookingId) {
   return `${SOCKET_ROOM_PREFIX.BOOKING}:${bookingId}`;
 }
 
+/** Authorized trip-chat room — only join after chat.service access check. */
+export function roomForBookingChat(bookingId) {
+  return `${SOCKET_ROOM_PREFIX.BOOKING_CHAT}:${bookingId}`;
+}
+
 export const ADMIN_ROOM = SOCKET_ROOM_PREFIX.ADMIN;
 export const ADMIN_SOS_ROOM = SOS_SOCKET_ROOMS.ADMIN;
 export const OPERATIONS_SOS_ROOM = SOS_SOCKET_ROOMS.OPERATIONS;
@@ -201,6 +207,9 @@ function attachConnectionHandlers(socket) {
     if (!bookingId) return;
     socket.leave(roomForBooking(bookingId));
   });
+
+  // Booking-scoped trip chat (authorized join + message handlers).
+  attachChatSocketHandlers(socket);
 
   // Driver-specific handlers (location stream, online/offline mirror).
   if (principal.type === 'driver') {

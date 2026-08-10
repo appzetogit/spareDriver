@@ -894,3 +894,48 @@ export function notifyDriverSupportReply(driverId, ticket) {
     },
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Trip chat                                                           */
+/* ------------------------------------------------------------------ */
+
+export function notifyUserTripChatMessage(userId, { title, body, data = {} }) {
+  return sendPushNotification(
+    { userId },
+    {
+      title: title || 'New message',
+      body: body || '',
+      type: USER_NOTIFICATION.TRIP_CHAT_MESSAGE,
+      data,
+    },
+  );
+}
+
+export function notifyDriverTripChatMessage(driverId, { title, body, data = {} }) {
+  return sendPushNotification(
+    { driverId },
+    {
+      title: title || 'New message',
+      body: body || '',
+      type: DRIVER_NOTIFICATION.TRIP_CHAT_MESSAGE,
+      data,
+    },
+  );
+}
+
+/**
+ * Soft admin notify for trip chat — inbox + socket, no FCM by default
+ * (chat volume would be noisy). Zone-scoped when booking has zoneIds.
+ */
+export function notifyAdminsTripChatMessage({ title, body, data = {}, zoneIds } = {}) {
+  return sendAdminNotification({
+    title: title || 'Trip chat message',
+    body: body || '',
+    severity: 'info',
+    type: ADMIN_NOTIFICATION.TRIP_CHAT_MESSAGE,
+    data,
+    zoneIds,
+    sendFcm: false,
+  });
+}
+

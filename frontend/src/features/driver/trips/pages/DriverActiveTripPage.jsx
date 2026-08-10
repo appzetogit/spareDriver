@@ -47,6 +47,9 @@ import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/servic
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
+import TripChatEntry from '../../../../components/chat/TripChatEntry';
+import useDriverAuthStore from '../../../../store/useDriverAuthStore';
+import { isChatVisibleForBooking } from '../../../../constants/chat';
 
 /**
  * Driver-side counterpart of `DriverAssignedPage` — one screen that adapts
@@ -122,6 +125,7 @@ const DriverActiveTripPage = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   const { emit, isConnected } = useSocket();
+  const driverAuth = useDriverAuthStore((s) => s.driver);
 
   const booking = useDriverActiveTripStore((s) => s.booking);
   const loading = useDriverActiveTripStore((s) => s.loading);
@@ -812,6 +816,20 @@ const DriverActiveTripPage = () => {
           since={customerSince}
           callHref={customerCallHref}
           contactLocked={!contactRevealed}
+          chatSlot={
+            isChatVisibleForBooking(booking) ? (
+              <TripChatEntry
+                booking={booking}
+                audience="driver"
+                selfId={driverAuth?._id || driverAuth?.id}
+                peerName={customerName || 'Customer'}
+                peerAvatar={customerPhoto}
+                subtitle="Trip chat"
+                buttonVariant="driver"
+                buttonClassName="!mt-0"
+              />
+            ) : null
+          }
         />
 
         {/* Vehicle — image + brand/model + plate. Driver needs to spot
@@ -1540,7 +1558,16 @@ function WaitingTimerCard({
  * accent gradient + verified chip mirror the visual hierarchy we use
  * on the user-side driver card so both audiences feel parallel.
  */
-function CustomerHeroCard({ photo, name, phone, email, since, callHref, contactLocked = false }) {
+function CustomerHeroCard({
+  photo,
+  name,
+  phone,
+  email,
+  since,
+  callHref,
+  contactLocked = false,
+  chatSlot = null,
+}) {
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-5 pt-5 pb-4 flex items-start gap-4">
@@ -1594,15 +1621,20 @@ function CustomerHeroCard({ photo, name, phone, email, since, callHref, contactL
           />
         )}
 
-        {callHref && (
-          <a
-            href={callHref}
-            className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-white font-semibold py-3 text-sm shadow-sm hover:bg-emerald-600 active:scale-[0.98] transition"
-            aria-label="Call customer"
-          >
-            <Phone className="w-4 h-4" />
-            Call customer
-          </a>
+        {(callHref || chatSlot) && (
+          <div className={`mt-3 grid gap-2 ${callHref && chatSlot ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {callHref && (
+              <a
+                href={callHref}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-white font-semibold py-3 text-sm shadow-sm hover:bg-emerald-600 active:scale-[0.98] transition"
+                aria-label="Call customer"
+              >
+                <Phone className="w-4 h-4" />
+                Call
+              </a>
+            )}
+            {chatSlot}
+          </div>
         )}
       </div>
     </Card>

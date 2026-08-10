@@ -201,6 +201,13 @@ import {
   settleOutstationArrived,
 } from '../controllers/booking.controller.js';
 import {
+  getBookingChat,
+  listBookingChatMessages,
+  sendBookingChatMessage,
+  markBookingChatRead,
+  getBookingChatUnread,
+} from '../controllers/chat.controller.js';
+import {
   adminListAds,
   adminCreateAd,
   adminUpdateAd,
@@ -325,6 +332,36 @@ router.get(
   getScheduledQueueJobs,
 );
 router.get('/bookings/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminBookingById);
+router.get(
+  '/bookings/:id/chat',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getBookingChat,
+);
+router.get(
+  '/bookings/:id/chat/messages',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  listBookingChatMessages,
+);
+router.get(
+  '/bookings/:id/chat/unread',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  getBookingChatUnread,
+);
+router.post(
+  '/bookings/:id/chat/messages',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  sendBookingChatMessage,
+);
+router.patch(
+  '/bookings/:id/chat/read',
+  protectStaff,
+  restrictTo(...ALL_STAFF),
+  markBookingChatRead,
+);
 router.get(
   '/bookings/:id/available-drivers',
   protectStaff,

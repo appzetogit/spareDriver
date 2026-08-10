@@ -17,6 +17,8 @@ export const SOCKET_ROOM_PREFIX = Object.freeze({
   DRIVER: 'driver',
   ADMIN: 'admin',
   BOOKING: 'booking',
+  /** Authorized chat room — join only after booking membership check. */
+  BOOKING_CHAT: 'booking-chat',
 });
 
 /** Built-in Socket.IO lifecycle events (re-exported for convenience). */
@@ -48,6 +50,14 @@ export const C2S_EVENTS = Object.freeze({
   /** Booking room join/leave (for users + drivers watching a specific trip). */
   BOOKING_JOIN: 'booking:join',
   BOOKING_LEAVE: 'booking:leave',
+
+  /** Trip chat — join/leave requires server-side booking access check. */
+  CHAT_JOIN: 'chat:join',
+  CHAT_LEAVE: 'chat:leave',
+  CHAT_MESSAGE_SEND: 'chat:message:send',
+  CHAT_MESSAGE_READ: 'chat:message:read',
+  CHAT_TYPING_START: 'chat:typing:start',
+  CHAT_TYPING_STOP: 'chat:typing:stop',
 });
 
 /**
@@ -139,4 +149,11 @@ export const S2C_EVENTS = Object.freeze({
 
   /** Operational alerts for admin dashboards (e.g. low driver count in zone). */
   ADMIN_ALERT: 'admin:alert',
+
+  /** Trip chat realtime events. */
+  CHAT_JOINED: 'chat:joined',
+  CHAT_MESSAGE_CREATED: 'chat:message:created',
+  CHAT_MESSAGE_READ: 'chat:message:read',
+  CHAT_TYPING: 'chat:typing',
+  CHAT_ERROR: 'chat:error',
 });
