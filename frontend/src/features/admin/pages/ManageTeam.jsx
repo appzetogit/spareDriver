@@ -184,13 +184,25 @@ const ManageTeam = () => {
       label: 'Team Member',
       width: '35%',
       render: (val, row) => (
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 font-bold uppercase ring-1 ring-slate-200 shadow-sm">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 font-bold uppercase ring-1 ring-slate-200 shadow-sm shrink-0">
             {val.charAt(0)}
           </div>
-          <div className="overflow-hidden">
-            <p className="font-semibold text-slate-900 truncate">{val}</p>
-            <p className="text-[11px] text-slate-500 truncate">{row.email}</p>
+          <div className="overflow-hidden min-w-0">
+            <p className="font-semibold text-slate-900 truncate text-sm">{val}</p>
+            <p className="text-[11px] text-slate-500 truncate hidden sm:block">{row.email}</p>
+            {/* Mobile: show role badge inline */}
+            <div className="flex items-center gap-1.5 mt-0.5 sm:hidden">
+              <Badge variant={row.role === 'admin' ? 'warning' : row.role === 'sub_admin' ? 'success' : 'info'} className="text-[9px] px-1.5 py-0.5">
+                {STAFF_ROLE_LABELS[row.role] || row.role}
+              </Badge>
+              <div className="flex items-center gap-1">
+                <div className={`w-1.5 h-1.5 rounded-full ${row.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <span className={`text-[9px] font-semibold ${row.isActive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {row.isActive ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       ),
@@ -199,6 +211,7 @@ const ManageTeam = () => {
       key: 'role',
       label: 'Role',
       width: '15%',
+      className: 'hidden sm:table-cell',
       render: (val) => (
         <Badge
           variant={val === 'admin' ? 'warning' : val === 'sub_admin' ? 'success' : 'info'}
@@ -217,6 +230,7 @@ const ManageTeam = () => {
       key: 'isActive',
       label: 'Status',
       width: '15%',
+      className: 'hidden sm:table-cell',
       render: (val) => (
         <div className="flex items-center gap-1.5">
           <div className={`w-2 h-2 rounded-full ${val ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
@@ -260,7 +274,7 @@ const ManageTeam = () => {
   ], [navigate]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 lg:p-6 space-y-6 animate-fade-in-up pb-10">
+    <div className="min-h-screen bg-slate-50 p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 animate-fade-in-up pb-10">
       {error && (
         <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-sm">
           {error}

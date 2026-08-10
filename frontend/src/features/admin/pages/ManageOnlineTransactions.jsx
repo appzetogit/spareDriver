@@ -203,16 +203,16 @@ const ManageOnlineTransactions = () => {
       <div className="bg-white border border-border-light rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-text-muted">
-              <tr>
-                <Th>When</Th>
-                <Th>Purpose</Th>
-                <Th>Subject</Th>
-                <Th>Reference</Th>
-                <Th>Amount</Th>
-                <Th>Status</Th>
-                <Th>Razorpay payment</Th>
-                <Th className="text-right">Details</Th>
+            <thead>
+              <tr className="bg-gray-50 text-text-muted border-b border-border-light">
+                <Th>Purpose / Txn</Th>
+                <Th className="hidden sm:table-cell">When</Th>
+                <Th className="hidden md:table-cell">Subject</Th>
+                <Th className="hidden sm:table-cell">Reference</Th>
+                <Th className="hidden sm:table-cell">Amount</Th>
+                <Th className="hidden sm:table-cell">Status</Th>
+                <Th className="hidden md:table-cell">Razorpay payment</Th>
+                <Th className="text-right w-10">Details</Th>
               </tr>
             </thead>
             <tbody>
@@ -242,25 +242,42 @@ const ManageOnlineTransactions = () => {
                       key={txn.id}
                       className="border-t border-border-light hover:bg-gray-50/60 align-top"
                     >
-                      <td className="px-4 py-3 text-xs text-text-muted whitespace-nowrap">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            {txn.purposeLabel}
+                          </span>
+                          <div className="sm:hidden">
+                            <Badge variant={meta.variant} className="text-[9px] px-1.5 py-0.5">
+                              <span className="inline-flex items-center gap-1">
+                                <Icon className="w-2.5 h-2.5" />
+                                {meta.label}
+                              </span>
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+                          <span className="truncate">Cust: {txn.subjectName || '—'}</span>
+                          <span className="font-bold text-emerald-600 shrink-0">
+                            {formatCurrency(txn.amountRupees)}
+                          </span>
+                        </div>
+                        <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                          <span className="truncate">Ref: {txn.referenceLabel || '—'}</span>
+                          <span className="text-slate-400 shrink-0">{formatDateTime(txn.createdAt)}</span>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell px-4 py-3 text-xs text-text-muted whitespace-nowrap">
                         {formatDateTime(txn.createdAt)}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary">
-                          <CreditCard className="w-3.5 h-3.5" />
-                          {txn.purposeLabel}
-                        </span>
-                        <p className="text-[10px] text-text-muted mt-0.5 capitalize">
-                          {txn.subjectType}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden md:table-cell px-4 py-3">
                         <p className="text-text font-medium">{txn.subjectName || '—'}</p>
                         <p className="text-[10px] text-text-muted mt-0.5">
                           {txn.subjectPhone || '—'}
                         </p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden sm:table-cell px-4 py-3">
                         <p className="font-mono text-xs font-medium text-text">
                           {txn.referenceLabel || '—'}
                         </p>
@@ -268,10 +285,10 @@ const ManageOnlineTransactions = () => {
                           {txn.razorpayOrderId || '—'}
                         </p>
                       </td>
-                      <td className="px-4 py-3 font-semibold text-text">
+                      <td className="hidden sm:table-cell px-4 py-3 font-semibold text-text">
                         {formatCurrency(txn.amountRupees)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden sm:table-cell px-4 py-3">
                         <Badge variant={meta.variant}>
                           <span className="inline-flex items-center gap-1">
                             <Icon className="w-3 h-3" />
@@ -279,7 +296,7 @@ const ManageOnlineTransactions = () => {
                           </span>
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-xs font-mono text-text-muted">
+                      <td className="hidden md:table-cell px-4 py-3 text-xs font-mono text-text-muted">
                         {txn.razorpayPaymentId || '—'}
                       </td>
                       <td className="px-4 py-3 text-right">

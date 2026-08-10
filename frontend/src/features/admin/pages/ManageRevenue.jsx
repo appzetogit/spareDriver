@@ -244,15 +244,15 @@ const ManageRevenue = () => {
       <div className="bg-white border border-border-light rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-text-muted">
-              <tr>
+            <thead>
+              <tr className="bg-gray-50 text-text-muted border-b border-border-light">
                 <Th>Booking</Th>
-                <Th>Source</Th>
-                <Th>Service</Th>
-                <Th>Customer</Th>
-                <Th>Driver</Th>
-                <Th>Amount</Th>
-                <Th>Occurred</Th>
+                <Th className="hidden sm:table-cell">Source</Th>
+                <Th className="hidden md:table-cell">Service</Th>
+                <Th className="hidden sm:table-cell">Customer</Th>
+                <Th className="hidden md:table-cell">Driver</Th>
+                <Th className="hidden sm:table-cell">Amount</Th>
+                <Th className="hidden sm:table-cell">Occurred</Th>
               </tr>
             </thead>
             <tbody>
@@ -329,9 +329,9 @@ const ManageRevenue = () => {
   );
 };
 
-function Th({ children }) {
+function Th({ children, className = '' }) {
   return (
-    <th className="text-left text-[11px] font-semibold uppercase tracking-wide px-4 py-3">
+    <th className={`text-left text-[11px] font-semibold uppercase tracking-wide px-4 py-3 ${className}`}>
       {children}
     </th>
   );
@@ -361,14 +361,33 @@ function RevenueRow({ row, onClick }) {
       }}
     >
       <td className="px-4 py-3">
-        <p className="font-mono text-xs font-medium text-text">
-          {row.bookingNumber || '\u2014'}
-        </p>
-        <p className="text-[10px] text-text-muted mt-0.5 font-mono">
-          {String(row.bookingId || '').slice(-8)}
-        </p>
+        <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+          <p className="font-mono text-xs font-bold text-slate-800">
+            {row.bookingNumber || '\u2014'}
+          </p>
+          <div className="sm:hidden">
+            <Badge variant={meta.variant} className="text-[9px] px-1.5 py-0.5">
+              <span className="inline-flex items-center gap-1">
+                <Icon className="w-2.5 h-2.5" />
+                {meta.label}
+              </span>
+            </Badge>
+          </div>
+        </div>
+        <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+          <span className="truncate">Cust: {customer}</span>
+          <span className={`font-bold shrink-0 ${meta.tone}`}>
+            {formatCurrency(row.amountRupees)}
+          </span>
+        </div>
+        <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+          <span className="truncate">Driver: {driver}</span>
+          <span className="text-slate-400 shrink-0">
+            {formatDateTime(row.occurredAt || row.createdAt)}
+          </span>
+        </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3">
         <Badge variant={meta.variant}>
           <span className="inline-flex items-center gap-1">
             <Icon className="w-3 h-3" />
@@ -376,17 +395,17 @@ function RevenueRow({ row, onClick }) {
           </span>
         </Badge>
       </td>
-      <td className="px-4 py-3 text-xs text-text-secondary capitalize">
+      <td className="hidden md:table-cell px-4 py-3 text-xs text-text-secondary capitalize">
         {row.serviceType || '\u2014'}
       </td>
-      <td className="px-4 py-3 text-xs text-text">{customer}</td>
-      <td className="px-4 py-3 text-xs text-text">{driver}</td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3 text-xs text-text">{customer}</td>
+      <td className="hidden md:table-cell px-4 py-3 text-xs text-text">{driver}</td>
+      <td className="hidden sm:table-cell px-4 py-3">
         <p className={`font-bold ${meta.tone}`}>
           {formatCurrency(row.amountRupees)}
         </p>
       </td>
-      <td className="px-4 py-3 text-xs text-text-muted">
+      <td className="hidden sm:table-cell px-4 py-3 text-xs text-text-muted">
         {formatDateTime(row.occurredAt || row.createdAt)}
       </td>
     </tr>

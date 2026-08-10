@@ -185,22 +185,48 @@ const ManageOutstationAssignments = () => {
       {
         key: 'bookingNumber',
         label: 'Booking',
-        width: '15%',
-        render: (_, row) => (
-          <div>
-            <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-1 rounded-lg">
-              {row.bookingNumber || row._id?.slice(-6)}
-            </span>
-            <p className="text-[10px] text-slate-400 mt-1.5 uppercase tracking-widest font-medium">
-              {row.bookingType || 'instant'}
-            </p>
-          </div>
-        ),
+        unclamp: true,
+        render: (_, row) => {
+          const meta = STATUS_BADGE[row.status] || {
+            variant: 'default',
+            label: String(row.status || '—').replace(/_/g, ' '),
+          };
+          const customerName = row.userId?.name || 'Unknown';
+          const startSrc = row.outstation?.pickupAt || row.outstation?.startDate;
+          const start = startSrc ? new Date(startSrc) : null;
+
+          return (
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+                <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded">
+                  {row.bookingNumber || row._id?.slice(-6)}
+                </span>
+                <span className="sm:hidden">
+                  <Badge variant={meta.variant} className="capitalize text-[9px] px-1.5 py-0.5">
+                    {meta.label}
+                  </Badge>
+                </span>
+              </div>
+              <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+                <span className="truncate">Cust: {customerName}</span>
+                <span className="font-bold text-emerald-600 shrink-0">₹{row.fareSnapshot?.total || 0}</span>
+              </div>
+              <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
+                <MapPin className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                <span className="truncate">{row.pickup?.address || '—'}</span>
+              </div>
+              <div className="sm:hidden text-[10px] text-slate-400 mt-0.5 flex items-center justify-between gap-2">
+                <span className="truncate">Driver: {row.driverId?.name || 'Unassigned'}</span>
+                <span className="shrink-0">{start ? formatDateTime12(start) : '—'}</span>
+              </div>
+            </div>
+          );
+        },
       },
       {
         key: 'customer',
         label: 'Customer',
-        width: '16%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900 truncate">
@@ -216,7 +242,7 @@ const ManageOutstationAssignments = () => {
       {
         key: 'pickup',
         label: 'Route',
-        width: '28%',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <div className="min-w-0 space-y-1">
             <p className="text-xs text-slate-700 truncate flex items-start gap-1" title={row.pickup?.address}>
@@ -249,7 +275,7 @@ const ManageOutstationAssignments = () => {
       {
         key: 'schedule',
         label: 'Schedule',
-        width: '22%',
+        className: 'hidden md:table-cell',
         render: (_, row) => {
           const startSrc = row.outstation?.pickupAt || row.outstation?.startDate;
           const endSrc = row.outstation?.expectedReturnAt || row.outstation?.endDate;
@@ -281,7 +307,7 @@ const ManageOutstationAssignments = () => {
       {
         key: 'fare',
         label: 'Fare',
-        width: '8%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <span className="text-sm font-bold text-emerald-600 flex items-center gap-0.5">
             <IndianRupee className="w-3.5 h-3.5" />
@@ -292,7 +318,7 @@ const ManageOutstationAssignments = () => {
       {
         key: 'status',
         label: 'Status',
-        width: '10%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => {
           const meta = STATUS_BADGE[row.status] || {
             variant: 'default',
@@ -315,7 +341,7 @@ const ManageOutstationAssignments = () => {
       {
         key: 'inbox',
         label: 'Inbox',
-        width: '6%',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <span className="text-xs text-slate-600">
             {(row.dispatch?.pendingOfferIds || []).length}
@@ -544,6 +570,7 @@ const ManageOutstationAssignments = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={rows}
         loading={loading}
@@ -624,19 +651,19 @@ function OutstationQueueStats({ total, overdue, today }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-3 gap-2 sm:gap-4">
       {tiles.map((t) => (
         <div
           key={t.label}
-          className={`bg-gradient-to-br ${t.gradient} rounded-2xl border border-white/80 shadow-sm p-5 flex items-center gap-4`}
+          className={`bg-gradient-to-br ${t.gradient} rounded-xl sm:rounded-2xl border border-white/80 shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4`}
         >
-          <div className={`w-12 h-12 rounded-2xl ${t.iconBg} flex items-center justify-center shrink-0`}>
-            <t.icon className={`w-6 h-6 ${t.fg}`} />
+          <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${t.iconBg} flex items-center justify-center shrink-0`}>
+            <t.icon className={`w-4 h-4 sm:w-6 sm:h-6 ${t.fg}`} />
           </div>
           <div className="min-w-0">
-            <p className={`text-3xl font-extrabold leading-none ${t.fg}`}>{t.value}</p>
-            <p className="text-[11px] font-bold text-slate-600 mt-1">{t.label}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">{t.desc}</p>
+            <p className={`text-xl sm:text-3xl font-extrabold leading-none ${t.fg}`}>{t.value}</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-slate-600 mt-0.5 sm:mt-1 leading-tight">{t.label}</p>
+            <p className="hidden sm:block text-[10px] text-slate-400 mt-0.5">{t.desc}</p>
           </div>
         </div>
       ))}

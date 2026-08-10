@@ -146,25 +146,59 @@ const ManageScheduledQueue = () => {
       {
         key: 'name',
         label: 'Job',
-        width: '20%',
-        render: (_, row) => (
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900">
-              {KIND_LABELS[row.name] || row.name}
-              {row.name === 'reminder' && row.minutesAhead != null && (
-                <span className="text-xs text-slate-500 ml-1">
-                  · -{row.minutesAhead}m
+        unclamp: true,
+        render: (_, row) => {
+          const at = row.booking?.scheduledStartAt || row.scheduledStartAt;
+
+          return (
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+                <span className="text-xs font-semibold text-slate-900">
+                  {KIND_LABELS[row.name] || row.name}
+                  {row.name === 'reminder' && row.minutesAhead != null && (
+                    <span className="text-[10px] text-slate-500 ml-1">
+                      (-{row.minutesAhead}m)
+                    </span>
+                  )}
                 </span>
+                <span className="sm:hidden">
+                  <StateBadge state={row.state} />
+                </span>
+              </div>
+              {row.booking ? (
+                <button
+                  type="button"
+                  className="sm:hidden text-left mt-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openBooking(row.bookingId);
+                  }}
+                >
+                  <p className="text-xs font-semibold text-primary hover:underline font-mono">
+                    {row.booking.bookingNumber || row.bookingId?.slice(-6)}
+                    <span className="text-slate-500 font-normal font-sans ml-1.5">
+                      · {row.booking.customerName || 'Customer'}
+                    </span>
+                  </p>
+                </button>
+              ) : row.bookingId ? (
+                <p className="sm:hidden text-[10px] text-slate-400 font-mono mt-0.5">
+                  {String(row.bookingId).slice(-8)}
+                </p>
+              ) : null}
+              {at && (
+                <p className="sm:hidden text-[10px] text-slate-500 mt-0.5">
+                  Pickup: {formatPickupDateTime(new Date(at))}
+                </p>
               )}
-            </p>
-            <p className="text-[11px] text-slate-400 font-mono truncate">{row.id}</p>
-          </div>
-        ),
+            </div>
+          );
+        },
       },
       {
         key: 'booking',
         label: 'Booking',
-        width: '22%',
+        className: 'hidden sm:table-cell',
         render: (_, row) =>
           row.booking ? (
             <button
@@ -175,7 +209,7 @@ const ManageScheduledQueue = () => {
                 openBooking(row.bookingId);
               }}
             >
-              <p className="text-sm font-semibold text-primary hover:underline">
+              <p className="text-sm font-semibold text-primary hover:underline font-mono">
                 {row.booking.bookingNumber || row.bookingId?.slice(-6)}
               </p>
               <p className="text-[11px] text-slate-500 truncate">
@@ -193,7 +227,7 @@ const ManageScheduledQueue = () => {
       {
         key: 'scheduledStartAt',
         label: 'Pickup',
-        width: '18%',
+        className: 'hidden md:table-cell',
         render: (_, row) => {
           const at = row.booking?.scheduledStartAt || row.scheduledStartAt;
           return (
@@ -206,7 +240,7 @@ const ManageScheduledQueue = () => {
       {
         key: 'nextRunAt',
         label: 'Next run',
-        width: '20%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => {
           if (row.state === 'completed' && row.finishedOn) {
             return (
@@ -240,13 +274,13 @@ const ManageScheduledQueue = () => {
       {
         key: 'state',
         label: 'Status',
-        width: '12%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => <StateBadge state={row.state} />,
       },
       {
         key: 'createdAt',
         label: 'Queued',
-        width: '8%',
+        className: 'hidden md:table-cell',
         render: (_, row) =>
           row.createdAt ? (
             <span className="text-xs text-slate-500">
@@ -261,23 +295,23 @@ const ManageScheduledQueue = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up p-4 lg:p-6">
-      <div className="bg-gradient-to-br from-slate-700 to-slate-900 text-white rounded-3xl p-5 shadow-sm flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-            <Layers className="w-5 h-5" />
+    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up p-3 sm:p-4 lg:p-6">
+      <div className="bg-gradient-to-br from-slate-700 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+            <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold">Scheduled Queue</h1>
-            <p className="text-[12px] text-white/80 mt-0.5 leading-snug">
+            <h1 className="text-base sm:text-lg font-bold truncate">Scheduled Queue</h1>
+            <p className="hidden sm:block text-[12px] text-white/80 mt-0.5 leading-snug">
               BullMQ worker jobs for reminders and the 45‑min batch. Legacy
               assign / escalate leftovers are hidden.
             </p>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[11px] uppercase tracking-wide text-white/70">Queued</p>
-          <p className="text-3xl font-bold leading-tight">{totalQueued}</p>
+          <p className="text-[9px] sm:text-[11px] uppercase tracking-wide text-white/70">Queued</p>
+          <p className="text-2xl sm:text-3xl font-bold leading-tight">{totalQueued}</p>
         </div>
       </div>
 
@@ -395,6 +429,7 @@ const ManageScheduledQueue = () => {
         </div>
       ) : (
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={columns}
           data={pagedJobs}
           loading={loading}

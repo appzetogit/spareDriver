@@ -275,16 +275,16 @@ const ManageRefunds = () => {
       <div className="bg-white border border-border-light rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-text-muted">
-              <tr>
-                <Th>Type</Th>
-                <Th>Reference</Th>
-                <Th>Customer</Th>
-                <Th>Amount</Th>
-                <Th>Status</Th>
-                <Th>Transaction</Th>
-                <Th>Requested</Th>
-                <Th className="text-right">Actions</Th>
+            <thead>
+              <tr className="bg-gray-50 text-text-muted border-b border-border-light">
+                <Th>Refund</Th>
+                <Th className="hidden sm:table-cell">Reference</Th>
+                <Th className="hidden sm:table-cell">Customer</Th>
+                <Th className="hidden sm:table-cell">Amount</Th>
+                <Th className="hidden sm:table-cell">Status</Th>
+                <Th className="hidden md:table-cell">Transaction</Th>
+                <Th className="hidden md:table-cell">Requested</Th>
+                <Th className="text-right w-10">Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -519,23 +519,34 @@ function RefundRow({ refund, updating, onMarkProcessed, onReject }) {
   return (
     <tr className="border-t border-border-light hover:bg-gray-50/60 align-top">
       <td className="px-4 py-3">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary">
-          {isWalletSettlement || isAdminManual || isAutoWallet ? (
-            <Wallet className="w-3.5 h-3.5" />
-          ) : null}
-          {KIND_LABELS[refund.kind] || 'Refund'}
-        </span>
-        <p className="text-[10px] text-text-muted mt-0.5">
-          {channel}
-          {refund.payoutMethod
-            ? ` · ${REFUND_PAYOUT_METHOD_LABELS[refund.payoutMethod] || refund.payoutMethod}`
-            : ''}
-          {isAdminManual && refund.subjectType
-            ? ` · ${REFUND_SUBJECT_TYPE_LABELS[refund.subjectType] || refund.subjectType}`
-            : ''}
-        </p>
+        <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary">
+            {isWalletSettlement || isAdminManual || isAutoWallet ? (
+              <Wallet className="w-3.5 h-3.5" />
+            ) : null}
+            {KIND_LABELS[refund.kind] || 'Refund'}
+          </span>
+          <div className="sm:hidden">
+            <Badge variant={meta.variant} className="text-[9px] px-1.5 py-0.5">
+              <span className="inline-flex items-center gap-1">
+                <Icon className="w-2.5 h-2.5" />
+                {meta.label}
+              </span>
+            </Badge>
+          </div>
+        </div>
+        <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+          <span className="truncate">Cust: {customer}</span>
+          <span className="font-bold text-emerald-600 shrink-0">
+            {formatCurrency(refund.amountRupees)}
+          </span>
+        </div>
+        <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+          <span className="truncate">Ref: {refund.subscriptionNumber || refund.bookingNumber || '—'}</span>
+          <span className="text-slate-400 shrink-0">{formatDateTime(refund.createdAt)}</span>
+        </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3">
         <p className="font-mono text-xs font-medium text-text">
           {isWalletSettlement
             ? 'Wallet settlement'
@@ -557,8 +568,8 @@ function RefundRow({ refund, updating, onMarkProcessed, onReject }) {
           </p>
         ) : null}
       </td>
-      <td className="px-4 py-3 text-text">{customer}</td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3 text-text">{customer}</td>
+      <td className="hidden sm:table-cell px-4 py-3">
         <p className="font-semibold text-success">{formatCurrency(refund.amountRupees)}</p>
         {!isWalletSettlement && !isAdminManual && Number(refund.grossPaidRupees) > 0 && (
           <p className="text-[10px] text-text-muted mt-0.5">
@@ -566,7 +577,7 @@ function RefundRow({ refund, updating, onMarkProcessed, onReject }) {
           </p>
         )}
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3">
         <Badge variant={meta.variant}>
           <span className="inline-flex items-center gap-1">
             <Icon className="w-3 h-3" />
@@ -574,8 +585,8 @@ function RefundRow({ refund, updating, onMarkProcessed, onReject }) {
           </span>
         </Badge>
       </td>
-      <td className="px-4 py-3 text-xs text-text-muted font-mono">{txnDisplay(refund)}</td>
-      <td className="px-4 py-3 text-xs text-text-muted">{formatDateTime(refund.createdAt)}</td>
+      <td className="hidden md:table-cell px-4 py-3 text-xs text-text-muted font-mono">{txnDisplay(refund)}</td>
+      <td className="hidden md:table-cell px-4 py-3 text-xs text-text-muted">{formatDateTime(refund.createdAt)}</td>
       <td className="px-4 py-3">
         {menuItems.length > 0 ? (
           <RowActionsMenu items={menuItems} />

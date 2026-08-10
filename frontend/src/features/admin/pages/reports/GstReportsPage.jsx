@@ -178,17 +178,17 @@ const GstReportsPage = () => {
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100">
-                <th className="px-5 py-3 font-semibold">Date</th>
-                <th className="px-5 py-3 font-semibold">Type</th>
-                <th className="px-5 py-3 font-semibold">Ref</th>
-                <th className="px-5 py-3 font-semibold">Source</th>
-                <th className="px-5 py-3 font-semibold">Base</th>
-                <th className="px-5 py-3 font-semibold">Svc charge</th>
-                <th className="px-5 py-3 font-semibold">GST</th>
-                <th className="px-5 py-3 font-semibold">Total</th>
+                <th className="px-3 sm:px-5 py-3 font-semibold">Ref / Date</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Type</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Ref</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Source</th>
+                <th className="hidden md:table-cell px-5 py-3 font-semibold">Base</th>
+                <th className="hidden md:table-cell px-5 py-3 font-semibold">Svc charge</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">GST</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -201,23 +201,35 @@ const GstReportsPage = () => {
               ) : (
                 lineItems.items.map((row) => (
                   <tr key={`${row.type}-${row.ref}-${row.date}`} className="border-b border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-5 py-3 whitespace-nowrap">{formatDateTime12(row.date)}</td>
-                    <td className="px-5 py-3 capitalize text-xs font-semibold text-slate-500">
+                    <td className="px-3 sm:px-5 py-3">
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <span className="font-mono text-xs font-semibold text-slate-800">{row.ref}</span>
+                        <span className="sm:hidden text-[10px] uppercase font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {row.type}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{formatDateTime12(row.date)}</p>
+                      <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                        <span>GST: {formatCurrency(row.gstAmount)} ({row.gstPercent}%)</span>
+                        <span className="font-bold text-slate-900">Total: {formatCurrency(row.total)}</span>
+                      </div>
+                    </td>
+                    <td className="hidden sm:table-cell px-5 py-3 capitalize text-xs font-semibold text-slate-500">
                       {row.type}
                     </td>
-                    <td className="px-5 py-3 font-mono text-xs">{row.ref}</td>
-                    <td className="px-5 py-3 capitalize">
+                    <td className="hidden sm:table-cell px-5 py-3 font-mono text-xs">{row.ref}</td>
+                    <td className="hidden sm:table-cell px-5 py-3 capitalize">
                       {row.type === 'subscription'
                         ? row.planName || 'Subscription'
                         : row.serviceType}
                     </td>
-                    <td className="px-5 py-3">{formatCurrency(row.base)}</td>
-                    <td className="px-5 py-3">{formatCurrency(row.serviceCharge)}</td>
-                    <td className="px-5 py-3">
+                    <td className="hidden md:table-cell px-5 py-3">{formatCurrency(row.base)}</td>
+                    <td className="hidden md:table-cell px-5 py-3">{formatCurrency(row.serviceCharge)}</td>
+                    <td className="hidden sm:table-cell px-5 py-3">
                       {formatCurrency(row.gstAmount)}
                       <span className="text-xs text-slate-400 ml-1">({row.gstPercent}%)</span>
                     </td>
-                    <td className="px-5 py-3 font-semibold">{formatCurrency(row.total)}</td>
+                    <td className="hidden sm:table-cell px-5 py-3 font-semibold">{formatCurrency(row.total)}</td>
                   </tr>
                 ))
               )}

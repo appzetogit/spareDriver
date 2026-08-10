@@ -154,13 +154,13 @@ const DriverReportsPage = () => {
           <h3 className="text-sm font-bold text-slate-800">Top drivers by earnings</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100">
-                <th className="px-5 py-3 font-semibold">Driver</th>
-                <th className="px-5 py-3 font-semibold">Trips</th>
-                <th className="px-5 py-3 font-semibold">Earnings</th>
-                <th className="px-5 py-3 font-semibold" />
+                <th className="px-3 sm:px-5 py-3 font-semibold">Driver</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Trips</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Earnings</th>
+                <th className="px-3 sm:px-5 py-3 font-semibold text-right" />
               </tr>
             </thead>
             <tbody>
@@ -173,18 +173,22 @@ const DriverReportsPage = () => {
               ) : (
                 topDrivers.map((driver) => (
                   <tr key={driver.driverId} className="border-b border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-5 py-3">
+                    <td className="px-3 sm:px-5 py-3">
                       <p className="font-semibold text-slate-800">{driver.name}</p>
                       <p className="text-xs text-slate-400">{driver.phone}</p>
+                      <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                        <span>{formatCount(driver.trips)} trips</span>
+                        <span className="font-bold text-slate-900">{formatCurrency(driver.earnings)}</span>
+                      </div>
                     </td>
-                    <td className="px-5 py-3">{formatCount(driver.trips)}</td>
-                    <td className="px-5 py-3 font-semibold">{formatCurrency(driver.earnings)}</td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="hidden sm:table-cell px-5 py-3">{formatCount(driver.trips)}</td>
+                    <td className="hidden sm:table-cell px-5 py-3 font-semibold">{formatCurrency(driver.earnings)}</td>
+                    <td className="px-3 sm:px-5 py-3 text-right">
                       <Link
                         to={`/admin/drivers/${driver.driverId}/analytics`}
                         className="text-xs font-semibold text-primary hover:underline"
                       >
-                        View analytics
+                        View
                       </Link>
                     </td>
                   </tr>

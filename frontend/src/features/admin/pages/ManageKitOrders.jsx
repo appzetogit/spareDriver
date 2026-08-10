@@ -91,7 +91,7 @@ const ManageKitOrders = () => {
             {
               key: '_select',
               label: '',
-              width: '4%',
+              width: '30px',
               render: (_v, row) =>
                 isOpenTask(row.reviewTask) ? (
                   <input
@@ -111,13 +111,45 @@ const ManageKitOrders = () => {
       {
         key: 'orderNumber',
         label: 'Order',
-        width: canAssign ? '14%' : '18%',
-        render: (val) => <span className="font-mono text-xs font-semibold text-slate-700">{val}</span>,
+        unclamp: true,
+        render: (val, row) => (
+          <div className="min-w-0">
+            <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+              <span className="font-mono text-xs font-bold text-slate-800">{val}</span>
+              <div className="sm:hidden flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-900">₹{row.amount?.toLocaleString('en-IN')}</span>
+                <span
+                  className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${
+                    row.paymentStatus === 'paid'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : row.paymentStatus === 'pending'
+                        ? 'bg-amber-100 text-amber-800'
+                        : row.paymentStatus === 'failed'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {PAYMENT_STATUS_LABELS[row.paymentStatus] || row.paymentStatus}
+                </span>
+              </div>
+            </div>
+            <div className="sm:hidden text-xs text-slate-700 mt-0.5 font-medium flex items-center gap-1.5 truncate">
+              <span>{row.driverId?.name || '—'}</span>
+              {row.driverId?.phone && <span className="text-slate-400">({row.driverId.phone})</span>}
+            </div>
+            <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>Approval: {ADMIN_STATUS_LABELS[row.adminStatus] || row.adminStatus}</span>
+              <span className="text-slate-300">·</span>
+              <span>Assigned: </span>
+              <TaskAssigneeBadge task={row.reviewTask} compact />
+            </div>
+          </div>
+        ),
       },
       {
         key: 'driverId',
         label: 'Driver',
-        width: '22%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <div>
             <p className="text-sm font-semibold text-slate-800">{row.driverId?.name || '—'}</p>
@@ -128,13 +160,13 @@ const ManageKitOrders = () => {
       {
         key: 'amount',
         label: 'Amount',
-        width: '12%',
+        className: 'hidden sm:table-cell',
         render: (val) => <span className="text-sm font-medium">₹{val?.toLocaleString('en-IN')}</span>,
       },
       {
         key: 'paymentStatus',
         label: 'Payment',
-        width: '16%',
+        className: 'hidden sm:table-cell',
         render: (val, row) => (
           <div>
             <span
@@ -161,7 +193,7 @@ const ManageKitOrders = () => {
       {
         key: 'adminStatus',
         label: 'Approval',
-        width: '12%',
+        className: 'hidden sm:table-cell',
         render: (val) => (
           <span className="text-xs font-semibold text-slate-600">
             {ADMIN_STATUS_LABELS[val] || val}
@@ -171,14 +203,12 @@ const ManageKitOrders = () => {
       {
         key: 'reviewTask',
         label: 'Assigned to',
-        width: '14%',
         className: 'hidden md:table-cell',
         render: (_val, row) => <TaskAssigneeBadge task={row.reviewTask} compact />,
       },
       {
         key: 'fulfillmentStatus',
         label: 'Delivery',
-        width: '14%',
         className: 'hidden lg:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
@@ -191,7 +221,7 @@ const ManageKitOrders = () => {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in-up">
       <KitOrderFilters
         search={search}
         onSearchChange={(v) => {
@@ -230,6 +260,7 @@ const ManageKitOrders = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={orders}
         loading={loading}

@@ -92,17 +92,17 @@ const ManageZones = () => {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-row items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Service zones</h1>
-          <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
+          <h1 className="text-xl sm:text-3xl font-bold text-slate-900">Service zones</h1>
+          <p className="text-xs sm:text-sm text-slate-600 mt-0.5 sm:mt-1 max-w-2xl leading-relaxed">
             Define geographic areas where online drivers can receive bookings. Draw a radius
             circle or a pentagon directly on the map.
           </p>
         </div>
         {canEdit && (
-          <Button onClick={openCreate} className="shrink-0">
-            <Plus className="w-4 h-4 mr-2" />
+          <Button onClick={openCreate} className="shrink-0 text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4">
+            <Plus className="w-4 h-4 mr-1.5 sm:mr-2" />
             Add zone
           </Button>
         )}
@@ -126,15 +126,15 @@ const ManageZones = () => {
           {canEdit && <Button onClick={openCreate}>Create zone</Button>}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
           {zones.map((zone) => (
             <div
               key={zone._id}
-              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col"
+              className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm flex flex-col"
             >
-              <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="flex items-start justify-between gap-2 mb-2 sm:mb-3">
                 <div className="min-w-0">
-                  <h2 className="font-bold text-slate-900 truncate">{zone.name}</h2>
+                  <h2 className="font-bold text-slate-900 truncate text-sm sm:text-base">{zone.name}</h2>
                   <p className="text-xs text-slate-500 font-mono mt-0.5">{zone.code}</p>
                 </div>
                 <span
@@ -149,7 +149,7 @@ const ManageZones = () => {
               </div>
 
               {zone.city && (
-                <p className="text-sm text-slate-600 mb-2 flex items-center gap-1">
+                <p className="text-xs sm:text-sm text-slate-600 mb-2 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 shrink-0" />
                   {zone.city}
                 </p>
@@ -179,11 +179,11 @@ const ManageZones = () => {
               </dl>
 
               {zone.description && (
-                <p className="text-xs text-slate-500 mt-3 line-clamp-2">{zone.description}</p>
+                <p className="text-xs text-slate-500 mt-2 sm:mt-3 line-clamp-2">{zone.description}</p>
               )}
 
               {canEdit && (
-                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+                <div className="flex gap-2 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100">
                   <Button variant="outline" size="sm" fullWidth onClick={() => openEdit(zone)}>
                     <Edit2 className="w-3.5 h-3.5 mr-1" />
                     Edit

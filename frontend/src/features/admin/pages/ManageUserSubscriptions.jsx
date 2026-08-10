@@ -190,15 +190,48 @@ const ManageUserSubscriptions = () => {
     {
       key: 'subscriptionNumber',
       label: 'Subscription ID',
-      render: (_, row) => (
-        <span className="text-xs font-mono font-medium text-slate-700 whitespace-nowrap">
-          {row.subscriptionNumber || '—'}
-        </span>
-      ),
+      unclamp: true,
+      render: (_, row) => {
+        const cancelPending = row.cancellationRequest?.status === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
+        const variant =
+          row.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED
+            ? 'success'
+            : row.assignmentStatus === SUBSCRIPTION_ASSIGNMENT_STATUS.RELEASED
+              ? 'default'
+              : 'warning';
+        const customerName = row.userId?.name || 'Unknown';
+
+        return (
+          <div className="min-w-0">
+            <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+              <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                {row.subscriptionNumber || '—'}
+              </span>
+              <div className="sm:hidden flex items-center gap-1">
+                <Badge variant={variant} className="text-[9px] px-1.5 py-0.5">{row.assignmentStatus || 'pending'}</Badge>
+                {cancelPending && <Badge variant="danger" className="text-[9px] px-1.5 py-0.5">Cancel requested</Badge>}
+              </div>
+            </div>
+            <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+              <span className="truncate">Cust: {customerName}</span>
+              <span className="font-bold text-indigo-600 shrink-0">
+                ₹{row.amount} ({row.planNameSnapshot || row.planId?.name || '—'})
+              </span>
+            </div>
+            <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+              <span className="truncate">Driver: {row.assignedDriverId?.name || 'Pending'}</span>
+              <span className="text-slate-400 shrink-0">
+                {row.startDate ? formatDateTime12(row.startDate) : '—'}
+              </span>
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: 'customer',
       label: 'Customer',
+      className: 'hidden sm:table-cell',
       render: (_, row) => (
         <div className="min-w-0">
           <p className="font-semibold text-slate-800 truncate">{row.userId?.name || '—'}</p>
@@ -209,6 +242,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'plan',
       label: 'Plan',
+      className: 'hidden sm:table-cell',
       render: (_, row) => (
         <div className="min-w-0">
           <p className="font-medium text-slate-800">{row.planNameSnapshot || row.planId?.name || '—'}</p>
@@ -224,6 +258,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'car',
       label: 'Car',
+      className: 'hidden md:table-cell',
       render: (_, row) => (
         <span className="inline-flex items-center gap-1 text-sm text-slate-600">
           <Car className="w-3.5 h-3.5 shrink-0" />
@@ -234,6 +269,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'zone',
       label: 'Zone',
+      className: 'hidden md:table-cell',
       render: (_, row) => (
         <span className="inline-flex items-center gap-1 text-sm text-slate-600">
           <MapPin className="w-3.5 h-3.5 shrink-0" />
@@ -245,6 +281,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'period',
       label: 'Period',
+      className: 'hidden md:table-cell',
       render: (_, row) => {
         const overdue = isOverdueUnassignedSubscription(row);
         return (
@@ -263,6 +300,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'driver',
       label: 'Driver',
+      className: 'hidden sm:table-cell',
       render: (_, row) => {
         if (row.assignedDriverId) {
           return (
@@ -278,6 +316,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'status',
       label: 'Status',
+      className: 'hidden sm:table-cell',
       render: (_, row) => {
         const cancelPending =
           row.cancellationRequest?.status === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
@@ -298,6 +337,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'inbox',
       label: 'Inbox',
+      className: 'hidden md:table-cell',
       render: (_, row) => (
         <span className="text-xs text-slate-600">
           {(row.dispatch?.pendingOfferIds || []).length}
@@ -307,6 +347,7 @@ const ManageUserSubscriptions = () => {
     {
       key: 'actions',
       label: '',
+      width: '40px',
       render: (_, row) => {
         const items = [];
         if (canAssign) {
@@ -345,7 +386,7 @@ const ManageUserSubscriptions = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <StatTile
           label="Total (this page)"
           value={rows.length}
@@ -470,6 +511,7 @@ const ManageUserSubscriptions = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={rows}
         loading={loading}
@@ -501,14 +543,14 @@ const ManageUserSubscriptions = () => {
 function StatTile({ label, value, desc, icon: Icon, accent }) {
   const accentClass = accent === 'amber' ? 'text-amber-600 bg-amber-100' : 'text-primary bg-primary/15';
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${accentClass}`}>
-        <Icon className="w-6 h-6" />
+    <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+      <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${accentClass}`}>
+        <Icon className="w-4 h-4 sm:w-6 sm:h-6" />
       </div>
       <div>
-        <p className="text-3xl font-extrabold text-slate-900 leading-none">{value}</p>
-        <p className="text-[11px] font-bold text-slate-600 mt-1">{label}</p>
-        <p className="text-[10px] text-slate-400 mt-0.5">{desc}</p>
+        <p className="text-xl sm:text-3xl font-extrabold text-slate-900 leading-none">{value}</p>
+        <p className="text-[10px] sm:text-[11px] font-bold text-slate-600 mt-0.5 sm:mt-1 leading-tight">{label}</p>
+        <p className="hidden sm:block text-[10px] text-slate-400 mt-0.5">{desc}</p>
       </div>
     </div>
   );

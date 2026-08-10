@@ -132,14 +132,14 @@ const UserReportsPage = () => {
           <h3 className="text-sm font-bold text-slate-800">Top users by spending</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100">
-                <th className="px-5 py-3 font-semibold">User</th>
-                <th className="px-5 py-3 font-semibold">Trips</th>
-                <th className="px-5 py-3 font-semibold">Trip spend</th>
-                <th className="px-5 py-3 font-semibold">Total</th>
-                <th className="px-5 py-3 font-semibold" />
+                <th className="px-3 sm:px-5 py-3 font-semibold">User</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Trips</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Trip spend</th>
+                <th className="hidden sm:table-cell px-5 py-3 font-semibold">Total</th>
+                <th className="px-3 sm:px-5 py-3 font-semibold text-right" />
               </tr>
             </thead>
             <tbody>
@@ -152,19 +152,23 @@ const UserReportsPage = () => {
               ) : (
                 topUsers.map((user) => (
                   <tr key={user.userId} className="border-b border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-5 py-3">
+                    <td className="px-3 sm:px-5 py-3">
                       <p className="font-semibold text-slate-800">{user.name}</p>
                       <p className="text-xs text-slate-400">{user.phone || user.email}</p>
+                      <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                        <span>{formatCount(user.trips)} trips</span>
+                        <span className="font-bold text-slate-900">{formatCurrency(user.totalSpending)}</span>
+                      </div>
                     </td>
-                    <td className="px-5 py-3">{formatCount(user.trips)}</td>
-                    <td className="px-5 py-3">{formatCurrency(user.tripSpending)}</td>
-                    <td className="px-5 py-3 font-semibold">{formatCurrency(user.totalSpending)}</td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="hidden sm:table-cell px-5 py-3">{formatCount(user.trips)}</td>
+                    <td className="hidden sm:table-cell px-5 py-3">{formatCurrency(user.tripSpending)}</td>
+                    <td className="hidden sm:table-cell px-5 py-3 font-semibold">{formatCurrency(user.totalSpending)}</td>
+                    <td className="px-3 sm:px-5 py-3 text-right">
                       <Link
                         to={`/admin/users/${user.userId}/analytics`}
                         className="text-xs font-semibold text-primary hover:underline"
                       >
-                        View analytics
+                        View
                       </Link>
                     </td>
                   </tr>

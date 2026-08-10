@@ -206,11 +206,11 @@ const ManageWithdrawals = () => {
             <thead className="bg-bg text-left text-xs text-text-muted uppercase">
               <tr>
                 <th className="px-4 py-3">Driver</th>
-                <th className="px-4 py-3">Amount</th>
-                <th className="px-4 py-3">Balance at request</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Requested</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="hidden sm:table-cell px-4 py-3">Amount</th>
+                <th className="hidden md:table-cell px-4 py-3">Balance at request</th>
+                <th className="hidden sm:table-cell px-4 py-3">Status</th>
+                <th className="hidden sm:table-cell px-4 py-3">Requested</th>
+                <th className="px-4 py-3 text-right w-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-light">
@@ -234,20 +234,34 @@ const ManageWithdrawals = () => {
                   return (
                     <tr key={w._id} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-text">{w.driverName || '—'}</p>
-                        <p className="text-xs text-text-muted">{w.driverPhone || ''}</p>
-                        {w.isFullSettlement && (
-                          <span className="text-[10px] text-amber-700 font-semibold">Account deletion</span>
+                        <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+                          <p className="font-medium text-text text-xs sm:text-sm">{w.driverName || '—'}</p>
+                          <div className="sm:hidden">
+                            <Badge variant={meta.variant} className="text-[9px] px-1.5 py-0.5">
+                              {WITHDRAWAL_STATUS_LABELS[w.status]}
+                            </Badge>
+                          </div>
+                        </div>
+                        {w.driverPhone && (
+                          <p className="text-[11px] text-text-muted">{w.driverPhone}</p>
                         )}
+                        <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+                          <span className="font-bold text-emerald-600">
+                            {formatCurrency(w.amountRupees)}
+                          </span>
+                          <span className="text-slate-400 text-[10px] shrink-0">
+                            {formatDateTime(w.createdAt)}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 font-semibold">{formatCurrency(w.amountRupees)}</td>
-                      <td className="px-4 py-3 text-text-muted">
+                      <td className="hidden sm:table-cell px-4 py-3 font-semibold">{formatCurrency(w.amountRupees)}</td>
+                      <td className="hidden md:table-cell px-4 py-3 text-text-muted">
                         {formatCurrency(w.walletBalanceAtRequest)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden sm:table-cell px-4 py-3">
                         <Badge variant={meta.variant}>{WITHDRAWAL_STATUS_LABELS[w.status]}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-text-muted text-xs">{formatDateTime(w.createdAt)}</td>
+                      <td className="hidden sm:table-cell px-4 py-3 text-text-muted text-xs">{formatDateTime(w.createdAt)}</td>
                       <td className="px-4 py-3 text-right">
                         <RowActionsMenu
                           items={[

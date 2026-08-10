@@ -132,33 +132,68 @@ const ManageBookings = () => {
       {
         key: 'id',
         label: 'Booking',
-        width: '15%',
-        render: (val, row) => (
-          <div className="min-w-0">
-            <span className="font-mono font-medium text-xs bg-gray-100 px-2 py-1 rounded">
-              {row.bookingNumber || row._id.slice(-6)}
-            </span>
-            <div className="flex flex-wrap items-center gap-1 mt-1">
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                  row.bookingType === 'scheduled'
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'bg-emerald-100 text-emerald-700'
-                }`}
-              >
-                {row.bookingType || 'instant'}
-              </span>
-              <span className="text-[10px] text-slate-400 capitalize">
-                {row.serviceType}
-              </span>
+        unclamp: true,
+        render: (val, row) => {
+          const variants = {
+            completed: 'success',
+            started: 'primary',
+            driver_assigned: 'primary',
+            arrived: 'primary',
+            en_route: 'primary',
+            searching: 'warning',
+            pending_assignment: 'info',
+            awaiting_payment: 'warning',
+            in_emergency_pool: 'danger',
+            no_drivers_found: 'danger',
+            cancelled: 'danger',
+          };
+          const customerName = row.userId ? row.userId.name : 'Unknown';
+          const driverName = row.driverId ? row.driverId.name : 'Unassigned';
+
+          return (
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+                <span className="font-mono font-medium text-xs bg-gray-100 px-2 py-0.5 rounded text-slate-900">
+                  {row.bookingNumber || row._id.slice(-6)}
+                </span>
+                <span className="sm:hidden">
+                  <Badge variant={variants[row.status] || 'default'} className="capitalize text-[9px] px-1.5 py-0.5">
+                    {row.status?.replace(/_/g, ' ')}
+                  </Badge>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                    row.bookingType === 'scheduled'
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'bg-emerald-100 text-emerald-700'
+                  }`}
+                >
+                  {row.bookingType || 'instant'}
+                </span>
+                <span className="text-[9px] text-slate-400 capitalize">
+                  {row.serviceType}
+                </span>
+              </div>
+              <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+                <span className="truncate">Cust: {customerName}</span>
+                <span className="font-bold text-emerald-600 shrink-0">₹{row.fareSnapshot?.total || 0}</span>
+              </div>
+              <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                <span className="truncate">Driver: {driverName}</span>
+                <span className="text-slate-400 shrink-0">
+                  {new Date(row.createdAt).toLocaleDateString('en-GB')}
+                </span>
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         key: 'user',
         label: 'Customer',
-        width: '18%',
+        className: 'hidden sm:table-cell',
         render: (val, row) => (
           <div className="min-w-0">
             <p className="font-semibold text-sm text-slate-900 truncate">
@@ -175,7 +210,7 @@ const ManageBookings = () => {
       {
         key: 'driver',
         label: 'Driver',
-        width: '17%',
+        className: 'hidden sm:table-cell',
         render: (val, row) =>
           row.driverId ? (
             <div className="min-w-0">
@@ -195,7 +230,7 @@ const ManageBookings = () => {
       {
         key: 'pickup',
         label: 'Pickup',
-        width: '20%',
+        className: 'hidden md:table-cell',
         render: (val, row) => (
           <p
             className="text-xs text-slate-600 line-clamp-2"
@@ -208,7 +243,7 @@ const ManageBookings = () => {
       {
         key: 'fare',
         label: 'Fare',
-        width: '10%',
+        className: 'hidden sm:table-cell',
         render: (val, row) => (
           <span className="font-medium text-emerald-600">
             ₹{row.fareSnapshot?.total || 0}
@@ -218,7 +253,7 @@ const ManageBookings = () => {
       {
         key: 'status',
         label: 'Status',
-        width: '10%',
+        className: 'hidden sm:table-cell',
         render: (val, row) => {
           const variants = {
             completed: 'success',
@@ -243,7 +278,7 @@ const ManageBookings = () => {
       {
         key: 'createdAt',
         label: 'Date',
-        width: '10%',
+        className: 'hidden md:table-cell',
         render: (val, row) => (
           <div>
             <p className="text-xs text-slate-700">
@@ -263,7 +298,7 @@ const ManageBookings = () => {
         label: 'Action',
         sortable: false,
         unclamp: true,
-        width: '8%',
+        width: '40px',
         render: (_, row) => {
           const items = [
             {
@@ -363,6 +398,7 @@ const ManageBookings = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={bookings}
         loading={loading}

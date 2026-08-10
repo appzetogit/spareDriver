@@ -230,16 +230,16 @@ const ManageKitRevenue = () => {
       <div className="bg-white border border-border-light rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-text-muted">
-              <tr>
+            <thead>
+              <tr className="bg-gray-50 text-text-muted border-b border-border-light">
                 <Th>Order</Th>
-                <Th>Driver</Th>
-                <Th>Kit</Th>
-                <Th>Amount</Th>
-                <Th>Payment</Th>
-                <Th>Approval</Th>
-                <Th>Fulfillment</Th>
-                <Th>Paid at</Th>
+                <Th className="hidden sm:table-cell">Driver</Th>
+                <Th className="hidden md:table-cell">Kit</Th>
+                <Th className="hidden sm:table-cell">Amount</Th>
+                <Th className="hidden sm:table-cell">Payment</Th>
+                <Th className="hidden md:table-cell">Approval</Th>
+                <Th className="hidden md:table-cell">Fulfillment</Th>
+                <Th className="hidden sm:table-cell">Paid at</Th>
               </tr>
             </thead>
             <tbody>
@@ -310,9 +310,9 @@ const ManageKitRevenue = () => {
   );
 };
 
-function Th({ children }) {
+function Th({ children, className = '' }) {
   return (
-    <th className="text-left text-[11px] font-semibold uppercase tracking-wide px-4 py-3">
+    <th className={`text-left text-[11px] font-semibold uppercase tracking-wide px-4 py-3 ${className}`}>
       {children}
     </th>
   );
@@ -337,47 +337,60 @@ function KitRevenueRow({ row, onClick }) {
       }}
     >
       <td className="px-4 py-3">
-        <p className="font-mono text-xs font-medium text-text">
-          {row.orderNumber || '\u2014'}
-        </p>
-        {row.razorpayPaymentId ? (
-          <p className="text-[10px] text-text-muted mt-0.5 font-mono truncate max-w-[140px]">
-            {row.razorpayPaymentId}
+        <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+          <p className="font-mono text-xs font-bold text-slate-800">
+            {row.orderNumber || '\u2014'}
           </p>
-        ) : null}
+          <div className="sm:hidden">
+            <Badge variant={PAYMENT_BADGE[row.paymentStatus] || 'muted'} className="text-[9px] px-1.5 py-0.5">
+              {PAYMENT_STATUS_LABELS[row.paymentStatus] || row.paymentStatus}
+            </Badge>
+          </div>
+        </div>
+        <div className="sm:hidden text-xs text-slate-800 mt-1 font-medium flex items-center justify-between gap-2">
+          <span className="truncate">Driver: {driver}</span>
+          <span className={`font-bold shrink-0 ${isRefunded ? 'text-rose-700' : 'text-emerald-700'}`}>
+            {isRefunded ? '\u2212' : ''}
+            {formatCurrency(row.amount)}
+          </span>
+        </div>
+        <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+          <span className="truncate">Kit: {row.kitName || '—'}</span>
+          <span className="text-slate-400 shrink-0">{formatDateTime(row.paidAt)}</span>
+        </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3">
         <p className="text-xs text-text font-medium">{driver}</p>
         {driverPhone && driver !== driverPhone ? (
           <p className="text-[10px] text-text-muted mt-0.5">{driverPhone}</p>
         ) : null}
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden md:table-cell px-4 py-3">
         <span className="inline-flex items-center gap-1.5 text-xs text-text">
           <Package className="w-3.5 h-3.5 text-text-muted shrink-0" />
           {row.kitName || '\u2014'}
         </span>
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3">
         <p className={`font-bold ${isRefunded ? 'text-rose-700' : 'text-emerald-700'}`}>
           {isRefunded ? '\u2212' : ''}
           {formatCurrency(row.amount)}
         </p>
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden sm:table-cell px-4 py-3">
         <Badge variant={PAYMENT_BADGE[row.paymentStatus] || 'muted'}>
           {PAYMENT_STATUS_LABELS[row.paymentStatus] || row.paymentStatus}
         </Badge>
       </td>
-      <td className="px-4 py-3">
+      <td className="hidden md:table-cell px-4 py-3">
         <Badge variant={ADMIN_BADGE[row.adminStatus] || 'muted'}>
           {ADMIN_STATUS_LABELS[row.adminStatus] || row.adminStatus}
         </Badge>
       </td>
-      <td className="px-4 py-3 text-xs text-text-secondary">
+      <td className="hidden md:table-cell px-4 py-3 text-xs text-text-secondary">
         {FULFILLMENT_STATUS_LABELS[row.fulfillmentStatus] || row.fulfillmentStatus || '\u2014'}
       </td>
-      <td className="px-4 py-3 text-xs text-text-muted">
+      <td className="hidden sm:table-cell px-4 py-3 text-xs text-text-muted">
         {formatDateTime(row.paidAt)}
       </td>
     </tr>

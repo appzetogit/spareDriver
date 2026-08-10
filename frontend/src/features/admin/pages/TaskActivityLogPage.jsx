@@ -45,48 +45,50 @@ const TaskActivityLogPage = () => {
   const columns = useMemo(
     () => [
       {
-        key: 'at',
-        label: 'When',
-        width: '16%',
-        render: (val) => (
-          <span className="text-xs text-slate-600">
-            {val ? new Date(val).toLocaleString() : '—'}
-          </span>
-        ),
-      },
-      {
-        key: 'action',
-        label: 'Action',
-        width: '12%',
-        render: (val) => (
-          <span className="text-xs font-semibold uppercase text-slate-700">{val}</span>
-        ),
-      },
-      {
         key: 'title',
         label: 'Task',
-        width: '28%',
+        unclamp: true,
         render: (val, row) => (
-          <div>
-            <p className="text-sm font-medium text-slate-800">{val}</p>
-            <p className="text-xs text-slate-500">
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-medium text-slate-800 truncate">{val}</p>
+            <p className="text-[10px] sm:text-xs text-slate-500 truncate mt-0.5">
               {TASK_TYPE_LABELS[row.taskType] || row.taskType}
+              <span className="sm:hidden"> · {row.action}</span>
             </p>
           </div>
         ),
       },
       {
+        key: 'action',
+        label: 'Action',
+        className: 'hidden sm:table-cell',
+        render: (val) => (
+          <span className="text-xs font-semibold uppercase text-slate-700">{val}</span>
+        ),
+      },
+      {
         key: 'byName',
         label: 'By',
-        width: '14%',
-        render: (val) => <span className="text-sm text-slate-600">{val || 'System'}</span>,
+        unclamp: true,
+        render: (val) => <span className="text-xs sm:text-sm text-slate-600">{val || 'System'}</span>,
       },
       {
         key: 'note',
         label: 'Note',
-        width: '30%',
+        className: 'hidden sm:table-cell',
         render: (val) => (
-          <span className="text-sm text-slate-600 line-clamp-2">{val || '—'}</span>
+          <span className="text-xs sm:text-sm text-slate-600 line-clamp-2">{val || '—'}</span>
+        ),
+      },
+      {
+        key: 'at',
+        label: 'When',
+        unclamp: true,
+        align: 'right',
+        render: (val) => (
+          <span className="text-[10px] sm:text-xs text-slate-600">
+            {val ? new Date(val).toLocaleDateString('en-GB') : '—'}
+          </span>
         ),
       },
     ],
@@ -94,37 +96,34 @@ const TaskActivityLogPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up pb-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="min-h-screen bg-slate-50 space-y-4 sm:space-y-6 animate-fade-in-up pb-8">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <Link
             to="/admin/tasks"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 mb-3"
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 mb-1 sm:mb-3"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Back to tasks
           </Link>
-          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-            <History className="w-8 h-8 text-primary" />
+          <h1 className="text-lg sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
+            <History className="w-5 h-5 sm:w-8 sm:h-8 text-primary shrink-0" />
             Task activity log
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Full audit trail of assignments and completions (admin only)
-          </p>
         </div>
         <button
           type="button"
           onClick={() => refetch()}
           disabled={loading}
-          className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2 shrink-0"
+          className="h-8 sm:h-11 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 shrink-0"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="w-full sm:w-56">
+      <div className="flex items-center gap-1.5 sm:gap-3">
+        <div className="flex-1 min-w-0">
           <Select
             value={taskType}
             onChange={(v) => {
@@ -142,7 +141,7 @@ const TaskActivityLogPage = () => {
             ]}
           />
         </div>
-        <div className="w-full sm:w-48">
+        <div className="flex-1 min-w-0">
           <Select
             value={category}
             onChange={(v) => {
@@ -168,6 +167,7 @@ const TaskActivityLogPage = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={entries}
         loading={loading}

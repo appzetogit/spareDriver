@@ -451,16 +451,40 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'customer',
         label: 'Customer',
+        unclamp: true,
         render: (_, row) => (
-          <div>
-            <p className="font-semibold text-slate-800">{row.userId?.name || '—'}</p>
-            <p className="text-xs text-slate-500">{row.userId?.phone_no || '—'}</p>
+          <div className="min-w-0">
+            <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+              <p className="font-semibold text-slate-800 text-xs sm:text-sm">
+                {row.userId?.name || '—'}
+              </p>
+              <div className="sm:hidden">
+                <button
+                  type="button"
+                  data-row-action
+                  onClick={() => setPayTarget(row)}
+                  disabled={!row.canPayMore}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary text-dark text-[10px] font-bold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Wallet className="w-3 h-3" />
+                  Pay
+                </button>
+              </div>
+            </div>
+            <p className="sm:hidden text-xs text-indigo-600 font-medium mt-0.5 truncate">
+              {row.planNameSnapshot || 'Subscription'} {row.subscriptionNumber ? `(${row.subscriptionNumber})` : ''}
+            </p>
+            <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+              <span>Earned: {formatCurrency(row.platformEarned ?? row.platformShareRupees)}</span>
+              <span className="font-bold text-amber-700 shrink-0">Rem: {formatCurrency(row.remainingDriverShare)}</span>
+            </div>
           </div>
         ),
       },
       {
         key: 'plan',
         label: 'Plan',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <div>
             <p className="font-medium">{row.planNameSnapshot || '—'}</p>
@@ -474,6 +498,7 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'period',
         label: 'Period',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <span className="text-xs text-slate-600">
             {formatDate(row.startDate)} – {formatDate(row.expiryDate)}
@@ -483,6 +508,7 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'platformEarned',
         label: 'Platform earned',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <span className="font-semibold text-slate-800">
             {formatCurrency(row.platformEarned ?? row.platformShareRupees)}
@@ -492,6 +518,7 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'driverPool',
         label: 'Driver pool',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <span className="font-semibold">{formatCurrency(row.driverSharePool ?? row.driverShareRupees)}</span>
         ),
@@ -499,6 +526,7 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'paidToDriver',
         label: 'Paid to driver',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <span className="font-semibold text-emerald-700">
             {formatCurrency(row.paidToDriver)}
@@ -508,6 +536,7 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'remaining',
         label: 'Remaining',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <span className="font-semibold text-amber-700">
             {formatCurrency(row.remainingDriverShare)}
@@ -517,6 +546,7 @@ const ManageSubscriptionRevenue = () => {
       {
         key: 'drivers',
         label: 'Drivers',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <span className="text-sm text-slate-600">{row.driverStintCount ?? 0}</span>
         ),
@@ -526,6 +556,7 @@ const ManageSubscriptionRevenue = () => {
         label: 'Pay',
         sortable: false,
         unclamp: true,
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <button
             type="button"
@@ -665,6 +696,7 @@ const ManageSubscriptionRevenue = () => {
       </Card>
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={rows}
         loading={loading}

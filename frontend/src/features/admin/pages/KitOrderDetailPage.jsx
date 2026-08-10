@@ -60,23 +60,23 @@ const KitOrderDetailPage = () => {
   const driver = order.driverId;
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-4 sm:space-y-6 pb-8">
       <div className="flex items-center justify-between">
         <BackLink />
         <button
           type="button"
           onClick={() => refetch()}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border p-6">
-        <p className="font-mono text-sm text-slate-500">{order.orderNumber}</p>
-        <h1 className="text-2xl font-bold text-slate-900 mt-1">{order.kitSnapshot?.name}</h1>
-        <p className="text-xl font-bold text-slate-900 mt-2">₹{order.amount?.toLocaleString('en-IN')}</p>
+      <div className="bg-white rounded-2xl border p-4 sm:p-6">
+        <p className="font-mono text-xs sm:text-sm text-slate-500">{order.orderNumber}</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">{order.kitSnapshot?.name}</h1>
+        <p className="text-lg sm:text-xl font-bold text-slate-900 mt-2">₹{order.amount?.toLocaleString('en-IN')}</p>
       </div>
 
       <PaymentDetailsCard order={order} />

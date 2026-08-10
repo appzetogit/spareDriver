@@ -117,15 +117,15 @@ const ManageKits = () => {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-row items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Driver kits</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-xl sm:text-3xl font-bold text-slate-900">Driver kits</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">
             Each kit includes items (T-shirt with sizes, badge, etc.)
           </p>
         </div>
         {canEdit && (
-          <Button variant="admin" size="md" onClick={openCreate} className="flex items-center gap-2">
+          <Button variant="admin" size="md" onClick={openCreate} className="flex items-center gap-1.5 shrink-0 text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4">
             <Plus className="w-4 h-4" /> Add kit
           </Button>
         )}

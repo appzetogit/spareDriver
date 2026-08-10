@@ -114,27 +114,50 @@ const ManageScheduledJobs = () => {
       {
         key: 'booking',
         label: 'Booking',
-        width: '18%',
-        render: (_, row) => (
-          <button type="button" className="text-left" onClick={() => openBooking(row._id)}>
-            <p className="text-sm font-semibold text-primary hover:underline">
-              {row.bookingNumber || String(row._id).slice(-6)}
-            </p>
-            <p className="text-[11px] text-slate-500 truncate">
-              {row.userId?.name || 'Customer'}
-              {row.scheduled?.tier && (
-                <span className="ml-1 uppercase text-[10px] text-slate-400">
-                  · {row.scheduled.tier}
+        unclamp: true,
+        render: (_, row) => {
+          const driverName = row.driverId ? row.driverId.name || 'Assigned' : row.status === 'searching' ? 'Open inbox' : 'Unassigned';
+          const offersCount = (row.dispatch?.pendingOfferIds || []).length;
+
+          return (
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-1.5 flex-wrap min-w-0">
+                <button type="button" className="text-left" onClick={() => openBooking(row._id)}>
+                  <p className="text-xs sm:text-sm font-semibold text-primary hover:underline font-mono">
+                    {row.bookingNumber || String(row._id).slice(-6)}
+                  </p>
+                </button>
+                <span className="sm:hidden">
+                  <Badge variant="info" className="capitalize text-[9px] px-1.5 py-0.5">
+                    {String(row.status || '').replace(/_/g, ' ')}
+                  </Badge>
                 </span>
-              )}
-            </p>
-          </button>
-        ),
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5 truncate">
+                {row.userId?.name || 'Customer'}
+                {row.scheduled?.tier && (
+                  <span className="uppercase text-[10px] text-slate-400">
+                    · {row.scheduled.tier}
+                  </span>
+                )}
+              </p>
+              <div className="sm:hidden text-[10px] text-slate-500 mt-0.5">
+                Pickup: {formatPickupDateTime(row.hourly?.scheduledStartAt ? new Date(row.hourly.scheduledStartAt) : null)}
+              </div>
+              <div className="sm:hidden text-[10px] text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                <span className={row.driverId ? 'text-slate-700' : 'text-amber-600 font-medium'}>
+                  Driver: {driverName}
+                </span>
+                <span className="text-slate-400 shrink-0">Offers: {offersCount}</span>
+              </div>
+            </div>
+          );
+        },
       },
       {
         key: 'pickup',
         label: 'Pickup',
-        width: '20%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <div>
             <p className="text-xs font-medium text-slate-800">
@@ -153,7 +176,7 @@ const ManageScheduledJobs = () => {
       {
         key: 'status',
         label: 'Status',
-        width: '14%',
+        className: 'hidden sm:table-cell',
         render: (_, row) => (
           <Badge variant="info" className="capitalize">
             {String(row.status || '').replace(/_/g, ' ')}
@@ -163,7 +186,7 @@ const ManageScheduledJobs = () => {
       {
         key: 'driver',
         label: 'Driver',
-        width: '14%',
+        className: 'hidden sm:table-cell',
         render: (_, row) =>
           row.driverId ? (
             <span className="text-xs text-slate-700">
@@ -178,7 +201,7 @@ const ManageScheduledJobs = () => {
       {
         key: 'escalateAt',
         label: 'Pool cutoff',
-        width: '12%',
+        className: 'hidden md:table-cell',
         render: (_, row) =>
           row.scheduled?.escalateAt ? (
             <span className="text-xs text-slate-500">
@@ -191,7 +214,7 @@ const ManageScheduledJobs = () => {
       {
         key: 'inbox',
         label: 'Inbox',
-        width: '6%',
+        className: 'hidden md:table-cell',
         render: (_, row) => (
           <span className="text-xs text-slate-600">
             {(row.dispatch?.pendingOfferIds || []).length}
@@ -201,7 +224,7 @@ const ManageScheduledJobs = () => {
       {
         key: 'actions',
         label: 'Action',
-        width: '8%',
+        width: '40px',
         sortable: false,
         unclamp: true,
         render: (_, row) => {
@@ -232,25 +255,25 @@ const ManageScheduledJobs = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up p-4 lg:p-6">
-      <div className="bg-gradient-to-br from-indigo-500 to-blue-600 text-white rounded-3xl p-5 shadow-sm flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-            <Timer className="w-5 h-5" />
+    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up p-3 sm:p-4 lg:p-6">
+      <div className="bg-gradient-to-br from-indigo-500 to-blue-600 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+            <Timer className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold">Scheduled Bookings</h1>
-            <p className="text-[12px] text-white/80 mt-0.5 leading-snug">
+            <h1 className="text-base sm:text-lg font-bold truncate">Scheduled Bookings</h1>
+            <p className="hidden sm:block text-[12px] text-white/80 mt-0.5 leading-snug">
               Customer scheduled rides — searching, assigned, completed, or
               in the emergency pool. Assign a driver manually when needed.
             </p>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[11px] uppercase tracking-wide text-white/70">
+          <p className="text-[9px] sm:text-[11px] uppercase tracking-wide text-white/70">
             Scheduled rides
           </p>
-          <p className="text-3xl font-bold leading-tight">
+          <p className="text-2xl sm:text-3xl font-bold leading-tight">
             {bookingsPagination.total}
           </p>
         </div>
@@ -348,6 +371,7 @@ const ManageScheduledJobs = () => {
         </div>
       ) : (
         <ServerPaginatedTable
+          minWidth="w-full min-w-0"
           columns={bookingColumns}
           data={rows}
           loading={loading}

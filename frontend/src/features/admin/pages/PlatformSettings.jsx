@@ -211,10 +211,10 @@ const PlatformSettings = () => {
   return (
     <div className="max-w-6xl space-y-8 animate-fade-in-up pb-10 px-2 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Platform Settings</h2>
-          <p className="text-sm text-slate-500 mt-1">Configure vehicle categories and registration checklists</p>
+          <h2 className="text-xl sm:text-3xl font-bold text-slate-900">Platform Settings</h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">Configure vehicle categories and registration checklists</p>
         </div>
       </div>
 
@@ -226,25 +226,25 @@ const PlatformSettings = () => {
 
       {/* Tabs - Responsive Container */}
       <div className="overflow-x-auto pb-1 no-scrollbar">
-        <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 rounded-2xl w-fit">
+        <div className="flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-slate-100 rounded-2xl w-max">
           {[
-            { id: 'vehicles', label: 'Vehicle Preferences', icon: Car },
-            { id: 'conditions', label: 'Registration Checklist', icon: CheckSquare },
+            { id: 'vehicles', label: 'Vehicles', icon: Car },
+            { id: 'conditions', label: 'Checklist', icon: CheckSquare },
             { id: 'banks', label: 'Banks', icon: Building2 },
-            { id: 'training', label: 'Driver Training', icon: Video },
-            { id: 'support', label: 'Website & Contact', icon: Headphones },
-            { id: 'legal', label: 'Legal Pages', icon: FileText },
+            { id: 'training', label: 'Training', icon: Video },
+            { id: 'support', label: 'Contact', icon: Headphones },
+            { id: 'legal', label: 'Legal', icon: FileText },
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap ${
                 activeTab === tab.id 
                   ? 'bg-yellow-400 text-black shadow-md' 
                   : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
               }`}
             >
-              <tab.icon className="w-4.5 h-4.5" />
+              <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               {tab.label}
             </button>
           ))}
@@ -388,11 +388,10 @@ const PlatformSettings = () => {
 
           {activeTab === 'legal' && <LegalPagesTab readOnly={!canEdit} />}
 
-          {/* Checklist Tab */}
           {activeTab === 'conditions' && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-slate-800">Registration Checklist</h3>
+                <h3 className="text-base sm:text-xl font-bold text-slate-800">Registration Checklist</h3>
                 {canEdit && (
                   <Button 
                     onClick={() => {
@@ -400,34 +399,34 @@ const PlatformSettings = () => {
                       setConditionForm({ question: '', key: '', isRequired: false, isActive: true });
                       setShowConditionModal(true);
                     }}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2"
                   >
-                    <Plus className="w-4 h-4" /> Add Question
+                    <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Add Question</span><span className="sm:hidden">Add</span>
                   </Button>
                 )}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {conditions.map((cond, idx) => (
                   <div 
                     key={cond._id} 
-                    className="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-sm transition-all duration-300"
+                    className="flex items-center justify-between p-3 sm:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-sm transition-all duration-300"
                   >
-                    <div className="flex items-center gap-4">
-                      <span className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-200">
+                    <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+                      <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-200 shrink-0">
                         {idx + 1}
                       </span>
-                      <div>
-                        <p className="font-semibold text-slate-900">{cond.question}</p>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Key: {cond.key}</span>
-                          {cond.isRequired && <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-bold">REQUIRED</span>}
-                          {!cond.isActive && <span className="px-2 py-0.5 rounded-full bg-slate-50 text-slate-400 text-[10px] font-bold">DISABLED</span>}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 text-sm truncate">{cond.question}</p>
+                        <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1 flex-wrap">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider truncate">Key: {cond.key}</span>
+                          {cond.isRequired && <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-bold">REQ</span>}
+                          {!cond.isActive && <span className="px-1.5 py-0.5 rounded-full bg-slate-50 text-slate-400 text-[10px] font-bold">OFF</span>}
                         </div>
                       </div>
                     </div>
                     {canEdit && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button 
                           onClick={() => {
                             setEditingItem(cond);
@@ -439,15 +438,15 @@ const PlatformSettings = () => {
                             });
                             setShowConditionModal(true);
                           }}
-                          className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
+                          className="p-2 sm:p-2.5 hover:bg-slate-100 rounded-lg sm:rounded-xl text-slate-400 hover:text-slate-600 transition-all"
                         >
-                          <Edit2 className="w-4 h-4" />
+                          <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                         <button 
                           onClick={() => deleteCondition(cond._id)}
-                          className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all"
+                          className="p-2 sm:p-2.5 hover:bg-rose-50 rounded-lg sm:rounded-xl text-slate-400 hover:text-rose-600 transition-all"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                       </div>
                     )}

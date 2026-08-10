@@ -2,7 +2,9 @@ import { User, UserX } from 'lucide-react';
 import { getAssigneeName, isOpenTask } from './taskUtils';
 
 const TaskAssigneeBadge = ({ task, compact = false }) => {
-  if (!task || !isOpenTask(task)) return null;
+  if (!task || !isOpenTask(task)) {
+    return <span className={`text-slate-400 ${compact ? 'text-[10px]' : 'text-xs'}`}>—</span>;
+  }
 
   const name = getAssigneeName(task);
   const unassigned = !name;

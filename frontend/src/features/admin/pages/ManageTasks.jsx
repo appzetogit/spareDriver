@@ -134,7 +134,7 @@ const ManageTasks = () => {
             {
               key: '_select',
               label: '',
-              width: '4%',
+              width: '30px',
               render: (_v, row) =>
                 isOpenTask(row) ? (
                   <input
@@ -154,20 +154,38 @@ const ManageTasks = () => {
       {
         key: 'title',
         label: 'Task',
-        width: '32%',
-        render: (val, row) => (
-          <div>
-            <p className="text-sm font-semibold text-slate-800">{val}</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {TASK_TYPE_LABELS[row.taskType] || row.taskType}
-            </p>
-          </div>
-        ),
+        unclamp: true,
+        render: (val, row) => {
+          const resourceDetail =
+            row.taskType === TASK_TYPE.DRIVER_REVIEW
+              ? [row.resource?.name, row.resource?.phone].filter(Boolean).join(' · ')
+              : [row.resource?.orderNumber, row.resource?.kitSnapshot?.name || row.resource?.kitId?.name].filter(Boolean).join(' · ');
+
+          return (
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                <p className="text-xs sm:text-sm font-semibold text-slate-800 truncate">{val}</p>
+                <span className="sm:hidden text-[9px] font-bold uppercase text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full shrink-0">
+                  {row.status}
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                {TASK_TYPE_LABELS[row.taskType] || row.taskType}
+                {resourceDetail ? ` · ${resourceDetail}` : ''}
+              </p>
+              {row.createdAt && (
+                <p className="sm:hidden text-[9px] text-slate-400 mt-0.5">
+                  Created: {new Date(row.createdAt).toLocaleDateString('en-GB')}
+                </p>
+              )}
+            </div>
+          );
+        },
       },
       {
         key: 'resource',
         label: 'Record',
-        width: '22%',
+        className: 'hidden sm:table-cell',
         render: (_v, row) => {
           if (row.taskType === TASK_TYPE.DRIVER_REVIEW) {
             return (
@@ -194,21 +212,20 @@ const ManageTasks = () => {
       {
         key: 'assignedTo',
         label: 'Assignee',
-        width: '18%',
+        unclamp: true,
         render: (_v, row) => <TaskAssigneeBadge task={row} />,
       },
       {
         key: 'status',
         label: 'Status',
-        width: '12%',
+        className: 'hidden sm:table-cell',
         render: (val) => (
-          <span className="text-xs font-semibold uppercase text-slate-600">{val}</span>
+          <span className="text-[10px] sm:text-xs font-semibold uppercase text-slate-600">{val}</span>
         ),
       },
       {
         key: 'createdAt',
         label: 'Created',
-        width: '12%',
         className: 'hidden md:table-cell',
         render: (val) => (
           <span className="text-xs text-slate-500">
@@ -221,28 +238,28 @@ const ManageTasks = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-6 animate-fade-in-up pb-8">
+    <div className="min-h-screen bg-slate-50 space-y-4 sm:space-y-6 animate-fade-in-up pb-8">
       <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md pb-2">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-              <CheckSquare className="w-8 h-8 text-primary" />
+            <h1 className="text-xl sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
+              <CheckSquare className="w-6 h-6 sm:w-8 sm:h-8 text-primary shrink-0" />
               Team tasks
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               {isOpsStaff
                 ? 'Assign reviews and track team workload'
                 : 'Tasks assigned to you — open a record to complete your review'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => refetch()}
               disabled={loading}
-              className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+              className="flex-1 sm:flex-initial h-8 sm:h-11 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 shrink-0"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
             {isOpsStaff && (
@@ -250,15 +267,21 @@ const ManageTasks = () => {
                 {canViewTaskActivityLog(admin?.role) && (
                   <Link
                     to="/admin/tasks/activity"
-                    className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+                    className="flex-1 sm:flex-initial h-8 sm:h-11 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5 shrink-0"
                   >
-                    <History className="w-4 h-4" />
-                    Activity log
+                    <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                    Activity
                   </Link>
                 )}
                 {canManageTaskAssignment(admin?.role) && (
-                  <Button variant="outline" size="md" loading={syncing} onClick={handleSync}>
-                    Sync pending reviews
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={syncing}
+                    onClick={handleSync}
+                    className="h-8 sm:h-11 px-2.5 sm:px-4 text-xs sm:text-sm font-semibold shrink-0"
+                  >
+                    <span>Sync<span className="hidden sm:inline"> reviews</span></span>
                   </Button>
                 )}
               </>
@@ -267,31 +290,31 @@ const ManageTasks = () => {
         </div>
 
         {isOpsStaff ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-3 sm:mt-5">
             <StatCard label="Unassigned" value={summary?.unassigned ?? 0} />
             <StatCard label="My tasks" value={summary?.mine ?? 0} />
             <StatCard label="All open" value={summary?.allOpen ?? 0} />
           </div>
         ) : (
-          <div className="mt-5 max-w-xs">
+          <div className="mt-3 sm:mt-5 max-w-xs">
             <StatCard label="My assigned tasks" value={summary?.mine ?? 0} />
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 mt-4">
+        <div className="flex items-center gap-1.5 sm:gap-3 mt-3 sm:mt-4">
           {isOpsStaff && (
-          <div className="w-full sm:w-48">
-            <Select
-              value={scope}
-              onChange={(v) => {
-                setScope(v);
-                setPage(1);
-              }}
-              options={TASK_SCOPE_OPTIONS}
-            />
-          </div>
+            <div className="flex-1 min-w-0">
+              <Select
+                value={scope}
+                onChange={(v) => {
+                  setScope(v);
+                  setPage(1);
+                }}
+                options={TASK_SCOPE_OPTIONS}
+              />
+            </div>
           )}
-          <div className="w-full sm:w-56">
+          <div className="flex-1 min-w-0">
             <Select
               value={taskType}
               onChange={(v) => {
@@ -310,7 +333,7 @@ const ManageTasks = () => {
             />
           </div>
           {isOpsStaff && (
-            <div className="w-full sm:w-56">
+            <div className="flex-1 min-w-0">
               <Select
                 value={assigneeFilter}
                 onChange={(v) => {
@@ -332,15 +355,15 @@ const ManageTasks = () => {
         </div>
 
         {isOpsStaff && selected.length > 0 && (
-          <div className="mt-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center p-4 rounded-xl bg-white border border-slate-200">
-            <span className="text-sm font-medium text-slate-700">
+          <div className="mt-3 flex flex-row items-center gap-2 p-2.5 sm:p-4 rounded-xl bg-white border border-slate-200">
+            <span className="text-xs sm:text-sm font-medium text-slate-700 shrink-0">
               {selected.length} selected
             </span>
-            <div className="flex-1 w-full sm:max-w-xs">
+            <div className="flex-1 min-w-0">
               <Select
                 value={bulkAssignee}
                 onChange={setBulkAssignee}
-                placeholder="Assign to member"
+                placeholder="Select member"
                 options={[
                   { value: '', label: 'Select member' },
                   ...assignees.map((u) => ({
@@ -352,12 +375,13 @@ const ManageTasks = () => {
             </div>
             <Button
               variant="admin"
-              size="md"
+              size="sm"
               icon={UserPlus}
               loading={bulkLoading}
               onClick={handleBulkAssign}
+              className="shrink-0"
             >
-              Assign selected
+              Assign
             </Button>
           </div>
         )}
@@ -370,6 +394,7 @@ const ManageTasks = () => {
       )}
 
       <ServerPaginatedTable
+        minWidth="w-full min-w-0"
         columns={columns}
         data={tasks}
         loading={loading}
@@ -402,9 +427,9 @@ const ManageTasks = () => {
 
 function StatCard({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
+    <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-2.5 sm:p-4 shadow-sm min-w-0">
+      <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-tight sm:tracking-wider text-slate-400 truncate">{label}</p>
+      <p className="text-base sm:text-2xl font-bold text-slate-900 mt-0.5 sm:mt-1">{value}</p>
     </div>
   );
 }
