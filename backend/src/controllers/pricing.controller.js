@@ -58,6 +58,10 @@ export const adminListUserSubscriptions = asyncHandler(async (req, res) => {
     status: req.query.status,
     assignmentStatus: req.query.assignmentStatus,
     zoneId: req.query.zoneId,
+    search: req.query.search || '',
+    cancelRequestStatus: req.query.cancelRequestStatus || '',
+    from: req.query.from || '',
+    to: req.query.to || '',
     staff: req.staff,
     page: Number(req.query.page) || 1,
     limit: Number(req.query.limit) || 25,
@@ -203,6 +207,7 @@ export const adminReviewSubscriptionCancellation = asyncHandler(async (req, res)
       reviewNote: req.body?.reviewNote || req.body?.reason || '',
       settlementConfirmed: req.body?.settlementConfirmed === true,
       createRefund: req.body?.createRefund !== false,
+      transactionDetails: req.body?.transactionDetails || null,
     },
     req.staff,
   );
@@ -219,6 +224,8 @@ export const adminListSubscriptionRevenue = asyncHandler(async (req, res) => {
     search: req.query.search || '',
     from: req.query.from || '',
     to: req.query.to || '',
+    payoutStatus: req.query.payoutStatus || '',
+    status: req.query.status || '',
   });
   return res.status(200).json(new ApiResponse(200, result, 'Subscription revenue fetched'));
 });
@@ -241,7 +248,7 @@ export const adminUpdateUserSubscriptionStatus = asyncHandler(async (req, res) =
   const { adminUpdateUserSubscriptionStatusService } = await import(
     '../services/adminSubscriptionOps.service.js'
   );
-  const { status, reason, settlementConfirmed, createRefund } = req.body || {};
+  const { status, reason, settlementConfirmed, createRefund, transactionDetails } = req.body || {};
   const result = await adminUpdateUserSubscriptionStatusService(
     req.params.id,
     {
@@ -249,6 +256,7 @@ export const adminUpdateUserSubscriptionStatus = asyncHandler(async (req, res) =
       reason,
       settlementConfirmed,
       createRefund: createRefund === true,
+      transactionDetails: transactionDetails || null,
     },
     req.staff,
   );

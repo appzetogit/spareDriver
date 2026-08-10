@@ -45,7 +45,7 @@ export default function AdminDriverDetailModal({ driver, subscriptionZone, open,
         </div>
 
         <div>
-          <p className="text-xs font-bold uppercase text-slate-500 mb-1.5">Outstation zones</p>
+          <p className="text-xs font-bold uppercase text-slate-500 mb-1.5">Round trip zones</p>
           {zones.length === 0 ? (
             <p className="text-sm text-slate-400">No zones selected</p>
           ) : (

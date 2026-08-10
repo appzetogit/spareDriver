@@ -27,6 +27,7 @@ import ConfirmDialog from '../../../components/ConfirmDialog';
 import Drawer from '../../../components/Drawer';
 import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import RowActionsMenu from '../components/RowActionsMenu';
+import AdminTransactionFields, { EMPTY_TXN_FORM } from '../components/AdminTransactionFields';
 import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
@@ -45,11 +46,33 @@ import AdminDriverDetailModal from '../components/AdminDriverDetailModal';
 const OPERATIONS_ROLES = new Set(['admin', 'sub_admin']);
 
 const ASSIGNMENT_FILTERS = [
-  { value: '', label: 'All statuses' },
+  { value: '', label: 'All assignment statuses' },
   { value: SUBSCRIPTION_ASSIGNMENT_STATUS.PENDING, label: 'Pending driver' },
   { value: SUBSCRIPTION_ASSIGNMENT_STATUS.ASSIGNED, label: 'Driver assigned' },
   { value: SUBSCRIPTION_ASSIGNMENT_STATUS.RELEASED, label: 'Released' },
 ];
+
+const STATUS_FILTERS = [
+  { value: SUBSCRIPTION_STATUS.ACTIVE, label: 'Active' },
+  { value: SUBSCRIPTION_STATUS.EXPIRED, label: 'Expired' },
+  { value: SUBSCRIPTION_STATUS.CANCELLED, label: 'Cancelled' },
+  { value: 'all', label: 'All statuses' },
+];
+
+const CANCEL_REQUEST_FILTERS = [
+  { value: '', label: 'All cancel requests' },
+  { value: SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING, label: 'Cancel requested' },
+];
+
+const EMPTY_FILTERS = {
+  search: '',
+  zoneId: '',
+  assignmentStatus: '',
+  status: SUBSCRIPTION_STATUS.ACTIVE,
+  cancelRequestStatus: '',
+  from: '',
+  to: '',
+};
 
 /** Pending + start calendar day already passed → admin needs to assign ASAP. */
 function isOverdueUnassignedSubscription(row) {
@@ -81,19 +104,38 @@ const ManageUserSubscriptions = () => {
 
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
-  const [filters, setFilters] = useState({ zoneId: '', assignmentStatus: '' });
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [searchInput, setSearchInput] = useState('');
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [assignRow, setAssignRow] = useState(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((f) => {
+        if (f.search === searchInput) return f;
+        setPage(1);
+        return { ...f, search: searchInput };
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit });
+      if (filters.search) params.append('search', filters.search);
       if (filters.zoneId) params.append('zoneId', filters.zoneId);
       if (filters.assignmentStatus) params.append('assignmentStatus', filters.assignmentStatus);
+      if (filters.status) params.append('status', filters.status);
+      if (filters.cancelRequestStatus) {
+        params.append('cancelRequestStatus', filters.cancelRequestStatus);
+      }
+      if (filters.from) params.append('from', filters.from);
+      if (filters.to) params.append('to', filters.to);
       const res = await api.get(`/admin/subscriptions/users?${params.toString()}`);
       const data = res?.data?.data || {};
       setRows(data.items || []);
@@ -110,6 +152,25 @@ const ManageUserSubscriptions = () => {
     }
   }, [page, limit, filters]);
 
+  const updateFilter = (key, value) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    setSearchInput('');
+    setPage(1);
+  };
+
+  const hasActiveFilters =
+    !!filters.search ||
+    !!filters.zoneId ||
+    !!filters.assignmentStatus ||
+    filters.status !== SUBSCRIPTION_STATUS.ACTIVE ||
+    !!filters.cancelRequestStatus ||
+    !!filters.from ||
+    !!filters.to;
   const handleDrawerUpdated = useCallback((nextSub) => {
     if (nextSub) setAssignRow(nextSub);
     else setAssignRow(null);
@@ -307,15 +368,22 @@ const ManageUserSubscriptions = () => {
       </div>
 
       <Card padding="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="relative sm:col-span-2 lg:col-span-2 xl:col-span-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search customer, phone, plan, or subscription ID"
+              className="w-full h-10 pl-9 pr-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <select
               value={filters.assignmentStatus}
-              onChange={(e) => {
-                setFilters((f) => ({ ...f, assignmentStatus: e.target.value }));
-                setPage(1);
-              }}
+              onChange={(e) => updateFilter('assignmentStatus', e.target.value)}
               className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
               {ASSIGNMENT_FILTERS.map((opt) => (
@@ -325,13 +393,22 @@ const ManageUserSubscriptions = () => {
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           </div>
           <div className="relative">
+            <select
+              value={filters.status}
+              onChange={(e) => updateFilter('status', e.target.value)}
+              className="w-full h-10 px-3 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              {STATUS_FILTERS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+          <div className="relative">
             <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <select
               value={filters.zoneId}
-              onChange={(e) => {
-                setFilters((f) => ({ ...f, zoneId: e.target.value }));
-                setPage(1);
-              }}
+              onChange={(e) => updateFilter('zoneId', e.target.value)}
               className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
               <option value="">All zones</option>
@@ -343,7 +420,46 @@ const ManageUserSubscriptions = () => {
             </select>
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           </div>
+          <div className="relative">
+            <select
+              value={filters.cancelRequestStatus}
+              onChange={(e) => updateFilter('cancelRequestStatus', e.target.value)}
+              className="w-full h-10 px-3 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              {CANCEL_REQUEST_FILTERS.map((opt) => (
+                <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => updateFilter('from', e.target.value)}
+            aria-label="Paid from date"
+            title="Paid from"
+            className="w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          />
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => updateFilter('to', e.target.value)}
+            aria-label="Paid to date"
+            title="Paid to"
+            className="w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          />
         </div>
+        {hasActiveFilters && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
       </Card>
 
       {error && (
@@ -444,12 +560,17 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   const [subscriptionStatusReason, setSubscriptionStatusReason] = useState('');
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [settlementConfirmed, setSettlementConfirmed] = useState(false);
-  const [createRefundOnCancel, setCreateRefundOnCancel] = useState(true);
+  const [refundTxnForm, setRefundTxnForm] = useState(EMPTY_TXN_FORM);
   const [approveCancelOpen, setApproveCancelOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const cancelRequestPending =
     subscription.cancellationRequest?.status === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
+  const refundAmountRupees = Number(subscription.amount) || 0;
+  const refundDetailsRequired = refundAmountRupees > 0;
+  const refundDetailsReady =
+    !refundDetailsRequired
+    || Boolean(refundTxnForm.transactionId?.trim() || refundTxnForm.utr?.trim());
   const [periodStartDraft, setPeriodStartDraft] = useState(() => toDateInputValue(subscription.startDate));
   const [periodSaving, setPeriodSaving] = useState(false);
   const searchRef = useRef(null);
@@ -630,24 +751,44 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
     }
   };
 
+  const resetCancelForms = () => {
+    setSettlementConfirmed(false);
+    setRefundTxnForm(EMPTY_TXN_FORM);
+  };
+
+  const buildRefundPayload = () => {
+    if (!refundDetailsRequired) return null;
+    return {
+      mode: refundTxnForm.mode.trim(),
+      transactionId: refundTxnForm.transactionId.trim(),
+      utr: refundTxnForm.utr.trim(),
+      referenceNumber: refundTxnForm.referenceNumber.trim(),
+      notes: refundTxnForm.notes.trim(),
+    };
+  };
+
   const handleCancelSubscription = async () => {
-    if (!settlementConfirmed) return;
+    if (!settlementConfirmed || !refundDetailsReady) return;
+    if (refundDetailsRequired && !refundTxnForm.transactionId?.trim() && !refundTxnForm.utr?.trim()) {
+      toast.error('Transaction ID or UTR is required for the refund');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.patch(`/admin/subscriptions/users/${subscription._id}/status`, {
         status: SUBSCRIPTION_STATUS.CANCELLED,
         reason: subscriptionStatusReason.trim() || 'Cancelled by admin',
         settlementConfirmed: true,
-        createRefund: createRefundOnCancel,
+        createRefund: refundDetailsRequired,
+        transactionDetails: buildRefundPayload(),
       });
       toast.success(
-        createRefundOnCancel
-          ? 'Subscription cancelled — refund queued for processing'
+        refundDetailsRequired
+          ? 'Subscription cancelled — refund recorded'
           : 'Subscription cancelled',
       );
       setCancelConfirmOpen(false);
-      setSettlementConfirmed(false);
-      setCreateRefundOnCancel(true);
+      resetCancelForms();
       onUpdated();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Could not cancel subscription');
@@ -657,23 +798,27 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   };
 
   const handleApproveCancelRequest = async () => {
-    if (!settlementConfirmed) return;
+    if (!settlementConfirmed || !refundDetailsReady) return;
+    if (refundDetailsRequired && !refundTxnForm.transactionId?.trim() && !refundTxnForm.utr?.trim()) {
+      toast.error('Transaction ID or UTR is required for the refund');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post(`/admin/subscriptions/users/${subscription._id}/cancel-request/review`, {
         action: 'approve',
         reviewNote: rejectNote.trim() || subscriptionStatusReason.trim() || undefined,
         settlementConfirmed: true,
-        createRefund: createRefundOnCancel,
+        createRefund: refundDetailsRequired,
+        transactionDetails: buildRefundPayload(),
       });
       toast.success(
-        createRefundOnCancel
-          ? 'Cancellation approved — refund queued for processing'
+        refundDetailsRequired
+          ? 'Cancellation approved — refund recorded'
           : 'Cancellation approved',
       );
       setApproveCancelOpen(false);
-      setSettlementConfirmed(false);
-      setCreateRefundOnCancel(true);
+      resetCancelForms();
       onUpdated();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Could not approve cancellation');
@@ -683,13 +828,18 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
   };
 
   const handleRejectCancelRequest = async () => {
+    const reason = rejectNote.trim() || subscriptionStatusReason.trim();
+    if (reason.length < 3) {
+      toast.error('Rejection reason is required');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post(`/admin/subscriptions/users/${subscription._id}/cancel-request/review`, {
         action: 'reject',
-        reviewNote: rejectNote.trim() || subscriptionStatusReason.trim() || undefined,
+        reviewNote: reason,
       });
-      toast.success('Cancellation request rejected');
+      toast.success('Cancellation rejected — customer emailed');
       setRejectNote('');
       onUpdated();
     } catch (err) {
@@ -766,16 +916,21 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               </div>
             </div>
             <p className="text-xs text-rose-800">
-              Approve to cancel and queue a refund, or reject to keep the subscription active.
-              Driver assignment is blocked while this request is pending.
+              Approve requires bank refund details, then cancels the subscription.
+              Reject keeps it active. Driver assignment is blocked while this request is pending.
             </p>
             <div>
-              <label className="text-xs font-semibold text-slate-600">Review note (optional)</label>
-              <input
+              <label className="text-xs font-semibold text-slate-600">
+                Review note <span className="text-rose-600">*</span>
+                {' '}
+                <span className="font-normal text-slate-500">(required to reject — emailed to customer)</span>
+              </label>
+              <textarea
                 value={rejectNote}
                 onChange={(e) => setRejectNote(e.target.value)}
-                placeholder="Note for approve / reject"
-                className="mt-1 w-full h-10 px-3 rounded-xl border border-rose-200 text-sm bg-white"
+                placeholder="Reason of rejection / note for approve"
+                rows={2}
+                className="mt-1 w-full px-3 py-2 rounded-xl border border-rose-200 text-sm bg-white resize-none"
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -791,8 +946,7 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
                 type="button"
                 disabled={submitting}
                 onClick={() => {
-                  setSettlementConfirmed(false);
-                  setCreateRefundOnCancel(true);
+                  resetCancelForms();
                   setApproveCancelOpen(true);
                 }}
               >
@@ -1172,16 +1326,16 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         onClose={() => {
           if (!submitting) {
             setCancelConfirmOpen(false);
-            setSettlementConfirmed(false);
+            resetCancelForms();
           }
         }}
         onConfirm={handleCancelSubscription}
         title="Cancel this subscription?"
-        description="Cancellation releases the assigned driver and cannot be undone."
+        description="Enter bank refund details first, then confirm settlement. Cancellation releases the assigned driver and cannot be undone."
         confirmLabel="Cancel subscription"
         variant="danger"
         loading={submitting}
-        confirmDisabled={!settlementConfirmed}
+        confirmDisabled={!settlementConfirmed || !refundDetailsReady}
       >
         <div className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
@@ -1198,18 +1352,19 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
               <span className="font-semibold">₹{remainingDriverShare.toLocaleString('en-IN')}</span>
             </div>
           </div>
-          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
-            <input
-              type="checkbox"
-              checked={createRefundOnCancel}
-              onChange={(e) => setCreateRefundOnCancel(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Create a pending refund for ₹{(Number(subscription.amount) || 0).toLocaleString('en-IN')}
-              {' '}(process later under Account → Refunds)
-            </span>
-          </label>
+          {refundDetailsRequired ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+              <p className="text-xs font-semibold text-slate-700">
+                Bank refund details for ₹{refundAmountRupees.toLocaleString('en-IN')}
+                {' '}
+                <span className="text-rose-600">*</span>
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Wallet refund is not available for subscriptions. Record the transfer before cancelling.
+              </p>
+              <AdminTransactionFields value={refundTxnForm} onChange={setRefundTxnForm} requireTxn />
+            </div>
+          ) : null}
           <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-900">
             <input
               type="checkbox"
@@ -1230,29 +1385,30 @@ function AssignSubscriptionDrawer({ subscription, onClose, onUpdated }) {
         onClose={() => {
           if (submitting) return;
           setApproveCancelOpen(false);
-          setSettlementConfirmed(false);
+          resetCancelForms();
         }}
         onConfirm={handleApproveCancelRequest}
         title="Approve cancellation?"
-        description="This cancels the subscription and can queue a refund for the customer."
+        description="Fill bank refund details, then cancel the subscription."
         confirmLabel="Approve & cancel"
         variant="danger"
         loading={submitting}
-        confirmDisabled={!settlementConfirmed}
+        confirmDisabled={!settlementConfirmed || !refundDetailsReady}
       >
         <div className="space-y-3">
-          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
-            <input
-              type="checkbox"
-              checked={createRefundOnCancel}
-              onChange={(e) => setCreateRefundOnCancel(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Create a pending refund for ₹{(Number(subscription.amount) || 0).toLocaleString('en-IN')}
-              {' '}(process later under Account → Refunds)
-            </span>
-          </label>
+          {refundDetailsRequired ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+              <p className="text-xs font-semibold text-slate-700">
+                Bank refund details for ₹{refundAmountRupees.toLocaleString('en-IN')}
+                {' '}
+                <span className="text-rose-600">*</span>
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Wallet refund is not available for subscriptions.
+              </p>
+              <AdminTransactionFields value={refundTxnForm} onChange={setRefundTxnForm} requireTxn />
+            </div>
+          ) : null}
           <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-900">
             <input
               type="checkbox"

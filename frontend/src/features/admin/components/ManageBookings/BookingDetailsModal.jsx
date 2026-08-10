@@ -575,7 +575,7 @@ const BookingDetailsModal = ({
         </Section>
 
         {isOutstation && (
-          <Section title="Outstation trip" icon={Compass}>
+          <Section title="Round trip" icon={Compass}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field
                 label="Start"

@@ -84,6 +84,23 @@ export function UserBookingAlertsBridge() {
         prev && String(prev.bookingId) === String(payload.bookingId) ? null : prev,
       );
     }
+    // Round-trip (and any) completions while the user is elsewhere in
+    // the app — nudge them onto the same rating screen used by the live
+    // assigned-page flow. Skip if already on completed/rate or the live
+    // assigned page (that page owns the redirect).
+    if (payload.status === BOOKING_STATUS.COMPLETED && payload.bookingId) {
+      if (payload.rating?.customer?.stars != null) return;
+      const path = window.location.pathname || '';
+      if (
+        path.startsWith('/user/tracking/completed')
+        || path.startsWith('/user/tracking/rate')
+        || path.includes('/user/book/assigned')
+      ) {
+        return;
+      }
+      const id = String(payload.bookingId);
+      navigate(`/user/tracking/completed?bookingId=${id}`);
+    }
   });
 
   // Rehydrate from the active booking after refresh / navigation.

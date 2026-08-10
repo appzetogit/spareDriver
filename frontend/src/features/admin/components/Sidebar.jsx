@@ -5,7 +5,7 @@ import {
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
   LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag, Headphones,
-  BarChart3, BellRing, Layers,
+  BarChart3, BellRing, Layers, CreditCard,
 } from 'lucide-react';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import useAdminSidebarCountsStore from '../../../store/admin/useAdminSidebarCountsStore';
@@ -87,7 +87,7 @@ const navItems = [
       },
       {
         path: '/admin/bookings/outstation-assignments',
-        label: 'Outstation Bookings',
+        label: 'Round Trip Bookings',
         icon: Compass,
         // Auto-search first; unmatched rows escalate into Emergency Pool.
         // This page lists every outstation booking (all statuses).
@@ -186,6 +186,12 @@ const navItems = [
         path: '/admin/account/refunds',
         label: 'Refunds',
         icon: Banknote,
+        roles: ['admin'],
+      },
+      {
+        path: '/admin/account/online-transactions',
+        label: 'Online Transactions',
+        icon: CreditCard,
         roles: ['admin'],
       },
       {

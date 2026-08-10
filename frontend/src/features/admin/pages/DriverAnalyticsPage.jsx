@@ -527,7 +527,7 @@ const DriverAnalyticsPage = () => {
           >
             <option value="">All services</option>
             <option value="hourly">Hourly</option>
-            <option value="outstation">Outstation</option>
+            <option value="outstation">Round trip</option>
           </select>
           <select
             value={status}
@@ -631,7 +631,7 @@ const DriverAnalyticsPage = () => {
                 value: String(profile.cancellationStats?.priorityPenaltyPoints ?? 0),
               },
               {
-                label: 'Outstation cancellations',
+                label: 'Round trip cancellations',
                 value: String(profile.cancellationStats?.outstationTotal ?? 0),
               },
               {
@@ -751,7 +751,7 @@ const DriverAnalyticsPage = () => {
             >
               <option value="">All services</option>
               <option value="hourly">Hourly</option>
-              <option value="outstation">Outstation</option>
+              <option value="outstation">Round trip</option>
             </select>
           </div>
         </Card>

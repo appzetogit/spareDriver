@@ -27,6 +27,7 @@ import api from '../../../../utils/api';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
+import { getLocationOnce, logGeo } from '../../../../utils/geolocation';
 
 /**
  * Step 3 — Rapido-style pickup screen.
@@ -288,19 +289,22 @@ const SelectPickupPage = () => {
       debouncedMapGeocodeRef.current(lat, lng, field);
     });
 
-    if (!pickup && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
+    if (!pickup) {
+      getLocationOnce({ enableHighAccuracy: true, timeout: 8_000, maximumAge: 30_000 })
+        .then(async (coords) => {
+          const lat = coords.lat;
+          const lng = coords.lng;
           moveMapTo({ lat, lng });
           if (pickupMarkerRef.current) pickupMarkerRef.current.position = { lat, lng };
           const point = await reverseGeocode({ lat, lng }, 'pickup');
           if (point) applyLocation(point, 'pickup');
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 8_000, maximumAge: 30_000 },
-      );
+        })
+        .catch((err) => {
+          logGeo('SelectPickupPage location failed', {
+            kind: err?.kind,
+            message: err?.message,
+          });
+        });
     }
   }, [
     ready,

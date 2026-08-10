@@ -101,7 +101,13 @@ export async function requestSubscriptionCancellationService(
  */
 export async function reviewSubscriptionCancellationService(
   subscriptionId,
-  { action, reviewNote = '', settlementConfirmed = false, createRefund = true } = {},
+  {
+    action,
+    reviewNote = '',
+    settlementConfirmed = false,
+    createRefund = true,
+    transactionDetails = null,
+  } = {},
   admin = null,
 ) {
   const normalized = String(action || '').toLowerCase();
@@ -116,11 +122,16 @@ export async function reviewSubscriptionCancellationService(
   }
 
   if (normalized === 'reject') {
+    const note = String(reviewNote || '').trim();
+    if (note.length < 3) {
+      throw new ApiError(400, 'Rejection reason is required (min 3 characters)');
+    }
     sub.cancellationRequest.status = SUBSCRIPTION_CANCEL_REQUEST_STATUS.REJECTED;
     sub.cancellationRequest.reviewedAt = new Date();
     sub.cancellationRequest.reviewedBy = admin?._id || null;
-    sub.cancellationRequest.reviewNote = String(reviewNote || '').trim().slice(0, 500);
+    sub.cancellationRequest.reviewNote = note.slice(0, 500);
     await sub.save();
+    sendSubscriptionCancelRejectedEmail(sub).catch(() => null);
     return { subscription: sub.toObject(), action: 'reject', refund: null };
   }
 
@@ -129,6 +140,11 @@ export async function reviewSubscriptionCancellationService(
       400,
       'Confirm that customer payments, driver payouts, refunds, and other obligations are settled before approving cancellation',
     );
+  }
+
+  const shouldRefund = Number(sub.amount) > 0;
+  if (shouldRefund) {
+    assertSubscriptionRefundTxn(transactionDetails);
   }
 
   const cancelResult = await adminUpdateUserSubscriptionStatusService(
@@ -140,6 +156,8 @@ export async function reviewSubscriptionCancellationService(
         || sub.cancellationRequest?.reason
         || 'Cancelled after customer request',
       settlementConfirmed: true,
+      createRefund: shouldRefund,
+      transactionDetails: shouldRefund ? transactionDetails : null,
     },
     admin,
   );
@@ -156,22 +174,24 @@ export async function reviewSubscriptionCancellationService(
     await refreshed.save();
   }
 
-  let refund = null;
-  if (createRefund !== false && refreshed) {
-    refund = await issueSubscriptionRefundService(refreshed, {
-      initiatedBy: 'admin',
-      reason:
-        reviewNote
-        || refreshed.cancellationRequest?.reason
-        || 'Subscription cancellation refund',
-    });
-  }
-
+  // Refund already created inside adminUpdateUserSubscriptionStatusService when createRefund.
   return {
     subscription: refreshed ? refreshed.toObject() : cancelResult.subscription,
     action: 'approve',
-    refund,
+    refund: cancelResult.refund || null,
   };
+}
+
+function assertSubscriptionRefundTxn(transactionDetails) {
+  const txn = transactionDetails || {};
+  const txnId = String(txn.transactionId || '').trim();
+  const utr = String(txn.utr || '').trim();
+  if (!txnId && !utr) {
+    throw new ApiError(
+      400,
+      'Refund transaction details are required (Transaction ID or UTR) before cancelling a subscription',
+    );
+  }
 }
 
 /**
@@ -180,7 +200,13 @@ export async function reviewSubscriptionCancellationService(
  */
 export async function adminUpdateUserSubscriptionStatusService(
   subscriptionId,
-  { status, reason = '', settlementConfirmed = false, createRefund = false } = {},
+  {
+    status,
+    reason = '',
+    settlementConfirmed = false,
+    createRefund = false,
+    transactionDetails = null,
+  } = {},
   admin = null,
 ) {
   if (!status || !ALLOWED_ADMIN_SUBSCRIPTION_STATUSES.includes(status)) {
@@ -205,6 +231,14 @@ export async function adminUpdateUserSubscriptionStatusService(
       400,
       'Confirm that customer payments, driver payouts, refunds, and other obligations are settled before cancellation',
     );
+  }
+
+  const shouldRefund =
+    status === SUBSCRIPTION_STATUS.CANCELLED
+    && Number(sub.amount) > 0;
+  // Paid subscriptions always require bank refund details at cancel time.
+  if (shouldRefund) {
+    assertSubscriptionRefundTxn(transactionDetails);
   }
 
   if (
@@ -234,10 +268,11 @@ export async function adminUpdateUserSubscriptionStatusService(
     await refreshed.save();
 
     let refund = null;
-    if (status === SUBSCRIPTION_STATUS.CANCELLED && createRefund === true) {
+    if (shouldRefund) {
       refund = await issueSubscriptionRefundService(refreshed, {
         initiatedBy: 'admin',
         reason: reason || 'Subscription cancellation refund',
+        transactionDetails,
       });
     }
 
@@ -277,12 +312,52 @@ export async function adminUpdateUserSubscriptionStatusService(
   await sub.save();
 
   let refund = null;
-  if (status === SUBSCRIPTION_STATUS.CANCELLED && createRefund === true) {
+  if (shouldRefund) {
     refund = await issueSubscriptionRefundService(sub, {
       initiatedBy: 'admin',
       reason: reason || 'Subscription cancellation refund',
+      transactionDetails,
     });
   }
 
   return { subscription: sub.toObject(), previousStatus, changed: true, refund };
+}
+
+async function sendSubscriptionCancelRejectedEmail(subscription) {
+  if (!subscription?.userId) return;
+  const User = (await import('../models/user.model.js')).default;
+  const user = await User.findById(subscription.userId).select('name email').lean();
+  if (!user?.email) return;
+
+  const { isPlaceholderUserEmail } = await import('../utils/email.util.js');
+  if (isPlaceholderUserEmail(user.email)) return;
+
+  const { sendEmail } = await import('./email.service.js');
+  const reason =
+    String(subscription.cancellationRequest?.reviewNote || '').trim()
+    || 'Your cancellation request could not be approved.';
+  const ref = subscription.subscriptionNumber || String(subscription._id).slice(-8);
+  const plan = subscription.planNameSnapshot || 'your subscription';
+  const name = user.name || 'there';
+
+  const escape = (s) =>
+    String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  await sendEmail({
+    to: user.email,
+    subject: `Cancellation request rejected — ${ref}`,
+    text: `Hi ${name},\n\nYour request to cancel ${plan} (${ref}) was rejected.\n\nReason of rejection:\n${reason}\n\nYour subscription remains active.\n\n— SpareDriver`,
+    html: `
+      <p>Hi ${escape(name)},</p>
+      <p>Your request to cancel <strong>${escape(plan)}</strong> (ref <strong>${escape(ref)}</strong>) was rejected.</p>
+      <p><strong>Reason of rejection:</strong></p>
+      <p style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">${escape(reason)}</p>
+      <p>Your subscription remains active. Contact support if you have questions.</p>
+      <p>— SpareDriver</p>
+    `,
+  });
 }

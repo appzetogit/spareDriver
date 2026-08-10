@@ -220,8 +220,9 @@ export async function issueBookingRefundService(booking, options = {}) {
 }
 
 /**
- * Create a pending refund ledger row for a cancelled subscription.
- * Admin processes money on Account → Refunds (same as booking cancels).
+ * Create a subscription cancellation refund ledger row.
+ * Bank payout only — wallet is not offered for subscription refunds.
+ * When transaction details are provided, the row is written as `processed`.
  * Idempotent per subscription for non-failed rows.
  */
 export async function issueSubscriptionRefundService(subscription, options = {}) {
@@ -237,23 +238,19 @@ export async function issueSubscriptionRefundService(subscription, options = {})
   }).sort({ createdAt: -1 });
   if (existing) return existing.toObject();
 
-  if (amountRupees <= 0) {
-    return Refund.create({
-      kind: REFUND_KIND.SUBSCRIPTION_CANCELLATION,
-      subscriptionId: subscription._id,
-      subscriptionNumber: subscription.subscriptionNumber || '',
-      userId: subscription.userId,
-      amountRupees: 0,
-      cancellationFeeRupees: fee,
-      grossPaidRupees: paid,
-      razorpayPaymentId: subscription.razorpayPaymentId || '',
-      payoutMethod: options.payoutMethod || REFUND_PAYOUT_METHOD.BANK_ACCOUNT,
-      status: REFUND_STATUS.PROCESSED,
-      initiatedBy: options.initiatedBy || REFUND_INITIATED_BY.ADMIN,
-      reason: options.reason || 'no_refund_due',
-      processedAt: new Date(),
-    }).then((doc) => doc.toObject());
+  const payoutMethod = REFUND_PAYOUT_METHOD.BANK_ACCOUNT;
+  const txn = normalizeTransactionDetails(options.transactionDetails || {});
+  const hasTxn = Boolean(txn.transactionId || txn.utr);
+
+  if (amountRupees > 0 && !hasTxn) {
+    throw new ApiError(
+      400,
+      'Refund transaction details are required (Transaction ID or UTR) before cancelling a subscription',
+    );
   }
+
+  const now = new Date();
+  const autoProcessed = amountRupees <= 0 || hasTxn;
 
   const refund = await Refund.create({
     kind: REFUND_KIND.SUBSCRIPTION_CANCELLATION,
@@ -264,31 +261,50 @@ export async function issueSubscriptionRefundService(subscription, options = {})
     cancellationFeeRupees: fee,
     grossPaidRupees: paid,
     razorpayPaymentId: subscription.razorpayPaymentId || '',
-    payoutMethod: options.payoutMethod || REFUND_PAYOUT_METHOD.BANK_ACCOUNT,
-    status: REFUND_STATUS.PENDING,
+    payoutMethod,
+    status: autoProcessed ? REFUND_STATUS.PROCESSED : REFUND_STATUS.PENDING,
     initiatedBy: options.initiatedBy || REFUND_INITIATED_BY.ADMIN,
-    reason: options.reason || 'subscription_cancellation',
+    reason:
+      options.reason
+      || (amountRupees <= 0 ? 'no_refund_due' : 'subscription_cancellation'),
+    processedAt: autoProcessed ? now : null,
+    transactionDetails: hasTxn
+      ? txn
+      : { mode: '', transactionId: '', utr: '', referenceNumber: '', notes: '' },
   });
 
-  notifyUserRefundInitiated(subscription.userId, refund).catch(() => null);
-  notifyAdminRefundRequest(refund).catch(() => null);
+  if (amountRupees > 0) {
+    if (autoProcessed) {
+      notifyUserRefundProcessed(subscription.userId, refund).catch(() => null);
+    } else {
+      notifyUserRefundInitiated(subscription.userId, refund).catch(() => null);
+      notifyAdminRefundRequest(refund).catch(() => null);
+    }
+  }
   return refund.toObject();
 }
 
+function normalizeTransactionDetails(raw = {}) {
+  return {
+    mode: String(raw.mode || '').trim().slice(0, 80),
+    transactionId: String(raw.transactionId || '').trim().slice(0, 120),
+    utr: String(raw.utr || '').trim().slice(0, 120),
+    referenceNumber: String(raw.referenceNumber || '').trim().slice(0, 120),
+    notes: String(raw.notes || '').trim().slice(0, 500),
+  };
+}
+
 /**
- * Admin → update a refund's status manually after they've handled the
- * refund on the Razorpay dashboard (or after they confirm the Razorpay
- * attempt failed).
+ * Admin → update a refund's status after handling the payout.
  *
- *   `processed` — admin moved the money. Optionally captures the
- *                 Razorpay refund id from the dashboard so the audit
- *                 line points back to the gateway transaction. Flips
- *                 `booking.paymentStatus → REFUNDED`.
- *   `failed`    — admin couldn't process the refund (closed account,
- *                 dispute, etc.). Captures an error note.
+ *   `processed` — money moved. Bank payouts require transaction details
+ *                 (txn id or UTR), same as Create Refund. Flips
+ *                 `booking.paymentStatus → REFUNDED` when applicable.
+ *   `rejected`  — refund denied; requires a reason emailed to the user.
+ *   `failed`    — processing failed; requires a note (admin can retry).
  *
- * Both transitions are idempotent — repeated PATCHes with the same
- * status replace the metadata but never duplicate the record.
+ * Transitions are idempotent — repeated PATCHes with the same status
+ * replace metadata but never duplicate the record.
  */
 export async function updateRefundStatusService(refundId, payload = {}, admin = null) {
   const refund = await Refund.findById(refundId);
@@ -308,39 +324,85 @@ export async function updateRefundStatusService(refundId, payload = {}, admin = 
   const now = new Date();
   refund.status = nextStatus;
   refund.error = [REFUND_STATUS.FAILED, REFUND_STATUS.REJECTED].includes(nextStatus)
-    ? String(payload.error || payload.reason || '').slice(0, 500)
+    ? String(payload.error || payload.reason || '').trim().slice(0, 500)
     : '';
 
   if (nextStatus === REFUND_STATUS.APPROVED) {
     refund.approvedAt = now;
     notifyUserRefundApproved(refund.userId, refund).catch(() => null);
   } else if (nextStatus === REFUND_STATUS.REJECTED) {
+    const rejectionReason = String(payload.reason || payload.error || '').trim();
+    if (rejectionReason.length < 3) {
+      throw new ApiError(400, 'Rejection reason is required (min 3 characters)');
+    }
     refund.rejectedAt = now;
-    if (payload.reason) refund.reason = String(payload.reason).slice(0, 500);
+    refund.error = rejectionReason.slice(0, 500);
     notifyUserRefundRejected(refund.userId, refund).catch(() => null);
+    sendRefundRejectedEmail(refund).catch(() => null);
   } else if (nextStatus === REFUND_STATUS.PROCESSED) {
+    if (refund.kind === REFUND_KIND.SUBSCRIPTION_CANCELLATION) {
+      // Subscription refunds are bank-only — never wallet.
+      if (
+        payload.payoutMethod
+        && payload.payoutMethod !== REFUND_PAYOUT_METHOD.BANK_ACCOUNT
+      ) {
+        throw new ApiError(400, 'Subscription refunds must be paid to bank account');
+      }
+    }
+
+    const payoutMethod =
+      refund.kind === REFUND_KIND.SUBSCRIPTION_CANCELLATION
+        ? REFUND_PAYOUT_METHOD.BANK_ACCOUNT
+        : (payload.payoutMethod
+          || refund.payoutMethod
+          || REFUND_PAYOUT_METHOD.BANK_ACCOUNT);
+    if (!Object.values(REFUND_PAYOUT_METHOD).includes(payoutMethod)) {
+      throw new ApiError(400, 'payoutMethod must be "wallet" or "bank_account"');
+    }
+
+    const txn = normalizeTransactionDetails(payload.transactionDetails || {});
+    if (payoutMethod === REFUND_PAYOUT_METHOD.BANK_ACCOUNT && !txn.transactionId && !txn.utr) {
+      throw new ApiError(400, 'Transaction ID or UTR is required when marking a bank refund as processed');
+    }
+
+    refund.payoutMethod = payoutMethod;
+    refund.transactionDetails = {
+      ...txn,
+      mode:
+        payoutMethod === REFUND_PAYOUT_METHOD.WALLET
+          ? (txn.mode || 'wallet')
+          : txn.mode,
+    };
     refund.processedAt = now;
     refund.failedAt = null;
     if (payload.razorpayRefundId) {
       refund.razorpayRefundId = String(payload.razorpayRefundId).slice(0, 80);
+    } else if (txn.transactionId && String(txn.transactionId).startsWith('rfnd_')) {
+      refund.razorpayRefundId = txn.transactionId.slice(0, 80);
     }
-    // Stash a tiny audit trail of who processed the refund. Optional —
-    // the Refund.timestamps already capture `updatedAt`.
+
     if (admin?._id) {
-      refund.reason = refund.reason
-        ? `${refund.reason} · processed by ${admin?.name || admin?._id}`
-        : `processed by ${admin?.name || admin?._id}`;
+      const who = admin?.name || admin?._id;
+      const audit = `processed by ${who}`;
+      if (!String(refund.reason || '').includes(audit)) {
+        refund.reason = refund.reason ? `${refund.reason} · ${audit}` : audit;
+      }
     }
     notifyUserRefundProcessed(refund.userId, refund).catch(() => null);
   } else if (nextStatus === REFUND_STATUS.FAILED) {
+    const failNote = String(payload.error || payload.reason || '').trim();
+    if (failNote.length < 3) {
+      throw new ApiError(400, 'Failure reason is required (min 3 characters)');
+    }
+    refund.error = failNote.slice(0, 500);
     refund.failedAt = now;
     refund.processedAt = null;
   }
   await refund.save();
 
   // Flip the booking's `paymentStatus` only when the money actually moved.
-  // Failed refunds keep the booking marked PAID so the admin can retry.
-  if (nextStatus === REFUND_STATUS.PROCESSED) {
+  // Failed / rejected refunds keep the booking marked PAID so admin can retry.
+  if (nextStatus === REFUND_STATUS.PROCESSED && refund.bookingId) {
     await Booking.updateOne(
       { _id: refund.bookingId },
       {
@@ -352,9 +414,10 @@ export async function updateRefundStatusService(refundId, payload = {}, admin = 
         },
       },
     );
-  } else if (refund.bookingId) {
-    // Failed → ensure paymentStatus is still PAID (admin may have flipped
-    // it earlier accidentally). Safe no-op if it's already PAID.
+  } else if (
+    refund.bookingId
+    && [REFUND_STATUS.FAILED, REFUND_STATUS.REJECTED].includes(nextStatus)
+  ) {
     await Booking.updateOne(
       { _id: refund.bookingId, paymentStatus: BOOKING_PAYMENT_STATUS.REFUNDED },
       { $set: { paymentStatus: BOOKING_PAYMENT_STATUS.PAID } },
@@ -362,6 +425,46 @@ export async function updateRefundStatusService(refundId, payload = {}, admin = 
   }
 
   return refund.toObject();
+}
+
+async function sendRefundRejectedEmail(refund) {
+  if (!refund?.userId) return;
+  const user = await User.findById(refund.userId).select('name email isEmailVerified').lean();
+  if (!user?.email) return;
+
+  const { isPlaceholderUserEmail } = await import('../utils/email.util.js');
+  if (isPlaceholderUserEmail(user.email)) return;
+
+  const { sendEmail } = await import('./email.service.js');
+  const amount = Number(refund.amountRupees) || 0;
+  const amountLabel = `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  const reason = String(refund.error || '').trim() || 'Your refund request could not be approved.';
+  const ref =
+    refund.subscriptionNumber
+    || refund.bookingNumber
+    || String(refund._id).slice(-8);
+  const name = user.name || 'there';
+
+  const escape = (s) =>
+    String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  await sendEmail({
+    to: user.email,
+    subject: `Refund rejected — ${ref}`,
+    text: `Hi ${name},\n\nYour refund of ${amountLabel} (ref ${ref}) was rejected.\n\nReason of rejection:\n${reason}\n\nIf you have questions, reply to this email or contact support.\n\n— SpareDriver`,
+    html: `
+      <p>Hi ${escape(name)},</p>
+      <p>Your refund of <strong>${escape(amountLabel)}</strong> (ref <strong>${escape(ref)}</strong>) was rejected.</p>
+      <p><strong>Reason of rejection:</strong></p>
+      <p style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">${escape(reason)}</p>
+      <p>If you have questions, contact SpareDriver support.</p>
+      <p>— SpareDriver</p>
+    `,
+  });
 }
 
 /**

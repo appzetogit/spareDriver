@@ -29,7 +29,7 @@ const LandingPage = () => {
     }
     metaDesc.setAttribute(
       'content',
-      'Get safe, verified, and professional drivers for your car on-demand. SpareDriver offers hourly bookings, outstation trips, and subscription benefits with real-time tracking.',
+      'Get safe, verified, and professional drivers for your car on-demand. SpareDriver offers hourly bookings, round trips, and subscription benefits with real-time tracking.',
     );
 
     let cancelled = false;
@@ -193,7 +193,7 @@ const LandingPage = () => {
 
             <p className="text-base md:text-lg text-text-muted max-w-xl leading-relaxed">
               Safe. Verified. On-Time. Enjoy a premium, seamless travel experience with our on-demand,
-              hourly, or outstation professional driver services. We handle the wheel, you command the
+              hourly, or round-trip professional driver services. We handle the wheel, you command the
               journey.
             </p>
 
@@ -417,7 +417,7 @@ const LandingPage = () => {
           </h2>
           <p className="text-text-muted text-base md:text-lg max-w-xl mx-auto leading-relaxed">
             Get the SpareDriver app on your smartphone to instantly book verified drivers, schedule
-            outstation trips, and track drivers in real-time.
+            round trips, and track drivers in real-time.
           </p>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
             <Button
@@ -520,7 +520,7 @@ const LandingPage = () => {
             />
             <p className="text-sm text-text-muted max-w-sm leading-relaxed">
               Reclaim your travel time. Hire premium, fully background-checked professional drivers to
-              drive your own car, available on-demand, hourly, or for outstations.
+              drive your own car, available on-demand, hourly, or for round trips.
             </p>
           </div>
 

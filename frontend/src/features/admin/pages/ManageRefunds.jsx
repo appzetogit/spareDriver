@@ -16,6 +16,8 @@ import Badge from '../../../components/Badge';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import RowActionsMenu from '../components/RowActionsMenu';
 import CreateAdminRefundModal from '../components/CreateAdminRefundModal';
+import AdminDetailModal from '../components/AdminDetailModal';
+import AdminTransactionFields, { EMPTY_TXN_FORM } from '../components/AdminTransactionFields';
 import useAdminRefundsStore from '../../../store/admin/useAdminRefundsStore';
 import {
   REFUND_KIND_LABELS,
@@ -26,7 +28,9 @@ import {
 
 const STATUS_META = {
   pending: { label: 'Pending', variant: 'warning', icon: Clock },
+  approved: { label: 'Approved', variant: 'info', icon: CheckCircle2 },
   processed: { label: 'Processed', variant: 'success', icon: CheckCircle2 },
+  rejected: { label: 'Rejected', variant: 'danger', icon: XCircle },
   failed: { label: 'Failed', variant: 'danger', icon: XCircle },
 };
 
@@ -68,8 +72,11 @@ const ManageRefunds = () => {
   const setPage = useAdminRefundsStore((s) => s.setPage);
   const updateRefundStatus = useAdminRefundsStore((s) => s.updateRefundStatus);
 
-  const [actionTarget, setActionTarget] = useState(null);
-  const [note, setNote] = useState('');
+  const [processTarget, setProcessTarget] = useState(null);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [txnForm, setTxnForm] = useState(EMPTY_TXN_FORM);
+  const [payoutMethod, setPayoutMethod] = useState('bank_account');
+  const [rejectReason, setRejectReason] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
@@ -99,8 +106,10 @@ const ManageRefunds = () => {
         accent: 'text-amber-700',
       },
       {
-        label: 'Failed',
-        value: totals?.byStatus?.failed?.count || 0,
+        label: 'Rejected / failed',
+        value:
+          (totals?.byStatus?.rejected?.count || 0)
+          + (totals?.byStatus?.failed?.count || 0),
         icon: XCircle,
         accent: 'text-danger',
       },
@@ -108,33 +117,77 @@ const ManageRefunds = () => {
     [totals],
   );
 
-  const openAction = (refund, action) => {
-    setActionTarget({ refund, action });
-    setNote('');
+  const openProcess = (refund) => {
+    setProcessTarget(refund);
+    const isSubscription = refund.kind === 'subscription_cancellation';
+    setPayoutMethod(
+      isSubscription ? 'bank_account' : (refund.payoutMethod || 'bank_account'),
+    );
+    setTxnForm(EMPTY_TXN_FORM);
   };
 
-  const closeAction = () => {
+  const closeProcess = () => {
     if (updatingId) return;
-    setActionTarget(null);
-    setNote('');
+    setProcessTarget(null);
+    setTxnForm(EMPTY_TXN_FORM);
   };
 
-  const confirmAction = async () => {
-    if (!actionTarget?.refund) return;
-    const { refund, action } = actionTarget;
+  const openReject = (refund) => {
+    setRejectTarget(refund);
+    setRejectReason('');
+  };
+
+  const closeReject = () => {
+    if (updatingId) return;
+    setRejectTarget(null);
+    setRejectReason('');
+  };
+
+  const confirmProcess = async () => {
+    if (!processTarget) return;
+    const isSubscription = processTarget.kind === 'subscription_cancellation';
+    const method = isSubscription ? 'bank_account' : payoutMethod;
+    if (method === 'bank_account') {
+      if (!txnForm.transactionId?.trim() && !txnForm.utr?.trim()) {
+        toast.error('Transaction ID or UTR is required');
+        return;
+      }
+    }
     try {
-      const payload =
-        action === 'processed'
-          ? { status: 'processed', razorpayRefundId: note.trim() || undefined }
-          : { status: 'failed', error: note.trim() || 'Refund failed' };
-      await updateRefundStatus(refund._id, payload);
-      toast.success(
-        action === 'processed' ? 'Refund marked as processed' : 'Refund marked as failed',
-      );
-      setActionTarget(null);
-      setNote('');
+      await updateRefundStatus(processTarget._id, {
+        status: 'processed',
+        payoutMethod: method,
+        transactionDetails: {
+          mode: txnForm.mode.trim(),
+          transactionId: txnForm.transactionId.trim(),
+          utr: txnForm.utr.trim(),
+          referenceNumber: txnForm.referenceNumber.trim(),
+          notes: txnForm.notes.trim(),
+        },
+      });
+      toast.success('Refund marked as processed');
+      closeProcess();
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Could not update refund');
+    }
+  };
+
+  const confirmReject = async () => {
+    if (!rejectTarget) return;
+    const reason = rejectReason.trim();
+    if (reason.length < 3) {
+      toast.error('Rejection reason is required');
+      return;
+    }
+    try {
+      await updateRefundStatus(rejectTarget._id, {
+        status: 'rejected',
+        reason,
+      });
+      toast.success('Refund rejected — customer notified');
+      closeReject();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Could not reject refund');
     }
   };
 
@@ -145,7 +198,10 @@ const ManageRefunds = () => {
           <h2 className="text-xl font-bold text-text">Refunds & settlements</h2>
           <p className="text-xs text-text-muted mt-1 max-w-xl">
             Automatic wallet refunds (cancellations) and manual admin refunds
-            share this ledger. Process legacy Razorpay refunds on{' '}
+            share this ledger. For bank payouts, transfer funds then mark
+            processed with transaction details — same fields as{' '}
+            <span className="font-medium text-text">Create refund</span>. Or reject
+            with a reason emailed to the customer. Legacy Razorpay refunds:{' '}
             <a
               href="https://dashboard.razorpay.com/app/refunds"
               target="_blank"
@@ -155,7 +211,7 @@ const ManageRefunds = () => {
               Razorpay
               <ExternalLink className="w-3 h-3" />
             </a>
-            , then mark processed with the gateway id.
+            .
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -211,6 +267,7 @@ const ManageRefunds = () => {
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
           <option value="processed">Processed</option>
+          <option value="rejected">Rejected</option>
           <option value="failed">Failed</option>
         </select>
       </div>
@@ -254,8 +311,8 @@ const ManageRefunds = () => {
                     key={refund._id}
                     refund={refund}
                     updating={updatingId === refund._id}
-                    onMarkProcessed={() => openAction(refund, 'processed')}
-                    onMarkFailed={() => openAction(refund, 'failed')}
+                    onMarkProcessed={() => openProcess(refund)}
+                    onReject={() => openReject(refund)}
                   />
                 ))}
             </tbody>
@@ -294,37 +351,117 @@ const ManageRefunds = () => {
 
       {error && <p className="text-xs text-danger">Could not load refunds: {error}</p>}
 
+      <AdminDetailModal
+        isOpen={!!processTarget}
+        onClose={closeProcess}
+        title="Mark refund as processed"
+        subtitle={
+          processTarget
+            ? `Record payout details for ${formatCurrency(processTarget.amountRupees)} — same fields as Create refund.`
+            : ''
+        }
+        size="lg"
+        footer={(
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeProcess}
+              disabled={!!updatingId}
+              className="px-4 py-2 rounded-xl border border-border-light text-sm font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmProcess}
+              disabled={!!updatingId}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-60"
+            >
+              {updatingId && <Loader2 className="w-4 h-4 animate-spin" />}
+              Mark processed
+            </button>
+          </div>
+        )}
+      >
+        <div className="space-y-4">
+          {processTarget?.kind === 'subscription_cancellation' ? (
+            <p className="text-xs text-text-muted rounded-xl border border-border-light bg-white px-3 py-2">
+              Subscription refunds are bank transfer only — wallet credit is not available.
+            </p>
+          ) : (
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-2">
+                Payout method <span className="text-danger">*</span>
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                {Object.entries(REFUND_PAYOUT_METHOD_LABELS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPayoutMethod(key)}
+                    className={`flex-1 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                      payoutMethod === key
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border-light bg-white text-text-secondary hover:bg-gray-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {payoutMethod === 'bank_account' || processTarget?.kind === 'subscription_cancellation' ? (
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-2">
+                Bank transfer details <span className="text-danger">*</span>
+              </p>
+              <div className="rounded-xl border border-border-light bg-white p-3">
+                <AdminTransactionFields value={txnForm} onChange={setTxnForm} requireTxn />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-semibold text-text-secondary mb-1.5">
+                Notes (optional)
+              </label>
+              <textarea
+                value={txnForm.notes}
+                onChange={(e) => setTxnForm({ ...txnForm, notes: e.target.value })}
+                rows={2}
+                placeholder="Internal notes about this wallet refund"
+                className="w-full rounded-xl border border-border-light px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          )}
+        </div>
+      </AdminDetailModal>
+
       <ConfirmDialog
-        open={!!actionTarget}
-        onClose={closeAction}
-        onConfirm={confirmAction}
-        title={
-          actionTarget?.action === 'processed'
-            ? 'Mark refund as processed'
-            : 'Mark refund as failed'
-        }
+        open={!!rejectTarget}
+        onClose={closeReject}
+        onConfirm={confirmReject}
+        title="Reject refund?"
         description={
-          actionTarget?.action === 'processed'
-            ? `Confirms you've refunded ${formatCurrency(actionTarget?.refund?.amountRupees)}.`
-            : 'Marks this refund as failed so you can retry later.'
+          rejectTarget
+            ? `Reject ${formatCurrency(rejectTarget.amountRupees)}. The reason is emailed to the customer.`
+            : ''
         }
-        confirmLabel={actionTarget?.action === 'processed' ? 'Mark processed' : 'Mark failed'}
-        variant={actionTarget?.action === 'processed' ? 'success' : 'danger'}
+        confirmLabel="Reject"
+        variant="danger"
         loading={!!updatingId}
       >
         <label className="flex flex-col gap-1.5 mt-1">
           <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide">
-            {actionTarget?.action === 'processed'
-              ? 'Razorpay refund id (optional)'
-              : 'Failure note'}
+            Reason of rejection <span className="text-danger">*</span>
           </span>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={
-              actionTarget?.action === 'processed' ? 'rfnd_XXXXXXXXXXXX' : 'Reason for failure'
-            }
-            className="px-3 py-2 rounded-xl border border-border-light text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Explain why this refund is being rejected…"
+            rows={3}
+            className="px-3 py-2 rounded-xl border border-border-light text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </label>
       </ConfirmDialog>
@@ -348,7 +485,7 @@ function Th({ children, className = '' }) {
   );
 }
 
-function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
+function RefundRow({ refund, updating, onMarkProcessed, onReject }) {
   const status = refund.status || 'pending';
   const meta = STATUS_META[status] || STATUS_META.pending;
   const Icon = meta.icon;
@@ -369,10 +506,13 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
     'Customer';
 
   const menuItems =
-    status === 'pending' && !isWalletSettlement && !isAdminManual && !isAutoWallet
+    (status === 'pending' || status === 'approved')
+    && !isWalletSettlement
+    && !isAdminManual
+    && !isAutoWallet
       ? [
           { label: 'Mark processed', icon: CheckCircle2, onClick: onMarkProcessed },
-          { label: 'Mark failed', icon: XCircle, variant: 'danger', onClick: onMarkFailed },
+          { label: 'Reject', icon: XCircle, variant: 'danger', onClick: onReject },
         ]
       : [];
 
@@ -410,6 +550,11 @@ function RefundRow({ refund, updating, onMarkProcessed, onMarkFailed }) {
         )}
         {(isAdminManual || isAutoWallet) && refund.reason ? (
           <p className="text-[10px] text-text-muted mt-0.5 line-clamp-2">{refund.reason}</p>
+        ) : null}
+        {status === 'rejected' && refund.error ? (
+          <p className="text-[10px] text-danger mt-0.5 line-clamp-2">
+            Rejected: {refund.error}
+          </p>
         ) : null}
       </td>
       <td className="px-4 py-3 text-text">{customer}</td>

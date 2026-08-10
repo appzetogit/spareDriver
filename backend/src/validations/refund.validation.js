@@ -8,6 +8,16 @@ const transactionDetailsSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+function requireTxnIdOrUtr(txn, ctx, path = ['transactionDetails']) {
+  if (!txn?.transactionId?.trim() && !txn?.utr?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Transaction ID or UTR is required',
+      path,
+    });
+  }
+}
+
 export const createAdminManualRefundSchema = z
   .object({
     subjectType: z.enum(['user', 'driver']),
@@ -19,12 +29,43 @@ export const createAdminManualRefundSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.payoutMethod !== 'bank_account') return;
-    const txn = data.transactionDetails || {};
-    if (!txn.transactionId?.trim() && !txn.utr?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Transaction ID or UTR is required for bank refunds',
-        path: ['transactionDetails'],
-      });
+    requireTxnIdOrUtr(data.transactionDetails || {}, ctx);
+  });
+
+export const updateRefundStatusSchema = z
+  .object({
+    status: z.enum(['approved', 'rejected', 'processed', 'failed']),
+    razorpayRefundId: z.string().max(80).optional(),
+    error: z.string().max(500).optional(),
+    reason: z.string().max(500).optional(),
+    payoutMethod: z.enum(['wallet', 'bank_account']).optional(),
+    transactionDetails: transactionDetailsSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === 'processed') {
+      const method = data.payoutMethod || 'bank_account';
+      if (method === 'bank_account') {
+        requireTxnIdOrUtr(data.transactionDetails || {}, ctx);
+      }
+    }
+    if (data.status === 'rejected') {
+      const note = String(data.reason || data.error || '').trim();
+      if (note.length < 3) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Rejection reason is required (min 3 characters)',
+          path: ['reason'],
+        });
+      }
+    }
+    if (data.status === 'failed') {
+      const note = String(data.error || data.reason || '').trim();
+      if (note.length < 3) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Failure reason is required (min 3 characters)',
+          path: ['error'],
+        });
+      }
     }
   });

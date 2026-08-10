@@ -6,17 +6,19 @@ import {
   getRefundSubjectWalletService,
   createAdminManualRefundService,
 } from '../services/refund.service.js';
-import { createAdminManualRefundSchema } from '../validations/refund.validation.js';
+import {
+  createAdminManualRefundSchema,
+  updateRefundStatusSchema,
+} from '../validations/refund.validation.js';
 
 /**
  * Admin-only refund endpoints. The "Account → Refunds" admin page reads
  * these — the refund records themselves are written by the booking
  * cancellation services.
  *
- * Refunds are processed MANUALLY on the Razorpay dashboard. Once the
- * admin confirms the refund, they PATCH the record to `processed` with
- * the gateway refund id; if Razorpay rejects the refund they PATCH to
- * `failed` with a note.
+ * Refunds are processed MANUALLY. Once the admin confirms payout, they
+ * PATCH to `processed` with mandatory bank transfer details (or wallet);
+ * reject with a required reason that is emailed to the customer.
  */
 
 export const listRefunds = asyncHandler(async (req, res) => {
@@ -33,14 +35,14 @@ export const listRefunds = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /admin/refunds/:id
- * body: { status: 'processed' | 'failed', razorpayRefundId?, error? }
+ * body: {
+ *   status: 'processed' | 'rejected' | 'failed' | 'approved',
+ *   transactionDetails?, payoutMethod?, reason?, error?, razorpayRefundId?
+ * }
  */
 export const updateRefundStatus = asyncHandler(async (req, res) => {
-  const refund = await updateRefundStatusService(
-    req.params.id,
-    req.body || {},
-    req.staff,
-  );
+  const body = updateRefundStatusSchema.parse(req.body || {});
+  const refund = await updateRefundStatusService(req.params.id, body, req.staff);
   return res
     .status(200)
     .json(new ApiResponse(200, { refund }, 'Refund status updated'));

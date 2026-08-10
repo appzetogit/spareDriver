@@ -24,7 +24,13 @@ const RegisterPage = () => {
   const navigate = useNavigate();
   const setAuth = useUserAuthStore((state) => state.setAuth);
 
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '', password: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    password: '',
+    alternatePhone: '',
+  });
   const [phoneOtp, setPhoneOtp] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
@@ -169,6 +175,17 @@ const RegisterPage = () => {
       setError('Verify mobile and email before continuing');
       return;
     }
+    const alternatePhone = formData.alternatePhone.trim();
+    if (alternatePhone) {
+      if (!/^[0-9]{10}$/.test(alternatePhone)) {
+        setError('Emergency / alternate mobile must be a valid 10-digit number');
+        return;
+      }
+      if (alternatePhone === formData.phone) {
+        setError('Emergency / alternate mobile must be different from your primary number');
+        return;
+      }
+    }
 
     setSubmitLoading(true);
     setError('');
@@ -178,6 +195,7 @@ const RegisterPage = () => {
         phone: formData.phone,
         email: formData.email.trim(),
         password: formData.password,
+        ...(alternatePhone ? { alternatePhone } : {}),
       }));
       const { user } = res.data.data;
       setAuth(user);
@@ -334,6 +352,29 @@ const RegisterPage = () => {
                 />
               </div>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-text">
+              Emergency Contact / Alternative Mobile{' '}
+              <span className="font-normal text-text-muted">(optional)</span>
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+                <Phone className="w-4 h-4 text-text-muted" />
+                <span>+91</span>
+              </div>
+              <Input
+                type="tel"
+                placeholder="10-digit alternate number"
+                value={formData.alternatePhone}
+                onChange={handleChange('alternatePhone')}
+                maxLength={10}
+                className="pl-[4.5rem]"
+                containerClassName="w-full"
+                helper="Used if we cannot reach you on your primary number"
+              />
+            </div>
           </div>
 
           {error && <p className="text-danger text-xs font-medium">{error}</p>}

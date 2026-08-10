@@ -15,6 +15,7 @@ import {
   Flag,
   Car,
   GraduationCap,
+  RefreshCw,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
@@ -28,6 +29,7 @@ import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
 import { reverseGeocode } from '../../../../utils/geocoding';
+import { classifyAccuracy } from '../../../../utils/geolocation';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { formatCurrency } from '../../../../utils/formatters';
 import {
@@ -139,9 +141,34 @@ const DriverHomePage = () => {
 
   const location = useDriverLocationStatus();
 
-  // Display location in the sticky header (independent of online GPS stream).
+  // Prefer live GPS stream when the driver is online/on-trip; otherwise one-shot cascade.
+  const needDisplayGeo = !(location.isSharing && location.coords);
   const { maps, ready: mapsReady } = useGoogleMaps();
-  const { coords, loading: locating, error: geoError } = useGeolocation();
+  const {
+    coords: geoCoords,
+    loading: locating,
+    refreshing,
+    error: geoError,
+    errorKind,
+    softError,
+    accuracyQuality: geoAccuracyQuality,
+    refresh: refreshGeo,
+  } = useGeolocation({ enabled: needDisplayGeo });
+
+  const coords = location.coords
+    ? {
+        lat: location.coords.lat,
+        lng: location.coords.lng,
+        accuracy: location.coords.accuracy,
+      }
+    : geoCoords;
+
+  const accuracyQuality = coords
+    ? (location.coords
+        ? classifyAccuracy(coords.accuracy)
+        : geoAccuracyQuality)
+    : null;
+
   const [currentLocation, setCurrentLocation] = useState(null);
 
   useEffect(() => {
@@ -154,12 +181,28 @@ const DriverHomePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [maps, mapsReady, coords]);
+  }, [maps, mapsReady, coords?.lat, coords?.lng]);
 
-  const locationLine = currentLocation?.city
-    ? currentLocation.city
-    : currentLocation?.address || (geoError ? 'Location unavailable' : 'Locating you…');
-  const locationLoading = !geoError && !currentLocation && (locating || !mapsReady);
+  const locationLine = (() => {
+    if (currentLocation?.city) return currentLocation.city;
+    if (currentLocation?.address) return currentLocation.address;
+    if (coords && (locating || refreshing)) {
+      return accuracyQuality === 'poor' || accuracyQuality === 'acceptable'
+        ? 'Improving GPS…'
+        : 'Updating location…';
+    }
+    if (coords && (accuracyQuality === 'poor' || accuracyQuality === 'acceptable')) {
+      return 'Weak GPS signal';
+    }
+    if (coords) return 'Location detected';
+    if (locating || refreshing) return 'Getting your location…';
+    if (geoError || location.error) return geoError || location.error;
+    return 'Tap retry for location';
+  })();
+  const locationLoading = Boolean((locating || refreshing) && !(geoError || location.error));
+  const showLocationRetry = Boolean(
+    geoError || softError || location.error || accuracyQuality === 'poor' || !coords,
+  );
 
   useEffect(() => {
     if (onlineStatus) {
@@ -228,6 +271,16 @@ const DriverHomePage = () => {
               </span>
               {locationLoading && (
                 <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin shrink-0" />
+              )}
+              {showLocationRetry && !locationLoading && (
+                <button
+                  type="button"
+                  onClick={() => refreshGeo()}
+                  className="p-1 rounded-full hover:bg-bg text-primary shrink-0"
+                  aria-label="Retry location"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
           </div>
@@ -406,6 +459,37 @@ const DriverHomePage = () => {
               <div className="flex-1">
                 <p className="text-sm font-medium text-text">Location permission blocked</p>
                 <p className="text-xs text-text-muted mt-1">{location.error}</p>
+                <p className="text-[11px] text-text-muted mt-1">
+                  Enable location for this app in system settings to stay visible to customers.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {(geoError || (softError && accuracyQuality === 'poor')) && (
+          <Card className="animate-fade-in-up border-l-4 border-l-amber-500 bg-amber-50/40">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-text">
+                  {geoError || 'Weak GPS signal'}
+                </p>
+                <p className="text-xs text-text-muted mt-1">
+                  {errorKind === 'permission_denied'
+                    ? 'Location permission is required to go online and share your position.'
+                    : accuracyQuality === 'poor'
+                      ? 'Trying to improve location. Move to an open area if this continues.'
+                      : 'Move to an open area, then retry.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refreshGeo()}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry
+                </button>
               </div>
             </div>
           </Card>

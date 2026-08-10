@@ -799,7 +799,7 @@ export async function completeTripService(driverId, bookingId) {
       throw new ApiError(
         409,
         isOutstation
-          ? `This outstation trip runs until the booked return — you can complete it in about ${remainingDays} day(s).`
+          ? `This round trip runs until the booked return — you can complete it in about ${remainingDays} day(s).`
           : `This ride is booked for ${(earliestCompleteMs - new Date(booking.timeline.startedAt).getTime()) / 3_600_000} hour(s) — you can complete it in about ${remainingMin} min.`,
         {
           code: 'TRIP_DURATION_NOT_ELAPSED',

@@ -67,7 +67,7 @@ const OutstationOptInCard = ({
       setMaxHours(updated?.outstationMaxDrivingHoursPerDay || maxHours);
       setPrefsDone(!!updated?.outstationPreferencesCompletedAt);
       refetchProfile?.(profileKey, {}, { force: true });
-      toast.success(nextAvailable ? "You're visible for outstation trips" : 'Opted out of outstation');
+      toast.success(nextAvailable ? "You're visible for round trips" : 'Opted out of round trips');
       return true;
     } catch (err) {
       const data = err?.response?.data;
@@ -144,7 +144,7 @@ const OutstationOptInCard = ({
             <Compass className={`w-4 h-4 ${available ? 'text-primary' : 'text-text-secondary'}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-text leading-tight">Outstation trips</p>
+            <p className="text-sm font-semibold text-text leading-tight">Round trips</p>
             <p className="text-[10px] text-text-muted">Admin-assigned multi-day trips</p>
           </div>
           <Toggle checked={available} onChange={handleToggle} disabled={saving} />

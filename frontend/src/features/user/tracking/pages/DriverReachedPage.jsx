@@ -51,7 +51,13 @@ const DriverReachedPage = () => {
         : '/user/book/assigned';
       navigate(target, { replace: true });
     } else if (booking.status === BOOKING_STATUS.COMPLETED) {
-      navigate('/user/tracking/completed', { replace: true });
+      const id = booking?._id;
+      navigate(
+        id
+          ? `/user/tracking/completed?bookingId=${id}`
+          : '/user/tracking/completed',
+        { replace: true },
+      );
     }
   }, [booking?.status, booking?._id, navigate]);
 

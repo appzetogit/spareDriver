@@ -32,7 +32,7 @@ export const SERVICE_CATALOG = Object.freeze({
   },
   [SERVICE_TYPES.OUTSTATION]: {
     key: SERVICE_TYPES.OUTSTATION,
-    title: 'Outstation',
+    title: 'Round trip',
     tagline: 'Multi-day trips, sorted',
     imageSrc: '/images/user/car.png',
     gradient: 'from-sky-50 via-blue-100 to-indigo-50',

@@ -53,13 +53,13 @@ export const BOOKING_TYPE_LIST = Object.freeze(Object.values(BOOKING_TYPE));
 export const BOOKING_TYPE_LABELS = Object.freeze({
   [BOOKING_TYPE.INSTANT]: 'Book now',
   [BOOKING_TYPE.SCHEDULED]: 'Schedule for later',
-  [BOOKING_TYPE.OUTSTATION]: 'Outstation',
+  [BOOKING_TYPE.OUTSTATION]: 'Round trip',
 });
 
 export const BOOKING_TYPE_DESCRIPTIONS = Object.freeze({
   [BOOKING_TYPE.INSTANT]: "We'll find a driver right now and they'll head over.",
   [BOOKING_TYPE.SCHEDULED]: 'Pick a date and time — we dispatch a driver closer to start.',
-  [BOOKING_TYPE.OUTSTATION]: 'Multi-day outstation trip with a dedicated driver.',
+  [BOOKING_TYPE.OUTSTATION]: 'Multi-day round trip with a dedicated driver.',
 });
 
 export const PAYMENT_MODE_LABELS = Object.freeze({

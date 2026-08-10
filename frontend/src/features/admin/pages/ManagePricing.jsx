@@ -125,7 +125,7 @@ const ManagePricing = () => {
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Pricing &amp; commission</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Configure each service type: hourly slabs and outstation rates. Fare engine and live
+            Configure each service type: hourly slabs and round trip rates. Fare engine and live
             billing use these values during booking and checkout.
           </p>
         </div>

@@ -216,7 +216,7 @@ const OutstationPreview = ({ form }) => {
     <>
       <div className="space-y-2 mb-3">
         <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-          Outstation simulation
+          Round trip simulation
         </p>
         <div className="grid grid-cols-2 gap-2">
           <SimInput label="Days" value={days} onChange={setDays} min={1} />

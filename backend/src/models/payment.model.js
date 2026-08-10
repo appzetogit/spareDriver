@@ -1,6 +1,18 @@
 import mongoose from 'mongoose';
 import { PAYMENT_PROVIDER, PAYMENT_PURPOSE } from '../constants/kitStatus.js';
 
+/**
+ * Payment / online transaction ledger.
+ *
+ * Razorpay-mediated charges (kit, subscription, booking, wallet top-up)
+ * land here with order/payment/signature ids so Account → Online
+ * Transactions can reconcile against the Razorpay dashboard.
+ *
+ * Internal wallet credits (trip_fare / allowance / waiting) also use
+ * this collection with `provider: wallet` — those are NOT online
+ * gateway rows.
+ */
+
 const paymentSchema = new mongoose.Schema(
   {
     provider: { type: String, default: PAYMENT_PROVIDER.RAZORPAY },
@@ -32,7 +44,18 @@ const paymentSchema = new mongoose.Schema(
     method: { type: String, default: '' },
     failureReason: { type: String, default: '' },
 
-    driverId: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', index: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    driverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Driver',
+      default: null,
+      index: true,
+    },
 
     /**
      * Free-form payload for internal book-keeping. Used by the
@@ -40,16 +63,22 @@ const paymentSchema = new mongoose.Schema(
      * fare-share / allowance-share split, the originating booking
      * number, service type, and the breakdown components on the
      * ledger row so admin audits don't have to re-derive any math.
-     * Razorpay-mediated rows leave this empty.
+     * Razorpay-mediated rows may store fee/tax/reference labels here.
      */
     meta: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );
 
+/** One row per kit / subscription / wallet-topup reference. */
 paymentSchema.index(
   { referenceId: 1, referenceModel: 1 },
-  { unique: true },
+  {
+    unique: true,
+    partialFilterExpression: {
+      referenceModel: { $in: ['KitOrder', 'UserSubscription', 'WalletTransaction'] },
+    },
+  },
 );
 
 paymentSchema.index(
@@ -61,6 +90,9 @@ paymentSchema.index(
     },
   },
 );
+
+paymentSchema.index({ provider: 1, createdAt: -1 });
+paymentSchema.index({ purpose: 1, status: 1, createdAt: -1 });
 
 const Payment = mongoose.models.Payment || mongoose.model('Payment', paymentSchema);
 export default Payment;

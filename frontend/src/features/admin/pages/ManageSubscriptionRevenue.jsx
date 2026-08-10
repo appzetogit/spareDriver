@@ -11,6 +11,9 @@ import {
   IndianRupee,
   CalendarRange,
   TrendingUp,
+  MapPin,
+  ChevronDown,
+  Filter,
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import Button from '../../../components/Button';
@@ -20,6 +23,8 @@ import ServerPaginatedTable from '../components/ServerPaginatedTable';
 import api from '../../../utils/api';
 import { formatCurrency } from '../../../utils/fareCalculator';
 import { formatDateTime12 } from '../../../utils/datetime';
+import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
+import { SUBSCRIPTION_STATUS } from '../../../constants/serviceTypes';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -30,6 +35,28 @@ function formatDate(d) {
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
 }
+
+const PAYOUT_FILTERS = [
+  { value: '', label: 'All payouts' },
+  { value: 'remaining', label: 'Remaining to pay' },
+  { value: 'paid', label: 'Fully paid' },
+];
+
+const STATUS_FILTERS = [
+  { value: SUBSCRIPTION_STATUS.ACTIVE, label: 'Active' },
+  { value: SUBSCRIPTION_STATUS.EXPIRED, label: 'Expired' },
+  { value: SUBSCRIPTION_STATUS.CANCELLED, label: 'Cancelled' },
+  { value: 'all', label: 'All statuses' },
+];
+
+const EMPTY_FILTERS = {
+  search: '',
+  zoneId: '',
+  payoutStatus: '',
+  status: SUBSCRIPTION_STATUS.ACTIVE,
+  from: '',
+  to: '',
+};
 
 function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
   const [detail, setDetail] = useState(null);
@@ -339,24 +366,48 @@ function DriverPayoutDrawer({ subscription, onClose, onPaid }) {
 }
 
 const ManageSubscriptionRevenue = () => {
+  const fetchZones = useAdminZonesStore((s) => s.fetch);
+  const zonesEntry = useAdminZonesStore((s) => s.getEntry('admin-zones'));
+  const zones = useMemo(
+    () => (Array.isArray(zonesEntry?.data) ? zonesEntry.data : []),
+    [zonesEntry],
+  );
+
+  useEffect(() => {
+    fetchZones?.('admin-zones', {}).catch(() => {});
+  }, [fetchZones]);
+
   const [page, setPage] = useState(1);
   const [limit] = useState(15);
-  const [search, setSearch] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [searchInput, setSearchInput] = useState('');
   const [rows, setRows] = useState([]);
   const [totals, setTotals] = useState(null);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
   const [payTarget, setPayTarget] = useState(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((f) => {
+        if (f.search === searchInput) return f;
+        setPage(1);
+        return { ...f, search: searchInput };
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit });
-      if (search) params.append('search', search);
-      if (from) params.append('from', from);
-      if (to) params.append('to', to);
+      if (filters.search) params.append('search', filters.search);
+      if (filters.zoneId) params.append('zoneId', filters.zoneId);
+      if (filters.payoutStatus) params.append('payoutStatus', filters.payoutStatus);
+      if (filters.status) params.append('status', filters.status);
+      if (filters.from) params.append('from', filters.from);
+      if (filters.to) params.append('to', filters.to);
       const res = await api.get(`/admin/subscriptions/revenue?${params}`);
       const data = res?.data?.data || {};
       setRows(data.items || []);
@@ -370,11 +421,30 @@ const ManageSubscriptionRevenue = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, from, to]);
+  }, [page, limit, filters]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const updateFilter = (key, value) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    setSearchInput('');
+    setPage(1);
+  };
+
+  const hasActiveFilters =
+    !!filters.search ||
+    !!filters.zoneId ||
+    !!filters.payoutStatus ||
+    filters.status !== SUBSCRIPTION_STATUS.ACTIVE ||
+    !!filters.from ||
+    !!filters.to;
 
   const columns = useMemo(
     () => [
@@ -513,19 +583,85 @@ const ManageSubscriptionRevenue = () => {
       </div>
 
       <Card padding="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <div className="relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="relative sm:col-span-2">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search plan name"
-              className="w-full h-10 pl-9 pr-3 rounded-xl border text-sm"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search customer, phone, plan, or subscription ID"
+              className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
-          <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className="h-10 px-3 rounded-xl border text-sm" />
-          <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className="h-10 px-3 rounded-xl border text-sm" />
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <select
+              value={filters.zoneId}
+              onChange={(e) => updateFilter('zoneId', e.target.value)}
+              className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="">All zones</option>
+              {zones.map((z) => (
+                <option key={z._id} value={z._id}>
+                  {z.name}{z.city ? ` · ${z.city}` : ''}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <select
+              value={filters.payoutStatus}
+              onChange={(e) => updateFilter('payoutStatus', e.target.value)}
+              className="w-full h-10 pl-9 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              {PAYOUT_FILTERS.map((opt) => (
+                <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <select
+              value={filters.status}
+              onChange={(e) => updateFilter('status', e.target.value)}
+              className="w-full h-10 px-3 pr-8 text-sm rounded-xl border border-slate-200 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              {STATUS_FILTERS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => updateFilter('from', e.target.value)}
+            aria-label="Paid from date"
+            title="Paid from"
+            className="h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          />
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => updateFilter('to', e.target.value)}
+            aria-label="Paid to date"
+            title="Paid to"
+            className="h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          />
         </div>
+        {hasActiveFilters && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
       </Card>
 
       <ServerPaginatedTable

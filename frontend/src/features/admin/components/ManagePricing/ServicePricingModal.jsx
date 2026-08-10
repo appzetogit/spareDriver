@@ -239,7 +239,7 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
       return;
     }
     if (isOutstation && !(form.outstation?.dailyRate > 0)) {
-      toast.error('Daily rate is required for outstation pricing');
+      toast.error('Daily rate is required for round trip pricing');
       return;
     }
     if (isOutstation) {
@@ -254,7 +254,7 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
         || visibility < 0
         || emergency < 0
       ) {
-        toast.error('Outstation day knobs must be non-negative numbers');
+        toast.error('Round trip day knobs must be non-negative numbers');
         return;
       }
       if (!(minLead >= visibility && visibility >= emergency)) {
@@ -683,10 +683,10 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
               don't apply because they're either rolled into the
               allowance or paid by the customer directly (toll). */}
           <Section
-            title={isOutstation ? 'Outstation extras' : 'Hourly extras'}
+            title={isOutstation ? 'Round trip extras' : 'Hourly extras'}
             subtitle={
               isOutstation
-                ? 'Outstation has no extra surcharges \u2014 fare is daily rate + allowance only. Toll & parking are paid by the customer directly to the driver.'
+                ? 'Round trip has no extra surcharges \u2014 fare is daily rate + allowance only. Toll & parking are paid by the customer directly to the driver.'
                 : 'Surcharges added on top of the slab rate.'
             }
           >
@@ -949,7 +949,7 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
             title="Cancellation policy"
             subtitle={
               isOutstation
-                ? 'Outstation runs on a single hours-until-pickup policy. Each tier is a flat ₹ or % of the paid fare. No driver grace window applies.'
+                ? 'Round trip runs on a single hours-until-pickup policy. Each tier is a flat ₹ or % of the paid fare. No driver grace window applies.'
                 : 'Pre-arrival fee is a flat ₹. Post-arrival fee can be flat or a percentage of the paid amount. Driver penalty is a flat ₹ debit when the driver cancels.'
             }
           >
@@ -1119,7 +1119,7 @@ const ServicePricingModal = ({ isOpen, onClose, serviceType, existing, onSaved }
           </Section>
           {(isHourly || isOutstation) && (
             <Section
-              title={isOutstation ? 'Outstation dispatcher' : 'Scheduled-ride dispatcher'}
+              title={isOutstation ? 'Round trip dispatcher' : 'Scheduled-ride dispatcher'}
               subtitle={
                 isOutstation
                   ? 'Day-based windows: how far ahead customers must book, when drivers see the request in their inbox, and when unmatched bookings escalate to the emergency pool.'
@@ -1541,10 +1541,7 @@ function OutstationCancellationEditor({ outstation, onChange }) {
     <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-4">
       <div>
         <p className="text-sm font-semibold text-slate-900">
-          Outstation cancellation policy
-          <span className="text-[10px] uppercase tracking-wide text-indigo-700 font-semibold ml-1">
-            Round trip
-          </span>
+          Round trip cancellation policy
         </p>
         <p className="text-[11px] text-slate-500 mt-0.5">
           One calculation path per scenario, keyed on

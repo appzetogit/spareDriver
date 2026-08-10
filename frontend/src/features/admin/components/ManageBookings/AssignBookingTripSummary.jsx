@@ -146,7 +146,7 @@ const AssignBookingTripSummary = ({
           </div>
           <div className="min-w-0">
             <p className="text-[10px] text-white/60 uppercase tracking-widest font-semibold">
-              {isOutstation ? 'Outstation trip' : 'Scheduled ride'}
+              {isOutstation ? 'Round trip' : 'Scheduled ride'}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-bold truncate">

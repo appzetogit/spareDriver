@@ -574,7 +574,7 @@ export async function buildDriverAnalyticsPdf(driverId, query = {}, { res } = {}
       value: String(profile.cancellationStats?.priorityPenaltyPoints ?? 0),
     },
     {
-      label: 'Outstation cancellations',
+      label: 'Round trip cancellations',
       value: String(profile.cancellationStats?.outstationTotal ?? 0),
     },
   ]);

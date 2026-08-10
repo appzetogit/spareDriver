@@ -676,7 +676,7 @@ const DriverActiveTripPage = () => {
 
   const titleLine =
     booking.serviceType === SERVICE_TYPES.OUTSTATION
-      ? `${booking.outstation?.days || 1}-day Outstation`
+      ? `${booking.outstation?.days || 1}-day Round trip`
       : `${booking.hourly?.durationHours || ''}h ${SERVICE_TYPE_LABELS.hourly || 'Hourly'}`;
 
   // Booking-type chip. Three types exist: instant, scheduled (hourly), outstation.
@@ -840,7 +840,7 @@ const DriverActiveTripPage = () => {
               <p className="text-sm text-text mt-1">
                 Ask the customer for the start OTP. If they do not arrive,
                 contact support — there is no automatic trip close for
-                outstation.
+                round trips.
               </p>
             </Card>
           ) : (

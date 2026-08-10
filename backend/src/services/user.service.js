@@ -38,6 +38,35 @@ function assertValidEmail(email) {
   return normalized;
 }
 
+/** Optional emergency / alternate mobile. Empty string when omitted. */
+function normalizeAlternatePhone(alternatePhone, primaryPhone) {
+  const value = String(alternatePhone || '').trim();
+  if (!value) return '';
+  if (!/^[0-9]{10}$/.test(value)) {
+    throw new ApiError(400, 'Emergency / alternate mobile must be a valid 10-digit number');
+  }
+  if (primaryPhone && value === String(primaryPhone).trim()) {
+    throw new ApiError(400, 'Emergency / alternate mobile must be different from your primary number');
+  }
+  return value;
+}
+
+async function seedSignupEmergencyContact(userId, alternatePhone) {
+  if (!alternatePhone) return;
+  try {
+    const EmergencyContact = (await import('../models/emergencyContact.model.js')).default;
+    await EmergencyContact.create({
+      userId,
+      name: 'Emergency Contact',
+      phoneNumber: alternatePhone,
+      relationship: 'Other',
+      isPrimary: true,
+    });
+  } catch {
+    // Non-blocking: account creation should not fail if contact seed races/duplicates
+  }
+}
+
 async function assertPhoneAvailable(phone) {
   const existingUser = await User.findOne({ phone_no: phone, isDeleted: false });
   if (existingUser) {
@@ -190,7 +219,16 @@ export const verifyRegistrationEmailOtpService = async (phone, email, otp) => {
   return { phoneVerified: true, emailVerified: true };
 };
 
-export const completeRegistrationService = async ({ name, phone, email, password, fcmToken, token, platform }) => {
+export const completeRegistrationService = async ({
+  name,
+  phone,
+  email,
+  password,
+  alternatePhone,
+  fcmToken,
+  token,
+  platform,
+}) => {
   if (!name?.trim() || !phone || !password) {
     throw new ApiError(400, 'All fields are required');
   }
@@ -199,6 +237,7 @@ export const completeRegistrationService = async ({ name, phone, email, password
   }
 
   const normalizedEmail = assertValidEmail(email);
+  const normalizedAlternatePhone = normalizeAlternatePhone(alternatePhone, phone);
 
   const draft = await RegistrationDraft.findOne({
     phone,
@@ -220,6 +259,7 @@ export const completeRegistrationService = async ({ name, phone, email, password
     name: name.trim(),
     email: normalizedEmail,
     phone_no: phone,
+    alternatePhone: normalizedAlternatePhone,
     password: hashedPassword,
     role: USER_ROLES.USER,
     authProvider: 'local',
@@ -228,6 +268,7 @@ export const completeRegistrationService = async ({ name, phone, email, password
   });
 
   await RegistrationDraft.deleteOne({ _id: draft._id });
+  await seedSignupEmergencyContact(user._id, normalizedAlternatePhone);
 
   const payload = tokenPayloadFromUser(user);
   const { notifyAdminNewUserRegistration } = await import('../utils/notificationDispatch.js');
@@ -241,7 +282,17 @@ export const completeRegistrationService = async ({ name, phone, email, password
   };
 };
 
-export const verifyUserOtpAndRegisterService = async ({ name, phone, password, otp, email, fcmToken, token, platform }) => {
+export const verifyUserOtpAndRegisterService = async ({
+  name,
+  phone,
+  password,
+  otp,
+  email,
+  alternatePhone,
+  fcmToken,
+  token,
+  platform,
+}) => {
   if (!name || !phone || !password || !otp) {
     throw new ApiError(400, 'All fields are required');
   }
@@ -253,6 +304,8 @@ export const verifyUserOtpAndRegisterService = async ({ name, phone, password, o
   if (isPlaceholderUserEmail(normalizedEmail)) {
     throw new ApiError(400, 'Valid email address required');
   }
+
+  const normalizedAlternatePhone = normalizeAlternatePhone(alternatePhone, phone);
 
   const existingPhone = await User.findOne({ phone_no: phone, isDeleted: false });
   if (existingPhone) {
@@ -283,12 +336,15 @@ export const verifyUserOtpAndRegisterService = async ({ name, phone, password, o
     name,
     email: normalizedEmail,
     phone_no: phone,
+    alternatePhone: normalizedAlternatePhone,
     password: hashedPassword,
     role: USER_ROLES.USER,
     authProvider: 'local',
     isPhoneVerified: true,
     isEmailVerified: false,
   });
+
+  await seedSignupEmergencyContact(user._id, normalizedAlternatePhone);
 
   const payload = tokenPayloadFromUser(user);
   const { notifyAdminNewUserRegistration } = await import('../utils/notificationDispatch.js');

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { unregisterFcmToken } from '../hooks/useFcmRegistration';
 import { useUserNotificationStore } from './useNotificationStore';
-import { clearAuthTokens } from '../utils/authTokens';
+import { endAuthSession } from '../utils/endAuthSession';
 
 const useUserAuthStore = create((set) => ({
   user: null,
@@ -13,9 +12,7 @@ const useUserAuthStore = create((set) => ({
   logout: () => {
     useUserNotificationStore.getState().reset();
     set({ user: null, isAuthenticated: false, onboarding: null });
-    void unregisterFcmToken('user')
-      .catch(() => null)
-      .finally(() => clearAuthTokens());
+    void endAuthSession('user');
   },
 }));
 

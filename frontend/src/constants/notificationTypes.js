@@ -92,6 +92,10 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
   const status = data.status || null;
 
   if (audience === 'user') {
+    if (kind === USER_NOTIFICATION.TRIP_COMPLETED) {
+      if (bookingId) return `/user/tracking/completed?bookingId=${bookingId}`;
+      return '/user/tracking/completed';
+    }
     if (bookingId) {
       if (USER_LIVE_KINDS.has(kind) || (status && [
         BOOKING_STATUS.SEARCHING,

@@ -389,7 +389,7 @@ const ManageOutstationAssignments = () => {
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-slate-900 leading-tight">
-                Outstation Bookings
+                Round Trip Bookings
               </h1>
               <p className="text-[12px] text-slate-400 mt-0.5">
                 All outstation trips — auto-search first, then emergency pool if unmatched
@@ -712,7 +712,7 @@ function SettleOutstationModal({ booking, onClose, onSettled }) {
         driverPayoutRupees: payoutNum,
         notes: notes.trim() || undefined,
       });
-      toast.success('Outstation booking settled — driver and user freed');
+      toast.success('Round trip booking settled — driver and user freed');
       onSettled?.();
     } catch (err) {
       toast.error(
@@ -729,7 +729,7 @@ function SettleOutstationModal({ booking, onClose, onSettled }) {
     <Modal
       isOpen
       onClose={onClose}
-      title="Settle arrived outstation"
+      title="Settle arrived round trip"
       size="md"
     >
       <div className="space-y-4">

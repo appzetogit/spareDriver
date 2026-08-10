@@ -516,6 +516,31 @@ export async function verifyTopupPaymentService(userId, { orderId, paymentId, si
   };
   await pending.save();
 
+  try {
+    const { upsertRazorpayPaymentRecord } = await import('./onlineTransaction.service.js');
+    const { PAYMENT_PURPOSE } = await import('../constants/kitStatus.js');
+    await upsertRazorpayPaymentRecord({
+      purpose: PAYMENT_PURPOSE.WALLET_TOPUP,
+      referenceId: pending._id,
+      referenceModel: 'WalletTransaction',
+      userId,
+      razorpayOrderId: orderId,
+      razorpayPaymentId: paymentId,
+      razorpaySignature: signature,
+      amountRupees: amt,
+      status: 'captured',
+      meta: {
+        feePaise,
+        taxPaise,
+        amountPaise: grossPaise,
+        netAmountPaise: toPaise(amt),
+      },
+      matchBy: 'reference',
+    });
+  } catch {
+    /* ledger write is best-effort — wallet already credited */
+  }
+
   // Full snapshot (balance + held + available) so the client never
   // flashes gross balance as "available" after a top-up.
   const wallet = await getWalletService(userId);

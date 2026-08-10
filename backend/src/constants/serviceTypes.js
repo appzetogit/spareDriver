@@ -8,7 +8,7 @@ export const SERVICE_TYPE_LIST = Object.freeze(Object.values(SERVICE_TYPES));
 
 export const SERVICE_TYPE_LABELS = Object.freeze({
   [SERVICE_TYPES.HOURLY]: 'Hourly',
-  [SERVICE_TYPES.OUTSTATION]: 'Outstation',
+  [SERVICE_TYPES.OUTSTATION]: 'Round trip',
 });
 
 export const SUBSCRIPTION_DISCOUNT_TYPES = Object.freeze({

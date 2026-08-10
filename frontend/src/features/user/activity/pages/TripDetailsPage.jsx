@@ -547,14 +547,32 @@ const TripDetailsPage = () => {
             Continue tracking
           </Button>
         ) : booking.status === BOOKING_STATUS.COMPLETED ? (
-          <Button
-            fullWidth
-            variant="primary"
-            onClick={() => navigate('/user/book/service')}
-            icon={CarIcon}
-          >
-            Book again
-          </Button>
+          <div className="space-y-2">
+            {booking.rating?.customer?.stars == null ? (
+              <Button
+                fullWidth
+                variant="primary"
+                icon={Star}
+                onClick={() => {
+                  setActiveBooking(booking);
+                  navigate(
+                    `/user/tracking/completed?bookingId=${booking._id}`,
+                    { replace: false },
+                  );
+                }}
+              >
+                Rate your driver
+              </Button>
+            ) : null}
+            <Button
+              fullWidth
+              variant={booking.rating?.customer?.stars == null ? 'secondary' : 'primary'}
+              onClick={() => navigate('/user/book/service')}
+              icon={CarIcon}
+            >
+              Book again
+            </Button>
+          </div>
         ) : (
           <Button fullWidth variant="ghost" onClick={() => navigate(-1)}>
             Back to my trips

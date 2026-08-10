@@ -92,7 +92,7 @@ export const BOOKING_ASSIGN_CONFIG = {
     driversPath: (id) => `/admin/outstation-assignments/${id}/available-drivers`,
     assignPath: (id) => `/admin/outstation-assignments/${id}/assign-driver`,
     detailPath: (id) => `/admin/outstation-assignments/${id}`,
-    label: 'Outstation trip',
+    label: 'Round trip',
   },
   reassign: {
     driversPath: (id) => `/admin/bookings/${id}/available-drivers`,
@@ -124,7 +124,7 @@ export const DRIVER_ELIGIBILITY_GUIDE = {
   outstation: {
     title: 'Who appears here',
     points: [
-      'Approved drivers who opted in for outstation trips',
+      'Approved drivers who opted in for round trips',
       'Preferred zones overlap this booking’s zones',
       'Car-type match, online, rating, and All-India filters apply when set',
       'On-trip drivers may appear but conflicts are blocked',

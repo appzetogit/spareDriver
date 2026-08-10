@@ -66,6 +66,13 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       unique: true,
     },
+    /** Optional emergency / alternate mobile collected at signup */
+    alternatePhone: {
+      type: String,
+      trim: true,
+      default: '',
+      match: [/^[0-9]{10}$|^$/, 'Alternate phone must be exactly 10 digits'],
+    },
     password: {
       type: String,
       minlength: 6,

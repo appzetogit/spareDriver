@@ -35,16 +35,31 @@ const IdentityDetailsPage = () => {
     }
   }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.revisionInProgress, navigate]);
 
-  const [form, setForm] = useState({ name: '', phone: '', password: '' });
+  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '' });
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+  const handleChange = (f) => (e) => {
+    const value = e.target.value;
+    setForm((p) => ({ ...p, [f]: value }));
+    if (error) setError('');
+  };
 
   const handleSendOtp = async () => {
+    const alternatePhone = form.alternatePhone.trim();
+    if (alternatePhone) {
+      if (!/^[0-9]{10}$/.test(alternatePhone)) {
+        setError('Emergency / alternate mobile must be a valid 10-digit number');
+        return;
+      }
+      if (alternatePhone === form.phone) {
+        setError('Emergency / alternate mobile must be different from your primary number');
+        return;
+      }
+    }
     try {
       setLoading(true);
       setError('');
@@ -63,12 +78,13 @@ const IdentityDetailsPage = () => {
     try {
       setLoading(true);
       setError('');
-      // This endpoint verifies OTP and registers the user
+      const alternatePhone = form.alternatePhone.trim();
       const res = await api.post('/driver/auth/verify-otp', await withFcmAuthPayload({
         phone: form.phone,
         otp,
         name: form.name,
         password: form.password,
+        ...(alternatePhone ? { alternatePhone } : {}),
       }));
 
       setAuth(res.data.data.driver);
@@ -154,6 +170,30 @@ const IdentityDetailsPage = () => {
               )}
             </div>
             {error && <p className="text-danger text-xs mt-1">{error}</p>}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-text mb-1.5 block">
+              Emergency Contact / Alternative Mobile{' '}
+              <span className="font-normal text-text-muted">(optional)</span>
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+                <Phone className="w-4 h-4 text-text-muted" />
+                <span>+91</span>
+              </div>
+              <Input
+                type="tel"
+                placeholder="10-digit alternate number"
+                value={form.alternatePhone}
+                onChange={handleChange('alternatePhone')}
+                maxLength={10}
+                disabled={isPhoneVerified}
+                className="pl-[4.5rem]"
+                containerClassName="w-full"
+                helper="Used if we cannot reach you on your primary number"
+              />
+            </div>
           </div>
 
         </div>

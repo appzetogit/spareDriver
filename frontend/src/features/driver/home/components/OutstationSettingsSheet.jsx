@@ -105,7 +105,7 @@ const OutstationSettingsSheet = ({
             <Compass className="w-4 h-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-bold text-text">Outstation settings</h3>
+            <h3 className="text-sm font-bold text-text">Round trip settings</h3>
             <p className="text-[10px] text-text-muted mt-0.5">Zones, travel range & daily capacity</p>
           </div>
           <button

@@ -84,11 +84,11 @@ const useAdminRefundsStore = create((set, get) => ({
   },
 
   /**
-   * Mark a refund as `processed` (admin moved money on Razorpay) or
-   * `failed` (admin couldn't process it).
+   * Mark a refund as `processed` (with transaction details) or
+   * `rejected` (with a reason emailed to the customer).
    *
    *   @param refundId
-   *   @param payload  { status, razorpayRefundId?, error? }
+   *   @param payload  { status, payoutMethod?, transactionDetails?, reason?, error? }
    */
   async updateRefundStatus(refundId, payload) {
     set({ updatingId: refundId });

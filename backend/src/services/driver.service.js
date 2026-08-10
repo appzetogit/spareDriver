@@ -29,6 +29,19 @@ import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinary.js
 import { resolveAuthFcm } from './fcmToken.service.js';
 import { isActiveBankName } from './platform.service.js';
 
+/** Optional emergency / alternate mobile. Empty string when omitted. */
+function normalizeAlternatePhone(alternatePhone, primaryPhone) {
+  const value = String(alternatePhone || '').trim();
+  if (!value) return '';
+  if (!/^[0-9]{10}$/.test(value)) {
+    throw new ApiError(400, 'Emergency / alternate mobile must be a valid 10-digit number');
+  }
+  if (primaryPhone && value === String(primaryPhone).trim()) {
+    throw new ApiError(400, 'Emergency / alternate mobile must be different from your primary number');
+  }
+  return value;
+}
+
 /** Validate + normalize bank payout fields (onboarding step 3 + profile edits). */
 const parseBankDetailsInput = async (bankDetails = {}) => {
   const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = bankDetails;
@@ -107,11 +120,13 @@ export const sendOtpService = async (phone) => {
 };
 
 export const verifyOtpAndRegisterService = async (data) => {
-  const { phone, otp, name, password, fcmToken, token, platform } = data;
+  const { phone, otp, name, password, alternatePhone, fcmToken, token, platform } = data;
 
   if (!phone || !otp || !name || !password) {
     throw new ApiError(400, 'Missing required fields');
   }
+
+  const normalizedAlternatePhone = normalizeAlternatePhone(alternatePhone, phone);
 
   if (!isTestOtp(otp)) {
     const otpRecord = await OTP.findOne({ phone, otp, purpose: 'registration' });
@@ -129,12 +144,14 @@ export const verifyOtpAndRegisterService = async (data) => {
     driver.name = name;
     driver.password = hashedPassword;
     driver.authProvider = 'local';
+    if (normalizedAlternatePhone) driver.alternatePhone = normalizedAlternatePhone;
     if (driver.onboardingStep < 1) driver.onboardingStep = 1;
     await driver.save();
   } else {
     driver = new Driver({
       name,
       phone,
+      alternatePhone: normalizedAlternatePhone,
       password: hashedPassword,
       authProvider: 'local',
       onboardingStep: 1,
@@ -153,6 +170,7 @@ export const verifyOtpAndRegisterService = async (data) => {
       id: driver._id,
       name: driver.name,
       phone: driver.phone,
+      alternatePhone: driver.alternatePhone || '',
       email: driver.email,
       onboardingStep: driver.onboardingStep,
       approvalStatus: driver.approvalStatus,

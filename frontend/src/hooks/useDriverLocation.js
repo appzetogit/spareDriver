@@ -1,18 +1,29 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useSocket } from './useSocket';
 import { C2S_EVENTS } from '../constants/socketEvents';
+import {
+  DRIVER_FIRST_FIX_OPTIONS,
+  DRIVER_WATCH_OPTIONS,
+  classifyAccuracy,
+  geoErrorMessage,
+  getLocationOnce,
+  isGeolocationSupported,
+  logGeo,
+  watchLocation,
+  GEO_ERROR,
+  classifyGeoError,
+} from '../utils/geolocation';
 
 /**
  * Driver-side GPS streamer.
  *
  * Pipeline:
- *   1. `navigator.geolocation.watchPosition` fires ~1/sec on most devices.
- *   2. We throttle emits to the backend to one every `MIN_EMIT_INTERVAL_MS`.
- *   3. Each accepted emit travels over Socket.IO to the backend, which writes
- *      to Firebase + (throttled) Mongo.
+ *   1. Fast first fix (`maximumAge` allowed) → then one `watchPosition`.
+ *   2. Throttle emits to the backend to one every `MIN_EMIT_INTERVAL_MS`.
+ *   3. Socket.IO carries accepted emits → Firebase + throttled Mongo.
  *
- * Shared status (permission / error / coords) is published so Home can still
- * surface a permission banner while `DriverLocationBridge` owns the watch.
+ * GPS is independent of Socket.IO: disconnect only buffers the latest point;
+ * it never clears the watch.
  */
 
 const MIN_EMIT_INTERVAL_MS = 5_000;
@@ -44,17 +55,12 @@ export function useDriverLocationStatus() {
   return useSyncExternalStore(subscribeLocationStatus, getLocationStatusSnapshot, getLocationStatusSnapshot);
 }
 
-const GEO_OPTIONS = Object.freeze({
-  enableHighAccuracy: true,
-  maximumAge: 0,
-  timeout: 20_000,
-});
-
 const PERMISSION = Object.freeze({
   UNKNOWN: 'unknown',
   GRANTED: 'granted',
   DENIED: 'denied',
   UNSUPPORTED: 'unsupported',
+  PROMPT: 'prompt',
 });
 
 /**
@@ -67,17 +73,27 @@ export function useDriverLocation({ enabled }) {
   const [lastEmittedAt, setLastEmittedAt] = useState(null);
   const [error, setError] = useState(null);
 
-  const watchIdRef = useRef(null);
   const lastEmitRef = useRef(0);
   const hasFirstEmitRef = useRef(false);
   const pendingPayloadRef = useRef(null);
+  const latestPayloadRef = useRef(null);
+
+  // Keep socket emit path stable so the GPS watch effect does not restart.
+  const emitRef = useRef(emit);
+  const isConnectedRef = useRef(isConnected);
+  useEffect(() => {
+    emitRef.current = emit;
+  }, [emit]);
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   /* ---- permission probe ------------------------------------------- */
 
   useEffect(() => {
-    if (!('geolocation' in navigator)) {
+    if (!isGeolocationSupported()) {
       setPermission(PERMISSION.UNSUPPORTED);
-      setError('Geolocation is not supported on this device.');
+      setError(geoErrorMessage(GEO_ERROR.UNSUPPORTED));
       return undefined;
     }
 
@@ -88,8 +104,12 @@ export function useDriverLocation({ enabled }) {
       .then((status) => {
         if (!active) return;
         setPermission(status.state);
+        logGeo('driver permission', { state: status.state });
         const onChange = () => {
-          if (active) setPermission(status.state);
+          if (active) {
+            setPermission(status.state);
+            logGeo('driver permission change', { state: status.state });
+          }
         };
         status.addEventListener?.('change', onChange);
       })
@@ -99,127 +119,154 @@ export function useDriverLocation({ enabled }) {
     };
   }, []);
 
-  /* ---- emit helper ------------------------------------------------- */
+  /* ---- emit helper (refs only — safe from watch callbacks) -------- */
 
-  const emitLocation = useCallback(
-    (position, { force = false } = {}) => {
-      const now = Date.now();
-      if (!force && hasFirstEmitRef.current && now - lastEmitRef.current < MIN_EMIT_INTERVAL_MS) {
-        return false;
-      }
+  const emitLocationPayload = useCallback((payload, { force = false } = {}) => {
+    if (!payload) return false;
+    latestPayloadRef.current = payload;
 
-      const { latitude, longitude, accuracy, heading, speed } = position.coords;
-      const payload = {
-        lat: latitude,
-        lng: longitude,
-        accuracy: Number.isFinite(accuracy) ? accuracy : null,
-        heading: Number.isFinite(heading) ? heading : null,
-        speed: Number.isFinite(speed) ? speed : null,
-      };
+    const now = Date.now();
+    if (!force && hasFirstEmitRef.current && now - lastEmitRef.current < MIN_EMIT_INTERVAL_MS) {
+      pendingPayloadRef.current = payload;
+      return false;
+    }
 
-      if (!isConnected) {
-        pendingPayloadRef.current = payload;
-        return false;
-      }
-
-      lastEmitRef.current = now;
-      hasFirstEmitRef.current = true;
-      pendingPayloadRef.current = null;
-
-      const sent = emit(C2S_EVENTS.DRIVER_LOCATION_UPDATE, payload, (ack) => {
-        if (ack?.ok === false && ack.reason !== 'throttled') {
-          if (import.meta.env.DEV) console.warn('[location] backend rejected:', ack.reason);
-        }
+    if (!isConnectedRef.current) {
+      pendingPayloadRef.current = payload;
+      logGeo('driver location buffered (socket down)', {
+        lat: payload.lat,
+        lng: payload.lng,
+        accuracy: payload.accuracy,
       });
-      if (sent) setLastEmittedAt(now);
-      return sent;
-    },
-    [emit, isConnected],
-  );
+      return false;
+    }
 
-  /* ---- flush pending coords once the socket connects -------------- */
+    lastEmitRef.current = now;
+    hasFirstEmitRef.current = true;
+    pendingPayloadRef.current = null;
+
+    logGeo('driver location emit', {
+      lat: payload.lat,
+      lng: payload.lng,
+      accuracy: payload.accuracy,
+      force,
+    });
+
+    const sent = emitRef.current(C2S_EVENTS.DRIVER_LOCATION_UPDATE, payload, (ack) => {
+      if (ack?.ok === false && ack.reason !== 'throttled') {
+        if (import.meta.env.DEV) console.warn('[location] backend rejected:', ack.reason);
+      }
+    });
+    if (sent) setLastEmittedAt(now);
+    return sent;
+  }, []);
+
+  const coordsToPayload = useCallback((c) => {
+    if (!c) return null;
+    return {
+      lat: c.lat,
+      lng: c.lng,
+      accuracy: Number.isFinite(c.accuracy) ? c.accuracy : null,
+      heading: Number.isFinite(c.heading) ? c.heading : null,
+      speed: Number.isFinite(c.speed) ? c.speed : null,
+    };
+  }, []);
+
+  /* ---- flush latest on socket reconnect --------------------------- */
 
   useEffect(() => {
-    if (!enabled || !isConnected || !pendingPayloadRef.current) return;
-    const pending = pendingPayloadRef.current;
-    emitLocation(
-      {
-        coords: {
-          latitude: pending.lat,
-          longitude: pending.lng,
-          accuracy: pending.accuracy,
-          heading: pending.heading,
-          speed: pending.speed,
-        },
-        timestamp: Date.now(),
-      },
-      { force: true },
-    );
-    emit(C2S_EVENTS.DRIVER_ONLINE);
-  }, [enabled, isConnected, emit, emitLocation]);
+    if (!enabled || !isConnected) return;
 
-  /* ---- main effect: start/stop the GPS watch ---------------------- */
+    const pending = pendingPayloadRef.current || latestPayloadRef.current;
+    if (pending) {
+      logGeo('driver socket reconnect — flushing latest location');
+      emitLocationPayload(pending, { force: true });
+    }
+
+    emitRef.current(C2S_EVENTS.DRIVER_ONLINE);
+  }, [enabled, isConnected, emitLocationPayload]);
+
+  /* ---- GPS watch: depends on enabled + blocked permission only ---- */
+
+  const gpsBlocked =
+    permission === PERMISSION.UNSUPPORTED || permission === PERMISSION.DENIED;
 
   useEffect(() => {
-    if (!enabled) return undefined;
-    if (permission === PERMISSION.UNSUPPORTED || permission === PERMISSION.DENIED) return undefined;
+    if (!enabled || gpsBlocked) return undefined;
+    if (!isGeolocationSupported()) {
+      setPermission(PERMISSION.UNSUPPORTED);
+      setError(geoErrorMessage(GEO_ERROR.UNSUPPORTED));
+      return undefined;
+    }
 
-    const onSuccess = (position) => {
+    let stopped = false;
+    let stopWatch = null;
+
+    const onCoords = (next, { forceEmit = false } = {}) => {
+      if (stopped) return;
       setError(null);
-      setPermission(PERMISSION.GRANTED);
+      setPermission((prev) => (prev === PERMISSION.GRANTED ? prev : PERMISSION.GRANTED));
       setCoords({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        ts: position.timestamp,
+        lat: next.lat,
+        lng: next.lng,
+        accuracy: next.accuracy,
+        ts: next.timestamp ?? next.fetchedAt ?? Date.now(),
       });
-      emitLocation(position, { force: !hasFirstEmitRef.current });
+      const payload = coordsToPayload(next);
+      emitLocationPayload(payload, { force: forceEmit || !hasFirstEmitRef.current });
     };
 
     const onError = (err) => {
-      if (err.code === err.PERMISSION_DENIED) {
+      if (stopped) return;
+      const kind = classifyGeoError(err);
+      if (kind === GEO_ERROR.PERMISSION_DENIED) {
         setPermission(PERMISSION.DENIED);
-        setError('Location permission denied. Enable it in your browser settings to go online.');
-      } else if (err.code === err.POSITION_UNAVAILABLE) {
-        setError('GPS signal unavailable. Move to an open area and try again.');
-      } else if (err.code === err.TIMEOUT) {
+        setError(geoErrorMessage(kind));
+      } else if (kind === GEO_ERROR.POSITION_UNAVAILABLE) {
+        setError(geoErrorMessage(kind));
+      } else if (kind === GEO_ERROR.TIMEOUT) {
         setError('Could not get a location fix in time. Retrying…');
       } else {
-        setError(err.message || 'Could not read location');
+        setError(geoErrorMessage(kind));
       }
+      // Do not clear coords — keep last valid fix on transient GPS errors.
     };
 
-    navigator.geolocation.getCurrentPosition(onSuccess, () => {}, GEO_OPTIONS);
-    const id = navigator.geolocation.watchPosition(onSuccess, onError, GEO_OPTIONS);
-    watchIdRef.current = id;
+    logGeo('driver GPS pipeline start', {
+      firstFix: DRIVER_FIRST_FIX_OPTIONS,
+      watch: DRIVER_WATCH_OPTIONS,
+    });
 
-    if (isConnected) {
-      emit(C2S_EVENTS.DRIVER_ONLINE);
-    }
+    // First fix: allow recent OS cache for a faster cold start (esp. indoors).
+    getLocationOnce(DRIVER_FIRST_FIX_OPTIONS)
+      .then((c) => {
+        if (stopped) return;
+        logGeo('driver first fix', {
+          accuracy: c.accuracy,
+          quality: classifyAccuracy(c.accuracy),
+        });
+        onCoords(c, { forceEmit: true });
+      })
+      .catch((err) => {
+        if (!stopped) onError(err);
+      });
+
+    stopWatch = watchLocation(
+      (c) => onCoords(c, { forceEmit: false }),
+      onError,
+      DRIVER_WATCH_OPTIONS,
+    );
 
     return () => {
-      if (watchIdRef.current != null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+      stopped = true;
+      stopWatch?.();
       hasFirstEmitRef.current = false;
-      pendingPayloadRef.current = null;
+      pendingPayloadRef.current = latestPayloadRef.current;
+      logGeo('driver GPS pipeline stop');
     };
-  }, [enabled, permission, isConnected, emit, emitLocation]);
+  }, [enabled, gpsBlocked, emitLocationPayload, coordsToPayload]);
 
-  /* ---- socket disconnect = stop sharing ---------------------------- */
-
-  useEffect(() => {
-    if (!socket) return undefined;
-    const onDisconnect = () => {
-      if (watchIdRef.current != null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-    };
-    socket.on('disconnect', onDisconnect);
-    return () => socket.off('disconnect', onDisconnect);
-  }, [socket]);
+  // Intentionally NO clearWatch on socket disconnect — GPS stays alive.
 
   const isSharing = enabled && permission === PERMISSION.GRANTED && coords != null;
 

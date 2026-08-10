@@ -155,6 +155,7 @@ export function notifyUserNoShowPrompt(userId, booking, { isFinal = false } = {}
 }
 
 export function notifyUserTripCompleted(userId, booking) {
+  const bookingId = String(booking._id || booking.id || '');
   return sendPushNotification(
     { userId },
     {
@@ -162,7 +163,13 @@ export function notifyUserTripCompleted(userId, booking) {
       body: 'Your trip has been completed. Rate your driver!',
       severity: 'success',
       type: USER_NOTIFICATION.TRIP_COMPLETED,
-      data: bookingRef(booking),
+      data: {
+        ...bookingRef(booking),
+        status: 'completed',
+        path: bookingId
+          ? `/user/tracking/completed?bookingId=${bookingId}`
+          : '/user/tracking/completed',
+      },
     },
   );
 }
@@ -219,14 +226,20 @@ export function notifyUserRefundProcessed(userId, refund) {
 }
 
 export function notifyUserRefundRejected(userId, refund) {
+  const rejectionReason =
+    String(refund?.error || refund?.reason || '').trim()
+    || 'Your refund request could not be approved.';
   return sendPushNotification(
     { userId },
     {
       title: 'Refund rejected',
-      body: refund.reason || 'Your refund request could not be approved.',
+      body: rejectionReason,
       severity: 'warn',
       type: USER_NOTIFICATION.REFUND_REJECTED,
-      data: { refundId: String(refund._id) },
+      data: {
+        refundId: String(refund._id),
+        rejectionReason,
+      },
     },
   );
 }

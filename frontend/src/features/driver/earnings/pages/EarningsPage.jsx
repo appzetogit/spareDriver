@@ -477,7 +477,7 @@ function labelForService(serviceType) {
     case 'hourly':
       return 'Hourly';
     case 'outstation':
-      return 'Outstation';
+      return 'Round trip';
     case 'oneway':
       return 'One-way';
     case 'round_trip':

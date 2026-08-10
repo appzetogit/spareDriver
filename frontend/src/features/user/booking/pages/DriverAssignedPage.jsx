@@ -261,12 +261,16 @@ const DriverAssignedPage = () => {
     }
     if (bookingStatus === BOOKING_STATUS.COMPLETED) {
       // Route to the post-trip rating + invoice flow rather than home
-      // so the customer is prompted to rate the driver. The trip
-      // summary page lives at `/user/tracking/completed` and links to
-      // `/user/tracking/rate`. We keep the active booking around so
-      // those screens can hydrate from the store.
+      // so the customer is prompted to rate the driver. Same path for
+      // instant, scheduled, and round-trip (outstation) bookings.
       draftReset();
-      navigate('/user/tracking/completed', { replace: true });
+      const id = booking?._id || routeBookingId;
+      navigate(
+        id
+          ? `/user/tracking/completed?bookingId=${id}`
+          : '/user/tracking/completed',
+        { replace: true },
+      );
     }
     if (
       bookingStatus === BOOKING_STATUS.SEARCHING &&
@@ -281,7 +285,7 @@ const DriverAssignedPage = () => {
     if (bookingStatus === BOOKING_STATUS.NO_DRIVERS_FOUND) {
       navigate('/user/book/no-drivers', { replace: true });
     }
-  }, [bookingStatus, cancellationReason, refundSummary, navigate, draftReset, fetchWallet]);
+  }, [bookingStatus, cancellationReason, refundSummary, navigate, draftReset, fetchWallet, booking?._id, routeBookingId]);
 
   const driver = booking?.driverId;
   const driverId = typeof driver === 'object' ? driver?._id : driver;

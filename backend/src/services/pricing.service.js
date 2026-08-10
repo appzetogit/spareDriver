@@ -18,6 +18,7 @@ import {
   SUBSCRIPTION_DISCOUNT_TYPES,
   SUBSCRIPTION_STATUS,
   SUBSCRIPTION_ASSIGNMENT_STATUS,
+  SUBSCRIPTION_CANCEL_REQUEST_STATUS,
 } from '../constants/serviceTypes.js';
 import {
   PAYMENT_PROVIDER,
@@ -643,11 +644,16 @@ async function syncSubscriptionPaymentRecord(subscription, razorpayOrderId) {
         purpose: PAYMENT_PURPOSE.SUBSCRIPTION,
         referenceId: subscription._id,
         referenceModel: 'UserSubscription',
+        userId: subscription.userId,
         razorpayOrderId,
         amount: subscription.amount,
         currency: 'INR',
         status: 'created',
         failureReason: '',
+        meta: {
+          subscriptionNumber: subscription.subscriptionNumber || '',
+          planName: subscription.planNameSnapshot || '',
+        },
       },
       $unset: { razorpayPaymentId: 1, razorpaySignature: 1 },
     },
@@ -844,9 +850,14 @@ export const verifySubscriptionPaymentService = async (
     { referenceId: subscription._id, referenceModel: 'UserSubscription' },
     {
       $set: {
+        userId: subscription.userId,
         razorpayPaymentId,
         razorpaySignature,
         status: 'captured',
+        meta: {
+          subscriptionNumber: subscription.subscriptionNumber || '',
+          planName: subscription.planNameSnapshot || '',
+        },
       },
     },
   );
@@ -2432,18 +2443,67 @@ export const listSubscriptionAvailableDriversService = async (
   };
 };
 
+const escapeSubscriptionRegex = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+async function applyUserSubscriptionSearch(filter, search) {
+  const q = String(search || '').trim();
+  if (!q) return;
+  const escaped = escapeSubscriptionRegex(q);
+  const users = await User.find({
+    $or: [
+      { name: { $regex: escaped, $options: 'i' } },
+      { phone_no: { $regex: escaped, $options: 'i' } },
+      { email: { $regex: escaped, $options: 'i' } },
+    ],
+  })
+    .select('_id')
+    .lean();
+
+  filter.$or = [
+    { subscriptionNumber: { $regex: escaped, $options: 'i' } },
+    { planNameSnapshot: { $regex: escaped, $options: 'i' } },
+    ...(users.length ? [{ userId: { $in: users.map((u) => u._id) } }] : []),
+  ];
+}
+
+function applyPaidAtRange(filter, from, to) {
+  if (!from && !to) return;
+  const paidAt = { ...(filter.paidAt || {}), $ne: null };
+  if (from) {
+    const fromDate = new Date(from);
+    if (!Number.isNaN(fromDate.getTime())) paidAt.$gte = fromDate;
+  }
+  if (to) {
+    const toDate = new Date(to);
+    if (!Number.isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999);
+      paidAt.$lte = toDate;
+    }
+  }
+  filter.paidAt = paidAt;
+}
+
 export const listUserSubscriptionsService = async ({
   status,
   assignmentStatus,
   zoneId,
+  search = '',
+  cancelRequestStatus = '',
+  from = '',
+  to = '',
   staff,
   page = 1,
   limit = 25,
 } = {}) => {
   const filter = { paidAt: { $ne: null } };
-  if (status) filter.status = status;
-  else filter.status = SUBSCRIPTION_STATUS.ACTIVE;
+  if (status && status !== 'all') filter.status = status;
+  else if (!status) filter.status = SUBSCRIPTION_STATUS.ACTIVE;
   if (assignmentStatus) filter.assignmentStatus = assignmentStatus;
+  if (cancelRequestStatus === SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING) {
+    filter['cancellationRequest.status'] = SUBSCRIPTION_CANCEL_REQUEST_STATUS.PENDING;
+  }
+  applyPaidAtRange(filter, from, to);
 
   const scope = zoneScopeForStaff(staff);
   if (scope !== null) {
@@ -2461,6 +2521,8 @@ export const listUserSubscriptionsService = async ({
   } else if (zoneId) {
     filter.zoneId = zoneId;
   }
+
+  await applyUserSubscriptionSearch(filter, search);
 
   const skip = (Math.max(1, page) - 1) * limit;
   const [items, total] = await Promise.all([
@@ -2493,49 +2555,31 @@ export const listSubscriptionRevenueService = async ({
   search = '',
   from = '',
   to = '',
+  payoutStatus = '',
+  status = '',
 } = {}) => {
   const filter = {
-    status: SUBSCRIPTION_STATUS.ACTIVE,
     paidAt: { $ne: null },
   };
+  if (status && status !== 'all') filter.status = status;
+  else if (!status) filter.status = SUBSCRIPTION_STATUS.ACTIVE;
   if (zoneId) filter.zoneId = zoneId;
-  if (from || to) {
-    filter.paidAt = { ...filter.paidAt };
-    if (from) filter.paidAt.$gte = new Date(from);
-    if (to) filter.paidAt.$lte = new Date(to);
-  }
-  if (search) {
-    const q = String(search).trim();
-    filter.$or = [
-      { planNameSnapshot: { $regex: q, $options: 'i' } },
-    ];
-  }
+  applyPaidAtRange(filter, from, to);
+  await applyUserSubscriptionSearch(filter, search);
 
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
   const safePage = Math.max(1, Number(page) || 1);
   const skip = (safePage - 1) * safeLimit;
 
-  const [items, total, allForTotals] = await Promise.all([
-    UserSubscription.find(filter)
-      .sort({ paidAt: -1 })
-      .skip(skip)
-      .limit(safeLimit)
-      .populate('userId', 'name phone_no email')
-      .populate('zoneId', 'name city')
-      .populate('assignedDriverId', 'name phone')
-      .populate('previousAssignments.driverId', 'name phone')
-      .lean(),
-    UserSubscription.countDocuments(filter),
-    UserSubscription.find(filter)
-      .select(
-        'amount platformShareRupees driverShareRupees driverSharePaidAt driverPayouts startDate expiryDate assignedDriverId assignedAt previousAssignments',
-      )
-      .populate('assignedDriverId', 'name phone')
-      .populate('previousAssignments.driverId', 'name phone')
-      .lean(),
-  ]);
+  const allItems = await UserSubscription.find(filter)
+    .sort({ paidAt: -1 })
+    .populate('userId', 'name phone_no email')
+    .populate('zoneId', 'name city')
+    .populate('assignedDriverId', 'name phone')
+    .populate('previousAssignments.driverId', 'name phone')
+    .lean();
 
-  const enrichedItems = items.map((item) => {
+  let enriched = allItems.map((item) => {
     const payout = summarizeSubscriptionPayouts(item);
     return {
       ...item,
@@ -2549,22 +2593,30 @@ export const listSubscriptionRevenueService = async ({
     };
   });
 
+  if (payoutStatus === 'remaining') {
+    enriched = enriched.filter((row) => (row.remainingDriverShare || 0) > 0);
+  } else if (payoutStatus === 'paid') {
+    enriched = enriched.filter((row) => (row.remainingDriverShare || 0) <= 0);
+  }
+
+  const total = enriched.length;
+  const pageItems = enriched.slice(skip, skip + safeLimit);
+
   let totalRevenue = 0;
   let totalPlatformEarned = 0;
   let totalDriverPool = 0;
   let totalPaidToDriver = 0;
   let totalRemaining = 0;
-  for (const doc of allForTotals) {
-    const payout = summarizeSubscriptionPayouts(doc);
-    totalRevenue += payout.totalRevenue || 0;
-    totalPlatformEarned += payout.platformEarned || 0;
-    totalDriverPool += payout.driverSharePool || 0;
-    totalPaidToDriver += payout.paidToDriver || 0;
-    totalRemaining += payout.remainingDriverShare || 0;
+  for (const doc of enriched) {
+    totalRevenue += doc.totalRevenue || 0;
+    totalPlatformEarned += doc.platformEarned || 0;
+    totalDriverPool += doc.driverSharePool || 0;
+    totalPaidToDriver += doc.paidToDriver || 0;
+    totalRemaining += doc.remainingDriverShare || 0;
   }
 
   return {
-    items: enrichedItems,
+    items: pageItems,
     total,
     page: safePage,
     limit: safeLimit,

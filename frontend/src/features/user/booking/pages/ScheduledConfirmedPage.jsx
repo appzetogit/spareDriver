@@ -130,7 +130,7 @@ const ScheduledConfirmedPage = () => {
     kind === 'subscription'
       ? 'Subscription booked'
       : isOutstation
-        ? 'Outstation ride booked'
+        ? 'Round trip booked'
         : 'Your ride is booked';
   const subtitle =
     kind === 'subscription'

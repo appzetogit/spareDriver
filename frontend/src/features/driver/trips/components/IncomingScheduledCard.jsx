@@ -53,7 +53,7 @@ export default function IncomingScheduledCard({
   const badgeLabel = isSubscription
     ? 'Subscription'
     : isOutstation
-      ? 'Outstation'
+      ? 'Round trip'
       : 'Scheduled';
   const badgeClass = isSubscription
     ? 'text-emerald-700 bg-emerald-50'

@@ -63,7 +63,7 @@ frontend/src/
     # Auth stores are in-memory; useAuthSessionStore bootstraps them from JWT (cookie/localStorage)
     user/   — useBookingDraftStore, useUserActiveBookingStore, useUserPricingStore, useUserSavedLocationsStore, useUserWalletStore, useAdsStore, useNearbyDriversStore
     driver/ — useDriverActiveTripStore, useDriverHistoryStore, useDriverIncomingOfferStore, useDriverIncomingScheduledStore (scheduled + outstation + subscription inbox), useDriverSubscriptionsStore (assigned dedicated-driver plans), useDriverKitStore, useDriverOnlineStore, useDriverProfileStore, useDriverTripsStore
-    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool,SidebarCounts,TeamMemberAnalytics}Store
+    admin/  — useAdmin{Drivers,Users,KitOrders,Kits,KitRevenue,Refunds,OnlineTransactions,Revenue,ServicePricing,Subscriptions,Tasks,Zones,DriverProfile,UserProfile,BulkPush,EmergencyPool,SidebarCounts,TeamMemberAnalytics}Store
   hooks/                  # useGoogleMaps, useDriverMovementSimulator, ...
   constants/              # mapTheme.js, etc.
   config/                 # axios, firebase, env

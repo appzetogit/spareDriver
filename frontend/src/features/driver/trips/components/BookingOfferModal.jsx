@@ -63,7 +63,7 @@ const OFFER_THEMES = {
     badgeBg: 'bg-emerald-600',
     badgeText: 'text-white',
     progressBar: 'bg-emerald-500',
-    label: 'Outstation trip',
+    label: 'Round trip',
     Icon: CalendarClock,
   },
 };
@@ -203,7 +203,7 @@ const BookingOfferModal = () => {
 
   const title =
     offer.serviceType === SERVICE_TYPES.OUTSTATION
-      ? `${offer.outstation?.days || 1}-day Outstation`
+      ? `${offer.outstation?.days || 1}-day Round trip`
       : `${offer.hourly?.durationHours || ''}h ${SERVICE_TYPE_LABELS.hourly}`;
 
   // Distance from the driver to the customer's pickup (server-computed during

@@ -401,7 +401,7 @@ const UserHistoryPage = () => {
             >
               <option value="">All services</option>
               <option value="hourly">Hourly</option>
-              <option value="outstation">Outstation</option>
+              <option value="outstation">Round trip</option>
             </select>
           )}
           <input

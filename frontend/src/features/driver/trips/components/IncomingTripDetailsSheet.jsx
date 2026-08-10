@@ -78,7 +78,7 @@ export default function IncomingTripDetailsSheet({
   const badgeLabel = isSubscription
     ? 'Subscription'
     : isOutstation
-      ? 'Outstation'
+      ? 'Round trip'
       : 'Scheduled';
 
   let whenLabel = null;

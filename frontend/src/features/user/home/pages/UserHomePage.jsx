@@ -42,9 +42,11 @@ const UserHomePage = () => {
   const fetchWallet = useUserWalletStore((s) => s.fetchWallet);
   const [showDriverSheet, setShowDriverSheet] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
-  const [locationLine, setLocationLine] = useState('Locating you…');
+  const [locationLine, setLocationLine] = useState('Getting your location…');
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationAddress, setLocationAddress] = useState('');
+  const [locationCanRetry, setLocationCanRetry] = useState(false);
+  const locationRetryRef = useRef(null);
 
   // Paint header + Book section first; defer wallet / Maps / GPS.
   const secondaryReady = useAfterPaint({ delayMs: 80 });
@@ -57,10 +59,12 @@ const UserHomePage = () => {
 
   const showWalletSkeleton = !walletFetched && (walletLoading || !secondaryReady);
 
-  const onLocationChange = useCallback(({ line, loading, address }) => {
+  const onLocationChange = useCallback(({ line, loading, address, canRetry, retry }) => {
     setLocationLine(line);
     setLocationLoading(loading);
     setLocationAddress(address || '');
+    setLocationCanRetry(Boolean(canRetry));
+    locationRetryRef.current = typeof retry === 'function' ? retry : null;
   }, []);
 
   return (
@@ -79,6 +83,16 @@ const UserHomePage = () => {
               </span>
               {locationLoading && (
                 <span className="inline-block w-3.5 h-3.5 rounded-full bg-gray-200 animate-pulse shrink-0" />
+              )}
+              {locationCanRetry && !locationLoading && (
+                <button
+                  type="button"
+                  onClick={() => locationRetryRef.current?.()}
+                  className="p-1 rounded-full hover:bg-bg text-primary shrink-0"
+                  aria-label="Retry location"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
           </div>
@@ -171,7 +185,16 @@ function NearbyDriversHomeBlock({
   const mapRef = useRef(null);
 
   const { maps, ready } = useGoogleMaps();
-  const { coords, loading: locating, error: geoError } = useGeolocation();
+  const {
+    coords,
+    loading: locating,
+    refreshing,
+    error: geoError,
+    errorKind,
+    softError,
+    accuracyQuality,
+    refresh: refreshGeo,
+  } = useGeolocation();
   const [currentLocation, setCurrentLocation] = useState(null);
 
   useEffect(() => {
@@ -207,16 +230,32 @@ function NearbyDriversHomeBlock({
 
   const locationLine = currentLocation?.city
     ? currentLocation.city
-    : currentLocation?.address || (geoError ? 'Location unavailable' : 'Locating you…');
-  const locationLoading = !geoError && !currentLocation && (locating || !ready);
+    : currentLocation?.address
+      || (coords && (locating || refreshing) ? 'Updating location…' : null)
+      || (coords ? 'Location detected' : null)
+      || (locating || refreshing ? 'Getting your location…' : null)
+      || (geoError || 'Tap retry for location');
+  const locationLoading = Boolean(
+    (locating || refreshing || (!ready && !geoError && !coords)) && !geoError,
+  );
+  const canRetry = Boolean(geoError || softError || accuracyQuality === 'poor');
 
   useEffect(() => {
     onLocationChange?.({
       line: locationLine,
       loading: locationLoading,
       address: currentLocation?.address,
+      canRetry,
+      retry: refreshGeo,
     });
-  }, [locationLine, locationLoading, currentLocation?.address, onLocationChange]);
+  }, [
+    locationLine,
+    locationLoading,
+    currentLocation?.address,
+    canRetry,
+    refreshGeo,
+    onLocationChange,
+  ]);
 
   const handleScroll = useCallback(() => {
     if (!mapRef.current) return;
@@ -292,17 +331,43 @@ function NearbyDriversHomeBlock({
             />
           ) : geoError ? (
             <div className="h-48 flex items-center justify-center text-text-muted">
-              <div className="px-4 text-center">
-                <p className="text-sm">{geoError}</p>
-                <p className="text-[11px] mt-1">
-                  Allow location access to see nearby drivers.
+              <div className="px-4 text-center space-y-3">
+                <p className="text-sm text-text font-medium">{geoError}</p>
+                <p className="text-[11px]">
+                  {errorKind === 'permission_denied'
+                    ? 'Enable location permission in your browser or app settings.'
+                    : 'You can retry after enabling location or moving to an open area.'}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => refreshGeo()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry
+                </button>
               </div>
             </div>
           ) : (
             <NearbyDriversMapSkeleton height={192} />
           )}
         </div>
+
+        {(softError || accuracyQuality === 'poor') && center && (
+          <p className="mt-2 text-xs text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
+            {accuracyQuality === 'poor'
+              ? 'Weak GPS signal — trying to improve location…'
+              : softError}
+            {' '}
+            <button
+              type="button"
+              onClick={() => refreshGeo()}
+              className="font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              Retry
+            </button>
+          </p>
+        )}
 
         {driversError && (
           <p className="mt-2 text-xs text-danger bg-danger/10 rounded-xl px-3 py-2">

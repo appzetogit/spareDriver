@@ -214,6 +214,29 @@ export async function verifyBookingPaymentService(userId, bookingId, { orderId, 
 
   await booking.save();
 
+  try {
+    const { upsertRazorpayPaymentRecord } = await import('./onlineTransaction.service.js');
+    const { PAYMENT_PURPOSE } = await import('../constants/kitStatus.js');
+    await upsertRazorpayPaymentRecord({
+      purpose: PAYMENT_PURPOSE.BOOKING,
+      referenceId: booking._id,
+      referenceModel: 'Booking',
+      userId: booking.userId,
+      razorpayOrderId: orderId,
+      razorpayPaymentId: paymentId,
+      razorpaySignature: signature,
+      amountRupees: chargedRupees,
+      status: 'captured',
+      meta: {
+        bookingNumber: booking.bookingNumber || '',
+        amountPaise: booking.razorpay?.amountPaise || 0,
+      },
+      matchBy: 'paymentId',
+    });
+  } catch {
+    /* ledger write is best-effort — booking payment already succeeded */
+  }
+
   const userPayload = {
     bookingId: String(booking._id),
     status: booking.status,

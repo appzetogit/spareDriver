@@ -5,6 +5,7 @@ import SosConfirmationModal from './SosConfirmationModal';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { useActiveSos } from '../../../../hooks/useActiveSos';
 import { SOS_ELIGIBLE_BOOKING_STATUSES } from '../../../../constants/sos';
+import { getLocationOnce } from '../../../../utils/geolocation';
 
 /**
  * Prominent red SOS control for active trips. Shows confirmation before
@@ -24,16 +25,11 @@ const SosEmergencyButton = ({ tripId, bookingStatus, className = '' }) => {
 
   const resolveCoords = useCallback(() => {
     if (coords) return Promise.resolve(coords);
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      return Promise.resolve(null);
-    }
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 10_000, maximumAge: 5_000 },
-      );
-    });
+    return getLocationOnce({
+      enableHighAccuracy: true,
+      timeout: 10_000,
+      maximumAge: 5_000,
+    }).catch(() => null);
   }, [coords]);
 
   useEffect(() => {

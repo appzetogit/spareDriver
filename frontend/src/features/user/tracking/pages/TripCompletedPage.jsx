@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { CheckCircle, Download } from 'lucide-react';
 import Card from '../../../../components/Card';
@@ -11,11 +11,19 @@ import useUserActiveBookingStore from '../../../../store/user/useUserActiveBooki
 /**
  * Post-ride summary — duration/distance, inline driver rating, and
  * invoice download on one screen (no hop to a separate rate page).
+ *
+ * Used for instant, scheduled, and round-trip (outstation) bookings.
+ * Deep links pass `?bookingId=` so the page still works after the
+ * booking leaves `/active` (common for multi-day round trips).
  */
 const TripCompletedPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const bookingIdParam = searchParams.get('bookingId');
+
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchActive = useUserActiveBookingStore((s) => s.fetchActive);
+  const fetchById = useUserActiveBookingStore((s) => s.fetchById);
   const downloadInvoicePdf = useUserActiveBookingStore((s) => s.downloadInvoicePdf);
   const rateDriver = useUserActiveBookingStore((s) => s.rateDriver);
 
@@ -24,12 +32,31 @@ const TripCompletedPage = () => {
   const [review, setReview] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // We may have lost the booking from the store on a hard refresh — try to
-  // re-hydrate once, but don't block if it 404s (server clears completed
-  // bookings off the "active" endpoint).
+  // Prefer an explicit booking id (push / trip-details deep link). Fall
+  // back to the in-memory active booking, then `/active` as a last resort.
   useEffect(() => {
-    if (!booking) fetchActive().catch(() => {});
-  }, [booking, fetchActive]);
+    let cancelled = false;
+    (async () => {
+      try {
+        if (bookingIdParam) {
+          if (!booking || String(booking._id) !== String(bookingIdParam)) {
+            await fetchById(bookingIdParam);
+          }
+          return;
+        }
+        if (!booking) {
+          await fetchActive();
+        }
+      } catch {
+        if (!cancelled) {
+          /* completed bookings leave /active — stay quiet */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingIdParam, booking, fetchById, fetchActive]);
 
   const previousRating = booking?.rating?.customer;
   const alreadyRated = previousRating?.stars != null;
@@ -136,7 +163,7 @@ const TripCompletedPage = () => {
             className="mb-3"
             loading={submitting}
             onClick={handleSubmitRating}
-            disabled={!rating || submitting}
+            disabled={!rating || submitting || !booking?._id}
           >
             Submit rating
           </Button>

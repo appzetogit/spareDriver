@@ -102,7 +102,7 @@ const BookingFilters = ({
           options={[
             { value: '', label: 'All services' },
             { value: 'hourly', label: 'Hourly' },
-            { value: 'outstation', label: 'Outstation' },
+            { value: 'outstation', label: 'Round trip' },
           ]}
         />
         <Select

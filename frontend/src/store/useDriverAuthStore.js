@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { unregisterFcmToken } from '../hooks/useFcmRegistration';
 import { useDriverNotificationStore } from './useNotificationStore';
-import { clearAuthTokens } from '../utils/authTokens';
+import { endAuthSession } from '../utils/endAuthSession';
 
 const useDriverAuthStore = create((set) => ({
   driver: null,
@@ -12,9 +11,7 @@ const useDriverAuthStore = create((set) => ({
   logout: () => {
     useDriverNotificationStore.getState().reset();
     set({ driver: null, isAuthenticated: false });
-    void unregisterFcmToken('driver')
-      .catch(() => null)
-      .finally(() => clearAuthTokens());
+    void endAuthSession('driver');
   },
 }));
 

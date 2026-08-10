@@ -132,6 +132,10 @@ import {
   createAdminManualRefund,
 } from '../controllers/refund.controller.js';
 import {
+  listOnlineTransactions,
+  getOnlineTransaction,
+} from '../controllers/onlineTransaction.controller.js';
+import {
   listWithdrawalsAdmin,
   rejectWithdrawalAdmin,
   processWithdrawalAdmin,
@@ -631,6 +635,20 @@ router.patch('/kit-orders/:id/approve', protectStaff, restrictTo(...ALL_STAFF), 
 router.patch('/kit-orders/:id/reject', protectStaff, restrictTo(...ALL_STAFF), rejectKitOrder);
 router.patch('/kit-orders/:id/dispatch', protectStaff, restrictTo(...ALL_STAFF), dispatchKitOrder);
 router.patch('/kit-orders/:id/deliver', protectStaff, restrictTo(...ALL_STAFF), deliverKitOrder);
+
+/* ---- Account → Online Transactions (Razorpay ledger) ----------------- */
+router.get(
+  '/online-transactions',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  listOnlineTransactions,
+);
+router.get(
+  '/online-transactions/:id',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  getOnlineTransaction,
+);
 
 /* ---- Account → Refunds ----------------------------------------------- */
 // The cancellation pipeline writes Refund documents; admins review and

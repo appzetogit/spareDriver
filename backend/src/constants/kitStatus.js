@@ -33,6 +33,10 @@ export const PAYMENT_PROVIDER = Object.freeze({
 export const PAYMENT_PURPOSE = Object.freeze({
   DRIVER_KIT: 'driver_kit',
   SUBSCRIPTION: 'subscription',
+  /** User Razorpay charge for a booking (pre-pay / settle / extension). */
+  BOOKING: 'booking',
+  /** User Razorpay wallet top-up. */
+  WALLET_TOPUP: 'wallet_topup',
   /** Driver-side credit: their share of the daily-rate × commission split. */
   TRIP_FARE: 'trip_fare',
   /**

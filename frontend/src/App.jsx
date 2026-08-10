@@ -168,6 +168,7 @@ const ManageKits = lazy(() => import('./features/admin/pages/ManageKits'));
 const ManageZones = lazy(() => import('./features/admin/pages/ManageZones'));
 const ManagePricing = lazy(() => import('./features/admin/pages/ManagePricing'));
 const ManageRefunds = lazy(() => import('./features/admin/pages/ManageRefunds'));
+const ManageOnlineTransactions = lazy(() => import('./features/admin/pages/ManageOnlineTransactions'));
 const ManageWithdrawals = lazy(() => import('./features/admin/pages/ManageWithdrawals'));
 // Account deletions — disabled for now; uncomment to re-enable admin review page
 // const ManageAccountDeletions = lazy(() => import('./features/admin/pages/ManageAccountDeletions'));
@@ -436,6 +437,7 @@ function App() {
             {/* Account section */}
             <Route path="/admin/account" element={<Navigate to="/admin/account/revenue" replace />} />
             <Route path="/admin/account/refunds" element={<ManageRefunds />} />
+            <Route path="/admin/account/online-transactions" element={<ManageOnlineTransactions />} />
             <Route path="/admin/account/withdrawals" element={<ManageWithdrawals />} />
             {/* Account deletions — disabled for now; uncomment route + lazy import to re-enable */}
             {/* <Route path="/admin/account/deletions" element={<ManageAccountDeletions />} /> */}

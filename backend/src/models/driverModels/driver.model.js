@@ -25,6 +25,13 @@ const driverSchema = new mongoose.Schema(
       unique: true,
       match: [/^[0-9]{10}$/, 'Phone number must be exactly 10 digits'],
     },
+    /** Optional emergency / alternate mobile collected at signup */
+    alternatePhone: {
+      type: String,
+      trim: true,
+      default: '',
+      match: [/^[0-9]{10}$|^$/, 'Alternate phone must be exactly 10 digits'],
+    },
     email: {
       type: String,
       default: '',
