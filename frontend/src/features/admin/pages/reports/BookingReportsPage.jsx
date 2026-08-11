@@ -14,6 +14,7 @@ import {
   ReportErrorBanner,
 } from '../../components/reports/ReportPeriodFilters';
 import { useReportPeriod } from '../../components/reports/useReportPeriod';
+import ReportExportButtons from '../../components/reports/ReportExportButtons';
 
 function formatCount(n) {
   return Number(n || 0).toLocaleString('en-IN');
@@ -60,6 +61,13 @@ const BookingReportsPage = () => {
         onToDateChange={setToDate}
         onRefresh={refetch}
         loading={loading}
+        actions={
+          <ReportExportButtons
+            exportPath="/admin/reports/bookings/export"
+            queryParams={queryParams}
+            filenamePrefix="booking-reports"
+          />
+        }
       />
 
       {error && <ReportErrorBanner message={error} onRetry={refetch} />}

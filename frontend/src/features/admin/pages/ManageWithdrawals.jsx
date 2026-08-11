@@ -19,6 +19,7 @@ import AdminTransactionFields, { EMPTY_TXN_FORM } from '../components/AdminTrans
 import WithdrawalDetailModal from '../components/WithdrawalDetailModal';
 import AdminDetailModal from '../components/AdminDetailModal';
 import useAdminWithdrawalsStore from '../../../store/admin/useAdminWithdrawalsStore';
+import { ReportExportIconButtons } from '../components/reports/ReportExportButtons';
 import { WITHDRAWAL_STATUS_LABELS } from '../../../constants/withdrawal';
 
 const STATUS_META = {
@@ -153,14 +154,21 @@ const ManageWithdrawals = () => {
             details, upload proof, and mark as paid to debit their wallet.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => fetchWithdrawals()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ReportExportIconButtons
+            exportPath="/admin/withdrawals/export"
+            queryParams={filters}
+            filenamePrefix="withdrawals"
+          />
+          <button
+            type="button"
+            onClick={() => fetchWithdrawals()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

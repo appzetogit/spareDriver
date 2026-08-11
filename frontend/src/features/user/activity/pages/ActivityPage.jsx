@@ -7,14 +7,17 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Download,
   Loader2,
   MapPin,
   Navigation,
   Star,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Avatar from '../../../../components/Avatar';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { mergeLiveBookingIntoList } from '../../../../utils/mergeLiveBooking';
+import { downloadBookingInvoicePdf } from '../../../../utils/downloadBookingInvoicePdf';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import { useUserBookingsStore } from '../../../../store/user/useUserBookingsStore';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
@@ -274,8 +277,10 @@ const FALLBACK_BADGE = {
 };
 
 function TripHistoryCard({ booking, onOpen, indexInList = 0 }) {
+  const [downloading, setDownloading] = useState(false);
   const badge = STATUS_BADGES[booking.status] || FALLBACK_BADGE;
   const StatusIcon = badge.icon;
+  const isCompleted = booking.status === BOOKING_STATUS.COMPLETED;
   const serviceLabel =
     SERVICE_TYPE_LABELS[booking.serviceType] ||
     SERVICE_CATALOG[booking.serviceType]?.title ||
@@ -336,6 +341,23 @@ function TripHistoryCard({ booking, onOpen, indexInList = 0 }) {
     const selfie = docs.find((d) => d?.type === 'selfie' && d?.fileUrl);
     return selfie?.fileUrl || driver.profilePicture || null;
   })();
+
+  const handleDownloadInvoice = async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadBookingInvoicePdf(booking);
+      toast.success('Invoice downloaded');
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Could not download invoice',
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div
@@ -438,6 +460,24 @@ function TripHistoryCard({ booking, onOpen, indexInList = 0 }) {
           ) : null}
           <ChevronRight className="w-4 h-4 text-text-muted/70 shrink-0 group-hover:text-primary" />
         </div>
+
+        {isCompleted && (
+          <div className="mt-3 pt-3 border-t border-border-light">
+            <button
+              type="button"
+              onClick={handleDownloadInvoice}
+              disabled={downloading}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 py-2.5 text-sm font-semibold text-text hover:bg-gray-50 active:scale-[0.99] transition disabled:opacity-50"
+            >
+              {downloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloading ? 'Downloading…' : 'Download invoice'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

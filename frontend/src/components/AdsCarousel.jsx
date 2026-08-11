@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCachedQuery } from '../hooks/useCachedQuery';
 import { useWhenVisible } from '../hooks/useWhenVisible';
 import { buildCacheKey } from '../store/lib/buildCacheKey';
 import { useAdsStore } from '../store/user/useAdsStore';
+import { openExternalUrl } from '../utils/openExternalUrl';
 import { AdsCarouselSkeleton } from './skeleton/SectionSkeletons';
 
 /**
- * Horizontally-scrolling ad carousel rendered on the user home screen.
- *
- * Ads are optional / below the fold — fetch only once the strip is near
- * the viewport so home startup is not competing with critical APIs.
+ * Single promo banner on the user home screen.
+ * Rotates active ads one-by-one in place (no horizontal scroll).
+ * Clicks open the destination in the system browser, not the Flutter WebView.
  */
 const ADS_CACHE_KEY = buildCacheKey('common-ads');
+const ROTATE_MS = 5000;
 
 const AdsCarousel = () => {
   const sectionRef = useRef(null);
@@ -24,54 +25,24 @@ const AdsCarousel = () => {
   );
   const ads = Array.isArray(data) ? data : [];
   const [activeIdx, setActiveIdx] = useState(0);
-  const scrollerRef = useRef(null);
-  const interactingRef = useRef(false);
+  const pausedRef = useRef(false);
 
-  const scrollToIndex = useCallback((idx) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const card = el.children?.[idx];
-    if (!card) return;
-    el.scrollTo({ left: card.offsetLeft - el.offsetLeft, behavior: 'smooth' });
-  }, []);
+  useEffect(() => {
+    if (activeIdx >= ads.length) setActiveIdx(0);
+  }, [ads.length, activeIdx]);
 
   useEffect(() => {
     if (ads.length < 2) return undefined;
     const tick = setInterval(() => {
-      if (interactingRef.current) return;
-      setActiveIdx((prev) => {
-        const next = (prev + 1) % ads.length;
-        scrollToIndex(next);
-        return next;
-      });
-    }, 5000);
+      if (pausedRef.current) return;
+      setActiveIdx((prev) => (prev + 1) % ads.length);
+    }, ROTATE_MS);
     return () => clearInterval(tick);
-  }, [ads.length, scrollToIndex]);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const children = Array.from(el.children);
-    if (!children.length) return;
-    const center = el.scrollLeft + el.clientWidth / 2;
-    let bestIdx = 0;
-    let bestDist = Infinity;
-    children.forEach((child, idx) => {
-      const childCenter = child.offsetLeft + child.clientWidth / 2 - el.offsetLeft;
-      const dist = Math.abs(childCenter - center);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIdx = idx;
-      }
-    });
-    setActiveIdx(bestIdx);
-  }, []);
+  }, [ads.length]);
 
   const handleAdClick = (ad) => {
-    if (!ad.linkUrl) return;
-    // Always `_blank` + `noopener,noreferrer` per the spec — keeps the
-    // PWA host page secure even if the destination is an ad partner.
-    window.open(ad.linkUrl, '_blank', 'noopener,noreferrer');
+    if (!ad?.linkUrl) return;
+    openExternalUrl(ad.linkUrl);
   };
 
   if (visible && loading && !isFetched) {
@@ -87,9 +58,10 @@ const AdsCarousel = () => {
   }
 
   if (!isFetched) {
-    // Reserve an observation target so IntersectionObserver can fire.
     return <section ref={sectionRef} aria-hidden className="h-1" />;
   }
+
+  const ad = ads[Math.min(activeIdx, ads.length - 1)];
 
   return (
     <section
@@ -97,41 +69,33 @@ const AdsCarousel = () => {
       className="animate-fade-in-up"
       style={{ animationDelay: '0.1s' }}
       aria-label="Promotions"
+      aria-live="polite"
+      onMouseEnter={() => {
+        pausedRef.current = true;
+      }}
+      onMouseLeave={() => {
+        pausedRef.current = false;
+      }}
+      onTouchStart={() => {
+        pausedRef.current = true;
+      }}
+      onTouchEnd={() => {
+        pausedRef.current = false;
+      }}
     >
-      <div
-        ref={scrollerRef}
-        onScroll={handleScroll}
-        onTouchStart={() => {
-          interactingRef.current = true;
-        }}
-        onTouchEnd={() => {
-          interactingRef.current = false;
-        }}
-        onMouseEnter={() => {
-          interactingRef.current = true;
-        }}
-        onMouseLeave={() => {
-          interactingRef.current = false;
-        }}
-        className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-4 px-4 scroll-smooth"
-      >
-        {ads.map((ad) => (
-          <AdCard key={ad._id} ad={ad} onClick={() => handleAdClick(ad)} />
-        ))}
-      </div>
+      <AdCard key={ad._id} ad={ad} onClick={() => handleAdClick(ad)} />
       {ads.length > 1 && (
         <div className="flex items-center justify-center gap-1.5 mt-2">
-          {ads.map((ad, idx) => (
+          {ads.map((item, idx) => (
             <button
-              key={ad._id}
+              key={item._id}
               type="button"
-              onClick={() => {
-                setActiveIdx(idx);
-                scrollToIndex(idx);
-              }}
+              onClick={() => setActiveIdx(idx)}
               aria-label={`Show ad ${idx + 1}`}
-              className={`h-1.5 rounded-full transition-all ${idx === activeIdx ? 'w-5 bg-primary' : 'w-1.5 bg-gray-300'
-                }`}
+              aria-current={idx === activeIdx ? 'true' : undefined}
+              className={`h-1.5 rounded-full transition-all ${
+                idx === activeIdx ? 'w-5 bg-primary' : 'w-1.5 bg-gray-300'
+              }`}
             />
           ))}
         </div>
@@ -149,8 +113,9 @@ function AdCard({ ad, onClick }) {
       type={clickable ? 'button' : undefined}
       onClick={clickable ? onClick : undefined}
       aria-label={ad.title ? `Open: ${ad.title}` : 'Open ad'}
-      className={`snap-start shrink-0 w-[88%] max-w-[420px] rounded-2xl overflow-hidden bg-slate-900 shadow-card relative ${clickable ? 'cursor-pointer active:scale-[0.98] transition-transform' : ''
-        }`}
+      className={`w-full rounded-2xl overflow-hidden bg-slate-900 shadow-card relative ${
+        clickable ? 'cursor-pointer active:scale-[0.98] transition-transform' : ''
+      }`}
     >
       <div className="aspect-[16/9] w-full">
         {isVideo ? (

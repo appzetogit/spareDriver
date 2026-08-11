@@ -19,6 +19,7 @@ import CreateAdminRefundModal from '../components/CreateAdminRefundModal';
 import AdminDetailModal from '../components/AdminDetailModal';
 import AdminTransactionFields, { EMPTY_TXN_FORM } from '../components/AdminTransactionFields';
 import useAdminRefundsStore from '../../../store/admin/useAdminRefundsStore';
+import { ReportExportIconButtons } from '../components/reports/ReportExportButtons';
 import {
   REFUND_KIND_LABELS,
   REFUND_PAYOUT_METHOD_LABELS,
@@ -215,6 +216,11 @@ const ManageRefunds = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <ReportExportIconButtons
+            exportPath="/admin/refunds/export"
+            queryParams={filters}
+            filenamePrefix="refunds"
+          />
           <button
             type="button"
             onClick={() => setCreateOpen(true)}

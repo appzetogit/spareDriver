@@ -22,6 +22,7 @@ import {
   ReportErrorBanner,
 } from '../../components/reports/ReportPeriodFilters';
 import { useReportPeriod } from '../../components/reports/useReportPeriod';
+import ReportExportButtons from '../../components/reports/ReportExportButtons';
 
 const QUICK_LINKS = [
   { to: '/admin/reports/users', label: 'User Reports', icon: Users, color: '#3B82F6' },
@@ -68,6 +69,13 @@ const ReportsOverviewPage = () => {
         onToDateChange={setToDate}
         onRefresh={refetch}
         loading={loading}
+        actions={
+          <ReportExportButtons
+            exportPath="/admin/reports/overview/export"
+            queryParams={queryParams}
+            filenamePrefix="reports-overview"
+          />
+        }
       />
 
       {error && <ReportErrorBanner message={error} onRetry={refetch} />}

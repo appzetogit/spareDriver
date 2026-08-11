@@ -358,7 +358,7 @@ function App() {
           <Route path="/dev/map-simulator" element={<MapSimulatorPage />} />
 
           {/* Catch all for mobile */}
-          <Route path="*" element={<Navigate to="/auth" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
 
         {/* ========== Admin Web Panel (Outside MobileLayout) ========== */}

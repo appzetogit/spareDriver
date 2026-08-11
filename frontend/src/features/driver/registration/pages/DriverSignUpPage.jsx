@@ -5,11 +5,13 @@ import Button from '../../../../components/Button';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 import { useStoreHydration } from '../../../../hooks/useStoreHydration';
+import { usePrimaryBleedBg } from '../../../../hooks/usePrimaryBleedBg';
 
 const DriverSignUpPage = () => {
   const navigate = useNavigate();
   const hydrated = useStoreHydration(useDriverAuthStore);
   const { isAuthenticated, driver } = useDriverAuthStore();
+  usePrimaryBleedBg();
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated || !driver) return;

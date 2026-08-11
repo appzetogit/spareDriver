@@ -10,6 +10,7 @@ import {
   Headphones,
   FileText,
   Building2,
+  Receipt,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TrainingVideosTab from '../components/PlatformSettings/TrainingVideosTab';
@@ -38,6 +39,16 @@ const EMPTY_SUPPORT_FORM = {
   iosAppUrl: '',
 };
 
+const EMPTY_GST_FORM = {
+  gstin: '',
+  legalName: '',
+  tradeName: '',
+  address: '',
+  state: '',
+  stateCode: '',
+  pan: '',
+};
+
 function normalizeSupportForm(data = {}) {
   return {
     supportPhone: data.supportPhone || '',
@@ -47,6 +58,18 @@ function normalizeSupportForm(data = {}) {
     supportHours: data.supportHours || '',
     androidAppUrl: data.androidAppUrl || '',
     iosAppUrl: data.iosAppUrl || '',
+  };
+}
+
+function normalizeGstForm(data = {}) {
+  return {
+    gstin: data.gstin || '',
+    legalName: data.legalName || '',
+    tradeName: data.tradeName || '',
+    address: data.address || '',
+    state: data.state || '',
+    stateCode: data.stateCode || '',
+    pan: data.pan || '',
   };
 }
 
@@ -77,20 +100,26 @@ const PlatformSettings = () => {
   const [supportForm, setSupportForm] = useState(EMPTY_SUPPORT_FORM);
   const [supportBaseline, setSupportBaseline] = useState(EMPTY_SUPPORT_FORM);
   const [supportSaving, setSupportSaving] = useState(false);
+  const [gstForm, setGstForm] = useState(EMPTY_GST_FORM);
+  const [gstBaseline, setGstBaseline] = useState(EMPTY_GST_FORM);
+  const [gstSaving, setGstSaving] = useState(false);
 
   const supportDirty =
     JSON.stringify(supportForm) !== JSON.stringify(supportBaseline);
+  const gstDirty = JSON.stringify(gstForm) !== JSON.stringify(gstBaseline);
 
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const [carsRes, condRes, trainingRes, supportRes, banksRes] = await Promise.all([
-        api.get('/admin/settings/car-types'),
-        api.get('/admin/settings/conditions'),
-        api.get('/admin/settings/training-videos'),
-        api.get('/admin/settings/support'),
-        api.get('/admin/settings/banks'),
-      ]);
+      const [carsRes, condRes, trainingRes, supportRes, banksRes, gstRes] =
+        await Promise.all([
+          api.get('/admin/settings/car-types'),
+          api.get('/admin/settings/conditions'),
+          api.get('/admin/settings/training-videos'),
+          api.get('/admin/settings/support'),
+          api.get('/admin/settings/banks'),
+          api.get('/admin/settings/gst'),
+        ]);
       setCarTypes(carsRes.data.data);
       setConditions(condRes.data.data);
       setTrainingVideos(trainingRes.data.data);
@@ -98,6 +127,9 @@ const PlatformSettings = () => {
       const support = normalizeSupportForm(supportRes.data.data || {});
       setSupportForm(support);
       setSupportBaseline(support);
+      const gst = normalizeGstForm(gstRes.data.data || {});
+      setGstForm(gst);
+      setGstBaseline(gst);
     } catch (err) {
       console.error('Failed to fetch platform data', err);
       if (!silent) {
@@ -198,6 +230,23 @@ const PlatformSettings = () => {
     }
   };
 
+  const handleGstSave = async (e) => {
+    e.preventDefault();
+    if (!gstDirty || gstSaving || loading) return;
+    setGstSaving(true);
+    try {
+      const res = await api.put('/admin/settings/gst', gstForm);
+      const saved = normalizeGstForm(res.data?.data || gstForm);
+      setGstForm(saved);
+      setGstBaseline(saved);
+      toast.success('GST details saved — they will appear on customer invoices');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save GST details');
+    } finally {
+      setGstSaving(false);
+    }
+  };
+
   if (!canViewPlatformSettings(admin?.role)) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -233,6 +282,7 @@ const PlatformSettings = () => {
             { id: 'banks', label: 'Banks', icon: Building2 },
             { id: 'training', label: 'Driver Training', icon: Video },
             { id: 'support', label: 'Website & Contact', icon: Headphones },
+            { id: 'gst', label: 'GST Details', icon: Receipt },
             { id: 'legal', label: 'Legal Pages', icon: FileText },
           ].map(tab => (
             <button
@@ -380,6 +430,109 @@ const PlatformSettings = () => {
                     disabled={!supportDirty || loading || supportSaving}
                   >
                     Save Website & Contact Settings
+                  </Button>
+                )}
+              </form>
+            </Card>
+          )}
+
+          {activeTab === 'gst' && (
+            <Card className="max-w-2xl space-y-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">GST Details</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Business tax identity printed on customer trip invoices. Leave GSTIN blank to hide this
+                  block from PDFs.
+                </p>
+              </div>
+              <form onSubmit={handleGstSave} className="space-y-4">
+                <Input
+                  label="GSTIN"
+                  value={gstForm.gstin}
+                  onChange={(e) =>
+                    setGstForm((prev) => ({
+                      ...prev,
+                      gstin: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  placeholder="22AAAAA0000A1Z5"
+                  maxLength={15}
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="Legal / Registered Name"
+                  value={gstForm.legalName}
+                  onChange={(e) =>
+                    setGstForm((prev) => ({ ...prev, legalName: e.target.value }))
+                  }
+                  placeholder="SpareDriver Private Limited"
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="Trade Name (optional)"
+                  value={gstForm.tradeName}
+                  onChange={(e) =>
+                    setGstForm((prev) => ({ ...prev, tradeName: e.target.value }))
+                  }
+                  placeholder="SpareDriver"
+                  disabled={!canEdit}
+                />
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Registered Address
+                  </label>
+                  <textarea
+                    value={gstForm.address || ''}
+                    onChange={(e) =>
+                      setGstForm((prev) => ({ ...prev, address: e.target.value }))
+                    }
+                    rows={3}
+                    disabled={!canEdit}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 disabled:bg-slate-50 disabled:text-slate-500"
+                    placeholder="Full registered business address"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="State"
+                    value={gstForm.state}
+                    onChange={(e) =>
+                      setGstForm((prev) => ({ ...prev, state: e.target.value }))
+                    }
+                    placeholder="Delhi"
+                    disabled={!canEdit}
+                  />
+                  <Input
+                    label="State Code"
+                    value={gstForm.stateCode}
+                    onChange={(e) =>
+                      setGstForm((prev) => ({ ...prev, stateCode: e.target.value }))
+                    }
+                    placeholder="07"
+                    maxLength={2}
+                    disabled={!canEdit}
+                  />
+                </div>
+                <Input
+                  label="PAN (optional)"
+                  value={gstForm.pan}
+                  onChange={(e) =>
+                    setGstForm((prev) => ({
+                      ...prev,
+                      pan: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  placeholder="AAAAA0000A"
+                  maxLength={10}
+                  disabled={!canEdit}
+                />
+                {canEdit && (
+                  <Button
+                    type="submit"
+                    loading={gstSaving}
+                    disabled={!gstDirty || loading || gstSaving}
+                  >
+                    Save GST Details
                   </Button>
                 )}
               </form>

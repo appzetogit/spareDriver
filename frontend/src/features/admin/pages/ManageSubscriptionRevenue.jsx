@@ -24,6 +24,7 @@ import api from '../../../utils/api';
 import { formatCurrency } from '../../../utils/fareCalculator';
 import { formatDateTime12 } from '../../../utils/datetime';
 import { useAdminZonesStore } from '../../../store/admin/useAdminZonesStore';
+import { ReportExportIconButtons } from '../components/reports/ReportExportButtons';
 import { SUBSCRIPTION_STATUS } from '../../../constants/serviceTypes';
 
 function formatDate(d) {
@@ -563,14 +564,21 @@ const ManageSubscriptionRevenue = () => {
             Track platform earnings and manual driver payouts. Paid amounts credit the driver wallet.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={fetchData}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium hover:bg-slate-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ReportExportIconButtons
+            exportPath="/admin/subscriptions/revenue/export"
+            queryParams={filters}
+            filenamePrefix="subscription-revenue"
+          />
+          <button
+            type="button"
+            onClick={fetchData}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium hover:bg-slate-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Badge from '../../../components/Badge';
 import useAdminKitRevenueStore from '../../../store/admin/useAdminKitRevenueStore';
+import { ReportExportIconButtons } from '../components/reports/ReportExportButtons';
 import {
   PAYMENT_STATUS_LABELS,
   ADMIN_STATUS_LABELS,
@@ -137,14 +138,21 @@ const ManageKitRevenue = () => {
             approval state, fulfillment, or date range to slice the totals.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => fetchRevenue()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ReportExportIconButtons
+            exportPath="/admin/kit-revenue/export"
+            queryParams={filters}
+            filenamePrefix="kit-revenue"
+          />
+          <button
+            type="button"
+            onClick={() => fetchRevenue()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
