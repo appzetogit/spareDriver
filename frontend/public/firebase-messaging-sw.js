@@ -36,7 +36,7 @@ messaging.onBackgroundMessage(async (payload) => {
   // Messages with a `notification` payload are already shown by the browser.
   // Calling showNotification again duplicates the push — only re-show when we
   // need web-specific options (sticky booking offers).
-  const needsCustomUi = kind === 'booking_offer';
+  const needsCustomUi = kind === 'booking_offer' || kind === 'inbox_offer';
   if (payload?.notification && !needsCustomUi) {
     return;
   }
@@ -50,7 +50,7 @@ messaging.onBackgroundMessage(async (payload) => {
     data,
     tag,
     renotify: Boolean(tag),
-    requireInteraction: kind === 'booking_offer',
+    requireInteraction: kind === 'booking_offer' || kind === 'inbox_offer',
   };
   await self.registration.showNotification(title, options);
 });
@@ -75,6 +75,9 @@ function resolveNotificationOpenUrl(data) {
   const bookingId = data.bookingId ? String(data.bookingId) : '';
   if (kind === 'booking_offer' || kind === 'new_booking_request') {
     return '/driver/home';
+  }
+  if (kind === 'inbox_offer') {
+    return '/driver/trips?tab=incoming';
   }
   if (kind === 'trip_chat_message' && bookingId) {
     if (data.recipientRole === 'driver') return '/driver/trip/' + bookingId;

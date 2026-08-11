@@ -135,3 +135,14 @@ Dispatch wave
 - [x] Phase 3 — pending-offer API + FE hydrate + SW
 - [x] Phase 5 — prime audio / polish
 - [ ] Phase 4 — Flutter (external)
+
+## FCM kinds for Flutter (ring by `kind`)
+
+| kind | Who | Ring | Open path |
+|---|---|---|---|
+| `booking_offer` | Driver | Instant looping ring | `/driver/home` |
+| `inbox_offer` | Driver | Inbox alert ring | `/driver/trips?tab=incoming` |
+| `booking_offer_withdrawn` | Driver | Stop ring / cancel notif | — |
+| `ride_ending_soon` | User | Alert ring | `/user/book/assigned/{id}?extend=1` |
+
+`inbox_offer` covers scheduled + outstation + subscription. Also read `bookingType` (`scheduled` \| `outstation` \| `subscription`) and `inbox: "1"`.

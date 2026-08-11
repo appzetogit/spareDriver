@@ -61,13 +61,20 @@ export function DriverOfferResumeBridge() {
       if (!msg || msg.type !== 'SD_BOOKING_OFFER_FCM') return;
       const payload = msg.payload || {};
       if (
-        payload.inbox
+        payload.kind === 'inbox_offer'
+        || payload.inbox === '1'
+        || payload.inbox === true
+        || payload.inbox === 'true'
         || payload.bookingType === BOOKING_TYPE.SCHEDULED
         || payload.bookingType === BOOKING_TYPE.OUTSTATION
         || payload.kind === 'subscription'
         || payload.bookingType === 'subscription'
       ) {
-        if (msg.action === 'withdraw' || payload.withdrawn) {
+        if (
+          msg.action === 'withdraw'
+          || payload.withdrawn
+          || payload.kind === 'booking_offer_withdrawn'
+        ) {
           removeByBookingId(payload.bookingId || payload.subscriptionId);
         } else {
           upsertFromOffer(payload);
@@ -76,6 +83,10 @@ export function DriverOfferResumeBridge() {
       }
       const action = parseDriverOfferFcmData(payload);
       if (action) {
+        if (action.type === 'inbox') {
+          upsertFromOffer(action.offer);
+          return;
+        }
         applyDriverOfferFcmAction(useDriverIncomingOfferStore, action);
         return;
       }

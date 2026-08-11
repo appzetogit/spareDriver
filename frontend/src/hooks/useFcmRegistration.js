@@ -4,6 +4,7 @@ import { getFirebaseApp } from '../config/firebase';
 import api from '../utils/api';
 import { acquireFcmToken, getFcmPlatform } from '../utils/fcmTokenClient';
 import useDriverIncomingOfferStore from '../store/driver/useDriverIncomingOfferStore';
+import useDriverIncomingScheduledStore from '../store/driver/useDriverIncomingScheduledStore';
 import {
   applyDriverOfferFcmAction,
   parseDriverOfferFcmData,
@@ -23,6 +24,13 @@ function handleDriverFcmPayload(payload) {
   const data = payload?.data || {};
   const action = parseDriverOfferFcmData(data);
   if (!action) return false;
+  if (action.type === 'inbox') {
+    useDriverIncomingScheduledStore.getState().upsertFromOffer(action.offer);
+    return true;
+  }
+  if (action.type === 'withdrawn') {
+    useDriverIncomingScheduledStore.getState().removeByBookingId(action.bookingId);
+  }
   return applyDriverOfferFcmAction(useDriverIncomingOfferStore, action);
 }
 

@@ -14,7 +14,14 @@ import { BOOKING_TYPE } from '../../constants/bookingStatus';
 
 function isScheduledInboxOffer(payload) {
   if (!payload?.bookingId && !payload?.subscriptionId) return false;
-  if (payload.inbox === true) return true;
+  if (
+    payload.inbox === true
+    || payload.inbox === '1'
+    || payload.inbox === 'true'
+    || payload.kind === 'inbox_offer'
+  ) {
+    return true;
+  }
   if (payload.kind === 'subscription' || payload.bookingType === 'subscription') {
     return true;
   }

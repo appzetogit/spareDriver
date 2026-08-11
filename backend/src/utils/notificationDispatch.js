@@ -338,7 +338,18 @@ export function notifyUserSosUpdate(userId, data) {
 /* ------------------------------------------------------------------ */
 
 export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = null) {
-  const bookingId = String(booking._id || booking.id || '');
+  const bookingId = String(booking._id || booking.id || offerPayload?.bookingId || '');
+  const bookingType = String(
+    offerPayload?.bookingType || booking.bookingType || booking.serviceType || '',
+  );
+  const isInbox = Boolean(
+    offerPayload?.inbox
+    || bookingType === 'scheduled'
+    || bookingType === 'outstation'
+    || bookingType === 'subscription'
+    || offerPayload?.kind === 'subscription',
+  );
+
   const expiresAt = offerPayload?.offerExpiresAt
     ? new Date(offerPayload.offerExpiresAt).toISOString()
     : booking.dispatch?.currentExpiresAt
@@ -346,7 +357,7 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
       : '';
 
   const compactOffer = offerPayload
-    ? compactBookingOfferForPush(offerPayload)
+    ? compactBookingOfferForPush({ ...offerPayload, inbox: isInbox, bookingType })
     : null;
 
   const pickupHint =
@@ -354,23 +365,47 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
     booking.pickup?.address ||
     'nearby';
 
+  const kind = isInbox
+    ? DRIVER_NOTIFICATION.INBOX_OFFER
+    : DRIVER_NOTIFICATION.BOOKING_OFFER;
+
+  const title = isInbox ? 'New inbox request' : 'New booking request';
+  const body = isInbox
+    ? bookingType === 'subscription'
+      ? 'A subscription assignment is waiting in your Incoming list.'
+      : bookingType === 'outstation'
+        ? 'An outstation request is waiting in your Incoming list.'
+        : 'A scheduled ride is waiting in your Incoming list.'
+    : `Ride request near ${String(pickupHint).slice(0, 80)}`;
+
+  const tagId = String(
+    offerPayload?.subscriptionId || bookingId || '',
+  );
+
   return sendPushNotification(
     { driverId },
     {
-      title: 'New booking request',
-      body: `Ride request near ${String(pickupHint).slice(0, 80)}`,
+      title,
+      body,
       severity: 'warn',
-      type: DRIVER_NOTIFICATION.BOOKING_OFFER,
-      // Foreground already shows BookingOfferModal via BOOKING_OFFERED —
+      type: kind,
+      // Foreground already shows BookingOfferModal / inbox via BOOKING_OFFERED —
       // skip duplicate socket toast; still persist + FCM for history/background.
       emitSocket: false,
       data: {
-        kind: DRIVER_NOTIFICATION.BOOKING_OFFER,
+        kind,
         ...bookingRef(booking),
+        bookingId: bookingId || String(offerPayload?.subscriptionId || ''),
+        bookingType,
+        inbox: isInbox ? '1' : '0',
+        subscriptionId: offerPayload?.subscriptionId
+          ? String(offerPayload.subscriptionId)
+          : '',
         priority: 'high',
         offerExpiresAt: expiresAt,
-        fcmTag: `booking_offer_${bookingId}`,
-        fcmChannelId: 'booking_offers',
+        fcmTag: `booking_offer_${tagId}`,
+        fcmChannelId: isInbox ? 'inbox_offers' : 'booking_offers',
+        path: isInbox ? '/driver/trips?tab=incoming' : '/driver/home',
         ...(compactOffer ? { offer: compactOffer } : {}),
       },
     },
@@ -408,10 +443,12 @@ export function notifyDriverBookingOfferWithdrawn(driverId, { bookingId, reason 
 /** Slim offer for FCM data (keep under ~4KB). */
 function compactBookingOfferForPush(offer) {
   return {
-    bookingId: String(offer.bookingId),
-    bookingNumber: offer.bookingNumber || '',
+    bookingId: String(offer.bookingId || offer.subscriptionId || ''),
+    bookingNumber: offer.bookingNumber || offer.subscriptionNumber || '',
     serviceType: offer.serviceType || '',
     bookingType: offer.bookingType || '',
+    inbox: Boolean(offer.inbox),
+    subscriptionId: offer.subscriptionId ? String(offer.subscriptionId) : '',
     paymentMode: offer.paymentMode || '',
     pickup: offer.pickup
       ? { address: offer.pickup.address || '' }

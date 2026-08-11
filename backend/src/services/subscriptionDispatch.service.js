@@ -18,7 +18,7 @@ import {
 } from './driverConflict.service.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import { emitToDriver, emitToAdmins } from '../utils/socketEmitters.js';
-import { notifyDriverSubscriptionAssigned } from '../utils/notificationDispatch.js';
+import { notifyDriverSubscriptionAssigned, notifyDriverNewBookingRequest, notifyDriverBookingOfferWithdrawn } from '../utils/notificationDispatch.js';
 import { startOfDay } from '../utils/reportDateRange.js';
 
 const SETTINGS_KEY = 'default';
@@ -297,6 +297,16 @@ export async function broadcastSubscriptionInboxService(subscriptionId, opts = {
       plan: { name: sub.planNameSnapshot },
     });
     emitToDriver(driver._id, S2C_EVENTS.BOOKING_OFFERED, offerPayload);
+    notifyDriverNewBookingRequest(
+      driver._id,
+      {
+        _id: sub._id,
+        bookingNumber: sub.subscriptionNumber || '',
+        bookingType: 'subscription',
+        pickup: sub.dailyPickup || null,
+      },
+      offerPayload,
+    ).catch(() => null);
   }
 
   return {
@@ -403,6 +413,10 @@ export async function acceptSubscriptionOfferService(subscriptionId, driverId) {
       subscriptionId: String(sub._id),
       reason: 'accepted_by_other',
     });
+    notifyDriverBookingOfferWithdrawn(id, {
+      bookingId: sub._id,
+      reason: 'accepted_by_other',
+    }).catch(() => null);
   }
 
   const driver = await Driver.findById(driverId)
@@ -592,6 +606,10 @@ export async function escalateSubscriptionAutoSearch(subscriptionId) {
       subscriptionId: String(sub._id),
       reason: 'subscription_manual_queue',
     });
+    notifyDriverBookingOfferWithdrawn(id, {
+      bookingId: sub._id,
+      reason: 'subscription_manual_queue',
+    }).catch(() => null);
   }
 
   emitToAdmins(S2C_EVENTS.ADMIN_ALERT, {
@@ -650,6 +668,10 @@ export async function withdrawSubscriptionInboxOffers(subscription, reason = 'as
       subscriptionId: String(subscription._id),
       reason,
     });
+    notifyDriverBookingOfferWithdrawn(id, {
+      bookingId: subscription._id,
+      reason,
+    }).catch(() => null);
   }
 }
 

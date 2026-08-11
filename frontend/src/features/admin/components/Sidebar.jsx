@@ -48,9 +48,13 @@ const navItems = [
     end: true,
     roles: ['admin'],
   },
+  { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
   { path: '/admin/drivers', label: 'Drivers', icon: Car, end: true },
+  { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
   { path: '/admin/drivers/live', label: 'Live Map', icon: Navigation },
+  { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
   { path: '/admin/sos', label: 'SOS Alerts', icon: ShieldAlert, roles: ['admin', 'sub_admin', 'team_member'] },
+  { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
   {
     path: '/admin/push-notifications',
     label: 'Push Notifications',
@@ -60,10 +64,6 @@ const navItems = [
   // Ads management — admin + sub_admin can publish promotional images
   // and short videos that surface on the user home screen.
   { path: '/admin/ads', label: 'Ads', icon: Megaphone, roles: ['admin', 'sub_admin'] },
-  { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
-  { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
-  { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
-  { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
   {
     label: 'Bookings',
     icon: CalendarCheck,

@@ -30,6 +30,8 @@ export const USER_NOTIFICATION = Object.freeze({
 export const DRIVER_NOTIFICATION = Object.freeze({
   NEW_BOOKING_REQUEST: 'new_booking_request',
   BOOKING_OFFER: 'booking_offer',
+  /** Scheduled / outstation / subscription inbox — ring + open Incoming. */
+  INBOX_OFFER: 'inbox_offer',
   BOOKING_OFFER_WITHDRAWN: 'booking_offer_withdrawn',
   ORDER_ASSIGNED: 'order_assigned',
   SUBSCRIPTION_ASSIGNED: 'subscription_assigned',
@@ -133,6 +135,9 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
       kind === DRIVER_NOTIFICATION.BOOKING_OFFER
     ) {
       return '/driver/home';
+    }
+    if (kind === DRIVER_NOTIFICATION.INBOX_OFFER || data.kind === 'inbox_offer') {
+      return '/driver/trips?tab=incoming';
     }
     if (kind === DRIVER_NOTIFICATION.SUBSCRIPTION_ASSIGNED || data.kind === 'subscription_assigned') {
       return '/driver/account';

@@ -51,8 +51,13 @@ export const USER_NOTIFICATION = Object.freeze({
 /** Driver-facing notification kinds */
 export const DRIVER_NOTIFICATION = Object.freeze({
   NEW_BOOKING_REQUEST: 'new_booking_request',
-  /** Rich dual-channel booking offer (socket + FCM hydrate payload). */
+  /** Rich dual-channel booking offer (socket + FCM hydrate payload). Instant wave only. */
   BOOKING_OFFER: 'booking_offer',
+  /**
+   * Scheduled / outstation / subscription inbox request (no countdown modal).
+   * Flutter rings on this kind and opens Incoming tab.
+   */
+  INBOX_OFFER: 'inbox_offer',
   /** FCM/socket cancel when wave times out or another driver wins. */
   BOOKING_OFFER_WITHDRAWN: 'booking_offer_withdrawn',
   BOOKING_CANCELLED: 'booking_cancelled',

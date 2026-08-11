@@ -1,10 +1,28 @@
 import { DRIVER_NOTIFICATION } from '../constants/notificationTypes';
 
+function parseOfferJson(data) {
+  let offer = null;
+  if (typeof data.offer === 'string' && data.offer) {
+    try {
+      offer = JSON.parse(data.offer);
+    } catch {
+      offer = null;
+    }
+  } else if (data.offer && typeof data.offer === 'object') {
+    offer = data.offer;
+  }
+  return offer;
+}
+
+function isTruthyFlag(value) {
+  return value === true || value === '1' || value === 'true';
+}
+
 /**
  * Parse FCM `data` (all string values) into a booking-offer action for the
- * driver incoming-offer store.
+ * driver incoming-offer store / inbox store.
  *
- * @returns {{ type: 'offer', offer: object } | { type: 'withdrawn', bookingId: string } | null}
+ * @returns {{ type: 'offer' | 'inbox', offer: object } | { type: 'withdrawn', bookingId: string } | null}
  */
 export function parseDriverOfferFcmData(data = {}) {
   if (!data || typeof data !== 'object') return null;
@@ -15,33 +33,38 @@ export function parseDriverOfferFcmData(data = {}) {
     kind === DRIVER_NOTIFICATION.BOOKING_OFFER_WITHDRAWN ||
     kind === 'booking_offer_withdrawn'
   ) {
-    const bookingId = data.bookingId ? String(data.bookingId) : null;
+    const bookingId = data.bookingId || data.subscriptionId
+      ? String(data.bookingId || data.subscriptionId)
+      : null;
     if (!bookingId) return null;
     return { type: 'withdrawn', bookingId, reason: data.reason || '' };
   }
 
-  if (
-    kind === DRIVER_NOTIFICATION.BOOKING_OFFER ||
-    kind === DRIVER_NOTIFICATION.NEW_BOOKING_REQUEST ||
-    kind === 'booking_offer'
-  ) {
-    let offer = null;
-    if (typeof data.offer === 'string' && data.offer) {
-      try {
-        offer = JSON.parse(data.offer);
-      } catch {
-        offer = null;
-      }
-    } else if (data.offer && typeof data.offer === 'object') {
-      offer = data.offer;
-    }
+  const isInboxKind =
+    kind === DRIVER_NOTIFICATION.INBOX_OFFER
+    || kind === 'inbox_offer'
+    || isTruthyFlag(data.inbox)
+    || data.bookingType === 'scheduled'
+    || data.bookingType === 'outstation'
+    || data.bookingType === 'subscription';
 
-    if (!offer?.bookingId && data.bookingId) {
-      // Minimal fallback — resume API should fill the rest if needed.
+  if (
+    kind === DRIVER_NOTIFICATION.BOOKING_OFFER
+    || kind === DRIVER_NOTIFICATION.NEW_BOOKING_REQUEST
+    || kind === DRIVER_NOTIFICATION.INBOX_OFFER
+    || kind === 'booking_offer'
+    || kind === 'inbox_offer'
+  ) {
+    let offer = parseOfferJson(data);
+
+    if (!offer?.bookingId && (data.bookingId || data.subscriptionId)) {
       offer = {
-        bookingId: String(data.bookingId),
+        bookingId: String(data.bookingId || data.subscriptionId),
         bookingNumber: data.bookingNumber || '',
         offerExpiresAt: data.offerExpiresAt || null,
+        bookingType: data.bookingType || '',
+        inbox: isInboxKind,
+        subscriptionId: data.subscriptionId ? String(data.subscriptionId) : '',
       };
     }
 
@@ -49,7 +72,13 @@ export function parseDriverOfferFcmData(data = {}) {
     if (data.offerExpiresAt && !offer.offerExpiresAt) {
       offer.offerExpiresAt = data.offerExpiresAt;
     }
-    return { type: 'offer', offer };
+    if (data.bookingType && !offer.bookingType) {
+      offer.bookingType = data.bookingType;
+    }
+    if (isInboxKind) {
+      offer.inbox = true;
+    }
+    return { type: isInboxKind ? 'inbox' : 'offer', offer };
   }
 
   return null;
