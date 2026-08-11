@@ -102,15 +102,12 @@ const DriverIdCardPage = () => {
       <div className="flex-1 px-4 pt-3 pb-8">
         <div className="bg-white rounded-2xl shadow-sm border border-border-light overflow-hidden">
           <div className="relative h-24 bg-primary">
-            <div className="absolute top-3 right-3 w-14 h-14 rounded-full bg-white shadow-sm flex flex-col items-center justify-center leading-tight">
+            <div className="absolute top-3 right-3 w-14 h-14 rounded-full bg-white shadow-sm overflow-hidden flex items-center justify-center p-1">
               <img
-                src="/logo-square.png"
-                alt=""
-                className="w-5 h-5 object-contain"
+                src="/images/captainSparedriver.jpg"
+                alt="SpareDriver Captain"
+                className="w-full h-full object-contain"
               />
-              <span className="text-[9px] font-bold text-text mt-0.5">
-                Captain
-              </span>
             </div>
           </div>
 

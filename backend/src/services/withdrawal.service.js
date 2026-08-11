@@ -193,8 +193,10 @@ export async function listWithdrawalsAdminService({
   limit = 20,
   status = '',
   search = '',
+  forExport = false,
 } = {}) {
-  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+  const maxLimit = forExport ? 10000 : 100;
+  const safeLimit = Math.max(1, Math.min(maxLimit, Number(limit) || 20));
   const safePage = Math.max(1, Number(page) || 1);
   const filter = {};
   if (status) filter.status = status;

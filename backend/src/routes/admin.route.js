@@ -175,6 +175,8 @@ import {
 import {
   getAdminSupportConfig,
   updateAdminSupportConfig,
+  getAdminGstDetails,
+  updateAdminGstDetails,
   getAdminSubscriptionDispatch,
   updateAdminSubscriptionDispatch,
 } from '../controllers/appSettings.controller.js';
@@ -239,9 +241,18 @@ import {
   getAdminDriverReports,
   getAdminBookingReports,
   getAdminRevenueReports,
+  exportAdminReportsOverview,
+  exportAdminUserReports,
+  exportAdminDriverReports,
+  exportAdminBookingReports,
   exportAdminRevenueReports,
   getAdminGstReport,
   exportAdminGstReport,
+  exportAccountRevenue,
+  exportSubscriptionRevenue,
+  exportKitRevenue,
+  exportRefunds,
+  exportWithdrawals,
 } from '../controllers/reports.controller.js';
 import { uploadAdMedia, upload } from '../middlewares/multer.js';
 
@@ -258,9 +269,13 @@ router.get('/search', protectStaff, restrictTo(...ALL_STAFF), adminGlobalSearch)
 
 /* ---- Reports & Analytics (super-admin only) --------------------------- */
 router.get('/reports/overview', protectStaff, restrictTo(...SUPER_ADMIN), getAdminReportsOverview);
+router.get('/reports/overview/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminReportsOverview);
 router.get('/reports/users', protectStaff, restrictTo(...SUPER_ADMIN), getAdminUserReports);
+router.get('/reports/users/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminUserReports);
 router.get('/reports/drivers', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDriverReports);
+router.get('/reports/drivers/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminDriverReports);
 router.get('/reports/bookings', protectStaff, restrictTo(...SUPER_ADMIN), getAdminBookingReports);
+router.get('/reports/bookings/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminBookingReports);
 router.get('/reports/revenue', protectStaff, restrictTo(...SUPER_ADMIN), getAdminRevenueReports);
 router.get('/reports/revenue/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAdminRevenueReports);
 router.get('/reports/gst', protectStaff, restrictTo(...SUPER_ADMIN), getAdminGstReport);
@@ -597,6 +612,8 @@ router.put('/settings/legal-documents/:id', protectStaff, restrictTo(...SUPER_AD
 
 router.get('/settings/support', protectStaff, restrictTo(...OPERATIONS), getAdminSupportConfig);
 router.put('/settings/support', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminSupportConfig);
+router.get('/settings/gst', protectStaff, restrictTo(...OPERATIONS), getAdminGstDetails);
+router.put('/settings/gst', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminGstDetails);
 router.get(
   '/settings/subscription-dispatch',
   protectStaff,
@@ -646,6 +663,12 @@ router.get(
   adminListSubscriptionRevenue,
 );
 router.get(
+  '/subscriptions/revenue/export',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  exportSubscriptionRevenue,
+);
+router.get(
   '/subscriptions/:id/driver-payouts',
   protectStaff,
   restrictTo(...SUPER_ADMIN),
@@ -693,6 +716,7 @@ router.get(
 // dashboard. There is no automated retry — the gateway call is human-
 // driven and the PATCH is the authoritative state-transition.
 router.get('/refunds', protectStaff, restrictTo(...SUPER_ADMIN), listRefunds);
+router.get('/refunds/export', protectStaff, restrictTo(...SUPER_ADMIN), exportRefunds);
 router.get(
   '/refunds/subject-wallet/:subjectType/:subjectId',
   protectStaff,
@@ -703,6 +727,7 @@ router.post('/refunds/manual', protectStaff, restrictTo(...SUPER_ADMIN), createA
 router.patch('/refunds/:id', protectStaff, restrictTo(...SUPER_ADMIN), updateRefundStatus);
 
 router.get('/withdrawals', protectStaff, restrictTo(...SUPER_ADMIN), listWithdrawalsAdmin);
+router.get('/withdrawals/export', protectStaff, restrictTo(...SUPER_ADMIN), exportWithdrawals);
 router.patch('/withdrawals/:id/reject', protectStaff, restrictTo(...SUPER_ADMIN), rejectWithdrawalAdmin);
 router.post(
   '/withdrawals/:id/process',
@@ -780,7 +805,9 @@ router.post('/failed-jobs/:id/resolve', protectStaff, restrictTo(...SUPER_ADMIN)
 // commission, company share of a cancellation fee, etc.) — writes are
 // done by the booking pipelines, not here.
 router.get('/revenue', protectStaff, restrictTo(...SUPER_ADMIN), listPlatformRevenue);
+router.get('/revenue/export', protectStaff, restrictTo(...SUPER_ADMIN), exportAccountRevenue);
 router.get('/kit-revenue', protectStaff, restrictTo(...SUPER_ADMIN), listKitRevenue);
+router.get('/kit-revenue/export', protectStaff, restrictTo(...SUPER_ADMIN), exportKitRevenue);
 
 router.get('/sos', protectStaff, restrictTo(...ALL_STAFF), listAdminSos);
 router.get('/sos/:id', protectStaff, restrictTo(...ALL_STAFF), getAdminSosDetail);

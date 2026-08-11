@@ -2557,6 +2557,7 @@ export const listSubscriptionRevenueService = async ({
   to = '',
   payoutStatus = '',
   status = '',
+  forExport = false,
 } = {}) => {
   const filter = {
     paidAt: { $ne: null },
@@ -2567,7 +2568,8 @@ export const listSubscriptionRevenueService = async ({
   applyPaidAtRange(filter, from, to);
   await applyUserSubscriptionSearch(filter, search);
 
-  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+  const maxLimit = forExport ? 10000 : 100;
+  const safeLimit = Math.max(1, Math.min(maxLimit, Number(limit) || 20));
   const safePage = Math.max(1, Number(page) || 1);
   const skip = (safePage - 1) * safeLimit;
 

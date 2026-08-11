@@ -12,6 +12,7 @@ import {
 import Badge from '../../../components/Badge';
 import useAdminRevenueStore from '../../../store/admin/useAdminRevenueStore';
 import RevenueDetailsModal from '../components/ManageRevenue/RevenueDetailsModal';
+import { ReportExportIconButtons } from '../components/reports/ReportExportButtons';
 
 /**
  * Admin → Account → Revenue.
@@ -170,14 +171,21 @@ const ManageRevenue = () => {
             Filter by source or date range to slice the totals.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => fetchRevenue()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ReportExportIconButtons
+            exportPath="/admin/revenue/export"
+            queryParams={filters}
+            filenamePrefix="account-revenue"
+          />
+          <button
+            type="button"
+            onClick={() => fetchRevenue()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border-light text-sm font-medium hover:bg-gray-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

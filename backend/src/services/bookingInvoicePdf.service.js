@@ -4,6 +4,7 @@ import { ApiError } from '../utils/apiError.js';
 import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 import { SERVICE_TYPE_LABELS } from '../constants/serviceTypes.js';
 import { drawBrandLogo, formatPdfInr } from '../utils/pdfBrand.js';
+import { getGstDetailsService } from './appSettings.service.js';
 
 const PALETTE = {
   text: '#0F172A',
@@ -51,6 +52,10 @@ function round2(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
+function hasGstIdentity(gst) {
+  return Boolean(gst?.gstin || gst?.legalName || gst?.tradeName || gst?.address);
+}
+
 function drawDivider(doc) {
   const y = doc.y + 4;
   doc
@@ -82,15 +87,85 @@ function drawRow(doc, label, value, { bold = false } = {}) {
   doc.moveDown(0.6);
 }
 
+function drawSellerGstBlock(doc, gst, pageLeft, pageRight) {
+  if (!hasGstIdentity(gst)) return;
+
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(10)
+    .fillColor(PALETTE.text)
+    .text(gst.legalName || gst.tradeName || 'SpareDriver', pageLeft, doc.y, {
+      width: pageRight - pageLeft,
+    });
+
+  if (gst.tradeName && gst.legalName && gst.tradeName !== gst.legalName) {
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(PALETTE.muted)
+      .text(`Trade name: ${gst.tradeName}`, pageLeft, doc.y, {
+        width: pageRight - pageLeft,
+      });
+  }
+
+  if (gst.gstin) {
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(PALETTE.text)
+      .text(`GSTIN: ${gst.gstin}`, pageLeft, doc.y, {
+        width: pageRight - pageLeft,
+      });
+  }
+
+  if (gst.pan) {
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(PALETTE.muted)
+      .text(`PAN: ${gst.pan}`, pageLeft, doc.y, {
+        width: pageRight - pageLeft,
+      });
+  }
+
+  if (gst.address) {
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(PALETTE.muted)
+      .text(gst.address, pageLeft, doc.y, {
+        width: pageRight - pageLeft,
+      });
+  }
+
+  const stateLine = [gst.state, gst.stateCode ? `Code ${gst.stateCode}` : '']
+    .filter(Boolean)
+    .join(' · ');
+  if (stateLine) {
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(PALETTE.muted)
+      .text(stateLine, pageLeft, doc.y, {
+        width: pageRight - pageLeft,
+      });
+  }
+
+  doc.moveDown(0.8);
+}
+
 /**
  * Stream a trip invoice PDF for a completed booking. Caller pipes `doc`
  * into the HTTP response.
  */
 export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
-  const booking = await Booking.findOne({ _id: bookingId, userId })
-    .populate('userId', 'name email phone_no')
-    .populate('driverId', 'name phone_no')
-    .lean();
+  const [booking, gstDetails] = await Promise.all([
+    Booking.findOne({ _id: bookingId, userId })
+      .populate('userId', 'name email phone_no')
+      .populate('driverId', 'name phone_no')
+      .lean(),
+    getGstDetailsService(),
+  ]);
 
   if (!booking) throw new ApiError(404, 'Booking not found');
   if (booking.status !== BOOKING_STATUS.COMPLETED) {
@@ -159,8 +234,10 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
     .font('Helvetica')
     .fontSize(10)
     .fillColor(PALETTE.muted)
-    .text('Trip Invoice / Receipt', pageLeft, doc.y);
-  doc.moveDown(1.2);
+    .text('Tax Invoice / Trip Receipt', pageLeft, doc.y);
+  doc.moveDown(0.6);
+
+  drawSellerGstBlock(doc, gstDetails, pageLeft, pageRight);
 
   doc
     .font('Helvetica-Bold')
@@ -210,7 +287,12 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
   if (fare.serviceCharge || fare.platformFee) {
     drawRow(doc, 'Platform fee', formatPdfInr(fare.platformFee || fare.serviceCharge));
   }
-  if (fare.gst) drawRow(doc, 'GST', formatPdfInr(fare.gst));
+  if (fare.gst) {
+    const gstPercent = fare.gstPercent ?? fare.breakdown?.gstPercent;
+    const gstLabel =
+      gstPercent != null ? `GST (${gstPercent}%)` : 'GST';
+    drawRow(doc, gstLabel, formatPdfInr(fare.gst));
+  }
   if (fare.discount) drawRow(doc, 'Discount', `-${formatPdfInr(fare.discount)}`);
   if (fare.couponDiscount) {
     const couponLabel = fare.couponCode ? `Coupon (${fare.couponCode})` : 'Coupon discount';
@@ -235,6 +317,20 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
   doc.moveDown(0.4);
   drawDivider(doc);
   drawRow(doc, 'Total paid', formatPdfInr(grandTotal), { bold: true });
+
+  if (gstDetails?.gstin) {
+    doc.moveDown(0.8);
+    doc
+      .font('Helvetica')
+      .fontSize(8)
+      .fillColor(PALETTE.muted)
+      .text(
+        `This is a computer-generated tax invoice. GSTIN: ${gstDetails.gstin}`,
+        pageLeft,
+        doc.y,
+        { width: pageRight - pageLeft, align: 'center' },
+      );
+  }
 
   doc.moveDown(2);
   doc

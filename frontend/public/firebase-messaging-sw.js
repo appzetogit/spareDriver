@@ -55,27 +55,50 @@ messaging.onBackgroundMessage(async (payload) => {
   await self.registration.showNotification(title, options);
 });
 
+/**
+ * Browser-displayed FCM notifications nest custom data under FCM_MSG.
+ * Our own showNotification() puts fields at the top level.
+ */
+function normalizeNotificationData(raw) {
+  const base = raw && typeof raw === 'object' ? raw : {};
+  const nested = base.FCM_MSG && typeof base.FCM_MSG === 'object' ? base.FCM_MSG : null;
+  const nestedData = nested && nested.data && typeof nested.data === 'object' ? nested.data : {};
+  return Object.assign({}, nestedData, base, {
+    kind: nestedData.kind || base.kind || (nested && nested.data && nested.data.kind) || '',
+  });
+}
+
 function resolveNotificationOpenUrl(data) {
   const path = typeof data.path === 'string' ? data.path.trim() : '';
   if (path.startsWith('/')) return path;
-  if (data.kind === 'booking_offer' || data.kind === 'new_booking_request') {
+  const kind = data.kind || '';
+  const bookingId = data.bookingId ? String(data.bookingId) : '';
+  if (kind === 'booking_offer' || kind === 'new_booking_request') {
     return '/driver/home';
   }
-  if (data.bookingId && (
-    data.kind === 'noshow_prompt'
-    || data.kind === 'driver_arrived'
-    || data.kind === 'driver_assigned'
-    || data.kind === 'trip_started'
-    || data.kind === 'ride_ending_soon'
+  if (kind === 'trip_chat_message' && bookingId) {
+    if (data.recipientRole === 'driver') return '/driver/trip/' + bookingId;
+    return '/user/book/assigned/' + bookingId;
+  }
+  if (bookingId && (
+    kind === 'noshow_prompt'
+    || kind === 'driver_arrived'
+    || kind === 'driver_assigned'
+    || kind === 'driver_accepted'
+    || kind === 'trip_started'
+    || kind === 'ride_ending_soon'
   )) {
-    return '/user/book/assigned/' + data.bookingId;
+    return '/user/book/assigned/' + bookingId;
+  }
+  if (bookingId && kind === 'order_assigned') {
+    return '/driver/trip/' + bookingId;
   }
   return '/';
 }
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const data = event.notification.data || {};
+  const data = normalizeNotificationData(event.notification.data || {});
   const openUrl = resolveNotificationOpenUrl(data);
   event.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -84,6 +107,13 @@ self.addEventListener('notificationclick', (event) => {
       client.postMessage({ type: 'SD_NOTIFICATION_OPEN', payload: data, url: openUrl });
       if ('focus' in client) {
         await client.focus();
+        if (openUrl && openUrl !== '/' && typeof client.navigate === 'function') {
+          try {
+            const current = new URL(client.url).pathname;
+            const target = openUrl.split('?')[0];
+            if (current !== target) await client.navigate(openUrl);
+          } catch (_) { /* soft-nav via postMessage */ }
+        }
         return;
       }
     }

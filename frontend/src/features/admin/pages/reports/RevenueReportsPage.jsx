@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import { DollarSign, Download, Loader2, ExternalLink, CircleSlash, TrendingUp } from 'lucide-react';
+import { DollarSign, ExternalLink, CircleSlash, TrendingUp } from 'lucide-react';
 import StatsCard from '../../components/StatsCard';
 import AnalyticsTrendChart from '../../components/UserAnalytics/AnalyticsTrendChart';
 import { SectionCard } from '../../components/DetailBlocks';
@@ -15,7 +14,7 @@ import {
   ReportErrorBanner,
 } from '../../components/reports/ReportPeriodFilters';
 import { useReportPeriod } from '../../components/reports/useReportPeriod';
-import { downloadCsvExport } from '../../components/reports/reportUtils';
+import ReportExportButtons from '../../components/reports/ReportExportButtons';
 
 function formatCount(n) {
   return Number(n || 0).toLocaleString('en-IN');
@@ -34,7 +33,6 @@ const SOURCE_COLORS = {
 const RevenueReportsPage = () => {
   const { period, setPeriod, fromDate, setFromDate, toDate, setToDate, queryParams } =
     useReportPeriod('30d');
-  const [exporting, setExporting] = useState(false);
 
   const cacheKey = useMemo(
     () => buildCacheKey('admin-revenue-reports', queryParams),
@@ -50,18 +48,6 @@ const RevenueReportsPage = () => {
   const summary = data?.summary;
   const breakdown = data?.breakdown;
   const trends = data?.trends;
-
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      await downloadCsvExport('/admin/reports/revenue/export', queryParams, 'revenue-report');
-      toast.success('Revenue report exported');
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Export failed');
-    } finally {
-      setExporting(false);
-    }
-  };
 
   if (loading && !data) return <ReportLoadingState />;
 
@@ -80,15 +66,11 @@ const RevenueReportsPage = () => {
         loading={loading}
         actions={
           <>
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={exporting}
-              className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-primary text-dark text-xs font-semibold hover:bg-primary-dark disabled:opacity-50"
-            >
-              {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
+            <ReportExportButtons
+              exportPath="/admin/reports/revenue/export"
+              queryParams={queryParams}
+              filenamePrefix="revenue-report"
+            />
             <Link
               to="/admin/account/revenue"
               className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"

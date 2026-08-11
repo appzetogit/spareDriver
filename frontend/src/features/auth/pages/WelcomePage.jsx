@@ -5,11 +5,13 @@ import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { useStoreHydration } from '../../../hooks/useStoreHydration';
 import { BootstrapShellSkeleton } from '../../../components/skeleton/SectionSkeletons';
+import { usePrimaryBleedBg } from '../../../hooks/usePrimaryBleedBg';
 
 const WelcomePage = () => {
   const navigate = useNavigate();
   const hydrated = useStoreHydration(useUserAuthStore);
   const { user, isAuthenticated } = useUserAuthStore();
+  usePrimaryBleedBg();
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated || !user) return;

@@ -3,6 +3,8 @@ import { ApiResponse } from '../utils/apiResponse.js';
 import {
   getSupportConfigService,
   updateSupportConfigService,
+  getGstDetailsService,
+  updateGstDetailsService,
 } from '../services/appSettings.service.js';
 
 export const getAdminSupportConfig = asyncHandler(async (_req, res) => {
@@ -14,6 +16,17 @@ export const updateAdminSupportConfig = asyncHandler(async (req, res) => {
   const staffId = req.staff?._id || null;
   const config = await updateSupportConfigService(req.body, staffId);
   return res.status(200).json(new ApiResponse(200, config, 'Support config updated'));
+});
+
+export const getAdminGstDetails = asyncHandler(async (_req, res) => {
+  const details = await getGstDetailsService();
+  return res.status(200).json(new ApiResponse(200, details, 'GST details fetched'));
+});
+
+export const updateAdminGstDetails = asyncHandler(async (req, res) => {
+  const staffId = req.staff?._id || null;
+  const details = await updateGstDetailsService(req.body, staffId);
+  return res.status(200).json(new ApiResponse(200, details, 'GST details updated'));
 });
 
 export const getAdminSubscriptionDispatch = asyncHandler(async (_req, res) => {

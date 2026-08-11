@@ -19,6 +19,19 @@ const appSettingsSchema = new mongoose.Schema(
     androidAppUrl: { type: String, default: '', trim: true },
     iosAppUrl: { type: String, default: '', trim: true },
     /**
+     * Platform GST / tax identity printed on customer invoices.
+     * Leave gstin empty to omit the block from PDFs.
+     */
+    gstDetails: {
+      gstin: { type: String, default: '', trim: true, uppercase: true },
+      legalName: { type: String, default: '', trim: true },
+      tradeName: { type: String, default: '', trim: true },
+      address: { type: String, default: '', trim: true },
+      state: { type: String, default: '', trim: true },
+      stateCode: { type: String, default: '', trim: true },
+      pan: { type: String, default: '', trim: true, uppercase: true },
+    },
+    /**
      * Dedicated-driver subscription auto-search knobs
      * (mirrors scheduled/outstation inbox dispatch).
      */
