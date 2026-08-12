@@ -4,6 +4,10 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useUserNotificationStore, useDriverNotificationStore, useAdminNotificationStore } from '../../store/useNotificationStore';
 import { useNotificationListener } from '../../hooks/useNotificationListener';
 import { useFcmRegistration } from '../../hooks/useFcmRegistration';
+import { useSocketEvent } from '../../hooks/useSocket';
+import { S2C_EVENTS } from '../../constants/socketEvents';
+import { useInAppAlertRing } from '../../hooks/useInAppAlertRing';
+import { ADMIN_NOTIFICATION } from '../../constants/notificationTypes';
 
 export function UserNotificationBridge() {
   const isAuthenticated = useUserAuthStore((s) => s.isAuthenticated);
@@ -34,11 +38,19 @@ export function DriverNotificationBridge() {
 export function AdminNotificationBridge() {
   const isAuthenticated = useAdminAuthStore((s) => s.isAuthenticated);
   const fetchUnread = useAdminNotificationStore((s) => s.fetchUnread);
+  const { play: playEmergencyAlert } = useInAppAlertRing();
 
   useFcmRegistration({ enabled: isAuthenticated, audience: 'admin' });
   useNotificationListener({
     enabled: isAuthenticated,
     onNotification: () => fetchUnread({ force: true }).catch(() => null),
+  });
+
+  useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
+    if (!isAuthenticated) return;
+    if (payload?.kind === ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED) {
+      playEmergencyAlert();
+    }
   });
 
   return null;

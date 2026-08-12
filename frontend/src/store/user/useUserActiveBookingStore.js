@@ -45,6 +45,28 @@ const useUserActiveBookingStore = create((set, get) => ({
   loading: false,
   error: null,
   paymentRequiredAt: null,
+  extensionPromptOpen: false,
+  extensionPromptDismissedAt: null,
+  extensionRejection: null,
+
+  openExtensionPrompt() {
+    set({ extensionPromptOpen: true, extensionPromptDismissedAt: null });
+  },
+
+  closeExtensionPrompt() {
+    set({
+      extensionPromptOpen: false,
+      extensionPromptDismissedAt: Date.now(),
+    });
+  },
+
+  setExtensionRejection(rejection) {
+    set({ extensionRejection: rejection });
+  },
+
+  clearExtensionRejection() {
+    set({ extensionRejection: null });
+  },
 
   setBooking(booking) {
     set({ booking, paymentRequiredAt: null });
@@ -320,18 +342,32 @@ const useUserActiveBookingStore = create((set, get) => ({
    * for the rest of the flow. Returns `{ booking, extension, breakdown }`.
    *
    * `amount` is interpreted by the backend based on the booking's
-   * serviceType — hourly bookings pass `{ additionalHours }`,
-   * outstation bookings pass `{ additionalDays }`. The store decides
-   * the field name by reading the live booking's `serviceType`.
+   * serviceType — hourly/scheduled pass fractional hours (converted
+   * to `additionalMinutes` for exact 15/30/60 steps), outstation
+   * bookings pass `{ additionalDays }`. The store decides the field
+   * name by reading the live booking's `serviceType`.
    */
-  async initiateExtension(amount) {
+  async initiateExtension(amount, options = {}) {
     const booking = get().booking;
     const id = booking?._id;
     if (!id) throw new Error('No active booking');
     const isOutstation = booking?.serviceType === 'outstation';
-    const body = isOutstation
-      ? { additionalDays: Number(amount) }
-      : { additionalHours: Number(amount) };
+    const unit = options?.unit === 'hours' || options?.unit === 'days'
+      ? options.unit
+      : isOutstation
+        ? 'days'
+        : 'hours';
+
+    let body;
+    if (isOutstation && unit === 'days') {
+      body = { unit: 'days', additionalDays: Number(amount) };
+    } else {
+      // Hourly/scheduled OR outstation hour-slice — exact minutes.
+      body = {
+        ...(isOutstation ? { unit: 'hours' } : {}),
+        additionalMinutes: Math.round(Number(amount) * 60),
+      };
+    }
     const res = await api.post(`/auth/bookings/${id}/extensions/initiate`, body);
     const data = res?.data?.data || {};
     if (data.booking) {

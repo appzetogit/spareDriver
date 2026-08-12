@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+/** Temporary kill-switch — notifications/popups unchanged; rings only. */
+export const NOTIFICATION_SOUND_MUTED = true;
+
 /**
  * Reusable notification-sound hook.
  *
@@ -77,6 +80,7 @@ export function useNotificationSound(src, { loop = false, volume = 1 } = {}) {
   }, [src, loop, volume]);
 
   const play = useCallback(() => {
+    if (NOTIFICATION_SOUND_MUTED) return;
     const audio = ensureAudio();
     if (!audio) return;
     // Always rewind so a back-to-back trigger starts from 0 rather than
@@ -113,6 +117,7 @@ export function useNotificationSound(src, { loop = false, volume = 1 } = {}) {
    * autoplay policy. No-op if already unlocked.
    */
   const prime = useCallback(() => {
+    if (NOTIFICATION_SOUND_MUTED) return;
     const audio = ensureAudio();
     if (!audio) return;
     const previousVolume = audio.volume;

@@ -45,6 +45,7 @@ import useDriverIncomingOfferStore from '../../../../store/driver/useDriverIncom
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
+import { formatExtensionHours } from '../../../../utils/formatters';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
 import TripChatEntry from '../../../../components/chat/TripChatEntry';
@@ -456,16 +457,16 @@ const DriverActiveTripPage = () => {
       if (!endSrc) return null;
       let endMs = new Date(endSrc).getTime();
       if (!Number.isFinite(endMs)) return null;
-      const unappliedDays = (booking?.extensions || []).reduce((sum, ext) => {
+      const unappliedMs = (booking?.extensions || []).reduce((sum, ext) => {
         if (ext?.status !== 'accepted') return sum;
         if (ext.windowAppliedAt) return sum;
-        const days =
-          Number(ext.additionalDays) ||
-          Math.round((Number(ext.additionalHours) || 0) / 24) ||
-          0;
-        return sum + Math.max(0, days);
+        const days = Number(ext.additionalDays) || 0;
+        if (days > 0) return sum + days * 86_400_000;
+        const hours = Number(ext.additionalHours) || 0;
+        if (hours > 0) return sum + hours * 3_600_000;
+        return sum;
       }, 0);
-      if (unappliedDays > 0) endMs += unappliedDays * 86_400_000;
+      if (unappliedMs > 0) endMs += unappliedMs;
       const remainingMs = endMs - Date.now();
       if (remainingMs <= 0) return null;
       return Math.max(1, Math.ceil(remainingMs / 60_000));
@@ -1007,7 +1008,7 @@ const DriverActiveTripPage = () => {
                   const days = Number(ext.additionalDays) || 0;
                   const amountLabel = days > 0
                     ? `+${days}d`
-                    : `+${ext.additionalHours}h`;
+                    : `+${formatExtensionHours(ext.additionalHours)}`;
                   return (
                     <p key={String(ext._id || ext.requestedAt)} className="text-xs text-text-secondary">
                       {amountLabel} · &#8377;{ext.driverEarning ?? 0}
@@ -1366,7 +1367,7 @@ function ExtensionOtpBanner({ banner, onDismiss }) {
   const days = Number(banner.additionalDays) || 0;
   const amountLabel = days > 0
     ? `+${days}d`
-    : `+${banner.additionalHours}h`;
+    : `+${formatExtensionHours(banner.additionalHours)}`;
 
   if (banner.stage === 'paid') {
     return (

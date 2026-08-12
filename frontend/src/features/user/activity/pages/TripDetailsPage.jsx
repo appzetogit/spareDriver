@@ -49,7 +49,7 @@ import TripChatEntry from '../../../../components/chat/TripChatEntry';
 import { isChatVisibleForBooking } from '../../../../constants/chat';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import { formatPickupDateTime } from '../../../../utils/datetime';
-import { maskPersonName } from '../../../../utils/formatters';
+import { maskPersonName, formatExtensionHours } from '../../../../utils/formatters';
 import RescheduleBookingSheet, {
   canRescheduleBooking,
 } from '../../booking/components/RescheduleBookingSheet';
@@ -936,8 +936,13 @@ function FareCard({
     });
   }
   extensions.forEach((ext, idx) => {
+    const days = Number(ext.additionalDays) || 0;
+    const duration =
+      days > 0
+        ? `+${days}d`
+        : `+${formatExtensionHours(ext.additionalHours)}`;
     lines.push({
-      label: `Extension ${extensions.length > 1 ? idx + 1 : ''} (+${ext.additionalHours}h)`,
+      label: `Extension ${extensions.length > 1 ? idx + 1 : ''} (${duration})`.trim(),
       value: ext.fareDelta,
     });
   });

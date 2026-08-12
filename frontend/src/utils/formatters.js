@@ -24,6 +24,36 @@ export const formatDuration = (minutes) => {
 };
 
 /**
+ * Format a ride-extension length stored as fractional hours
+ * (0.25 = 15 min, 0.5 = 30 min, 1 = 1 hour).
+ *
+ *   formatExtensionHours(0.25) → "15 min"
+ *   formatExtensionHours(1)    → "1h"
+ *   formatExtensionHours(1.5)  → "1h 30m"
+ */
+export const formatExtensionHours = (hours, { compact = true } = {}) => {
+  const h = Number(hours);
+  if (!Number.isFinite(h) || h <= 0) return compact ? '0' : '0 min';
+  const totalMin = Math.round(h * 60);
+  if (totalMin < 60) {
+    return compact ? `${totalMin} min` : `${totalMin} minutes`;
+  }
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (mins === 0) {
+    return compact
+      ? `${hrs}h`
+      : `${hrs} hour${hrs === 1 ? '' : 's'}`;
+  }
+  return compact ? `${hrs}h ${mins}m` : `${hrs}h ${mins}m`;
+};
+
+/** Preset options for hourly/scheduled ride extensions (minutes). */
+export const HOURLY_EXTENSION_PRESETS_MINUTES = Object.freeze([
+  15, 30, 60, 120, 180, 240, 300, 360, 420, 480,
+]);
+
+/**
  * Format phone number
  */
 export const formatPhone = (phone) => {

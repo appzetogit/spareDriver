@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   MapPin,
@@ -26,7 +26,6 @@ import useUserActiveBookingStore from '../../../../store/user/useUserActiveBooki
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
 import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverLocations';
-import { useFareEstimate } from '../hooks/useFareEstimate';
 import { useRideTimer } from '../hooks/useRideTimer';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import {
@@ -36,11 +35,10 @@ import {
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { haversineMeters, formatDistance } from '../../../../utils/geo';
-import { maskPersonName } from '../../../../utils/formatters';
+import { maskPersonName, formatExtensionHours } from '../../../../utils/formatters';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import PaymentChoiceSheet from '../components/PaymentChoiceSheet';
 import RideStartOtpCard from '../components/RideStartOtpCard';
-import ExtendRideModal from '../components/ExtendRideModal';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import {
   previewUserCancellation,
@@ -103,7 +101,6 @@ function StatusIcon({ icon }) {
 const DriverAssignedPage = () => {
   const navigate = useNavigate();
   const { id: routeBookingId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchById = useUserActiveBookingStore((s) => s.fetchById);
   const refreshCurrentOrActive = useUserActiveBookingStore(
@@ -111,23 +108,16 @@ const DriverAssignedPage = () => {
   );
   const applyUpdate = useUserActiveBookingStore((s) => s.applyUpdate);
   const cancelBooking = useUserActiveBookingStore((s) => s.cancelBooking);
-  const initiateExtension = useUserActiveBookingStore((s) => s.initiateExtension);
-  const verifyExtensionOtp = useUserActiveBookingStore((s) => s.verifyExtensionOtp);
-  const payExtension = useUserActiveBookingStore((s) => s.payExtension);
   const cancelExtension = useUserActiveBookingStore((s) => s.cancelExtension);
+  const extensionPromptOpen = useUserActiveBookingStore((s) => s.extensionPromptOpen);
+  const openExtensionPrompt = useUserActiveBookingStore((s) => s.openExtensionPrompt);
   const draftReset = useBookingDraftStore((s) => s.reset);
   const fetchWallet = useUserWalletStore((s) => s.fetchWallet);
-  const wallet = useUserWalletStore((s) => s.wallet);
   const user = useUserAuthStore((s) => s.user);
   const { emit, isConnected } = useSocket();
 
   const [cancelling, setCancelling] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  // Whether the user has already dismissed the extension prompt for the
-  // current "you're past the booked time" window. Reset every time a new
-  // extension lands (so the next overflow can prompt again).
-  const [extensionPromptOpen, setExtensionPromptOpen] = useState(false);
-  const [extensionPromptDismissedAt, setExtensionPromptDismissedAt] = useState(null);
 
   // Hydrate the active booking on mount. Two paths:
   //   1. URL carries `/:id` (preferred) → fetch *that* booking. This
@@ -177,38 +167,12 @@ const DriverAssignedPage = () => {
     }
   });
 
-  // Driver hit Dismiss on the OTP banner. We need to:
-  //   1. Tell the customer in plain English (toast).
-  //   2. Stamp `extensionRejection` so the open ExtendRideModal can
-  //      show an inline "Driver couldn't accept this — try again"
-  //      state, with the same `extensionId` that was just declined.
-  //   3. Let `applyUpdate` (via the BOOKING_UPDATED echo the server
-  //      also emits) refresh the booking so the pending row is no
-  //      longer pending and the sticky banner falls away.
-  const [extensionRejection, setExtensionRejection] = useState(null);
+  // Driver hit Dismiss on the OTP banner — global extend sheet
+  // (`UserBookingAlertsBridge`) shows the retry state.
   useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_RESOLVED, (payload) => {
     if (payload?.stage !== 'dismissed_by_driver') return;
     if (booking?._id && String(booking._id) !== String(payload.bookingId)) return;
-    setExtensionRejection({
-      extensionId: payload.extensionId,
-      additionalHours: payload.additionalHours,
-      fareDelta: payload.fareDelta,
-      at: Date.now(),
-    });
-    toast.error(
-      'Driver dismissed this extension. You can try again.',
-      { duration: 5000 },
-    );
-    // Force-refresh the booking — the BOOKING_UPDATED echo handles
-    // it too, but pulling explicitly avoids a flicker where the
-    // sticky banner briefly shows a now-declined row.
     refreshCurrentOrActive?.().catch(() => {});
-    // Reopen the modal so the customer immediately sees the
-    // dismissed state + Retry CTA. If they don't want to retry,
-    // closing the modal is one tap. This is friendlier than leaving
-    // them with just a toast.
-    setExtensionPromptDismissedAt(null);
-    setExtensionPromptOpen(true);
   });
 
   // Scheduled-ride countdown reminder. The same event is consumed on
@@ -367,32 +331,6 @@ const DriverAssignedPage = () => {
   // Ride duration timer + extension prompt (only active once STARTED).
   const rideTimer = useRideTimer(booking);
 
-  // Pull the extra-hour rate from the live pricing service so the extension
-  // modal can quote a realistic number before the user commits.
-  const fareEstimatePayload = useMemo(() => {
-    if (!booking || booking.serviceType !== SERVICE_TYPES.HOURLY) return null;
-    return {
-      serviceType: booking.serviceType,
-      bookedHours: booking.hourly?.durationHours,
-      slabId: booking.hourly?.slabId || undefined,
-      scheduledAt: booking.hourly?.scheduledStartAt,
-    };
-  }, [booking]);
-  const { estimate: liveEstimate } = useFareEstimate(fareEstimatePayload);
-  const extraHourRate = useMemo(() => {
-    const bd = liveEstimate?.fareBreakdown || booking?.fareSnapshot?.breakdown || {};
-    // Pricing engine exposes the rate as part of the hourly breakdown only
-    // when an extra hour was charged. Fall back to the configured rate when
-    // present, otherwise approximate as base-fare / bookedHours.
-    if (bd.extraHourCharge && bd.extraHours) {
-      return Math.round(bd.extraHourCharge / bd.extraHours);
-    }
-    if (bd.packagePrice && booking?.hourly?.durationHours) {
-      return Math.round(bd.packagePrice / booking.hourly.durationHours);
-    }
-    return 0;
-  }, [liveEstimate, booking]);
-
   const isOutstationBooking = booking?.serviceType === SERVICE_TYPES.OUTSTATION;
 
   // Per-day rate the outstation extension modal quotes before the
@@ -421,44 +359,26 @@ const DriverAssignedPage = () => {
     return Math.max(0, Math.round(dailyRate + foodPerDay + stayShare));
   }, [isOutstationBooking, booking?.fareSnapshot?.breakdown, booking?.outstation]);
 
-  // Open the extension prompt as soon as we cross the lead-time threshold
-  // — but never more than once per dismissal window. The user can also tap
-  // the persistent "Extend ride" pill from the trip card.
-  useEffect(() => {
-    if (!rideTimer.shouldPromptExtension) return;
-    if (extensionPromptOpen) return;
-    if (extensionPromptDismissedAt && Date.now() - extensionPromptDismissedAt < 60_000) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical timer trigger
-    setExtensionPromptOpen(true);
-    toast('Your trip is about to end — do you want to extend?', {
-      duration: 5000,
-    });
-  }, [rideTimer.shouldPromptExtension, extensionPromptOpen, extensionPromptDismissedAt]);
+  // Preview ₹/hr for outstation hour-slice extensions. Prefer an
+  // explicit rate on the fare snapshot when present; otherwise
+  // dailyRate / 24 (matches backend resolveOutstationHourlyRate).
+  const outstationHourlyRate = useMemo(() => {
+    if (!isOutstationBooking) return 0;
+    const bd = booking?.fareSnapshot?.breakdown || {};
+    const explicit =
+      Number(bd.outstationExtraHourCharge) ||
+      Number(bd.extraHourChargeRate) ||
+      0;
+    if (explicit > 0) return Math.round(explicit);
+    const daily = Number(bd.dailyRate) || 0;
+    return daily > 0 ? Math.max(1, Math.round(daily / 24)) : 0;
+  }, [isOutstationBooking, booking?.fareSnapshot?.breakdown]);
 
-  // Push / deep-link: `?extend=1` (FCM tap) opens the extend sheet once
-  // the STARTED trip is hydrated.
-  useEffect(() => {
-    if (searchParams.get('extend') !== '1') return;
-    if (booking?.status !== BOOKING_STATUS.STARTED) return;
-    setExtensionPromptOpen(true);
-    const next = new URLSearchParams(searchParams);
-    next.delete('extend');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, booking?.status, booking?._id]);
-
-  // Server-side ride-end nudge (same moment as the FCM) — open the sheet
-  // if the local timer was missed or the app was backgrounded.
-  useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_OFFERED, (payload) => {
-    if (!payload?.bookingId || !booking?._id) return;
-    if (String(payload.bookingId) !== String(booking._id)) return;
-    if (booking.status !== BOOKING_STATUS.STARTED) return;
-    setExtensionPromptOpen(true);
-  });
+  // Extend sheet + ring are global (`UserBookingAlertsBridge`).
 
   // Pick the most recent extension still in a handshake state. This is
-  // what powers both the modal's resume-on-open and the sticky banner
-  // that nudges the customer back to finish payment when they close
-  // the modal mid-flow.
+  // what powers the sticky banner that nudges the customer back to
+  // finish payment when they close the modal mid-flow.
   const pendingExtension = useMemo(() => {
     const list = booking?.extensions || [];
     // Scan back-to-front so the freshest intent wins (we only ever have
@@ -471,21 +391,6 @@ const DriverAssignedPage = () => {
     }
     return null;
   }, [booking?.extensions]);
-
-  // Auto-reopen the modal the instant a pending_payment lands and the
-  // sheet isn't already up — covers the "user closed it but the OTP is
-  // already burned" case so the next render brings them straight to Pay.
-  useEffect(() => {
-    if (!pendingExtension) return;
-    if (extensionPromptOpen) return;
-    if (pendingExtension.status !== 'pending_payment') return;
-    // Respect the recent-dismissal cooldown so a stubborn user isn't
-    // re-prompted constantly. The sticky banner below stays visible the
-    // whole time so they can come back when they're ready.
-    if (extensionPromptDismissedAt && Date.now() - extensionPromptDismissedAt < 30_000) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot resume
-    setExtensionPromptOpen(true);
-  }, [pendingExtension, extensionPromptOpen, extensionPromptDismissedAt]);
 
   const handleCancel = async () => {
     if (cancelling) return;
@@ -752,14 +657,12 @@ const DriverAssignedPage = () => {
         <PendingExtensionBanner
           extension={pendingExtension}
           onResume={() => {
-            setExtensionPromptDismissedAt(null);
-            setExtensionPromptOpen(true);
+            openExtensionPrompt();
           }}
           onChangeHours={async () => {
             try {
               await cancelExtension({ extensionId: pendingExtension._id });
-              setExtensionPromptDismissedAt(null);
-              setExtensionPromptOpen(true);
+              openExtensionPrompt();
             } catch (err) {
               toast.error(
                 err?.response?.data?.message ||
@@ -990,15 +893,15 @@ const DriverAssignedPage = () => {
                           {formatRideClock(Math.abs(rideTimer.remainingSeconds))}
                         </p>
                       </div>
-                      <Button size="sm" variant="secondary" onClick={() => setExtensionPromptOpen(true)}>
+                      <Button size="sm" variant="secondary" onClick={() => openExtensionPrompt()}>
                         Extend ride
                       </Button>
                     </div>
                   </Card>
                 )}
 
-                {/* Outstation: days remaining + single Extend trip CTA.
-                    Same ExtendRideModal OTP handshake as hourly. */}
+                {/* Outstation: return countdown + Extend trip CTA.
+                    Modal offers Hours | Days; same OTP handshake. */}
                 {isOutstationBooking
                   && booking.status === BOOKING_STATUS.STARTED && (
                   <Card>
@@ -1011,7 +914,7 @@ const DriverAssignedPage = () => {
                           <>
                             <p className="text-xs text-text-muted">
                               {rideTimer.remainingSeconds >= 0
-                                ? 'Days remaining'
+                                ? 'Time until return'
                                 : 'Past booked return'}
                             </p>
                             <p
@@ -1025,11 +928,16 @@ const DriverAssignedPage = () => {
                                 Math.abs(rideTimer.remainingSeconds),
                               )}
                             </p>
-                            {outstationPerDayRate > 0 && (
-                              <p className="text-xs text-text-muted mt-0.5">
-                                ~₹{outstationPerDayRate}/day for extra days
-                              </p>
-                            )}
+                            <p className="text-xs text-text-muted mt-0.5">
+                              Extend by hours
+                              {outstationHourlyRate > 0
+                                ? ` (~₹${outstationHourlyRate}/hr)`
+                                : ''}
+                              {' '}or days
+                              {outstationPerDayRate > 0
+                                ? ` (~₹${outstationPerDayRate}/day)`
+                                : ''}
+                            </p>
                           </>
                         ) : (
                           <>
@@ -1037,14 +945,12 @@ const DriverAssignedPage = () => {
                               Need more time on the road?
                             </p>
                             <p className="text-sm font-semibold text-text">
-                              {outstationPerDayRate > 0
-                                ? `~₹${outstationPerDayRate}/day for extra days`
-                                : 'Extend for more days'}
+                              Extend by hours or full days
                             </p>
                           </>
                         )}
                       </div>
-                      <Button size="sm" variant="secondary" onClick={() => setExtensionPromptOpen(true)}>
+                      <Button size="sm" variant="secondary" onClick={() => openExtensionPrompt()}>
                         Extend trip
                       </Button>
                     </div>
@@ -1114,54 +1020,6 @@ const DriverAssignedPage = () => {
         open={isAwaitingPayment && !isPaid}
         onClose={() => { /* sheet only closes via successful payment / status change */ }}
         booking={booking}
-      />
-
-      <ExtendRideModal
-        open={extensionPromptOpen}
-        onClose={() => {
-          setExtensionPromptOpen(false);
-          setExtensionPromptDismissedAt(Date.now());
-          // Refresh wallet on close so the next time the user re-opens
-          // the modal (or browses to their wallet) they see the up-to-
-          // date held / available amounts.
-          fetchWallet().catch(() => {});
-        }}
-        onInitiate={(amount) => initiateExtension(amount)}
-        onVerifyOtp={(args) => verifyExtensionOtp(args)}
-        onPay={async (args) => {
-          const result = await payExtension(args);
-          // Wallet just took a debit — sync the global wallet snapshot
-          // so the home / wallet pages don't show stale numbers.
-          fetchWallet().catch(() => {});
-          return result;
-        }}
-        onCancelExtension={async (args) => {
-          await cancelExtension(args);
-          // The cancel updates the booking server-side and the patch
-          // arrives via socket; pulling wallet too is defensive.
-          fetchWallet().catch(() => {});
-        }}
-        pendingExtension={pendingExtension}
-        extensionRejection={extensionRejection}
-        onClearRejection={() => setExtensionRejection(null)}
-        onWalletRefresh={() => fetchWallet().catch(() => {})}
-        extraHourRate={extraHourRate}
-        walletBalance={
-          wallet?.availableRupees != null
-            ? Number(wallet.availableRupees)
-            : Math.max(0, Number(wallet?.balance || 0) - Number(wallet?.heldRupees || 0))
-        }
-        remainingMinutes={
-          rideTimer.remainingSeconds != null
-            ? Math.ceil(rideTimer.remainingSeconds / 60)
-            : 0
-        }
-        minHours={1}
-        maxHours={8}
-        unit={isOutstationBooking ? 'days' : 'hours'}
-        perDayRate={outstationPerDayRate}
-        minDays={1}
-        maxDays={14}
       />
     </div>
   );
@@ -1357,7 +1215,7 @@ function PendingExtensionBanner({ extension, onResume, onChangeHours }) {
   const additionalHours = Number(extension?.additionalHours) || 0;
   const amountLabel = additionalDays > 0
     ? `+${additionalDays}d`
-    : `+${additionalHours}h`;
+    : `+${formatExtensionHours(additionalHours)}`;
   return (
     <div className="relative z-20 px-3 pb-2 pointer-events-auto">
       <div
@@ -1409,8 +1267,8 @@ function PendingExtensionBanner({ extension, onResume, onChangeHours }) {
           <button
             type="button"
             onClick={onChangeHours}
-            aria-label="Change hours"
-            title="Change hours"
+            aria-label="Change duration"
+            title="Change duration"
             className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center bg-white border ${
               isPay
                 ? 'border-emerald-200 text-emerald-800 hover:bg-emerald-100'

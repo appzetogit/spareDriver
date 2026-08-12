@@ -53,6 +53,7 @@ const buildDefaultForm = (serviceType) => ({
   // when both new fields are 0.
   outstation: {
     dailyRate: serviceType === SERVICE_TYPES.OUTSTATION ? 1500 : 0,
+    extraHourCharge: 0,
     foodAllowancePerDay: serviceType === SERVICE_TYPES.OUTSTATION ? 300 : 0,
     stayAllowancePerNight: serviceType === SERVICE_TYPES.OUTSTATION ? 500 : 0,
     minDays: 1,

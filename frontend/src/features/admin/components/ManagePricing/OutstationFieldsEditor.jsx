@@ -64,6 +64,14 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
           helper="Flat ₹ billed for every calendar day of the round trip."
         />
         <Input
+          label="Extra hour charge (₹/hr)"
+          type="number"
+          min={0}
+          value={o.extraHourCharge ?? 0}
+          onChange={(e) => update({ extraHourCharge: Number(e.target.value) })}
+          helper="Used when the customer extends by hours mid-trip. Leave 0 to use daily rate ÷ 24."
+        />
+        <Input
           label="Food allowance (₹/day)"
           type="number"
           min={0}

@@ -34,6 +34,16 @@ function formatDistance(meters) {
   return `${Math.round(m)} m`;
 }
 
+function formatExtensionHoursLabel(hours) {
+  const h = Number(hours);
+  if (!Number.isFinite(h) || h <= 0) return '0 min';
+  const totalMin = Math.round(h * 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  return mins === 0 ? `${hrs}h` : `${hrs}h ${mins}m`;
+}
+
 function computeDurationMinutes(startedAt, completedAt) {
   if (!startedAt || !completedAt) return null;
   const diffMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
@@ -304,10 +314,10 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
   for (const ext of acceptedExtensions) {
     const hours = Number(ext.additionalHours) || 0;
     const days = Number(ext.additionalDays) || 0;
-    const label =
-      days > 0
-        ? `Trip extension (+${days} day${days === 1 ? '' : 's'})`
-        : `Trip extension (+${hours}h)`;
+    const durationLabel = days > 0
+      ? `+${days} day${days === 1 ? '' : 's'}`
+      : `+${formatExtensionHoursLabel(hours)}`;
+    const label = `Trip extension (${durationLabel})`;
     drawRow(doc, label, formatPdfInr(Number(ext.fareDelta) || 0));
   }
   if (waitingTotal) {

@@ -329,7 +329,9 @@ export const driverCancelBooking = asyncHandler(async (req, res) => {
  * is pushed to the driver via socket. Returns the customer-safe row
  * (no OTP code) for the FE to drive its multi-step modal.
  *
- *   body: { additionalHours: number }   // minimum 0.5
+ *   body: { additionalHours?, additionalMinutes?, additionalDays?, unit? }
+ *         // Hourly: 15-minute steps. Prefer minutes.
+ *         // Outstation: unit="days" (default) or unit="hours".
  */
 export const initiateBookingExtension = asyncHandler(async (req, res) => {
   const result = await initiateExtensionService(req.user._id, req.params.id, req.body);

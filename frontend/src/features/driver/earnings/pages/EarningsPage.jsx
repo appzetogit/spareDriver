@@ -23,7 +23,7 @@ import {
   useDriverEarningsLedgerStore,
 } from '../../../../store/driver/useDriverTripsStore';
 import { useDriverProfileStore } from '../../../../store/driver/useDriverProfileStore';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatCurrency, formatExtensionHours } from '../../../../utils/formatters';
 import { MIN_DRIVER_WALLET_BALANCE } from '../../../../constants/withdrawal';
 import DriverScreenShell from '../../components/DriverScreenShell';
 
@@ -663,7 +663,7 @@ function TripBreakdownBlock({ meta, row }) {
         <BreakdownLine
           icon={TimerReset}
           tone="text-indigo-700 bg-indigo-100"
-          label={`Extensions \u00B7 +${extensionHours}h`}
+          label={`Extensions \u00B7 +${formatExtensionHours(extensionHours)}`}
           sublabel={`${extensionsCount} paid extension${
             extensionsCount === 1 ? '' : 's'
           }`}

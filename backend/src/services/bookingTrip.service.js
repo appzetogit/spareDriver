@@ -757,17 +757,17 @@ function earliestCompleteAtMs(booking) {
     if (!endSrc) return null;
     let endMs = new Date(endSrc).getTime();
     if (!Number.isFinite(endMs)) return null;
-    const unappliedDays = (booking.extensions || []).reduce((sum, ext) => {
+    const unappliedMs = (booking.extensions || []).reduce((sum, ext) => {
       if (ext?.status !== 'accepted') return sum;
       if (ext.windowAppliedAt) return sum;
-      const days =
-        Number(ext.additionalDays)
-        || Math.round((Number(ext.additionalHours) || 0) / 24)
-        || 0;
-      return sum + Math.max(0, days);
+      const days = Number(ext.additionalDays) || 0;
+      if (days > 0) return sum + days * 86_400_000;
+      const hours = Number(ext.additionalHours) || 0;
+      if (hours > 0) return sum + hours * 3_600_000;
+      return sum;
     }, 0);
-    if (unappliedDays > 0) {
-      endMs += unappliedDays * 86_400_000;
+    if (unappliedMs > 0) {
+      endMs += unappliedMs;
     }
     return endMs;
   }

@@ -132,6 +132,12 @@ function validatePricingForType(serviceType, data) {
     if (o.dailyRate == null || o.dailyRate < 0) {
       throw new ApiError(400, 'Outstation: dailyRate must be a non-negative number');
     }
+    if (o.extraHourCharge != null && o.extraHourCharge < 0) {
+      throw new ApiError(
+        400,
+        'Outstation: extraHourCharge must be a non-negative number',
+      );
+    }
     if (o.foodAllowancePerDay != null && o.foodAllowancePerDay < 0) {
       throw new ApiError(
         400,

@@ -54,6 +54,24 @@ import { BOOKING_STATUS, BOOKING_STATUS_LIST } from '../constants/bookingStatus.
 
 const router = express.Router();
 
+/** Dev routes accept Mongo `_id` or human `bookingNumber` (e.g. BK-20260812-790934). */
+async function resolveDevBookingId(ref) {
+  const key = String(ref || '').trim();
+  if (!key) throw new ApiError(400, 'Booking id required');
+
+  if (/^[a-fA-F0-9]{24}$/.test(key)) {
+    const byId = await Booking.findById(key).select('_id bookingNumber').lean();
+    if (byId) return String(byId._id);
+  }
+
+  const byNumber = await Booking.findOne({ bookingNumber: key })
+    .select('_id bookingNumber')
+    .lean();
+  if (byNumber) return String(byNumber._id);
+
+  throw new ApiError(404, `Booking not found for "${key}"`);
+}
+
 /* ------------------------------------------------------------------ */
 /* Guard — never run in production                                     */
 /* ------------------------------------------------------------------ */
@@ -70,7 +88,8 @@ router.use((_req, _res, next) => {
 router.get(
   '/bookings/:id/inspect',
   asyncHandler(async (req, res) => {
-    const booking = await Booking.findById(req.params.id)
+    const bookingId = await resolveDevBookingId(req.params.id);
+    const booking = await Booking.findById(bookingId)
       .populate('userId', 'name phone_no')
       .populate('driverId', 'name phone_no isOnline isOnTrip')
       .lean();
@@ -121,7 +140,8 @@ router.get(
 router.post(
   '/bookings/:id/trigger-assign',
   asyncHandler(async (req, res) => {
-    const result = await kickoffScheduledAssignment(req.params.id);
+    const bookingId = await resolveDevBookingId(req.params.id);
+    const result = await kickoffScheduledAssignment(bookingId);
     res.json(new ApiResponse(200, result, 'Assign job triggered'));
   }),
 );
@@ -134,7 +154,8 @@ router.post(
   '/bookings/:id/trigger-escalate',
   asyncHandler(async (req, res) => {
     const { escalateToEmergencyPool } = await import('../services/bookingEmergencyPool.service.js');
-    const result = await escalateToEmergencyPool(req.params.id);
+    const bookingId = await resolveDevBookingId(req.params.id);
+    const result = await escalateToEmergencyPool(bookingId);
     res.json(new ApiResponse(200, result, 'Escalate job triggered'));
   }),
 );
@@ -147,7 +168,8 @@ router.post(
   '/bookings/:id/trigger-remind',
   asyncHandler(async (req, res) => {
     const minutesAhead = Number(req.body?.minutesAhead) || 15;
-    const result = await sendScheduledReminder(req.params.id, minutesAhead);
+    const bookingId = await resolveDevBookingId(req.params.id);
+    const result = await sendScheduledReminder(bookingId, minutesAhead);
     res.json(new ApiResponse(200, result, `Reminder fired (${minutesAhead}m ahead)`));
   }),
 );
@@ -167,7 +189,8 @@ router.post(
         `Invalid status. Must be one of: ${BOOKING_STATUS_LIST.join(', ')}`,
       );
     }
-    const booking = await Booking.findById(req.params.id);
+    const bookingId = await resolveDevBookingId(req.params.id);
+    const booking = await Booking.findById(bookingId);
     if (!booking) throw new ApiError(404, 'Booking not found');
 
     const previousStatus = booking.status;
@@ -193,7 +216,8 @@ router.post(
 router.post(
   '/bookings/:id/force-dispatch',
   asyncHandler(async (req, res) => {
-    const booking = await Booking.findById(req.params.id);
+    const bookingId = await resolveDevBookingId(req.params.id);
+    const booking = await Booking.findById(bookingId);
     if (!booking) throw new ApiError(404, 'Booking not found');
 
     if (booking.status !== BOOKING_STATUS.SEARCHING) {
@@ -201,7 +225,7 @@ router.post(
       await booking.save();
     }
 
-    const result = await dispatchNextDriverService(req.params.id);
+    const result = await dispatchNextDriverService(bookingId);
     res.json(new ApiResponse(200, result, 'Dispatch wave triggered'));
   }),
 );

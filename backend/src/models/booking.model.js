@@ -187,16 +187,17 @@ const extensionSchema = new mongoose.Schema(
   {
     requestedAt: { type: Date, default: Date.now },
     /**
-     * Hourly-flow extension amount. Stored even for outstation rows
-     * (set to days × 24) so legacy aggregations that read this field
+     * Hourly/scheduled extension amount in fractional hours
+     * (0.25 = 15 min, 0.5 = 30 min). Outstation rows set this to
+     * days × 24 so legacy aggregations that read this field
      * keep producing sensible numbers.
      */
     additionalHours: { type: Number, required: true, min: 0 },
     /**
-     * Outstation-flow extension amount, in whole calendar days. Zero
-     * for hourly extensions. The extension service branches on the
-     * booking's `serviceType` to decide which of these two fields to
-     * read when computing the fare delta and surfacing the duration.
+     * Outstation day-extension amount (whole calendar days). Zero for
+     * hourly/scheduled extensions AND for outstation hour-slice
+     * extensions. When > 0 the row is treated as a day extension
+     * (additionalHours is set to days × 24 for legacy readers).
      */
     additionalDays: { type: Number, default: 0, min: 0 },
     fareDelta: { type: Number, required: true, min: 0 },

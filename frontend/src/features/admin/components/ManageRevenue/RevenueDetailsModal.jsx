@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import AdminDetailModal from '../AdminDetailModal';
 import Badge from '../../../../components/Badge';
+import { formatExtensionHours } from '../../../../utils/formatters';
 
 /**
  * Admin → Account → Revenue → row click → details popup.
@@ -258,7 +259,7 @@ function CommissionBreakdown({ meta, amount }) {
       {hasExtensions && (
         <SectionCard
           title="Extensions"
-          subtitle={`${extensionsCount} ride extension${extensionsCount === 1 ? '' : 's'} \u2014 +${extensionAdditionalHours}h total`}
+          subtitle={`${extensionsCount} ride extension${extensionsCount === 1 ? '' : 's'} \u2014 +${formatExtensionHours(extensionAdditionalHours)} total`}
           icon={TimerReset}
         >
           <KV

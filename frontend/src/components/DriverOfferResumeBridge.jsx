@@ -12,6 +12,7 @@ import {
   applyDriverOfferFcmAction,
   parseDriverOfferFcmData,
 } from '../utils/fcmOfferPayload';
+import { useInAppAlertRing } from '../hooks/useInAppAlertRing';
 
 /** Trip ended / unassigned for this driver — refresh home Active trips. */
 const DRIVER_HOME_REFRESH_STATUSES = new Set([
@@ -38,6 +39,7 @@ export function DriverOfferResumeBridge() {
   const upsertFromOffer = useDriverIncomingScheduledStore((s) => s.upsertFromOffer);
   const removeByBookingId = useDriverIncomingScheduledStore((s) => s.removeByBookingId);
   const { isConnected } = useSocket();
+  const { play: playInboxAlert } = useInAppAlertRing();
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -118,12 +120,14 @@ export function DriverOfferResumeBridge() {
   useSocketEvent(S2C_EVENTS.BOOKING_OFFERED, (payload) => {
     if (
       payload?.inbox
+      || payload?.kind === 'inbox_offer'
       || payload?.bookingType === BOOKING_TYPE.SCHEDULED
       || payload?.bookingType === BOOKING_TYPE.OUTSTATION
       || payload?.kind === 'subscription'
       || payload?.bookingType === 'subscription'
     ) {
       upsertFromOffer(payload);
+      playInboxAlert();
     }
   });
 

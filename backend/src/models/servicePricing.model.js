@@ -198,6 +198,13 @@ const outstationSchema = new mongoose.Schema(
      */
     stayAllowancePerNight: { type: Number, default: 0, min: 0 },
 
+    /**
+     * ₹ per extra hour when the customer extends an outstation trip
+     * by hours (15 / 30 / 60 min …) instead of whole days. When 0,
+     * the extension service falls back to `dailyRate / 24`.
+     */
+    extraHourCharge: { type: Number, default: 0, min: 0 },
+
     /** Minimum days that can be booked as outstation. */
     minDays: { type: Number, default: 1, min: 1 },
     /** Maximum days that can be booked as outstation (0 = unlimited). */

@@ -4,7 +4,6 @@ import { Home, MapPin, User, Car, DollarSign } from 'lucide-react';
 import BookingOfferModal from '../features/driver/trips/components/BookingOfferModal';
 import { UserNotificationBridge, DriverNotificationBridge } from '../components/notifications/NotificationBridge';
 import { DriverOfferResumeBridge } from '../components/DriverOfferResumeBridge';
-import { UserBookingAlertsBridge } from '../components/UserBookingAlertsBridge';
 import useDriverIncomingScheduledStore from '../store/driver/useDriverIncomingScheduledStore';
 
 const userNavItems = [
@@ -21,7 +20,6 @@ export const UserDashboardLayout = () => {
   return (
     <div className="flex-1 flex flex-col pb-16">
       <UserNotificationBridge />
-      <UserBookingAlertsBridge />
       <Outlet />
       <BottomNav items={userNavItems} />
     </div>

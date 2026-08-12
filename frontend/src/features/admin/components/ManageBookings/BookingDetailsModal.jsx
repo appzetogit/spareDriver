@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Ticket,
 } from 'lucide-react';
+import { formatExtensionHours } from '../../../../utils/formatters';
 
 const STATUS_VARIANTS = {
   completed: 'success',
@@ -829,7 +830,7 @@ const BookingDetailsModal = ({
               const duration =
                 Number(ext.additionalDays) > 0
                   ? `+${ext.additionalDays}d`
-                  : `+${ext.additionalHours}h`;
+                  : `+${formatExtensionHours(ext.additionalHours)}`;
               return (
                 <FareRow
                   key={ext._id || idx}

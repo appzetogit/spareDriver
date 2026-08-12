@@ -90,23 +90,43 @@ async function toDriverBooking(booking) {
 }
 
 /**
- * Push the outstation return window forward by `additionalDays` once an
- * extension is paid. Updates expectedReturnAt / endDate / days / nights
- * so the customer countdown and driver complete-gate stay in sync.
+ * Push the outstation return window forward once an extension is paid.
+ *
+ *   - Day extensions: +N calendar days on expectedReturnAt / endDate
+ *     and bump outstation.days / nights.
+ *   - Hour extensions: +hours on the return instant only — do NOT
+ *     inflate days/nights (those stay day-granular for fare history).
+ *
+ * Returns the patched outstation window fields, or null if nothing
+ * could be applied.
  */
-function bumpOutstationWindow(booking, additionalDays) {
+function bumpOutstationWindow(
+  booking,
+  { additionalDays = 0, additionalHours = 0 } = {},
+) {
   const days = Math.max(0, Math.floor(Number(additionalDays) || 0));
-  if (days <= 0 || !booking?.outstation) return null;
+  const hours = Math.max(0, Number(additionalHours) || 0);
+  if ((days <= 0 && hours <= 0) || !booking?.outstation) return null;
+
   const currentEndSrc =
     booking.outstation.expectedReturnAt || booking.outstation.endDate;
   const currentEnd = currentEndSrc ? new Date(currentEndSrc) : null;
   if (!currentEnd || Number.isNaN(currentEnd.getTime())) return null;
 
-  currentEnd.setDate(currentEnd.getDate() + days);
+  if (days > 0) {
+    currentEnd.setDate(currentEnd.getDate() + days);
+    booking.outstation.days = (Number(booking.outstation.days) || 0) + days;
+    booking.outstation.nights = Math.max(
+      0,
+      (Number(booking.outstation.days) || 1) - 1,
+    );
+  }
+  if (hours > 0) {
+    currentEnd.setTime(currentEnd.getTime() + Math.round(hours * 3_600_000));
+  }
+
   booking.outstation.expectedReturnAt = currentEnd;
   booking.outstation.endDate = currentEnd;
-  booking.outstation.days = (Number(booking.outstation.days) || 0) + days;
-  booking.outstation.nights = Math.max(0, (Number(booking.outstation.days) || 1) - 1);
   return {
     pickupAt: booking.outstation.pickupAt,
     expectedReturnAt: booking.outstation.expectedReturnAt,
@@ -115,6 +135,16 @@ function bumpOutstationWindow(booking, additionalDays) {
     days: booking.outstation.days,
     nights: booking.outstation.nights,
   };
+}
+
+/** Args for {@link bumpOutstationWindow} derived from an extension row. */
+function outstationBumpFromExtension(ext) {
+  const days = Math.max(0, Math.floor(Number(ext?.additionalDays) || 0));
+  if (days > 0) {
+    return { additionalDays: days, additionalHours: 0 };
+  }
+  const hours = Math.max(0, Number(ext?.additionalHours) || 0);
+  return { additionalDays: 0, additionalHours: hours };
 }
 
 /**
@@ -138,19 +168,79 @@ function bumpOutstationWindow(booking, additionalDays) {
  */
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-const MIN_EXTENSION_HOURS = 0.5;
-const MAX_EXTENSION_HOURS_DEFAULT = 12;
 /**
- * Outstation extensions are accumulated in WHOLE calendar days — the
- * dailyRate / foodAllowancePerDay / stayAllowancePerNight knobs on
- * `ServicePricing.outstation` are per-day numbers and the existing
- * outstation booking flow already enforces day-granularity, so we
- * keep the same unit on the extension side. The lower bound mirrors
- * `outstation.minDays` (effectively 1) and the upper bound is a
- * sanity cap.
+ * Hourly / scheduled extensions accept 15-minute increments (15 / 30 /
+ * 60 min, then whole hours up to the cap). Stored as fractional
+ * `additionalHours` so ride-end timers and settlement keep working
+ * without a schema change.
+ */
+const MIN_EXTENSION_MINUTES = 15;
+const MAX_EXTENSION_HOURS_DEFAULT = 12;
+const EXTENSION_MINUTE_STEP = 15;
+
+/** Human label for fractional hours — "15 min", "1h", "1h 30m". */
+function formatExtensionHoursLabel(hours) {
+  const h = Number(hours);
+  if (!Number.isFinite(h) || h <= 0) return '0 min';
+  const totalMin = Math.round(h * 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  return mins === 0 ? `${hrs}h` : `${hrs}h ${mins}m`;
+}
+/**
+ * Outstation extensions support two units:
+ *   - whole calendar days (dailyRate + food/stay allowances)
+ *   - hourly slices (15-min steps) priced via outstation.extraHourCharge
+ *     or dailyRate/24 fallback
+ * The lower bound for days mirrors outstation.minDays; hours use the
+ * same 15-minute step as hourly/scheduled bookings.
  */
 const MIN_EXTENSION_DAYS = 1;
 const MAX_EXTENSION_DAYS_DEFAULT = 14;
+
+/** Parse 15-minute-step extension length from body minutes or hours. */
+function parseExtensionMinutes(body = {}) {
+  const rawMinutes = body?.additionalMinutes;
+  let minutes;
+  if (rawMinutes != null && rawMinutes !== '') {
+    minutes = Number(rawMinutes);
+  } else {
+    const hours = Number(body?.additionalHours);
+    minutes = Number.isFinite(hours) ? Math.round(hours * 60) : NaN;
+  }
+  if (
+    !Number.isFinite(minutes) ||
+    minutes < MIN_EXTENSION_MINUTES ||
+    minutes % EXTENSION_MINUTE_STEP !== 0
+  ) {
+    throw new ApiError(
+      400,
+      `Extend by ${MIN_EXTENSION_MINUTES}, 30, or 60 minutes (or longer in ${EXTENSION_MINUTE_STEP}-minute steps)`,
+    );
+  }
+  if (minutes > MAX_EXTENSION_HOURS_DEFAULT * 60) {
+    throw new ApiError(
+      400,
+      `Cannot extend by more than ${MAX_EXTENSION_HOURS_DEFAULT} hours`,
+    );
+  }
+  return minutes;
+}
+
+/** ₹/hr for outstation hour-slice extensions. */
+function resolveOutstationHourlyRate(pricing, fareBreakdown) {
+  const fromOutstation = Number(pricing?.outstation?.extraHourCharge) || 0;
+  if (fromOutstation > 0) return fromOutstation;
+  const fromTop = Number(pricing?.extraHourCharge) || 0;
+  if (fromTop > 0) return fromTop;
+  const daily =
+    Number(pricing?.outstation?.dailyRate) ||
+    Number(fareBreakdown?.dailyRate) ||
+    0;
+  if (daily > 0) return round2(daily / 24);
+  return 0;
+}
 
 /**
  * Sum of all CONFIRMED extension fare deltas for a booking — i.e. only
@@ -721,8 +811,11 @@ function computePlatformFeeFromRates(subtotal, rates) {
   return round2((subtotal * pct) / 100);
 }
 
-function computeExtensionDelta(pricing, fareBreakdown, additionalHours) {
-  const extraRate = pricing?.extraHourCharge || 0;
+function computeExtensionDelta(pricing, fareBreakdown, additionalHours, rateOverride = null) {
+  const extraRate =
+    rateOverride != null && Number(rateOverride) > 0
+      ? Number(rateOverride)
+      : pricing?.extraHourCharge || 0;
   if (!extraRate || extraRate <= 0) {
     throw new ApiError(400, 'Extra-hour pricing is not configured for this service');
   }
@@ -1030,10 +1123,10 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
     throw new ApiError(400, 'Ride must be in progress to extend');
   }
 
-  // Branch on serviceType — hourly accepts `additionalHours`, outstation
-  // accepts `additionalDays`. We normalise both into the same row shape
-  // (the model stores both `additionalHours` AND `additionalDays`,
-  // populating the unused one with 0).
+  // Branch on serviceType + unit:
+  //   hourly    → additionalMinutes / additionalHours
+  //   outstation → unit=days (default) OR unit=hours
+  // We normalise into additionalHours + additionalDays on the row.
   const isOutstation = booking.serviceType === SERVICE_TYPES.OUTSTATION;
   const isHourly = booking.serviceType === SERVICE_TYPES.HOURLY;
   if (!isOutstation && !isHourly) {
@@ -1042,36 +1135,49 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
 
   let additionalHours = 0;
   let additionalDays = 0;
+  let outstationUnit = null; // 'days' | 'hours' when isOutstation
+
   if (isOutstation) {
-    additionalDays = Number(body?.additionalDays);
-    if (!Number.isFinite(additionalDays) || additionalDays < MIN_EXTENSION_DAYS) {
-      throw new ApiError(
-        400,
-        `additionalDays must be at least ${MIN_EXTENSION_DAYS}`,
-      );
+    const rawUnit = String(body?.unit || '').toLowerCase();
+    if (rawUnit === 'hours' || rawUnit === 'hourly') {
+      outstationUnit = 'hours';
+    } else if (rawUnit === 'days' || rawUnit === 'day') {
+      outstationUnit = 'days';
+    } else if (
+      body?.additionalMinutes != null ||
+      (body?.additionalHours != null && body?.additionalDays == null)
+    ) {
+      outstationUnit = 'hours';
+    } else {
+      outstationUnit = 'days';
     }
-    if (additionalDays > MAX_EXTENSION_DAYS_DEFAULT) {
-      throw new ApiError(
-        400,
-        `additionalDays cannot exceed ${MAX_EXTENSION_DAYS_DEFAULT}`,
-      );
+
+    if (outstationUnit === 'hours') {
+      const minutes = parseExtensionMinutes(body);
+      additionalHours = round2(minutes / 60);
+      additionalDays = 0;
+    } else {
+      additionalDays = Number(body?.additionalDays);
+      if (!Number.isFinite(additionalDays) || additionalDays < MIN_EXTENSION_DAYS) {
+        throw new ApiError(
+          400,
+          `additionalDays must be at least ${MIN_EXTENSION_DAYS}`,
+        );
+      }
+      if (additionalDays > MAX_EXTENSION_DAYS_DEFAULT) {
+        throw new ApiError(
+          400,
+          `additionalDays cannot exceed ${MAX_EXTENSION_DAYS_DEFAULT}`,
+        );
+      }
+      additionalDays = Math.floor(additionalDays);
+      // Keep days×24 on additionalHours for legacy aggregations that
+      // only read that field (earnings totals etc.).
+      additionalHours = additionalDays * 24;
     }
-    additionalDays = Math.floor(additionalDays);
-    additionalHours = additionalDays * 24;
   } else {
-    additionalHours = Number(body?.additionalHours);
-    if (!Number.isFinite(additionalHours) || additionalHours < MIN_EXTENSION_HOURS) {
-      throw new ApiError(
-        400,
-        `additionalHours must be at least ${MIN_EXTENSION_HOURS}`,
-      );
-    }
-    if (additionalHours > MAX_EXTENSION_HOURS_DEFAULT) {
-      throw new ApiError(
-        400,
-        `additionalHours cannot exceed ${MAX_EXTENSION_HOURS_DEFAULT}`,
-      );
-    }
+    const minutes = parseExtensionMinutes(body);
+    additionalHours = round2(minutes / 60);
   }
 
   expireStaleExtensions(booking);
@@ -1094,9 +1200,35 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
     throw new ApiError(400, 'Pricing for this service is not configured');
   }
   const fareBreakdown = booking.fareSnapshot?.breakdown || {};
-  const { fareDelta, breakdown } = isOutstation
-    ? computeOutstationExtensionDelta(pricing, fareBreakdown, booking, additionalDays)
-    : computeExtensionDelta(pricing, fareBreakdown, additionalHours);
+  let fareDelta;
+  let breakdown;
+  if (isOutstation && outstationUnit === 'days') {
+    ({ fareDelta, breakdown } = computeOutstationExtensionDelta(
+      pricing,
+      fareBreakdown,
+      booking,
+      additionalDays,
+    ));
+  } else if (isOutstation && outstationUnit === 'hours') {
+    const hourlyRate = resolveOutstationHourlyRate(pricing, fareBreakdown);
+    ({ fareDelta, breakdown } = computeExtensionDelta(
+      pricing,
+      fareBreakdown,
+      additionalHours,
+      hourlyRate,
+    ));
+    breakdown = {
+      ...breakdown,
+      extensionUnit: 'hours',
+      outstationHourly: true,
+    };
+  } else {
+    ({ fareDelta, breakdown } = computeExtensionDelta(
+      pricing,
+      fareBreakdown,
+      additionalHours,
+    ));
+  }
 
   const otpCode = generateExtensionOtp();
   const now = new Date();
@@ -1287,7 +1419,7 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     ) {
       const patched = bumpOutstationWindow(
         booking,
-        ext.additionalDays || Math.round((Number(ext.additionalHours) || 0) / 24),
+        outstationBumpFromExtension(ext),
       );
       if (patched) {
         ext.windowAppliedAt = new Date();
@@ -1318,7 +1450,11 @@ export async function payExtensionService(userId, bookingId, body = {}) {
       userId,
       amount: fareDelta,
       source: WALLET_TXN_SOURCE.BOOKING_EXTENSION_PAYMENT,
-      description: `Extension \u2014 booking ${booking.bookingNumber} (+${ext.additionalHours}h)`,
+      description: `Extension \u2014 booking ${booking.bookingNumber} (+${
+        Number(ext.additionalDays) > 0
+          ? `${ext.additionalDays}d`
+          : formatExtensionHoursLabel(ext.additionalHours)
+      })`,
       refType: 'Booking',
       refId: String(booking._id),
     });
@@ -1378,12 +1514,13 @@ export async function payExtensionService(userId, bookingId, body = {}) {
 
   // Outstation: push the booked return window forward so the customer
   // countdown and any complete-after-end gate use the new end date
-  // instead of inventing a startedAt + (days×24h) hourly clock.
+  // (day extensions also bump days/nights; hour slices only move the
+  // return instant).
   let outstationPatch = null;
   if (booking.serviceType === SERVICE_TYPES.OUTSTATION) {
     outstationPatch = bumpOutstationWindow(
       booking,
-      ext.additionalDays || Math.round((Number(ext.additionalHours) || 0) / 24),
+      outstationBumpFromExtension(ext),
     );
     if (outstationPatch) {
       ext.windowAppliedAt = new Date();
