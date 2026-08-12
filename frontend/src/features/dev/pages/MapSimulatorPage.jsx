@@ -85,8 +85,9 @@ const MapSimulatorPage = () => {
 
   /* ---- Map prop derivation -------------------------------------------- */
   // "Driver heading to pickup": pickup = the route's destination so the
-  // simulated driver visibly converges on it. "Trip in progress": pickup
-  // is the start, drop is the destination, and the camera follows.
+  // simulated driver visibly converges on it. "Trip in progress": keep
+  // pickup as the start pin and pass dropoff as the route target —
+  // TripTrackingMap routes driver→dropoff when bookingStatus is STARTED.
   const isApproach = scenario === 'approach';
   const pickupForMap = isApproach ? activeRoute.destination : activeRoute.origin;
   const dropoffForMap = isApproach ? null : activeRoute.destination;

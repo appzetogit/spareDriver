@@ -37,10 +37,10 @@ const TripInProgressPage = () => {
   }, [booking?.pickup]);
 
   const dropPoint = useMemo(() => {
-    const c = booking?.outstation?.location?.coordinates;
+    const c = booking?.dropoff?.location?.coordinates;
     if (!Array.isArray(c) || c.length !== 2) return null;
     return { lat: c[1], lng: c[0] };
-  }, [booking?.outstation]);
+  }, [booking?.dropoff]);
 
   const driverPoint = useMemo(() => {
     if (!liveDriver) return null;

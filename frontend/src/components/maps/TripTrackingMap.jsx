@@ -84,15 +84,25 @@ function TripTrackingMap({
   const isArrivedStatus = bookingStatus === BOOKING_STATUS.ARRIVED;
   const isStartedStatus = bookingStatus === BOOKING_STATUS.STARTED;
 
+  // EN_ROUTE → driver→pickup. STARTED → driver→dropoff (when we have one).
+  // Without this swap the polyline either points at the pin the driver just
+  // left, or is suppressed entirely by the "within 50 m of destination"
+  // hide rule that fires as soon as the ride starts at pickup.
+  const routeDestination = useMemo(() => {
+    if (isStartedStatus && dropoff) return dropoff;
+    return pickup;
+  }, [isStartedStatus, dropoff, pickup]);
+
   const straightLineMeters = useMemo(() => {
-    if (!driver || !pickup) return null;
-    const d = haversineMeters(driver, pickup);
+    if (!driver || !routeDestination) return null;
+    const d = haversineMeters(driver, routeDestination);
     return Number.isFinite(d) ? d : null;
-  }, [driver, pickup]);
+  }, [driver, routeDestination]);
 
   const routeVisible =
     showRoute &&
     !isArrivedStatus &&
+    Boolean(routeDestination) &&
     !(Number.isFinite(straightLineMeters) && straightLineMeters <= ARRIVED_METERS);
 
   const resetMapHeading = useCallback(() => {
@@ -120,8 +130,8 @@ function TripTrackingMap({
   } = useDirectionsRoute({
     maps,
     origin: routeVisible ? driver : null,
-    destination: routeVisible ? pickup : null,
-    enabled: routeVisible && Boolean(driver && pickup),
+    destination: routeVisible ? routeDestination : null,
+    enabled: routeVisible && Boolean(driver && routeDestination),
   });
 
   const initialCenter = useMemo(() => {
@@ -133,16 +143,16 @@ function TripTrackingMap({
   }, []);
 
   const { distanceMeters, etaMinutes } = useMemo(() => {
-    if (!driver || !pickup) return { distanceMeters: null, etaMinutes: null };
+    if (!driver || !routeDestination) return { distanceMeters: null, etaMinutes: null };
     if (Number.isFinite(routeDistanceMeters) && Number.isFinite(routeDurationSeconds)) {
       return {
         distanceMeters: routeDistanceMeters,
         etaMinutes: Math.max(1, Math.round(routeDurationSeconds / 60)),
       };
     }
-    const d = haversineMeters(driver, pickup);
+    const d = haversineMeters(driver, routeDestination);
     return { distanceMeters: d, etaMinutes: estimateEtaMinutes(d) };
-  }, [driver, pickup, routeDistanceMeters, routeDurationSeconds]);
+  }, [driver, routeDestination, routeDistanceMeters, routeDurationSeconds]);
 
   useEffect(() => {
     if (!onEtaChange) return;
@@ -270,7 +280,10 @@ function TripTrackingMap({
 
   const hasRoute = routeVisible && Array.isArray(routePath) && routePath.length > 1;
   const showFallback =
-    routeVisible && driver && pickup && (!routePath || routePath.length < 2);
+    routeVisible &&
+    driver &&
+    routeDestination &&
+    (!routePath || routePath.length < 2);
 
   return (
     <div
@@ -333,7 +346,7 @@ function TripTrackingMap({
 
           {showFallback && (
             <RoutePolyline
-              path={[driver, pickup]}
+              path={[driver, routeDestination]}
               animate={false}
               dashed
             />

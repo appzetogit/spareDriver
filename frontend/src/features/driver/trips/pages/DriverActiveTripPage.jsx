@@ -313,6 +313,12 @@ const DriverActiveTripPage = () => {
     return { lat: c[1], lng: c[0] };
   }, [booking?.pickup]);
 
+  const dropoffCoords = useMemo(() => {
+    const c = booking?.dropoff?.location?.coordinates;
+    if (!Array.isArray(c) || c.length !== 2) return null;
+    return { lat: c[1], lng: c[0] };
+  }, [booking?.dropoff]);
+
   // Tick a heartbeat once a second so the cancel preview's grace-window
   // recompute (in `previewDriverCancellation`) reflects the live wall
   // clock. Without this the preview is frozen at mount time and the
@@ -773,6 +779,7 @@ const DriverActiveTripPage = () => {
           <TripTrackingMap
             driver={driverPoint}
             pickup={pickupCoords}
+            dropoff={dropoffCoords}
             emphasis="pickup"
             height={240}
             showRoute={booking.status !== BOOKING_STATUS.ARRIVED}

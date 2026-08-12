@@ -39,10 +39,10 @@ const DriverTripInProgressPage = () => {
   }, [booking?.pickup]);
 
   const dropPoint = useMemo(() => {
-    const c = booking?.outstation?.location?.coordinates;
+    const c = booking?.dropoff?.location?.coordinates;
     if (!Array.isArray(c) || c.length !== 2) return null;
     return { lat: c[1], lng: c[0] };
-  }, [booking?.outstation]);
+  }, [booking?.dropoff]);
 
   // Live elapsed-time clock anchored on the real start timestamp.
   const startedAtMs = useMemo(() => {
