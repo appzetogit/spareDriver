@@ -179,25 +179,55 @@ const HourlyPreview = ({ form }) => {
 // are not added to the fare here.
 const OutstationPreview = ({ form }) => {
   const minDays = Math.max(1, Number(form.outstation?.minDays) || 1);
-  const [days, setDays] = useState(minDays > 1 ? minDays : 3);
+  const [pickupLocal, setPickupLocal] = useState('2026-08-10T08:00');
+  const [returnLocal, setReturnLocal] = useState('2026-08-12T19:00');
   const [customerArrangesAll, setCustomerArrangesAll] = useState(false);
 
-  useEffect(() => {
-    const next = Math.max(1, Number(form.outstation?.minDays) || 1);
-    if (next > 1) setDays(next);
-  }, [form.outstation?.minDays]);
+  const metrics = useMemo(() => {
+    try {
+      // Inline Kolkata-safe calendar math (mirrors outstationSchedule).
+      const start = new Date(pickupLocal);
+      const end = new Date(returnLocal);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        return { days: minDays, nights: Math.max(0, minDays - 1), durationMinutes: 0 };
+      }
+      const tz = 'Asia/Kolkata';
+      const ymd = (d) => {
+        const parts = Object.fromEntries(
+          new Intl.DateTimeFormat('en-US', {
+            timeZone: tz,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          })
+            .formatToParts(d)
+            .filter((p) => p.type !== 'literal')
+            .map((p) => [p.type, p.value]),
+        );
+        return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+      };
+      const span = Math.round((ymd(end) - ymd(start)) / 86_400_000);
+      const days = Math.max(1, span + 1);
+      return {
+        days,
+        nights: Math.max(0, span),
+        durationMinutes: Math.floor((end - start) / 60_000),
+      };
+    } catch {
+      return { days: minDays, nights: Math.max(0, minDays - 1), durationMinutes: 0 };
+    }
+  }, [pickupLocal, returnLocal, minDays]);
 
   const breakdown = useMemo(
     () =>
       calculateOutstationFare({
         pricing: form,
-        days: Number(days) || 1,
-        // The customer's UI surfaces a single all-or-nothing toggle —
-        // we mirror that here by flipping both flags together.
+        days: metrics.days,
+        nights: metrics.nights,
         foodProvided: customerArrangesAll,
         stayProvided: customerArrangesAll,
       }),
-    [form, days, customerArrangesAll],
+    [form, metrics.days, metrics.nights, customerArrangesAll],
   );
 
   if (!breakdown || !(Number(form.outstation?.dailyRate) > 0)) {
@@ -211,6 +241,9 @@ const OutstationPreview = ({ form }) => {
   const foodPerDay = Number(breakdown.foodAllowancePerDay) || 0;
   const stayPerNight = Number(breakdown.stayAllowancePerNight) || 0;
   const legacyAllowance = Number(breakdown.legacyAllowanceTotal) || 0;
+  const exactHours = (metrics.durationMinutes / 60).toFixed(
+    metrics.durationMinutes % 60 === 0 ? 0 : 1,
+  );
 
   return (
     <>
@@ -218,8 +251,25 @@ const OutstationPreview = ({ form }) => {
         <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
           Round trip simulation
         </p>
-        <div className="grid grid-cols-2 gap-2">
-          <SimInput label="Days" value={days} onChange={setDays} min={1} />
+        <div className="grid grid-cols-1 gap-2">
+          <label className="text-[11px] text-slate-500">
+            Pickup datetime
+            <input
+              type="datetime-local"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              value={pickupLocal}
+              onChange={(e) => setPickupLocal(e.target.value)}
+            />
+          </label>
+          <label className="text-[11px] text-slate-500">
+            Expected return datetime
+            <input
+              type="datetime-local"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              value={returnLocal}
+              onChange={(e) => setReturnLocal(e.target.value)}
+            />
+          </label>
           <FlagToggle
             label={
               customerArrangesAll
@@ -231,8 +281,8 @@ const OutstationPreview = ({ form }) => {
           />
         </div>
         <p className="text-[10px] text-slate-400">
-          {breakdown.days} day(s) · {breakdown.nights} night(s) · toll &amp;
-          parking paid directly to driver
+          Exact {exactHours}h · Billable {breakdown.days} day(s) · Overnight{' '}
+          {breakdown.nights} night(s)
           {customerArrangesAll ? ' · allowances waived' : ''}
         </p>
       </div>

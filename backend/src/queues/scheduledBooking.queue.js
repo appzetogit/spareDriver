@@ -44,6 +44,10 @@ export const SCHEDULED_JOB_NAMES = Object.freeze({
   ESCALATE: 'escalate',
   ESCALATE_BATCH: 'escalate-batch',
   EXPIRE_UNASSIGNED: 'expire-unassigned',
+  /** Outstation return lifecycle — isolated from hourly reminder jobs. */
+  OUTSTATION_RETURN_APPROACHING: 'outstation-return-approaching',
+  OUTSTATION_RETURN_REACHED: 'outstation-return-reached',
+  OUTSTATION_RETURN_PROMPT: 'outstation-return-prompt',
 });
 
 export const ESCALATE_BATCH_JOB_ID = 'escalate-batch-recurring';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
@@ -45,7 +45,7 @@ import useDriverIncomingOfferStore from '../../../../store/driver/useDriverIncom
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
-import { formatExtensionHours } from '../../../../utils/formatters';
+import { formatExtensionHours, maskPersonName } from '../../../../utils/formatters';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
 import TripChatEntry from '../../../../components/chat/TripChatEntry';
@@ -125,6 +125,7 @@ const STATUSES_WITH_MAP = [
 const DriverActiveTripPage = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { emit, isConnected } = useSocket();
   const driverAuth = useDriverAuthStore((s) => s.driver);
 
@@ -161,6 +162,20 @@ const DriverActiveTripPage = () => {
   // Live patches.
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     applyUpdate(payload);
+    const current = useDriverActiveTripStore.getState().booking;
+    const nextStatus = payload?.status || current?.status;
+    if (
+      nextStatus
+      && isBookingContactRevealed({ ...current, status: nextStatus })
+    ) {
+      const hasPhone =
+        current?.userId
+        && typeof current.userId === 'object'
+        && (current.userId.phone_no || current.userId.phone);
+      if (!hasPhone && current?._id) {
+        fetchById(current._id).catch(() => {});
+      }
+    }
   });
 
   // Extension OTP banner — the customer hit "extend" in their app. We
@@ -296,6 +311,11 @@ const DriverActiveTripPage = () => {
   const [otpOpen, setOtpOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [sheetExpanded, setSheetExpanded] = useState(true);
+
+  useEffect(() => {
+    if (searchParams.get('chat') === '1') setSheetExpanded(true);
+  }, [searchParams]);
 
   // Live GPS from `DriverLocationBridge` (watchPosition → shared status).
   // Do NOT use one-shot `useGeolocation` here — that froze the polyline
@@ -452,24 +472,8 @@ const DriverActiveTripPage = () => {
       booking?.bookingType === 'outstation';
 
     if (isOutstation) {
-      const endSrc =
-        booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
-      if (!endSrc) return null;
-      let endMs = new Date(endSrc).getTime();
-      if (!Number.isFinite(endMs)) return null;
-      const unappliedMs = (booking?.extensions || []).reduce((sum, ext) => {
-        if (ext?.status !== 'accepted') return sum;
-        if (ext.windowAppliedAt) return sum;
-        const days = Number(ext.additionalDays) || 0;
-        if (days > 0) return sum + days * 86_400_000;
-        const hours = Number(ext.additionalHours) || 0;
-        if (hours > 0) return sum + hours * 3_600_000;
-        return sum;
-      }, 0);
-      if (unappliedMs > 0) endMs += unappliedMs;
-      const remainingMs = endMs - Date.now();
-      if (remainingMs <= 0) return null;
-      return Math.max(1, Math.ceil(remainingMs / 60_000));
+      // Outstation: early completion is allowed once STARTED.
+      return null;
     }
 
     const startedAtMs = booking?.timeline?.startedAt
@@ -654,8 +658,11 @@ const DriverActiveTripPage = () => {
   }
 
   const customer = typeof booking.userId === 'object' ? booking.userId : null;
-  const customerName = customer?.name || null;
   const contactRevealed = isBookingContactRevealed(booking);
+  const rawCustomerName = customer?.name || null;
+  const customerName = contactRevealed
+    ? rawCustomerName
+    : maskPersonName(rawCustomerName) || 'Customer';
   // Server populates the user's primary contact field as `phone_no`.
   // Older builds returned `phone`; we honour both so the call CTA keeps
   // working on bookings created before the rename. Contact is withheld
@@ -690,13 +697,17 @@ const DriverActiveTripPage = () => {
       ? `${booking.outstation?.days || 1}-day Round trip`
       : `${booking.hourly?.durationHours || ''}h ${SERVICE_TYPE_LABELS.hourly || 'Hourly'}`;
 
-  // Booking-type chip. Three types exist: instant, scheduled (hourly), outstation.
-  // Outstation bookings are now stamped with bookingType = 'outstation' at
-  // creation time, so a simple check here covers all cases cleanly.
-  const isScheduled =
-    booking.bookingType === BOOKING_TYPE.SCHEDULED ||
-    booking.bookingType === BOOKING_TYPE.OUTSTATION;
-  const isOutstationBooking = booking.bookingType === BOOKING_TYPE.OUTSTATION;
+  // Booking-type chip. Instant / Scheduled / Outstation are distinct —
+  // outstation must NOT fall through as "Scheduled".
+  const isOutstationBooking =
+    booking.bookingType === BOOKING_TYPE.OUTSTATION ||
+    booking.serviceType === SERVICE_TYPES.OUTSTATION;
+  const isScheduledHourly = booking.bookingType === BOOKING_TYPE.SCHEDULED;
+  const typeBadge = isOutstationBooking
+    ? { label: 'Outstation', variant: 'success', Icon: Route }
+    : isScheduledHourly
+      ? { label: 'Scheduled', variant: 'info', Icon: CalendarClock }
+      : { label: 'Instant', variant: 'primary', Icon: Zap };
   const scheduledStartAt =
     booking.hourly?.scheduledStartAt ||
     booking.outstation?.pickupAt ||
@@ -711,6 +722,9 @@ const DriverActiveTripPage = () => {
       minute: '2-digit',
     })
     : null;
+  const showPickupSchedule =
+    Boolean(scheduledStartLabel) && (isScheduledHourly || isOutstationBooking);
+  const isMapPhase = STATUSES_WITH_MAP.includes(booking.status);
 
   // Vehicle (populated by getBookingByIdService / getActiveBookingForDriverService
   // when the request is driver-side).
@@ -730,100 +744,64 @@ const DriverActiveTripPage = () => {
     && pickupCoords
     && locationRevealed;
 
-  return (
-    <div className="flex-1 flex flex-col bg-bg min-h-dvh">
-      {/* Sticky header — pinned so the driver always knows what status
-          they're on no matter how far they scroll into the trip card.
-          `top-0` + `z-30` keeps it above sheets/overlays. */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-border-light px-4 py-3 flex items-center gap-3 shadow-sm">
-        <button
-          type="button"
-          onClick={() => navigate('/driver/trips?tab=ongoing')}
-          className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center active:scale-90 transition"
-          aria-label="Back to my trips"
-        >
-          <ArrowLeft className="w-5 h-5 text-text" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-wide text-text-muted font-semibold">
-            {config.title}
-          </p>
-          <div className="flex items-center gap-2 mt-0.5 min-w-0">
-            <p className="text-sm font-bold text-text truncate">{titleLine}</p>
-            <Badge
-              variant={isScheduled ? 'info' : 'primary'}
-              className="!text-[10px] gap-1 shrink-0"
-            >
-              {isScheduled ? (
-                <CalendarClock className="w-3 h-3" />
-              ) : (
-                <Zap className="w-3 h-3 fill-current" />
-              )}
-              {isScheduled ? 'Scheduled' : 'Instant'}
-            </Badge>
-          </div>
-          {isScheduled && scheduledStartLabel && (
-            <p className="text-[11px] text-text-muted mt-0.5">
-              Pickup {scheduledStartLabel}
-            </p>
-          )}
-        </div>
-        <span className="ml-auto text-[11px] text-text-muted font-mono shrink-0 self-start">
-          {booking.bookingNumber}
-        </span>
-      </div>
+  const TypeBadgeIcon = typeBadge.Icon;
 
-      <div className="flex-1 p-4 space-y-4">
-        {/* Live map: driver + pickup, emphasising the pickup pin.
-            Outstation hides coords until midnight on trip day. */}
-        {showMap && (
-          <TripTrackingMap
-            driver={driverPoint}
-            pickup={pickupCoords}
-            dropoff={dropoffCoords}
-            emphasis="pickup"
-            height={240}
-            showRoute={booking.status !== BOOKING_STATUS.ARRIVED}
-            followDriver={Boolean(driverPoint)}
-            bookingStatus={booking.status}
-          />
-        )}
-        {!locationRevealed && STATUSES_WITH_MAP.includes(booking.status) && (
+  const ctaDisabled =
+    paymentBlocker ||
+    busy === 'cancel' ||
+    (config.cta?.action === 'markArrived' && !arrivalReady) ||
+    (config.cta?.action === 'markEnRoute' && enRouteTooEarly) ||
+    (config.cta?.action === 'markArrived' && arrivedTooEarly) ||
+    (config.cta?.action === 'startTrip' && startTooEarly) ||
+    (config.cta?.action === 'completeTrip' && completeTooEarlyMinutes != null);
+
+  const ctaLabel = !config.cta
+    ? null
+    : config.cta.action === 'markEnRoute' && enRouteTooEarly
+      ? `Unlocks in ${formatScheduledLead(minutesUntilEnRouteUnlock)}`
+      : config.cta.action === 'markArrived' && arrivedTooEarly
+        ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
+        : config.cta.action === 'startTrip' && startTooEarly
+          ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
+          : config.cta.action === 'completeTrip' && completeTooEarlyMinutes != null
+            ? `Complete in ${completeTooEarlyLabel}`
+            : config.cta.label;
+
+  const tripDetails = (
+    <>
+        {/* Status banner */}
+        <Card>
+          <p className="text-sm text-text-secondary leading-snug">{config.subtitle}</p>
+        </Card>
+
+        {showMap && !driverPoint && (
           <Card className="bg-amber-50 border border-amber-200">
             <div className="flex items-start gap-3">
               <MapPin className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-amber-900">
-                  Map unlocks on trip day
-                </p>
+                <p className="text-sm font-semibold text-amber-900">Waiting for your GPS</p>
                 <p className="text-xs text-amber-800 mt-1 leading-snug">
-                  {booking?.pickup?.address
-                    ? `Pickup address: ${booking.pickup.address}`
-                    : 'Full address is shown above. The live map and pin unlock at midnight on the pickup day.'}
+                  Enable location so we can show your pin and the route to pickup.
                 </p>
               </div>
             </div>
           </Card>
         )}
 
-        {/* Status banner */}
-        <Card>
-          <p className="text-sm text-text-secondary leading-snug">{config.subtitle}</p>
-        </Card>
-
-        {/* Customer hero card — surfaces every detail the driver might
-            want at a glance (name, phone, email, tenure) and gives the
-            call CTA the most prominent affordance on the page. Replaces
-            the generic PersonContactCard because the driver's primary
-            action on this screen is "phone the customer". */}
         <CustomerHeroCard
           photo={customerPhoto}
           name={customerName}
+          avatarName={rawCustomerName}
           phone={customerPhone}
           email={customerEmail}
           since={customerSince}
           callHref={customerCallHref}
           contactLocked={!contactRevealed}
+          contactUnlockHint={
+            isOutstationBooking
+              ? 'Customer contact unlocks when you arrive at pickup — chat is available now'
+              : 'Customer contact unlocks when you start heading to pickup'
+          }
           chatSlot={
             isChatVisibleForBooking(booking) ? (
               <TripChatEntry
@@ -840,9 +818,6 @@ const DriverActiveTripPage = () => {
           }
         />
 
-        {/* Vehicle — image + brand/model + plate. Driver needs to spot
-            the car at the pickup; we render the customer's vehicle in
-            the same hierarchy as the customer card. */}
         {car && (
           <VehicleCard
             image={carImage}
@@ -854,9 +829,6 @@ const DriverActiveTripPage = () => {
           />
         )}
 
-        {/* Waiting timer — only at ARRIVED. Hourly shows free-wait /
-            charge meter; outstation just waits for OTP (admin settles
-            if the customer never starts). */}
         {booking.status === BOOKING_STATUS.ARRIVED && (
           booking.serviceType === SERVICE_TYPES.OUTSTATION ? (
             <Card className="border-l-4 border-l-sky-500 bg-sky-50/40">
@@ -880,21 +852,10 @@ const DriverActiveTripPage = () => {
           )
         )}
 
-        {/* Extension OTP banner — pushed via socket when the customer
-            taps "extend" in their app. The driver reads the 4-digit
-            code out loud, the customer types it in, then pays. We keep
-            the banner small but visually prominent because the
-            customer is literally waiting for the driver to read it. */}
         {extensionOtpBanner && (
           <ExtensionOtpBanner
             banner={extensionOtpBanner}
             onDismiss={async () => {
-              // For 'otp' and 'verified' stages there's a live row on
-              // the booking that needs to be torn down server-side —
-              // otherwise the customer's app keeps thinking the
-              // extension is in progress. The 'paid' banner is
-              // ephemeral UI only (no open intent) so we just close
-              // the card locally.
               const stage = extensionOtpBanner.stage;
               if (
                 (stage === 'otp' || stage === 'verified') &&
@@ -909,7 +870,7 @@ const DriverActiveTripPage = () => {
                     err?.message ||
                     'Could not dismiss extension',
                   );
-                  return; // keep the banner so the driver can retry
+                  return;
                 }
               }
               setExtensionOtpBanner(null);
@@ -917,7 +878,6 @@ const DriverActiveTripPage = () => {
           />
         )}
 
-        {/* Trip details */}
         <Card>
           <h3 className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wide">
             Trip
@@ -944,10 +904,6 @@ const DriverActiveTripPage = () => {
           )}
         </Card>
 
-        {/* Driver earning — we deliberately don't show the customer's
-            gross fare or the platform commission on this screen. The
-            number the driver cares about is what lands in their wallet
-            after this trip closes out. */}
         <Card>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -983,13 +939,6 @@ const DriverActiveTripPage = () => {
           </div>
         ) : null}
 
-        {/* Paid extensions only. We deliberately skip pending_otp /
-            pending_payment / declined / expired rows: those are the
-            customer's in-flight intents, not money on the books, and
-            showing them here was misleading drivers into thinking
-            they'd been credited for an extension the customer never
-            actually paid for. The live OTP banner above covers the
-            "extension in progress" state separately. */}
         {(() => {
           const accepted = (booking.extensions || []).filter(
             (ext) => ext?.status === 'accepted',
@@ -1063,11 +1012,6 @@ const DriverActiveTripPage = () => {
           </div>
         )}
 
-        {/* Scheduled-pickup countdown banners.
-            - DRIVER_ASSIGNED: "Start to pickup" unlocks RIDE_BUFFER early.
-            - EN_ROUTE (scheduled/outstation): "I've arrived" locked until pickup.
-            - ARRIVED (scheduled/outstation): start ride locked until pickup.
-            Instant skips both time floors (proximity / OTP only). */}
         {enRouteTooEarly && (
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-indigo-100 text-indigo-700">
@@ -1145,12 +1089,222 @@ const DriverActiveTripPage = () => {
             </div>
           </div>
         )}
+    </>
+  );
+
+  const actionBar = (
+    <div className="bg-white border-t border-border-light px-4 py-3 space-y-2">
+      {config.cta && (
+        <Button
+          fullWidth
+          variant="driver"
+          disabled={ctaDisabled}
+          loading={busy === config.cta.action}
+          icon={config.cta.icon}
+          onClick={handleAdvance}
+        >
+          {ctaLabel}
+        </Button>
+      )}
+      {config.canCancel && (
+        <button
+          type="button"
+          disabled={!!busy && busy !== 'cancel'}
+          onClick={handleCancel}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-red-600 font-semibold py-3 text-sm disabled:opacity-60 hover:bg-red-100 transition"
+        >
+          <XCircle className="w-4 h-4" />
+          Cancel trip
+        </button>
+      )}
+    </div>
+  );
+
+  if (isMapPhase) {
+    return (
+      <div className="flex-1 flex flex-col relative bg-gray-950 min-h-dvh overflow-hidden">
+        {showMap ? (
+          <div className="absolute inset-0">
+            <TripTrackingMap
+              driver={driverPoint}
+              pickup={pickupCoords}
+              dropoff={dropoffCoords}
+              emphasis="pickup"
+              height="100%"
+              className="!rounded-none"
+              showRoute={booking.status !== BOOKING_STATUS.ARRIVED}
+              followDriver={Boolean(driverPoint)}
+              bookingStatus={booking.status}
+              audience="driver"
+              controlClassName="!bottom-[38dvh] sm:!bottom-[36dvh]"
+            />
+          </div>
+        ) : !locationRevealed ? (
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-100 via-white to-slate-50">
+            <div className="h-full flex flex-col items-center justify-center px-6 pb-[42dvh] text-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <MapPin className="w-7 h-7" />
+              </div>
+              <p className="text-base font-bold text-slate-900">Map unlocks on trip day</p>
+              <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
+                {booking?.pickup?.address
+                  ? `Pickup address: ${booking.pickup.address}`
+                  : 'The live map and pin unlock at midnight on the pickup day.'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900" />
+        )}
+
+        <div className="relative z-20 flex items-center gap-3 px-4 pt-12 pb-3 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => navigate('/driver/trips?tab=ongoing')}
+            className="w-10 h-10 rounded-2xl bg-white/90 backdrop-blur shadow-lg flex items-center justify-center active:scale-90 transition"
+            aria-label="Back to my trips"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-800" />
+          </button>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/90 backdrop-blur shadow-lg min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="text-xs font-bold text-gray-900 truncate">{config.title}</span>
+          </div>
+          <Badge
+            variant={typeBadge.variant}
+            className="!text-[10px] gap-1 shrink-0 bg-white/90 backdrop-blur shadow-lg !py-1.5"
+          >
+            <TypeBadgeIcon className="w-3 h-3" />
+            {typeBadge.label}
+          </Badge>
+        </div>
+
+        <div className="relative z-20 mt-auto pointer-events-auto">
+          <div className="bg-white rounded-t-[28px] shadow-[0_-8px_32px_rgba(0,0,0,0.18)]">
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={sheetExpanded ? 'Collapse details' : 'Expand details'}
+              onClick={() => setSheetExpanded((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSheetExpanded((v) => !v);
+                }
+              }}
+              className="w-full px-5 pt-3 pb-3 flex flex-col items-stretch gap-2 focus:outline-none cursor-pointer"
+            >
+              <div className="mx-auto w-10 h-1 rounded-full bg-gray-200" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-text truncate">{titleLine}</p>
+                  {showPickupSchedule && (
+                    <p className="text-[11px] text-text-muted mt-0.5">
+                      Pickup {scheduledStartLabel}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-text-muted font-mono">
+                    {booking.bookingNumber}
+                  </span>
+                  <div className={`w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center transition-transform duration-300 ${sheetExpanded ? 'rotate-180' : ''}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-500">
+                      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              {driverPoint && pickupCoords && booking.status !== BOOKING_STATUS.ARRIVED && (
+                <p className="text-xs text-text-muted">
+                  {formatDistance(distanceToPickup ?? 0)} to pickup
+                </p>
+              )}
+            </div>
+
+            {sheetExpanded ? (
+              <div
+                className="overflow-y-auto overscroll-contain px-4 pb-3 space-y-4"
+                style={{ maxHeight: '48dvh' }}
+              >
+                {tripDetails}
+              </div>
+            ) : (
+              <div className="hidden">{tripDetails}</div>
+            )}
+
+            {actionBar}
+          </div>
+        </div>
+
+        <CustomerPaymentOverlay
+          open={paymentBlocker}
+          paymentDeadlineAt={booking.timeline?.paymentDeadlineAt}
+          driverAssignedAt={booking.timeline?.driverAssignedAt}
+        />
+
+        <StartRideOtpSheet
+          open={otpOpen}
+          onClose={() => setOtpOpen(false)}
+          onSubmit={handleStartWithOtp}
+          busy={busy === 'start'}
+        />
+
+        <ConfirmDialog
+          open={cancelOpen}
+          onClose={() => !cancelling && setCancelOpen(false)}
+          onConfirm={handleCancelConfirm}
+          title={cancelPreview.tripStarted ? 'Cancel this active trip?' : 'Cancel this trip?'}
+          description={buildCancelDialogCopy(cancelPreview, booking)}
+          confirmLabel="Cancel trip"
+          cancelLabel="Keep trip"
+          variant="danger"
+          loading={cancelling}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-bg min-h-dvh">
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-border-light px-4 py-3 flex items-center gap-3 shadow-sm">
+        <button
+          type="button"
+          onClick={() => navigate('/driver/trips?tab=ongoing')}
+          className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center active:scale-90 transition"
+          aria-label="Back to my trips"
+        >
+          <ArrowLeft className="w-5 h-5 text-text" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] uppercase tracking-wide text-text-muted font-semibold">
+            {config.title}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5 min-w-0">
+            <p className="text-sm font-bold text-text truncate">{titleLine}</p>
+            <Badge
+              variant={typeBadge.variant}
+              className="!text-[10px] gap-1 shrink-0"
+            >
+              <TypeBadgeIcon className="w-3 h-3" />
+              {typeBadge.label}
+            </Badge>
+          </div>
+          {showPickupSchedule && (
+            <p className="text-[11px] text-text-muted mt-0.5">
+              Pickup {scheduledStartLabel}
+            </p>
+          )}
+        </div>
+        <span className="ml-auto text-[11px] text-text-muted font-mono shrink-0 self-start">
+          {booking.bookingNumber}
+        </span>
       </div>
 
-      {/* Pay-first overlay: while the customer is settling the fare we lock
-          the driver behind a non-dismissible "user is making payment" sheet.
-          If the customer doesn't pay in time the server auto-cancels and
-          the booking transitions to CANCELLED (handled by the effect above). */}
+      <div className="flex-1 p-4 space-y-4">
+        {tripDetails}
+      </div>
+
       <CustomerPaymentOverlay
         open={paymentBlocker}
         paymentDeadlineAt={booking.timeline?.paymentDeadlineAt}
@@ -1164,49 +1318,8 @@ const DriverActiveTripPage = () => {
         busy={busy === 'start'}
       />
 
-      {/* Sticky action bar */}
-      <div className="sticky bottom-0 bg-white border-t border-border-light px-4 py-3 space-y-2 z-10">
-        {config.cta && (
-          <Button
-            fullWidth
-            variant="driver"
-            disabled={
-              paymentBlocker ||
-              busy === 'cancel' ||
-              (config.cta.action === 'markArrived' && !arrivalReady) ||
-              (config.cta.action === 'markEnRoute' && enRouteTooEarly) ||
-              (config.cta.action === 'markArrived' && arrivedTooEarly) ||
-              (config.cta.action === 'startTrip' && startTooEarly) ||
-              (config.cta.action === 'completeTrip' &&
-                completeTooEarlyMinutes != null)
-            }
-            loading={busy === config.cta.action}
-            icon={config.cta.icon}
-            onClick={handleAdvance}
-          >
-            {config.cta.action === 'markEnRoute' && enRouteTooEarly
-              ? `Unlocks in ${formatScheduledLead(minutesUntilEnRouteUnlock)}`
-              : config.cta.action === 'markArrived' && arrivedTooEarly
-                ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
-                : config.cta.action === 'startTrip' && startTooEarly
-                  ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
-                  : config.cta.action === 'completeTrip' &&
-                      completeTooEarlyMinutes != null
-                    ? `Complete in ${completeTooEarlyLabel}`
-                    : config.cta.label}
-          </Button>
-        )}
-        {config.canCancel && (
-          <button
-            type="button"
-            disabled={!!busy && busy !== 'cancel'}
-            onClick={handleCancel}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-red-600 font-semibold py-3 text-sm disabled:opacity-60 hover:bg-red-100 transition"
-          >
-            <XCircle className="w-4 h-4" />
-            Cancel trip
-          </button>
-        )}
+      <div className="sticky bottom-0 z-10">
+        {actionBar}
       </div>
 
       <ConfirmDialog
@@ -1569,11 +1682,13 @@ function WaitingTimerCard({
 function CustomerHeroCard({
   photo,
   name,
+  avatarName,
   phone,
   email,
   since,
   callHref,
   contactLocked = false,
+  contactUnlockHint = 'Customer contact unlocks when you start heading to pickup',
   chatSlot = null,
 }) {
   return (
@@ -1581,7 +1696,7 @@ function CustomerHeroCard({
       <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-5 pt-5 pb-4 flex items-start gap-4">
         <Avatar
           src={photo}
-          name={name || 'Customer'}
+          name={avatarName || name || 'Customer'}
           size="xl"
         />
         <div className="flex-1 min-w-0">
@@ -1608,7 +1723,7 @@ function CustomerHeroCard({
       <div className="px-5 pt-3 pb-4 border-t border-border-light bg-white space-y-2">
         {contactLocked && (
           <p className="text-xs text-text-muted text-center py-1">
-            Customer contact unlocks when you start heading to pickup
+            {contactUnlockHint}
           </p>
         )}
         {phone && (

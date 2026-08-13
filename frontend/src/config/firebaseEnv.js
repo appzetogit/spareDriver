@@ -89,12 +89,27 @@ messaging.onBackgroundMessage(async (payload) => {
 
 function resolveNotificationOpenUrl(data) {
   const path = typeof data.path === 'string' ? data.path.trim() : '';
-  if (path.startsWith('/')) return path;
+  if (path.startsWith('/')) {
+    if (data.kind === 'trip_chat_message' && !path.includes('chat=')) {
+      return path + (path.includes('?') ? '&' : '?') + 'chat=1';
+    }
+    return path;
+  }
   if (data.kind === 'booking_offer' || data.kind === 'new_booking_request') {
     return '/driver/home';
   }
   if (data.kind === 'inbox_offer') {
     return '/driver/trips?tab=incoming';
+  }
+  if (data.kind === 'trip_chat_message' && data.bookingId) {
+    const chatQuery = data.channel ? '&channel=' + encodeURIComponent(data.channel) : '';
+    if (data.recipientRole === 'driver') {
+      return '/driver/trip/' + data.bookingId + '?chat=1' + chatQuery;
+    }
+    if (data.recipientRole === 'admin') {
+      return '/admin/bookings?bookingId=' + data.bookingId + '&chat=1' + chatQuery;
+    }
+    return '/user/book/assigned/' + data.bookingId + '?chat=1' + chatQuery;
   }
   if (data.bookingId && (
     data.kind === 'noshow_prompt'

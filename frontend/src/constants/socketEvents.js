@@ -53,6 +53,8 @@ export const S2C_EVENTS = Object.freeze({
   // remaining-time bar without a refetch.
   BOOKING_EXTENSION_PAID: 'booking:extension:paid',
   BOOKING_NOSHOW_PROMPT: 'booking:noshow:prompt',
+  /** Outstation return approaching / reached / grace prompts. */
+  BOOKING_OUTSTATION_RETURN: 'booking:outstation:return',
 
   // Post-trip ratings. Each side submits once after COMPLETED and the
   // other side hears about it here. Payload: { bookingId,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   MapPin,
@@ -101,6 +101,7 @@ function StatusIcon({ icon }) {
 const DriverAssignedPage = () => {
   const navigate = useNavigate();
   const { id: routeBookingId } = useParams();
+  const [searchParams] = useSearchParams();
   const booking = useUserActiveBookingStore((s) => s.booking);
   const fetchById = useUserActiveBookingStore((s) => s.fetchById);
   const refreshCurrentOrActive = useUserActiveBookingStore(
@@ -153,10 +154,9 @@ const DriverAssignedPage = () => {
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     applyUpdate(payload);
-    // Contact details unlock when the driver starts heading to pickup —
-    // refetch so phone/call CTAs appear without a manual refresh.
-    if (payload?.status && isBookingContactRevealed(payload.status)) {
-      const current = useUserActiveBookingStore.getState().booking;
+    const current = useUserActiveBookingStore.getState().booking;
+    const nextStatus = payload?.status || current?.status;
+    if (nextStatus && isBookingContactRevealed({ ...current, status: nextStatus })) {
       const hasPhone =
         current?.driverId &&
         typeof current.driverId === 'object' &&
@@ -458,8 +458,14 @@ const DriverAssignedPage = () => {
   // "Rendered more hooks than during the previous render" — the bug that
   // produced the blank screen on hard refresh.
   const [cancellable, setCancellable] = useState(true);
-  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [sheetExpanded, setSheetExpanded] = useState(
+    () => searchParams.get('chat') === '1',
+  );
   const [mapLocked, setMapLocked] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('chat') === '1') setSheetExpanded(true);
+  }, [searchParams]);
 
   const bookingStatusForCancel = booking?.status;
   const arrivedAtForCancel = booking?.timeline?.arrivedAt;
@@ -857,14 +863,18 @@ const DriverAssignedPage = () => {
                     {driver && !isBookingContactRevealed(booking) && !isChatVisibleForBooking(booking) && (
                       <div className="px-5 py-3 border-t border-gray-100">
                         <p className="text-xs text-center text-gray-500">
-                          Driver contact unlocks when they start heading to pickup
+                          {isOutstationBooking
+                            ? 'Driver contact unlocks when they arrive at pickup'
+                            : 'Driver contact unlocks when they start heading to pickup'}
                         </p>
                       </div>
                     )}
                     {driver && !isBookingContactRevealed(booking) && isChatVisibleForBooking(booking) && (
                       <div className="px-5 pb-3">
                         <p className="text-[11px] text-center text-gray-500">
-                          Phone unlocks when driver starts heading to pickup — chat is available now
+                          {isOutstationBooking
+                            ? 'Phone unlocks when the driver arrives at pickup — chat is available now'
+                            : 'Phone unlocks when driver starts heading to pickup — chat is available now'}
                         </p>
                       </div>
                     )}

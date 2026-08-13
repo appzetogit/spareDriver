@@ -37,20 +37,21 @@ const TRACKING_MAP_OPTIONS = Object.freeze({
   tilt: 0,
 });
 
-function tripStatusLabel({ bookingStatus, distanceMeters }) {
+function tripStatusLabel({ bookingStatus, distanceMeters, audience }) {
+  const forDriver = audience === 'driver';
   if (
     bookingStatus === BOOKING_STATUS.ARRIVED ||
     (Number.isFinite(distanceMeters) && distanceMeters <= ARRIVED_METERS)
   ) {
-    return 'Driver has arrived';
+    return forDriver ? 'You have arrived' : 'Driver has arrived';
   }
   if (Number.isFinite(distanceMeters) && distanceMeters <= ARRIVING_METERS) {
-    return 'Driver is arriving';
+    return forDriver ? 'Almost at pickup' : 'Driver is arriving';
   }
   if (bookingStatus === BOOKING_STATUS.STARTED) {
     return 'Trip in progress';
   }
-  return 'Driver is on the way';
+  return forDriver ? 'Heading to pickup' : 'Driver is on the way';
 }
 
 function TripTrackingMap({
@@ -72,6 +73,8 @@ function TripTrackingMap({
   controlClassName = '',
   /** When false, map gestures are blocked but Recenter stays clickable. */
   mapInteractive = true,
+  /** `driver` uses first-person copy on the ETA pill. */
+  audience = 'customer',
 }) {
   const { isLoaded, loadError, maps } = useGoogleMap();
   const viewRef = useRef(null);
@@ -160,8 +163,8 @@ function TripTrackingMap({
   }, [distanceMeters, etaMinutes, onEtaChange]);
 
   const statusText = useMemo(
-    () => tripStatusLabel({ bookingStatus, distanceMeters }),
-    [bookingStatus, distanceMeters],
+    () => tripStatusLabel({ bookingStatus, distanceMeters, audience }),
+    [bookingStatus, distanceMeters, audience],
   );
 
   useSmoothCamera({

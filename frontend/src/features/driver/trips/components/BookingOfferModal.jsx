@@ -19,6 +19,7 @@ import { S2C_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { BOOKING_TYPE } from '../../../../constants/bookingStatus';
 import { formatDistance } from '../../../../utils/geo';
+import { maskPersonName } from '../../../../utils/formatters';
 import Button from '../../../../components/Button';
 
 /**
@@ -206,6 +207,16 @@ const BookingOfferModal = () => {
       ? `${offer.outstation?.days || 1}-day Round trip`
       : `${offer.hourly?.durationHours || ''}h ${SERVICE_TYPE_LABELS.hourly}`;
 
+  const isOutstationOffer =
+    offer.bookingType === BOOKING_TYPE.OUTSTATION
+    || offer.serviceType === SERVICE_TYPES.OUTSTATION
+    || Boolean(offer.outstation);
+  const customerDisplayName = offer.customer?.name
+    ? (isOutstationOffer
+      ? (maskPersonName(offer.customer.name) || 'Customer')
+      : offer.customer.name)
+    : 'Customer';
+
   // Distance from the driver to the customer's pickup (server-computed during
   // dispatch). Helps the driver decide whether the offer is worth taking.
   const pickupDistanceLabel =
@@ -275,7 +286,7 @@ const BookingOfferModal = () => {
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-text-muted">Customer</p>
                 <p className="text-sm font-semibold text-text truncate">
-                  {offer.customer.name || 'Customer'}
+                  {customerDisplayName}
                 </p>
               </div>
             </div>

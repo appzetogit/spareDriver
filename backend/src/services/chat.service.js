@@ -25,6 +25,7 @@ import {
   isPrincipalInBookingChat,
 } from '../utils/socketEmitters.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
+import { TERMINAL_BOOKING_STATUSES } from '../constants/bookingStatus.js';
 import {
   notifyUserTripChatMessage,
   notifyDriverTripChatMessage,
@@ -461,6 +462,11 @@ async function dispatchChatNotifications({
     recipientRole,
   };
 
+  const chatQuery = channel ? `chat=1&channel=${encodeURIComponent(channel)}` : 'chat=1';
+  const userChatPath = TERMINAL_BOOKING_STATUSES.includes(booking.status)
+    ? `/user/trips/${bookingId}?${chatQuery}`
+    : `/user/book/assigned/${bookingId}?${chatQuery}`;
+
   const tasks = [];
 
   if (recipientRole === CHAT_SENDER_ROLE.USER && senderRole !== CHAT_SENDER_ROLE.USER) {
@@ -476,7 +482,7 @@ async function dispatchChatNotifications({
           body,
           data: {
             ...data,
-            path: `/user/book/assigned/${bookingId}`,
+            path: userChatPath,
           },
         }),
       );
@@ -496,7 +502,7 @@ async function dispatchChatNotifications({
           body,
           data: {
             ...data,
-            path: `/driver/trip/${bookingId}`,
+            path: `/driver/trip/${bookingId}?${chatQuery}`,
           },
         }),
       );
@@ -510,7 +516,7 @@ async function dispatchChatNotifications({
         body,
         data: {
           ...data,
-          path: `/admin/bookings`,
+          path: `/admin/bookings?bookingId=${bookingId}&${chatQuery}`,
           bookingId,
         },
         zoneIds: booking.zoneIds,

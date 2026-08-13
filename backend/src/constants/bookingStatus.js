@@ -265,9 +265,9 @@ export const DISPATCH_MODE = Object.freeze({
 });
 
 /**
- * Statuses where the counterparty's phone/email may be shared with
- * the driver or the customer. Hidden until the driver taps
- * "Start to pickup" (status → en_route).
+ * Hourly instant / scheduled: phone/email unlock when the driver taps
+ * "Start to pickup" (en_route). Outstation waits until ARRIVED so a
+ * long lead window cannot leak contact; chat stays available earlier.
  */
 export const CONTACT_REVEALED_STATUSES = Object.freeze([
   BOOKING_STATUS.EN_ROUTE,
@@ -276,9 +276,26 @@ export const CONTACT_REVEALED_STATUSES = Object.freeze([
   BOOKING_STATUS.COMPLETED,
 ]);
 
+export const OUTSTATION_CONTACT_REVEALED_STATUSES = Object.freeze([
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+  BOOKING_STATUS.COMPLETED,
+]);
+
+function isOutstationContactBooking(booking) {
+  if (!booking || typeof booking === 'string') return false;
+  return (
+    booking.bookingType === 'outstation'
+    || booking.serviceType === 'outstation'
+    || Boolean(booking.outstation)
+  );
+}
+
 /**
  * Whether either party may see the other's contact details.
- * Cancelled trips keep contact only if the driver had already arrived.
+ * Outstation: only after the driver marks arrived.
+ * Hourly: after start-to-pickup.
+ * Cancelled trips keep contact only if it had already unlocked.
  */
 export function isBookingContactRevealed(bookingOrStatus) {
   if (!bookingOrStatus) return false;
@@ -286,13 +303,17 @@ export function isBookingContactRevealed(bookingOrStatus) {
     typeof bookingOrStatus === 'string'
       ? bookingOrStatus
       : bookingOrStatus.status;
-  if (CONTACT_REVEALED_STATUSES.includes(status)) return true;
-  if (
-    status === BOOKING_STATUS.CANCELLED &&
-    (bookingOrStatus?.timeline?.enRouteAt ||
-      bookingOrStatus?.timeline?.arrivedAt)
-  ) {
-    return true;
+  const outstation = isOutstationContactBooking(bookingOrStatus);
+  const allowed = outstation
+    ? OUTSTATION_CONTACT_REVEALED_STATUSES
+    : CONTACT_REVEALED_STATUSES;
+  if (allowed.includes(status)) return true;
+  if (status === BOOKING_STATUS.CANCELLED) {
+    if (outstation) return Boolean(bookingOrStatus?.timeline?.arrivedAt);
+    return Boolean(
+      bookingOrStatus?.timeline?.enRouteAt
+      || bookingOrStatus?.timeline?.arrivedAt,
+    );
   }
   return false;
 }

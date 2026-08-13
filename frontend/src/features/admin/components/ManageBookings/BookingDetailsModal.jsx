@@ -5,7 +5,7 @@ import Badge from '../../../../components/Badge';
 import Button from '../../../../components/Button';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import api from '../../../../utils/api';
-import { BOOKING_STATUS_LIST } from '../../../../constants/bookingStatus';
+import { BOOKING_STATUS, BOOKING_STATUS_LIST } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import useAdminAuthStore from '../../../../store/useAdminAuthStore';
 import {
@@ -24,6 +24,14 @@ import {
   Ticket,
 } from 'lucide-react';
 import { formatExtensionHours } from '../../../../utils/formatters';
+
+const ADMIN_OVERRIDE_HIDDEN_STATUSES = new Set([
+  BOOKING_STATUS.PENDING_ASSIGNMENT,
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.DRIVER_ASSIGNED,
+  BOOKING_STATUS.AWAITING_PAYMENT,
+  BOOKING_STATUS.CANCELLED,
+]);
 
 const STATUS_VARIANTS = {
   completed: 'success',
@@ -495,11 +503,16 @@ const BookingDetailsModal = ({
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <select
-                value={currentStatus}
+                value={ADMIN_OVERRIDE_HIDDEN_STATUSES.has(currentStatus) ? '' : currentStatus}
                 onChange={(e) => setStatusDraft(e.target.value)}
                 className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
               >
-                {BOOKING_STATUS_LIST.filter((s) => s !== 'cancelled').map((s) => (
+                {ADMIN_OVERRIDE_HIDDEN_STATUSES.has(currentStatus) && (
+                  <option value="" disabled>
+                    Select status
+                  </option>
+                )}
+                {BOOKING_STATUS_LIST.filter((s) => !ADMIN_OVERRIDE_HIDDEN_STATUSES.has(s)).map((s) => (
                   <option key={s} value={s}>
                     {s.replace(/_/g, ' ')}
                   </option>

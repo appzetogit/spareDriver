@@ -136,6 +136,15 @@ export const S2C_EVENTS = Object.freeze({
   BOOKING_NOSHOW_PROMPT: 'booking:noshow:prompt',
 
   /**
+   * Outstation return lifecycle prompt (approaching / reached / grace /
+   * awaiting_decision). Hourly rides never emit this — they use
+   * BOOKING_EXTENSION_OFFERED / ride-end timers instead.
+   *
+   * Payload: `{ bookingId, returnPhase, expectedReturnAt, outstation, … }`
+   */
+  BOOKING_OUTSTATION_RETURN: 'booking:outstation:return',
+
+  /**
    * Post-trip rating events. Each side submits exactly once after
    * `COMPLETED`; the other side hears about it here (driver dashboard
    * tile / admin feedback feed). Payload:

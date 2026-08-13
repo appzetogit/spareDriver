@@ -10,7 +10,9 @@
     "fix:payment-index": "node scripts/fixPaymentIndex.js",
     "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
     "seed": "node scripts/seed.js",
-    "seed:fresh": "node scripts/seed.js --fresh"
+    "seed:fresh": "node scripts/seed.js --fresh",
+    "test": "node --test src/utils/outstationDuration.test.js",
+    "test:outstation": "node --test src/utils/outstationDuration.test.js"
   },
   "keywords": [],
   "author": "",

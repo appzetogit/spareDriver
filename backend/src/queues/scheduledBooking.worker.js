@@ -11,6 +11,11 @@ import {
   runScheduledInboxBatchJob,
   expireUnassignedScheduledBooking,
 } from '../services/bookingScheduled.service.js';
+import {
+  handleOutstationReturnApproaching,
+  handleOutstationReturnReached,
+  handleOutstationReturnPromptRepeat,
+} from '../services/bookingOutstationReturn.service.js';
 
 /**
  * BullMQ worker for the scheduled-booking queue.
@@ -87,6 +92,27 @@ export async function startScheduledBookingWorker() {
               throw new Error('scheduledBooking expire-unassigned missing bookingId');
             }
             return expireUnassignedScheduledBooking(bookingId);
+          }
+          case SCHEDULED_JOB_NAMES.OUTSTATION_RETURN_APPROACHING: {
+            const { bookingId } = job.data || {};
+            if (!bookingId) {
+              throw new Error('outstation-return-approaching missing bookingId');
+            }
+            return handleOutstationReturnApproaching(bookingId);
+          }
+          case SCHEDULED_JOB_NAMES.OUTSTATION_RETURN_REACHED: {
+            const { bookingId } = job.data || {};
+            if (!bookingId) {
+              throw new Error('outstation-return-reached missing bookingId');
+            }
+            return handleOutstationReturnReached(bookingId);
+          }
+          case SCHEDULED_JOB_NAMES.OUTSTATION_RETURN_PROMPT: {
+            const { bookingId } = job.data || {};
+            if (!bookingId) {
+              throw new Error('outstation-return-prompt missing bookingId');
+            }
+            return handleOutstationReturnPromptRepeat(bookingId);
           }
           default:
             throw new Error(`Unknown scheduledBooking job name: ${job.name}`);

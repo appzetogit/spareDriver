@@ -162,6 +162,10 @@ const ConfirmAndPayPage = () => {
       if (draft.hourly.foodProvided != null) base.foodProvided = !!draft.hourly.foodProvided;
       if (draft.hourly.stayProvided != null) base.stayProvided = !!draft.hourly.stayProvided;
     } else {
+      base.pickupAt =
+        draft.outstation.pickupAt || draft.outstation.startDate;
+      base.expectedReturnAt =
+        draft.outstation.expectedReturnAt || draft.outstation.endDate;
       base.days = draft.outstation.days;
       base.scheduledAt =
         draft.outstation.pickupAt || draft.outstation.startDate;

@@ -70,9 +70,14 @@ function normalizeNotificationData(raw) {
 
 function resolveNotificationOpenUrl(data) {
   const path = typeof data.path === 'string' ? data.path.trim() : '';
-  if (path.startsWith('/')) return path;
   const kind = data.kind || '';
   const bookingId = data.bookingId ? String(data.bookingId) : '';
+  if (path.startsWith('/')) {
+    if (kind === 'trip_chat_message' && path.indexOf('chat=') === -1) {
+      return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'chat=1';
+    }
+    return path;
+  }
   if (kind === 'booking_offer' || kind === 'new_booking_request') {
     return '/driver/home';
   }
@@ -80,8 +85,12 @@ function resolveNotificationOpenUrl(data) {
     return '/driver/trips?tab=incoming';
   }
   if (kind === 'trip_chat_message' && bookingId) {
-    if (data.recipientRole === 'driver') return '/driver/trip/' + bookingId;
-    return '/user/book/assigned/' + bookingId;
+    const chatQuery = (data.channel ? '&channel=' + encodeURIComponent(data.channel) : '');
+    if (data.recipientRole === 'driver') return '/driver/trip/' + bookingId + '?chat=1' + chatQuery;
+    if (data.recipientRole === 'admin') {
+      return '/admin/bookings?bookingId=' + bookingId + '&chat=1' + chatQuery;
+    }
+    return '/user/book/assigned/' + bookingId + '?chat=1' + chatQuery;
   }
   if (bookingId && (
     kind === 'noshow_prompt'
@@ -112,9 +121,12 @@ self.addEventListener('notificationclick', (event) => {
         await client.focus();
         if (openUrl && openUrl !== '/' && typeof client.navigate === 'function') {
           try {
-            const current = new URL(client.url).pathname;
-            const target = openUrl.split('?')[0];
-            if (current !== target) await client.navigate(openUrl);
+            const current = new URL(client.url);
+            const targetPath = openUrl.split('?')[0];
+            const currentFull = current.pathname + current.search;
+            if (current.pathname !== targetPath || currentFull !== openUrl) {
+              await client.navigate(openUrl);
+            }
           } catch (_) { /* soft-nav via postMessage */ }
         }
         return;

@@ -21,10 +21,15 @@ import {
 } from '../utils/socketEmitters.js';
 import { getServicePricingByTypeService } from './pricing.service.js';
 import {
+  computeOutstationTripMetrics,
+  assertOutstationDaysWithinLimits,
+} from '../utils/outstationDuration.js';
+import {
   debitWalletService,
   releaseWalletHoldService,
 } from './wallet.service.js';
 import { scheduleRideEndTimer } from './bookingRideEndTimeout.service.js';
+import { rescheduleOutstationReturnJobs } from './bookingOutstationReturn.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 import { todayKey } from './bookingCancellation.service.js';
 
@@ -92,13 +97,15 @@ async function toDriverBooking(booking) {
 /**
  * Push the outstation return window forward once an extension is paid.
  *
- *   - Day extensions: +N calendar days on expectedReturnAt / endDate
- *     and bump outstation.days / nights.
- *   - Hour extensions: +hours on the return instant only — do NOT
- *     inflate days/nights (those stay day-granular for fare history).
+ *   - Day extensions: +N × 24h on expectedReturnAt / endDate (IST has
+ *     no DST, so this matches +N calendar days at the same clock time).
+ *   - Hour extensions: +hours on the return instant.
  *
- * Returns the patched outstation window fields, or null if nothing
- * could be applied.
+ * After either bump, recompute Asia/Kolkata billable days/nights and
+ * exact durationMinutes from pickupAt → new expectedReturnAt so the
+ * stored window stays authoritative for conflicts / maxDays / UI.
+ * (Hour-extension FARE still uses extraHourCharge only — see delta
+ * helpers below.)
  */
 function bumpOutstationWindow(
   booking,
@@ -114,12 +121,7 @@ function bumpOutstationWindow(
   if (!currentEnd || Number.isNaN(currentEnd.getTime())) return null;
 
   if (days > 0) {
-    currentEnd.setDate(currentEnd.getDate() + days);
-    booking.outstation.days = (Number(booking.outstation.days) || 0) + days;
-    booking.outstation.nights = Math.max(
-      0,
-      (Number(booking.outstation.days) || 1) - 1,
-    );
+    currentEnd.setTime(currentEnd.getTime() + days * 86_400_000);
   }
   if (hours > 0) {
     currentEnd.setTime(currentEnd.getTime() + Math.round(hours * 3_600_000));
@@ -127,6 +129,20 @@ function bumpOutstationWindow(
 
   booking.outstation.expectedReturnAt = currentEnd;
   booking.outstation.endDate = currentEnd;
+
+  const pickupSrc =
+    booking.outstation.pickupAt || booking.outstation.startDate;
+  if (pickupSrc) {
+    try {
+      const metrics = computeOutstationTripMetrics(pickupSrc, currentEnd);
+      booking.outstation.days = metrics.days;
+      booking.outstation.nights = metrics.nights;
+      booking.outstation.durationMinutes = metrics.durationMinutes;
+    } catch {
+      // Keep previous days/nights if bounds somehow invert.
+    }
+  }
+
   return {
     pickupAt: booking.outstation.pickupAt,
     expectedReturnAt: booking.outstation.expectedReturnAt,
@@ -134,6 +150,7 @@ function bumpOutstationWindow(
     endDate: booking.outstation.endDate,
     days: booking.outstation.days,
     nights: booking.outstation.nights,
+    durationMinutes: booking.outstation.durationMinutes,
   };
 }
 
@@ -228,18 +245,54 @@ function parseExtensionMinutes(body = {}) {
   return minutes;
 }
 
-/** ₹/hr for outstation hour-slice extensions. */
+/** ₹/hr for outstation hour-slice extensions — prefer booking snapshot. */
 function resolveOutstationHourlyRate(pricing, fareBreakdown) {
+  const fromSnapshot =
+    Number(fareBreakdown?.outstationExtraHourCharge) ||
+    Number(fareBreakdown?.extraHourChargeRate) ||
+    0;
+  if (fromSnapshot > 0) return fromSnapshot;
   const fromOutstation = Number(pricing?.outstation?.extraHourCharge) || 0;
   if (fromOutstation > 0) return fromOutstation;
   const fromTop = Number(pricing?.extraHourCharge) || 0;
   if (fromTop > 0) return fromTop;
   const daily =
-    Number(pricing?.outstation?.dailyRate) ||
     Number(fareBreakdown?.dailyRate) ||
+    Number(pricing?.outstation?.dailyRate) ||
     0;
   if (daily > 0) return round2(daily / 24);
   return 0;
+}
+
+/** Snapshot-first daily rate for outstation day extensions. */
+function resolveOutstationDailyRate(pricing, fareBreakdown) {
+  const fromSnapshot = Number(fareBreakdown?.dailyRate) || 0;
+  if (fromSnapshot > 0) return fromSnapshot;
+  return Number(pricing?.outstation?.dailyRate) || 0;
+}
+
+function resolveOutstationFoodPerDay(pricing, fareBreakdown) {
+  const fromSnapshot = Number(fareBreakdown?.foodAllowancePerDay);
+  if (Number.isFinite(fromSnapshot) && fromSnapshot >= 0) return fromSnapshot;
+  return Number(pricing?.outstation?.foodAllowancePerDay) || 0;
+}
+
+function resolveOutstationStayPerNight(pricing, fareBreakdown) {
+  const fromSnapshot = Number(fareBreakdown?.stayAllowancePerNight);
+  if (Number.isFinite(fromSnapshot) && fromSnapshot >= 0) return fromSnapshot;
+  return Number(pricing?.outstation?.stayAllowancePerNight) || 0;
+}
+
+function resolveOutstationLegacyAllowancePerNight(pricing, fareBreakdown) {
+  const fromSnapshot = Number(fareBreakdown?.allowancePerNight);
+  if (Number.isFinite(fromSnapshot) && fromSnapshot >= 0) return fromSnapshot;
+  return Number(pricing?.outstation?.allowancePerNight) || 0;
+}
+
+function resolveOutstationMaxDays(pricing, fareBreakdown) {
+  const fromSnapshot = Number(fareBreakdown?.maxDays);
+  if (Number.isFinite(fromSnapshot) && fromSnapshot >= 0) return fromSnapshot;
+  return Math.max(0, Number(pricing?.outstation?.maxDays) || 0);
 }
 
 /**
@@ -862,32 +915,16 @@ function computeExtensionDelta(pricing, fareBreakdown, additionalHours, rateOver
 }
 
 /**
- * Outstation extension delta — N extra calendar days at the daily
- * rate, plus the per-day food allowance and per-night stay allowance
- * the booking was already paying for (mirrors the at-create math in
- * `pricing.service.js#calculateOutstationFare`).
+ * Outstation extension delta — N extra calendar days at the snapshotted
+ * daily rate, plus food/stay allowances using the same customer flags
+ * as booking-create (`needsFood`/`needsStay` === true → customer
+ * arranges → no allowance).
  *
- * Conventions:
- *   - The food + stay allowance is pass-through to the driver (same
- *     as the original booking) — so platform commission only applies
- *     to the daily-rate portion. This keeps the post-uplift breakdown
- *     symmetric with the at-create breakdown and the company-revenue
- *     ledger remains balanced when `payExtensionService` bumps it.
- *   - Service charge + GST percentages are re-derived from the
- *     original fare snapshot so the extension uses the same
- *     percentages even if the admin tweaks pricing mid-trip.
- *   - For an N-day extension, `extraNights` is treated as N (the
- *     customer needs the driver overnight for each of the N added
- *     days, including the new "last" night before pickup of the next
- *     extra day) when the original booking already crossed at least
- *     one night. For a same-day add-on (rare), the stay allowance
- *     skips. We approximate this from the original booking's
- *     `outstation.nights / days` ratio so the extension's per-day
- *     cost matches the original's per-day cost.
+ * Additional nights are derived from Asia/Kolkata calendar math on the
+ * projected new return window (not the legacy "originalNights > 0 ?
+ * +N : 0" shortcut).
  *
- * Honours the booking's `outstation.needsFood` / `needsStay` flags so
- * customers who arranged food + stay upfront aren't surprise-charged
- * for the extension.
+ * Platform fee + GST percentages come from the original fare snapshot.
  */
 function computeOutstationExtensionDelta(
   pricing,
@@ -895,8 +932,7 @@ function computeOutstationExtensionDelta(
   booking,
   additionalDays,
 ) {
-  const o = pricing?.outstation || {};
-  const dailyRate = Number(o.dailyRate) || 0;
+  const dailyRate = resolveOutstationDailyRate(pricing, fareBreakdown);
   if (!dailyRate) {
     throw new ApiError(
       400,
@@ -905,32 +941,46 @@ function computeOutstationExtensionDelta(
   }
   const days = Math.max(1, Math.floor(additionalDays));
 
-  // The original booking's per-day allowances. We honour the customer's
-  // food/stay flags (set at booking-create) so an extension never
-  // bills for an allowance the original trip already opted out of.
-  const needsFood = booking?.outstation?.needsFood !== false;
-  const needsStay = booking?.outstation?.needsStay !== false;
-  const foodAllowancePerDay = needsFood ? Number(o.foodAllowancePerDay) || 0 : 0;
-  const stayAllowancePerNight = needsStay
-    ? Number(o.stayAllowancePerNight) || 0
-    : 0;
-  // Legacy back-compat: when both split fields are 0 and the doc still
-  // has the combined per-night number, the original at-create math
-  // used `legacyAllowancePerNight × nights`. Mirror that here so the
-  // extension fare matches the original's per-day cost. Waived when
-  // BOTH provided flags are true (same as `calculateOutstationFare`).
+  // needsFood/needsStay === true → customer arranges → no allowance
+  // (same convention as calculateOutstationFare foodProvided/stayProvided).
+  const customerArrangesFood = booking?.outstation?.needsFood === true;
+  const customerArrangesStay = booking?.outstation?.needsStay === true;
+
+  const foodRate = resolveOutstationFoodPerDay(pricing, fareBreakdown);
+  const stayRate = resolveOutstationStayPerNight(pricing, fareBreakdown);
+  const legacyRate = resolveOutstationLegacyAllowancePerNight(
+    pricing,
+    fareBreakdown,
+  );
+
+  const foodAllowancePerDay = customerArrangesFood ? 0 : foodRate;
+  const stayAllowancePerNight = customerArrangesStay ? 0 : stayRate;
+  const useLegacy =
+    foodRate <= 0 && stayRate <= 0 && legacyRate > 0;
   const legacyAllowancePerNight =
-    foodAllowancePerDay <= 0 && stayAllowancePerNight <= 0
-      ? (needsFood && needsStay ? 0 : Number(o.allowancePerNight) || 0)
+    useLegacy && !(customerArrangesFood && customerArrangesStay)
+      ? legacyRate
       : 0;
 
-  // For an N-day extension we add N "extra nights" the driver will
-  // sleep over (one per added day) IF the original booking already
-  // had at least one overnight halt; otherwise we treat the extension
-  // as zero-night (a same-day add-on) so the customer isn't
-  // surprise-charged for a stay they didn't need on day 1.
-  const originalNights = Number(booking?.outstation?.nights) || 0;
-  const extraNights = originalNights > 0 ? days : 0;
+  // Project the new return and compute how many additional nights the
+  // calendar model actually adds.
+  const pickupSrc =
+    booking?.outstation?.pickupAt || booking?.outstation?.startDate;
+  const endSrc =
+    booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
+  let extraNights = days; // fallback: +1 night per +1 day
+  if (pickupSrc && endSrc) {
+    try {
+      const current = computeOutstationTripMetrics(pickupSrc, endSrc);
+      const projectedEnd = new Date(
+        new Date(endSrc).getTime() + days * 86_400_000,
+      );
+      const next = computeOutstationTripMetrics(pickupSrc, projectedEnd);
+      extraNights = Math.max(0, next.nights - current.nights);
+    } catch {
+      extraNights = days;
+    }
+  }
 
   const dailyRateTotal = dailyRate * days;
   const foodAllowanceTotal = foodAllowancePerDay * days;
@@ -946,10 +996,6 @@ function computeOutstationExtensionDelta(
   const gst = ((subtotal + serviceCharge) * gstPercent) / 100;
   const fareDelta = round2(subtotal + serviceCharge + gst);
 
-  // Commission applies only to the daily-rate portion — the food +
-  // stay allowance is pass-through to the driver (same policy as the
-  // original outstation booking). See `applyPlatformLayers` in
-  // `pricing.service.js`.
   const platformCommissionPercent =
     Number(fareBreakdown?.platformCommissionPercent) ||
     Number(pricing?.platformCommissionPercent) ||
@@ -957,7 +1003,6 @@ function computeOutstationExtensionDelta(
   const commissionableSubtotal = dailyRateTotal;
   const platformCommission =
     (commissionableSubtotal * platformCommissionPercent) / 100;
-  // Driver keeps the full allowance + (dailyRateTotal − commission).
   const driverFareEarning = Math.max(
     0,
     commissionableSubtotal - platformCommission,
@@ -968,19 +1013,17 @@ function computeOutstationExtensionDelta(
   return {
     fareDelta,
     breakdown: {
-      // Hours field is set to days × 24 so legacy aggregations that
-      // read `additionalHours` still produce sensible numbers.
       additionalHours: days * 24,
       additionalDays: days,
+      additionalNights: extraNights,
       dailyRate: round2(dailyRate),
       dailyRateTotal: round2(dailyRateTotal),
       foodAllowancePerDay: round2(foodAllowancePerDay),
       foodAllowanceTotal: round2(foodAllowanceTotal),
       stayAllowancePerNight: round2(stayAllowancePerNight),
       stayAllowanceTotal: round2(stayAllowanceTotal),
-      legacyAllowanceTotal: round2(legacyAllowanceTotal),
       allowanceTotal: round2(allowanceTotal),
-      extraNights,
+      legacyAllowanceTotal: round2(legacyAllowanceTotal),
       subtotal: round2(subtotal),
       serviceCharge: round2(serviceCharge),
       serviceChargePercent: rates.serviceChargePercent,
@@ -992,8 +1035,9 @@ function computeOutstationExtensionDelta(
       platformCommission: round2(platformCommission),
       platformCommissionPercent,
       driverEarning: round2(driverEarning),
-      driverFareEarning: round2(driverFareEarning),
-      driverAllowanceEarning: round2(driverAllowanceEarning),
+      extensionUnit: 'days',
+      outstationDaily: true,
+      usedSnapshotRates: true,
     },
   };
 }
@@ -1200,6 +1244,42 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
     throw new ApiError(400, 'Pricing for this service is not configured');
   }
   const fareBreakdown = booking.fareSnapshot?.breakdown || {};
+
+  // Outstation: reject extensions that would push calendar days past maxDays.
+  if (isOutstation) {
+    const pickupSrc =
+      booking.outstation?.pickupAt || booking.outstation?.startDate;
+    const endSrc =
+      booking.outstation?.expectedReturnAt || booking.outstation?.endDate;
+    if (pickupSrc && endSrc) {
+      const projectedEnd = new Date(endSrc);
+      if (outstationUnit === 'days' && additionalDays > 0) {
+        projectedEnd.setTime(
+          projectedEnd.getTime() + additionalDays * 86_400_000,
+        );
+      } else if (outstationUnit === 'hours' && additionalHours > 0) {
+        projectedEnd.setTime(
+          projectedEnd.getTime() + Math.round(additionalHours * 3_600_000),
+        );
+      }
+      try {
+        const projected = computeOutstationTripMetrics(pickupSrc, projectedEnd);
+        assertOutstationDaysWithinLimits(projected.days, {
+          minDays: 1,
+          maxDays: resolveOutstationMaxDays(pricing, fareBreakdown),
+        });
+      } catch (err) {
+        if (
+          err.code === 'OUTSTATION_ABOVE_MAX_DAYS' ||
+          err.code === 'OUTSTATION_BELOW_MIN_DAYS'
+        ) {
+          throw new ApiError(400, err.message, err.details || undefined);
+        }
+        throw err;
+      }
+    }
+  }
+
   let fareDelta;
   let breakdown;
   if (isOutstation && outstationUnit === 'days') {
@@ -1221,6 +1301,7 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
       ...breakdown,
       extensionUnit: 'hours',
       outstationHourly: true,
+      usedSnapshotRates: true,
     };
   } else {
     ({ fareDelta, breakdown } = computeExtensionDelta(
@@ -1530,7 +1611,18 @@ export async function payExtensionService(userId, bookingId, body = {}) {
   await booking.save();
 
   // Push the hourly auto-complete timer out by the newly accepted hours.
+  // No-op for outstation (rideEndsAtMs returns null without hourly hours).
   scheduleRideEndTimer(booking);
+
+  // Outstation return lifecycle jobs must follow the new expectedReturnAt.
+  if (booking.serviceType === SERVICE_TYPES.OUTSTATION && outstationPatch) {
+    rescheduleOutstationReturnJobs(booking).catch((err) =>
+      console.warn(
+        '[extension] failed to reschedule outstation return jobs:',
+        err?.message,
+      ),
+    );
+  }
 
   const extensionsForUi = booking.extensions.map((e) => serialiseExtensionForCustomer(e));
   const userPayload = {

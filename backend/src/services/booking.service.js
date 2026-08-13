@@ -6,6 +6,12 @@ import {
   getServicePricingByTypeService,
 } from './pricing.service.js';
 import {
+  computeOutstationDuration,
+  computeOutstationTripMetrics,
+  assertOutstationDaysWithinLimits,
+} from '../utils/outstationDuration.js';
+import { attachOutstationReturnPhase } from './bookingOutstationReturn.service.js';
+import {
   cancelPaymentTimeout,
   releaseDriverFromBooking,
 } from './bookingPaymentTimeout.service.js';
@@ -245,8 +251,8 @@ export function driverEarningFromFareSnapshot(fareSnapshot) {
  * OTP-entry sheet.
  */
 /**
- * Strip counterparty phone/email until the driver has arrived at pickup.
- * Mutates a lean booking POJO in place.
+ * Strip counterparty phone/email until contact is revealed
+ * (hourly: en_route; outstation: arrived). Mutates a lean POJO.
  */
 function stripContactIfHidden(person) {
   if (!person || typeof person !== 'object') return person;
@@ -343,7 +349,7 @@ export function sanitizeBookingForDriver(booking) {
 
   applyOutstationLocationPrivacy(obj);
 
-  return obj;
+  return attachOutstationReturnPhase(obj);
 }
 
 /**
@@ -358,7 +364,7 @@ export function sanitizeBookingForUser(booking) {
   ) {
     stripContactIfHidden(booking.driverId);
   }
-  return booking;
+  return attachOutstationReturnPhase(booking);
 }
 
 /**
@@ -708,44 +714,13 @@ function shapePlace(place) {
 }
 
 /**
- * Round-trip outstation duration.
+ * Round-trip outstation duration — re-exported from the Kolkata-safe
+ * util so existing imports of `computeOutstationDuration` from this
+ * module keep working. Calendar days/nights use Asia/Kolkata.
  *
- *   Days  = number of DISTINCT calendar dates the trip spans
- *           (server-local time). Same-day = 1, overnight = 2, etc.
- *           e.g. pickup Mon 09:00 → return Wed 06:00 ⇒ 3 days.
- *           e.g. pickup Mon 08:00 → return Mon 20:00 ⇒ 1 day.
- *   Nights = days − 1 (one less night than days, since the customer
- *           is back home on the final day).
- *
- * The two arguments are intentionally named generically (`pickupAt`,
- * `expectedReturnAt`) but accept the legacy `(startDate, endDate)`
- * pair too — both flows use the same calendar-day model.
- *
- * Returns `{ days: 1, nights: 0 }` when either bound is missing or
- * invalid so a downstream fare estimate never blows up on null math.
+ * @see ../utils/outstationDuration.js
  */
-export function computeOutstationDuration(pickupAt, expectedReturnAt) {
-  if (!pickupAt || !expectedReturnAt) return { days: 1, nights: 0 };
-  const start = new Date(pickupAt);
-  const end = new Date(expectedReturnAt);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return { days: 1, nights: 0 };
-  }
-  if (end.getTime() <= start.getTime()) return { days: 1, nights: 0 };
-
-  // Strip the time component so the diff is in WHOLE calendar days.
-  // Math.round (not floor) shrugs off DST quirks where the local-day
-  // difference is 23h 59m or 24h 01m.
-  const startMidnight = new Date(start);
-  startMidnight.setHours(0, 0, 0, 0);
-  const endMidnight = new Date(end);
-  endMidnight.setHours(0, 0, 0, 0);
-  const calendarSpan = Math.round(
-    (endMidnight.getTime() - startMidnight.getTime()) / 86_400_000,
-  );
-  const days = Math.max(1, calendarSpan + 1);
-  return { days, nights: Math.max(0, days - 1) };
-}
+export { computeOutstationDuration, computeOutstationTripMetrics };
 
 /**
  * Compute the start + end Date for a booking-create payload. Used by
@@ -951,10 +926,30 @@ export async function createBookingService(userId, body) {
     serviceType === SERVICE_TYPES.OUTSTATION
       ? new Date(outstation?.expectedReturnAt || outstation?.endDate)
       : null;
-  const outstationDuration =
+  const outstationMetrics =
     serviceType === SERVICE_TYPES.OUTSTATION
-      ? computeOutstationDuration(outstationPickupAt, outstationReturnAt)
+      ? computeOutstationTripMetrics(outstationPickupAt, outstationReturnAt)
       : null;
+  const outstationDuration = outstationMetrics
+    ? { days: outstationMetrics.days, nights: outstationMetrics.nights }
+    : null;
+
+  // Enforce admin minDays / maxDays before fare estimate (server-side
+  // only — never trust client-supplied days).
+  if (serviceType === SERVICE_TYPES.OUTSTATION && outstationMetrics) {
+    const livePricing = await getServicePricingByTypeService(
+      SERVICE_TYPES.OUTSTATION,
+    );
+    const o = livePricing?.outstation || {};
+    try {
+      assertOutstationDaysWithinLimits(outstationMetrics.days, {
+        minDays: o.minDays,
+        maxDays: o.maxDays,
+      });
+    } catch (err) {
+      throw new ApiError(400, err.message, err.details || undefined);
+    }
+  }
 
   const estimate = await estimateFareService({
     serviceType,
@@ -964,6 +959,9 @@ export async function createBookingService(userId, body) {
     bookedHours: hourly?.durationHours,
     scheduledAt: hourly?.scheduledStartAt || outstationPickupAt,
     days: outstationDuration?.days,
+    nights: outstationDuration?.nights,
+    pickupAt: outstationPickupAt || undefined,
+    expectedReturnAt: outstationReturnAt || undefined,
     stayProvided:
       serviceType === SERVICE_TYPES.OUTSTATION
         ? (outstation?.needsStay ?? true)
@@ -1105,6 +1103,7 @@ export async function createBookingService(userId, body) {
               endDate: outstationReturnAt,
               days: outstationDuration.days,
               nights: outstationDuration.nights,
+              durationMinutes: outstationMetrics.durationMinutes,
               needsStay: outstation.needsStay ?? true,
               needsFood: outstation.needsFood ?? true,
               estimatedKm: outstation.estimatedKm || 0,
@@ -1690,7 +1689,21 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
       throw new ApiError(400, 'Expected return must be after the new pickup time');
     }
 
-    const duration = computeOutstationDuration(nextPickup, nextReturn);
+    const duration = computeOutstationTripMetrics(nextPickup, nextReturn);
+    try {
+      const livePricing = await getServicePricingByTypeService(
+        SERVICE_TYPES.OUTSTATION,
+      );
+      assertOutstationDaysWithinLimits(duration.days, {
+        minDays: livePricing?.outstation?.minDays,
+        maxDays: livePricing?.outstation?.maxDays,
+      });
+    } catch (err) {
+      if (err.code === 'OUTSTATION_BELOW_MIN_DAYS' || err.code === 'OUTSTATION_ABOVE_MAX_DAYS') {
+        throw new ApiError(400, err.message, err.details || undefined);
+      }
+      throw err;
+    }
     await assertCarAvailableForWindow({
       userId,
       carId: booking.carId,
@@ -1738,6 +1751,9 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
     freshBooking.outstation.endDate = new Date(nextReturnIso);
     freshBooking.outstation.days = outstationDays.days;
     freshBooking.outstation.nights = outstationDays.nights;
+    if (outstationDays.durationMinutes != null) {
+      freshBooking.outstation.durationMinutes = outstationDays.durationMinutes;
+    }
   }
 
   if (freshBooking.dispatch) {

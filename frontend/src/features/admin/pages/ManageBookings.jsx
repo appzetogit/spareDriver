@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Eye, MessageSquare, UserPlus, UserRoundCog } from 'lucide-react';
 import Badge from '../../../components/Badge';
+import api from '../../../utils/api';
 import { useCachedQuery } from '../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../store/lib/buildCacheKey';
 import { useAdminBookingsStore } from '../../../store/admin/useAdminBookingsStore';
@@ -34,7 +35,7 @@ const LIVE_REFRESH_STATUSES = new Set([
 ]);
 
 const ManageBookings = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialSearch = searchParams.get('search') || '';
   const admin = useAdminAuthStore((s) => s.admin);
   const canAssign = OPERATIONS_ROLES.has(admin?.role);
@@ -59,6 +60,32 @@ const ManageBookings = () => {
     setDebouncedSearch(fromUrl);
     setPage(1);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get('chat') !== '1') return;
+    const bookingId = searchParams.get('bookingId');
+    if (!bookingId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/admin/bookings/${bookingId}`);
+        const booking = res?.data?.data?.booking;
+        if (cancelled || !booking) return;
+        setChatBooking(booking);
+        setChatOpen(true);
+        const next = new URLSearchParams(searchParams);
+        next.delete('chat');
+        next.delete('channel');
+        next.delete('bookingId');
+        setSearchParams(next, { replace: true });
+      } catch {
+        // keep the deep-link so a refresh can retry
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);

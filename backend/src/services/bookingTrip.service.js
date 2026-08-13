@@ -13,6 +13,11 @@ import {
   cancelRideEndSchedule,
 } from './bookingRideEndTimeout.service.js';
 import {
+  scheduleOutstationReturnJobs,
+  cancelOutstationReturnJobs,
+  snapshotOutstationReturnConfig,
+} from './bookingOutstationReturn.service.js';
+import {
   BOOKING_STATUS,
   BOOKING_TYPE,
   ACTIVE_BOOKING_STATUSES,
@@ -614,6 +619,27 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   // extension. Outstation is day-based and is not auto-closed here.
   scheduleRideEndTimer(booking);
 
+  // Outstation: arm return-approaching / return-reached jobs.
+  if (
+    booking.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    const pricing = await ServicePricing.findOne({
+      serviceType: SERVICE_TYPES.OUTSTATION,
+      isActive: true,
+    })
+      .select('outstation')
+      .lean();
+    snapshotOutstationReturnConfig(booking, pricing?.outstation);
+    await booking.save();
+    scheduleOutstationReturnJobs(booking).catch((err) =>
+      console.warn(
+        '[trip] failed to schedule outstation return jobs:',
+        err?.message,
+      ),
+    );
+  }
+
   broadcastUpdate(booking);
   notifyUserTripStarted(booking.userId, booking).catch(() => null);
   return booking.toObject();
@@ -740,9 +766,8 @@ function bookedDurationMs(booking) {
 /**
  * Earliest wall-clock instant the driver may mark COMPLETED.
  *   - Hourly: startedAt + booked hours (+ paid extensions)
- *   - Outstation: expectedReturnAt / endDate, plus any paid extension
- *     days that have not yet been applied to that window
- *     (`windowAppliedAt` missing — legacy heal path)
+ *   - Outstation: null — early completion is allowed any time after STARTED
+ *     (no unused-time refund in V1)
  */
 function earliestCompleteAtMs(booking) {
   if (!booking) return null;
@@ -752,24 +777,7 @@ function earliestCompleteAtMs(booking) {
     || booking.bookingType === BOOKING_TYPE.OUTSTATION;
 
   if (isOutstation) {
-    const endSrc =
-      booking.outstation?.expectedReturnAt || booking.outstation?.endDate;
-    if (!endSrc) return null;
-    let endMs = new Date(endSrc).getTime();
-    if (!Number.isFinite(endMs)) return null;
-    const unappliedMs = (booking.extensions || []).reduce((sum, ext) => {
-      if (ext?.status !== 'accepted') return sum;
-      if (ext.windowAppliedAt) return sum;
-      const days = Number(ext.additionalDays) || 0;
-      if (days > 0) return sum + days * 86_400_000;
-      const hours = Number(ext.additionalHours) || 0;
-      if (hours > 0) return sum + hours * 3_600_000;
-      return sum;
-    }, 0);
-    if (unappliedMs > 0) {
-      endMs += unappliedMs;
-    }
-    return endMs;
+    return null;
   }
 
   const startedAtMs = booking.timeline?.startedAt
@@ -784,9 +792,8 @@ export async function completeTripService(driverId, bookingId) {
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.STARTED], 'complete the ride');
 
-  // Do not allow completing before the booked window ends. Hourly uses
-  // startedAt + hours; outstation uses the calendar return (bumped when
-  // the customer pays for extra days).
+  // Do not allow completing before the booked window ends (hourly only).
+  // Outstation allows early completion once STARTED.
   const earliestCompleteMs = earliestCompleteAtMs(booking);
   if (earliestCompleteMs != null) {
     const remainingMs = earliestCompleteMs - Date.now();
@@ -813,6 +820,7 @@ export async function completeTripService(driverId, bookingId) {
 
   // Stop the auto-complete timer — we're completing manually.
   cancelRideEndSchedule(booking._id);
+  cancelOutstationReturnJobs(booking._id).catch(() => null);
 
   booking.status = BOOKING_STATUS.COMPLETED;
   booking.timeline.completedAt = new Date();

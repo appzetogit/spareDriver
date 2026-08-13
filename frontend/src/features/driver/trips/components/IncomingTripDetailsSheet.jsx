@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import BottomSheet from '../../../../components/BottomSheet';
 import Button from '../../../../components/Button';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatCurrency, maskPersonName } from '../../../../utils/formatters';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance } from '../../../../utils/geo';
 
@@ -188,7 +188,11 @@ export default function IncomingTripDetailsSheet({
         <DetailRow
           icon={UserIcon}
           label="Customer"
-          value={customer?.name || null}
+          value={
+            customer?.name
+              ? (isSubscription ? customer.name : (maskPersonName(customer.name) || 'Customer'))
+              : null
+          }
         />
         <DetailRow icon={CarIcon} label="Vehicle" value={carLabel} multi />
       </div>

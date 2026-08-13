@@ -129,6 +129,90 @@ export function notifyUserRideEndingSoon(userId, booking) {
   );
 }
 
+function formatReturnClock(booking) {
+  const src =
+    booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
+  if (!src) return null;
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(src));
+  } catch {
+    return null;
+  }
+}
+
+/** Outstation-only: ~2h before expected return. */
+export function notifyUserOutstationReturnApproaching(userId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  const clock = formatReturnClock(booking);
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'Trip ending soon',
+      body: clock
+        ? `Your trip is expected to end at ${clock}. Do you need more time with your driver?`
+        : 'Your trip is expected to end soon. Do you need more time with your driver?',
+      type: USER_NOTIFICATION.OUTSTATION_RETURN_APPROACHING,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'started',
+        returnPhase: 'approaching',
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}?return=1`
+          : '/user/book/assigned?return=1',
+      },
+    },
+  );
+}
+
+/** Outstation-only: expected return reached / grace / repeat. */
+export function notifyUserOutstationReturnReached(
+  userId,
+  booking,
+  { phase = 'reached' } = {},
+) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'Expected return time passed',
+      body: 'Your expected return time has passed. Are you still travelling with the driver?',
+      type: USER_NOTIFICATION.OUTSTATION_RETURN_REACHED,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'started',
+        returnPhase: phase,
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}?return=1`
+          : '/user/book/assigned?return=1',
+      },
+    },
+  );
+}
+
+export function notifyDriverOutstationReturnReached(driverId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Expected return reached',
+      body: 'The booked return time has been reached. Complete the trip or wait if the customer extends.',
+      type: DRIVER_NOTIFICATION.OUTSTATION_RETURN_REACHED,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'started',
+        path: bookingId
+          ? `/driver/trips/active/${bookingId}`
+          : '/driver/trips/active',
+      },
+    },
+  );
+}
+
 export function notifyUserNoShowPrompt(userId, booking, { isFinal = false } = {}) {
   const bookingId = String(booking._id || booking.id || booking.bookingId || '');
   return sendPushNotification(

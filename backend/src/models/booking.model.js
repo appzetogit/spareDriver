@@ -55,9 +55,27 @@ const outstationDetailsSchema = new mongoose.Schema(
     endDate: { type: Date, required: true },
     days: { type: Number, required: true, min: 1 },
     nights: { type: Number, default: 0, min: 0 },
+    /**
+     * Exact wall-clock trip length in whole minutes
+     * (floor((expectedReturnAt − pickupAt) / 60000)). Used for UI,
+     * reminders, conflict checks, and return lifecycle — NOT for
+     * calendar-day fare billing.
+     */
+    durationMinutes: { type: Number, default: 0, min: 0 },
     needsStay: { type: Boolean, default: true },
     needsFood: { type: Boolean, default: true },
     estimatedKm: { type: Number, default: 0, min: 0 },
+    /**
+     * Outstation return-lifecycle stamps (idempotent prompts).
+     * Phase is derived at read time — no new top-level booking status.
+     */
+    returnReminderSentAt: { type: Date, default: null },
+    returnReachedPromptedAt: { type: Date, default: null },
+    lastReturnPromptAt: { type: Date, default: null },
+    /** Snapshotted from ServicePricing.outstation at trip start. */
+    returnGraceMinutes: { type: Number, default: null, min: 0 },
+    returnPromptRepeatMinutes: { type: Number, default: null, min: 0 },
+    returnReminderMinutes: { type: Number, default: null, min: 0 },
   },
   { _id: false },
 );

@@ -152,8 +152,8 @@ export function readDispatchNumber(value, fallback) {
 }
 
 /**
- * Statuses where the counterparty's phone may be shown. Hidden until
- * the driver taps "Start to pickup". Keep in sync with backend
+ * Hourly instant / scheduled: phone unlocks at "Start to pickup".
+ * Outstation waits until ARRIVED. Keep in sync with backend
  * `bookingStatus.js`.
  */
 export const CONTACT_REVEALED_STATUSES = Object.freeze([
@@ -163,19 +163,38 @@ export const CONTACT_REVEALED_STATUSES = Object.freeze([
   BOOKING_STATUS.COMPLETED,
 ]);
 
+export const OUTSTATION_CONTACT_REVEALED_STATUSES = Object.freeze([
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+  BOOKING_STATUS.COMPLETED,
+]);
+
+function isOutstationContactBooking(booking) {
+  if (!booking || typeof booking === 'string') return false;
+  return (
+    booking.bookingType === BOOKING_TYPE.OUTSTATION
+    || booking.serviceType === 'outstation'
+    || Boolean(booking.outstation)
+  );
+}
+
 export function isBookingContactRevealed(bookingOrStatus) {
   if (!bookingOrStatus) return false;
   const status =
     typeof bookingOrStatus === 'string'
       ? bookingOrStatus
       : bookingOrStatus.status;
-  if (CONTACT_REVEALED_STATUSES.includes(status)) return true;
-  if (
-    status === BOOKING_STATUS.CANCELLED &&
-    (bookingOrStatus?.timeline?.enRouteAt ||
-      bookingOrStatus?.timeline?.arrivedAt)
-  ) {
-    return true;
+  const outstation = isOutstationContactBooking(bookingOrStatus);
+  const allowed = outstation
+    ? OUTSTATION_CONTACT_REVEALED_STATUSES
+    : CONTACT_REVEALED_STATUSES;
+  if (allowed.includes(status)) return true;
+  if (status === BOOKING_STATUS.CANCELLED) {
+    if (outstation) return Boolean(bookingOrStatus?.timeline?.arrivedAt);
+    return Boolean(
+      bookingOrStatus?.timeline?.enRouteAt
+      || bookingOrStatus?.timeline?.arrivedAt,
+    );
   }
   return false;
 }

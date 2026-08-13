@@ -9,6 +9,7 @@ import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTr
 import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../../../utils/geo';
 import { BOOKING_STATUS, isBookingContactRevealed } from '../../../../constants/bookingStatus';
+import { maskPersonName } from '../../../../utils/formatters';
 
 /**
  * Driver-side "navigate to customer" screen — replaces the static mock
@@ -44,8 +45,10 @@ const NavigateToCustomerPage = () => {
   }, [driverPoint, pickupPoint]);
 
   const customer = typeof booking?.userId === 'object' ? booking.userId : null;
-  const customerName = customer?.name || null;
   const contactRevealed = isBookingContactRevealed(booking);
+  const customerName = contactRevealed
+    ? customer?.name || null
+    : maskPersonName(customer?.name) || 'Customer';
   const customerPhone = contactRevealed
     ? customer?.phone_no || customer?.phone || null
     : null;

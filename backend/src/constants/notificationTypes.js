@@ -22,6 +22,10 @@ export const USER_NOTIFICATION = Object.freeze({
   TRIP_STARTED: 'trip_started',
   /** Hourly ride nearing booked end — offer to extend. */
   RIDE_ENDING_SOON: 'ride_ending_soon',
+  /** Outstation: ~2h before expectedReturnAt. */
+  OUTSTATION_RETURN_APPROACHING: 'outstation_return_approaching',
+  /** Outstation: expectedReturnAt reached / grace / repeat prompt. */
+  OUTSTATION_RETURN_REACHED: 'outstation_return_reached',
   /** Driver waiting at pickup — "are you on your way?" no-show prompt. */
   NOSHOW_PROMPT: 'noshow_prompt',
   TRIP_COMPLETED: 'trip_completed',
@@ -76,6 +80,8 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   SUPPORT_REPLY: 'support_reply',
   EMERGENCY_ALERT: 'emergency_alert',
   BOOKING_REMINDER: 'booking_reminder',
+  /** Outstation expected return reached — driver may complete or await extension. */
+  OUTSTATION_RETURN_REACHED: 'outstation_return_reached',
   ACCOUNT_APPROVED: 'account_approved',
   ACCOUNT_REJECTED: 'account_rejected',
   ACCOUNT_SUSPENDED: 'account_suspended',

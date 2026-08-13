@@ -210,6 +210,27 @@ const outstationSchema = new mongoose.Schema(
     /** Maximum days that can be booked as outstation (0 = unlimited). */
     maxDays: { type: Number, default: 0, min: 0 },
 
+    /**
+     * Minutes before expectedReturnAt to send the return-approaching
+     * prompt ("Your trip is expected to end at …"). Default 120 (2h).
+     */
+    returnReminderMinutes: { type: Number, default: 120, min: 0 },
+    /**
+     * Grace window after expectedReturnAt with no overtime charge.
+     * Trip stays active; customer may extend or complete. Default 30.
+     */
+    returnGraceMinutes: { type: Number, default: 30, min: 0 },
+    /**
+     * How often to re-prompt after grace when still no decision.
+     * Default 30. Does NOT auto-complete or auto-charge.
+     */
+    returnPromptRepeatMinutes: { type: Number, default: 30, min: 0 },
+    /**
+     * Optional auto-complete hours after expectedReturnAt.
+     * 0 = disabled (default) — never silently complete.
+     */
+    returnAutoCompleteHours: { type: Number, default: 0, min: 0 },
+
     // ── Deprecated (retained for back-compat with saved docs) ──
     /**
      * @deprecated Combined per-night allowance from the previous

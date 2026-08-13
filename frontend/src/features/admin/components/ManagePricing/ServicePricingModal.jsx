@@ -58,6 +58,10 @@ const buildDefaultForm = (serviceType) => ({
     stayAllowancePerNight: serviceType === SERVICE_TYPES.OUTSTATION ? 500 : 0,
     minDays: 1,
     maxDays: 0,
+    returnReminderMinutes: 120,
+    returnGraceMinutes: 30,
+    returnPromptRepeatMinutes: 30,
+    returnAutoCompleteHours: 0,
     // Deprecated — kept on the form so a save doesn't drop them from
     // the persisted document on round-trip. Always zero on new docs.
     allowancePerNight: 0,

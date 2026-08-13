@@ -297,6 +297,7 @@ export function calculateHourlyFare({
 export function calculateOutstationFare({
   pricing,
   days = 1,
+  nights: nightsIn = null,
   // `actualKm` and `tollParking` accepted for back-compat; both are
   // no-ops in the current pricing model.
   actualKm: _actualKm = 0, // eslint-disable-line no-unused-vars
@@ -310,7 +311,10 @@ export function calculateOutstationFare({
   const o = pricing.outstation || {};
 
   const tripDays = Math.max(1, Math.ceil(Number(days) || 0));
-  const nights = Math.max(0, tripDays - 1);
+  const nights =
+    nightsIn != null && Number.isFinite(Number(nightsIn))
+      ? Math.max(0, Math.floor(Number(nightsIn)))
+      : Math.max(0, tripDays - 1);
 
   const dailyRate = Number(o.dailyRate) || 0;
   const foodAllowancePerDay = Number(o.foodAllowancePerDay) || 0;

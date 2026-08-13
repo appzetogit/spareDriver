@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatCurrency, maskPersonName } from '../../../../utils/formatters';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance } from '../../../../utils/geo';
 import IncomingTripDetailsSheet from './IncomingTripDetailsSheet';
@@ -138,7 +138,11 @@ export default function IncomingScheduledCard({
           {customer?.name && (
             <div className="flex items-center gap-2 text-xs text-text min-w-0">
               <UserIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
-              <span className="truncate">{customer.name}</span>
+              <span className="truncate">
+                {isSubscription
+                  ? customer.name
+                  : (maskPersonName(customer.name) || 'Customer')}
+              </span>
             </div>
           )}
           {car && (

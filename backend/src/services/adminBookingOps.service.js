@@ -10,6 +10,13 @@ import {
   SCHEDULED_BOOKING,
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES } from '../constants/serviceTypes.js';
+
+const ADMIN_OVERRIDE_BLOCKED = new Set([
+  BOOKING_STATUS.PENDING_ASSIGNMENT,
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.DRIVER_ASSIGNED,
+  BOOKING_STATUS.AWAITING_PAYMENT,
+]);
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
   emitToUser,
@@ -319,6 +326,9 @@ export async function adminUpdateBookingStatusService(
 ) {
   if (!status || !BOOKING_STATUS_LIST.includes(status)) {
     throw new ApiError(400, `status must be one of: ${BOOKING_STATUS_LIST.join(', ')}`);
+  }
+  if (ADMIN_OVERRIDE_BLOCKED.has(status)) {
+    throw new ApiError(400, `Admin cannot override status to ${status}`);
   }
 
   const booking = await Booking.findById(bookingId);

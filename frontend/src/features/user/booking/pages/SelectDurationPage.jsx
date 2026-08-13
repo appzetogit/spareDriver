@@ -21,6 +21,8 @@ import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import {
   computeOutstationDuration,
+  computeOutstationTripMetrics,
+  formatOutstationExactDuration,
   addCalendarDays,
   startOfLocalDay,
 } from '../../../../utils/outstationSchedule';
@@ -302,6 +304,11 @@ function OutstationBranch({ pricing, draft, onPatch, onContinue }) {
     return computeOutstationDuration(pickupAt, expectedReturnAt);
   }, [pickupAt, expectedReturnAt]);
 
+  const tripMetrics = useMemo(() => {
+    if (!pickupAt || !expectedReturnAt) return null;
+    return computeOutstationTripMetrics(pickupAt, expectedReturnAt);
+  }, [pickupAt, expectedReturnAt]);
+
   // Auto-clear return when pickup pushes past it; keeps the diff
   // non-negative without forcing a separate validation message.
   const onPickupChange = (iso) => {
@@ -433,14 +440,26 @@ function OutstationBranch({ pricing, draft, onPatch, onContinue }) {
             />
           </div>
           {pickupAt && expectedReturnAt ? (
-            <div className="mt-3 flex items-center justify-between bg-bg rounded-xl px-3 py-2">
-              <span className="text-xs text-text-muted inline-flex items-center gap-1.5">
-                <CalendarRange className="w-3.5 h-3.5" />
-                Trip length
-              </span>
-              <span className="text-sm font-bold text-text">
-                {days} day{days > 1 ? 's' : ''} · {nights} night{nights === 1 ? '' : 's'}
-              </span>
+            <div className="mt-3 space-y-1.5 bg-bg rounded-xl px-3 py-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-text-muted inline-flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  Trip duration
+                </span>
+                <span className="text-sm font-bold text-text">
+                  {formatOutstationExactDuration(tripMetrics?.durationMinutes)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-text-muted inline-flex items-center gap-1.5">
+                  <CalendarRange className="w-3.5 h-3.5" />
+                  Billable
+                </span>
+                <span className="text-sm font-semibold text-text">
+                  {days} day{days > 1 ? 's' : ''} · {nights} overnight
+                  {nights === 1 ? '' : 's'}
+                </span>
+              </div>
             </div>
           ) : (
             <p className="mt-3 text-[11px] text-text-muted inline-flex items-center gap-1.5">

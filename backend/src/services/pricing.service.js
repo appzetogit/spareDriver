@@ -32,6 +32,10 @@ import {
 } from './driverConflict.service.js';
 import { normaliseOutstationPolicy } from './bookingOutstationCancellation.service.js';
 import { normaliseHourlyPolicy } from './bookingCancellation.service.js';
+import {
+  computeOutstationTripMetrics,
+  assertOutstationDaysWithinLimits,
+} from '../utils/outstationDuration.js';
 import { getActiveLegalDocumentService } from './legalDocument.service.js';
 import { sendPushNotification } from './pushNotification.service.js';
 import { notifyDriverSubscriptionAssigned } from '../utils/notificationDispatch.js';
@@ -158,6 +162,16 @@ function validatePricingForType(serviceType, data) {
     }
     if (o.minDays && o.maxDays && o.maxDays > 0 && o.maxDays < o.minDays) {
       throw new ApiError(400, 'Outstation: maxDays must be greater than minDays');
+    }
+    for (const key of [
+      'returnReminderMinutes',
+      'returnGraceMinutes',
+      'returnPromptRepeatMinutes',
+      'returnAutoCompleteHours',
+    ]) {
+      if (o[key] != null && Number(o[key]) < 0) {
+        throw new ApiError(400, `Outstation: ${key} must be a non-negative number`);
+      }
     }
   }
 }
@@ -1273,6 +1287,7 @@ export function calculateHourlyFare({
 export function calculateOutstationFare({
   pricing,
   days = 1,
+  nights: nightsIn = null,
   // `actualKm` and `tollParking` accepted for back-compat with older
   // callers; both are no-ops in the new pricing model.
   actualKm: _actualKm = 0, // eslint-disable-line no-unused-vars
@@ -1285,12 +1300,18 @@ export function calculateOutstationFare({
   if (!pricing) throw new ApiError(400, 'Service pricing is required for fare calculation');
   const o = pricing.outstation || {};
 
-  const tripDays = Math.max(1, Math.ceil(days));
-  const nights = Math.max(0, tripDays - 1);
+  const tripDays = Math.max(1, Math.ceil(Number(days) || 1));
+  // Prefer explicit nights (calendar midnights crossed). Fall back to
+  // days − 1 only when the caller didn't supply nights.
+  const nights =
+    nightsIn != null && Number.isFinite(Number(nightsIn))
+      ? Math.max(0, Math.floor(Number(nightsIn)))
+      : Math.max(0, tripDays - 1);
 
   const dailyRate = Number(o.dailyRate) || 0;
   const foodAllowancePerDay = Number(o.foodAllowancePerDay) || 0;
   const stayAllowancePerNight = Number(o.stayAllowancePerNight) || 0;
+  const extraHourCharge = Number(o.extraHourCharge) || 0;
   const legacyAllowancePerNight = Number(o.allowancePerNight) || 0;
   // If the admin hasn't migrated to the split fields yet, treat the
   // legacy combined `allowancePerNight` as the per-night charge —
@@ -1349,6 +1370,17 @@ export function calculateOutstationFare({
     foodAllowanceTotal: round2(foodAllowanceTotal),
     stayAllowancePerNight: round2(stayAllowancePerNight),
     stayAllowanceTotal: round2(stayAllowanceTotal),
+    // Snapshotted for extensions — never re-read live admin rates.
+    outstationExtraHourCharge: round2(extraHourCharge),
+    extraHourChargeRate: round2(extraHourCharge),
+    minDays: Math.max(1, Number(o.minDays) || 1),
+    maxDays: Math.max(0, Number(o.maxDays) || 0),
+    returnReminderMinutes: Math.max(0, Number(o.returnReminderMinutes) || 120),
+    returnGraceMinutes: Math.max(0, Number(o.returnGraceMinutes) || 30),
+    returnPromptRepeatMinutes: Math.max(
+      0,
+      Number(o.returnPromptRepeatMinutes) || 30,
+    ),
     // Combined total — surfaced for back-compat with clients that read
     // a single `allowanceTotal` line (sums food + stay + legacy
     // fallback).
@@ -1387,6 +1419,9 @@ export const estimateFareService = async ({
   waitingMinutes = 0,
   // outstation fields
   days,
+  nights = null,
+  pickupAt = null,
+  expectedReturnAt = null,
   actualKm = 0,
   stayProvided = true,
   // shared fields
@@ -1539,13 +1574,38 @@ export const estimateFareService = async ({
   }
 
   if (serviceType === SERVICE_TYPES.OUTSTATION) {
-    if (!days || days < 1) {
+    // Prefer exact datetimes when present — never trust client-supplied
+    // days alone. Falls back to `days` for older estimate callers.
+    let billableDays = days;
+    let billableNights = nights;
+    let durationMeta = null;
+    if (pickupAt && expectedReturnAt) {
+      try {
+        durationMeta = computeOutstationTripMetrics(pickupAt, expectedReturnAt);
+      } catch (err) {
+        throw new ApiError(400, err.message);
+      }
+      billableDays = durationMeta.days;
+      billableNights = durationMeta.nights;
+    }
+    if (!billableDays || billableDays < 1) {
       throw new ApiError(400, 'Outstation: days must be at least 1');
+    }
+
+    const oCfg = pricing.outstation || {};
+    try {
+      assertOutstationDaysWithinLimits(billableDays, {
+        minDays: oCfg.minDays,
+        maxDays: oCfg.maxDays,
+      });
+    } catch (err) {
+      throw new ApiError(400, err.message, err.details || undefined);
     }
 
     const breakdown = calculateOutstationFare({
       pricing,
-      days,
+      days: billableDays,
+      nights: billableNights,
       actualKm,
       foodProvided,
       stayProvided,
@@ -1553,6 +1613,11 @@ export const estimateFareService = async ({
       subscription,
       coupon,
     });
+    if (durationMeta) {
+      breakdown.durationMinutes = durationMeta.durationMinutes;
+      breakdown.durationHours = durationMeta.durationHours;
+      breakdown.durationMs = durationMeta.durationMs;
+    }
 
     return {
       pricingId: pricing._id,

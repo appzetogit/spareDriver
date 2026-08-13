@@ -110,6 +110,59 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
         </div>
       </div>
 
+      <div className="pt-2 border-t border-slate-100 space-y-3">
+        <div>
+          <h4 className="text-sm font-bold text-slate-900">Return lifecycle</h4>
+          <p className="text-xs text-slate-500">
+            Outstation-only prompts around expected return. Never charges
+            overtime automatically. Auto-complete stays off unless you set
+            hours &gt; 0.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Input
+            label="Return reminder (minutes before)"
+            type="number"
+            min={0}
+            value={o.returnReminderMinutes ?? 120}
+            onChange={(e) =>
+              update({ returnReminderMinutes: Number(e.target.value) })
+            }
+            helper="Default 120 — “Your trip is expected to end at …”"
+          />
+          <Input
+            label="Return grace (minutes after)"
+            type="number"
+            min={0}
+            value={o.returnGraceMinutes ?? 30}
+            onChange={(e) =>
+              update({ returnGraceMinutes: Number(e.target.value) })
+            }
+            helper="No overtime during grace. Trip stays active."
+          />
+          <Input
+            label="Return prompt repeat (minutes)"
+            type="number"
+            min={0}
+            value={o.returnPromptRepeatMinutes ?? 30}
+            onChange={(e) =>
+              update({ returnPromptRepeatMinutes: Number(e.target.value) })
+            }
+            helper="How often to re-prompt after grace if still no decision."
+          />
+          <Input
+            label="Return auto-complete (hours, 0 = off)"
+            type="number"
+            min={0}
+            value={o.returnAutoCompleteHours ?? 0}
+            onChange={(e) =>
+              update({ returnAutoCompleteHours: Number(e.target.value) })
+            }
+            helper="Leave 0 — do not silently complete trips."
+          />
+        </div>
+      </div>
+
       {showLegacyNotice && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 leading-snug">
           <strong>Legacy allowance detected:</strong> this pricing doc

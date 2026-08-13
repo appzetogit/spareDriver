@@ -10,6 +10,8 @@ export const USER_NOTIFICATION = Object.freeze({
   NO_DRIVERS_FOUND: 'no_drivers_found',
   TRIP_STARTED: 'trip_started',
   RIDE_ENDING_SOON: 'ride_ending_soon',
+  OUTSTATION_RETURN_APPROACHING: 'outstation_return_approaching',
+  OUTSTATION_RETURN_REACHED: 'outstation_return_reached',
   NOSHOW_PROMPT: 'noshow_prompt',
   TRIP_COMPLETED: 'trip_completed',
   PAYMENT_SUCCESSFUL: 'payment_successful',
@@ -87,8 +89,29 @@ function userLiveRoute(kind, bookingId, status) {
   return '/user/book/assigned';
 }
 
-/** Resolve in-app navigation path from notification payload */
-export function notificationNavigatePath(kind, data = {}, audience = 'user') {
+function isTripChatNotification(kind) {
+  return kind === USER_NOTIFICATION.TRIP_CHAT_MESSAGE
+    || kind === DRIVER_NOTIFICATION.TRIP_CHAT_MESSAGE
+    || kind === ADMIN_NOTIFICATION.TRIP_CHAT_MESSAGE
+    || kind === 'trip_chat_message';
+}
+
+function withChatOpenQuery(path, data = {}) {
+  if (!path || typeof path !== 'string' || !path.startsWith('/')) return path;
+  const qIndex = path.indexOf('?');
+  const pathname = qIndex >= 0 ? path.slice(0, qIndex) : path;
+  const params = new URLSearchParams(qIndex >= 0 ? path.slice(qIndex + 1) : '');
+  params.set('chat', '1');
+  if (data.channel && !params.get('channel')) {
+    params.set('channel', String(data.channel));
+  }
+  if (data.bookingId && pathname.startsWith('/admin/') && !params.get('bookingId')) {
+    params.set('bookingId', String(data.bookingId));
+  }
+  return `${pathname}?${params.toString()}`;
+}
+
+function resolveNotificationNavigatePath(kind, data = {}, audience = 'user') {
   if (data.path && typeof data.path === 'string' && data.path.startsWith('/')) {
     return data.path;
   }
@@ -177,10 +200,22 @@ export function notificationNavigatePath(kind, data = {}, audience = 'user') {
         return '/admin/account/withdrawals';
       case ADMIN_NOTIFICATION.SUBSCRIPTION_CANCEL_REQUEST:
         return data.path || '/admin/subscriptions/users';
+      case ADMIN_NOTIFICATION.TRIP_CHAT_MESSAGE:
+        if (data.bookingId) return `/admin/bookings?bookingId=${data.bookingId}`;
+        return '/admin/bookings';
       default:
         return null;
     }
   }
 
   return null;
+}
+
+/** Resolve in-app navigation path from notification payload */
+export function notificationNavigatePath(kind, data = {}, audience = 'user') {
+  const path = resolveNotificationNavigatePath(kind, data, audience);
+  if (path && (isTripChatNotification(kind) || isTripChatNotification(data.kind))) {
+    return withChatOpenQuery(path, data);
+  }
+  return path;
 }
