@@ -11,6 +11,7 @@
     "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
     "seed": "node scripts/seed.js",
     "seed:fresh": "node scripts/seed.js --fresh",
+    "seed:developer": "node scripts/seedDeveloper.js",
     "test": "node --test src/utils/outstationDuration.test.js",
     "test:outstation": "node --test src/utils/outstationDuration.test.js"
   },

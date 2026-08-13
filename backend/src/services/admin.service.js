@@ -8,6 +8,7 @@ import { ApiError } from '../utils/apiError.js';
 import { USER_ROLES } from '../constants/roles.js';
 import {
   STAFF_ROLES,
+  PANEL_ROLES,
   getStaffZoneScopeIds,
   usesAssignedZoneScope,
 } from '../constants/staffPermissions.js';
@@ -122,7 +123,7 @@ export const loginStaffService = async (email, password, fcmInput = {}) => {
     throw new ApiError(400, 'Email and password required');
   }
   const staff = await User.findOne({ email: email.toLowerCase() }).select('+password');
-  if (!staff || !STAFF_ROLES.includes(staff.role)) {
+  if (!staff || !PANEL_ROLES.includes(staff.role)) {
     throw new ApiError(401, 'Invalid credentials or unauthorized');
   }
 
@@ -150,7 +151,7 @@ export const loginStaffService = async (email, password, fcmInput = {}) => {
 
 export const getStaffProfileService = async (staffId) => {
   const staff = await User.findById(staffId).select('-password');
-  if (!staff || staff.isDeleted || !STAFF_ROLES.includes(staff.role)) {
+  if (!staff || staff.isDeleted || !PANEL_ROLES.includes(staff.role)) {
     throw new ApiError(404, 'Profile not found');
   }
   return staff;

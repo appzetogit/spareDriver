@@ -327,3 +327,16 @@ async function autoCompleteExpiredRide(bookingId) {
     }
   }
 }
+
+/** Dev-only: fire the extend nudge immediately (skips lead-time wait). */
+export async function triggerExtensionPromptNow(bookingId) {
+  await sendRideEndingSoonPrompt(bookingId);
+  return { ok: true };
+}
+
+/** Dev-only: run auto-complete settlement immediately if past grace. */
+export async function triggerAutoCompleteNow(bookingId) {
+  await autoCompleteExpiredRide(bookingId);
+  const booking = await Booking.findById(bookingId).lean();
+  return { ok: true, status: booking?.status || null };
+}

@@ -7,6 +7,16 @@ export const STAFF_ROLES = Object.freeze([
   USER_ROLES.TEAM_MEMBER,
 ]);
 
+/** Staff + internal developer QA login (shared /admin/login) */
+export const PANEL_ROLES = Object.freeze([
+  ...STAFF_ROLES,
+  USER_ROLES.DEVELOPER,
+]);
+
+export function isDeveloper(staff) {
+  return staff?.role === USER_ROLES.DEVELOPER;
+}
+
 /** Route groups for restrictTo() */
 export const ROUTE_ROLES = Object.freeze({
   ALL_STAFF: STAFF_ROLES,

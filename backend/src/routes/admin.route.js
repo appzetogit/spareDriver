@@ -20,7 +20,7 @@ import {
   getAdminTeamMemberAnalytics,
   adminGlobalSearch,
 } from '../controllers/admin.controller.js';
-import { protectStaff, restrictTo } from '../middlewares/authMiddleware.js';
+import { protectStaff, protectPanel, protectDeveloper, restrictTo } from '../middlewares/authMiddleware.js';
 import { ROUTE_ROLES } from '../constants/staffPermissions.js';
 import {
   registerStaffFcmToken,
@@ -254,13 +254,19 @@ import {
   exportRefunds,
   exportWithdrawals,
 } from '../controllers/reports.controller.js';
+import {
+  listDevBookings,
+  getDevBookingDetail,
+  patchDevBooking,
+  runDevBookingAction,
+} from '../controllers/adminDevBookingTest.controller.js';
 import { uploadAdMedia, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
 const { ALL_STAFF, OPERATIONS, SUPER_ADMIN } = ROUTE_ROLES;
 
 router.post('/auth/login', loginAdmin);
-router.get('/auth/me', protectStaff, restrictTo(...ALL_STAFF), getStaffMe);
+router.get('/auth/me', protectPanel, getStaffMe);
 router.post('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), registerStaffFcmToken);
 router.delete('/fcm-token', protectStaff, restrictTo(...ALL_STAFF), unregisterStaffFcmToken);
 router.get('/dashboard', protectStaff, restrictTo(...SUPER_ADMIN), getAdminDashboard);
@@ -817,5 +823,11 @@ router.get('/support', protectStaff, restrictTo(...ALL_STAFF), adminListSupportT
 router.get('/support/:id', protectStaff, restrictTo(...ALL_STAFF), adminGetSupportTicket);
 router.put('/support/:id', protectStaff, restrictTo(...ALL_STAFF), adminUpdateSupportTicket);
 router.patch('/support/:id/assign', protectStaff, restrictTo(...OPERATIONS), adminAssignSupportTicket);
+
+/* ---- Developer booking test lab (developer role only) ---------------- */
+router.get('/dev/bookings', protectDeveloper, listDevBookings);
+router.get('/dev/bookings/:id', protectDeveloper, getDevBookingDetail);
+router.patch('/dev/bookings/:id', protectDeveloper, patchDevBooking);
+router.post('/dev/bookings/:id/actions', protectDeveloper, runDevBookingAction);
 
 export default router;

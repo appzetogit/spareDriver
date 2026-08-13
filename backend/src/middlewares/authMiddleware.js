@@ -2,7 +2,7 @@ import { Driver } from '../models/driverModels/driver.model.js';
 import User from '../models/user.model.js';
 import { verifyAccessToken, inferAccountType } from '../utils/jwt.util.js';
 import { ACCOUNT_DRIVER, ACCOUNT_USER, USER_ROLES } from '../constants/roles.js';
-import { STAFF_ROLES } from '../constants/staffPermissions.js';
+import { STAFF_ROLES, PANEL_ROLES, isDeveloper } from '../constants/staffPermissions.js';
 import { COOKIE_NAMES } from '../utils/cookie.util.js';
 
 function readAccessToken(req) {
@@ -97,7 +97,78 @@ export const protectDriver = (req, res, next) => {
 };
 
 /**
- * 3. Staff routes (Admin + Team Member)
+ * Admin panel login (staff + developer QA).
+ */
+export const protectPanel = async (req, res, next) => {
+  const token = readAccessToken(req);
+  if (!token) {
+    return res.status(401).json({ status: 401, message: 'Not authorized, no token' });
+  }
+
+  try {
+    const decoded = verifyAccessToken(token);
+    const decodedAccountType = inferAccountType(decoded);
+
+    if (decodedAccountType !== ACCOUNT_USER) {
+      return res.status(403).json({ status: 403, message: 'Not authorized for admin panel' });
+    }
+
+    const account = await User.findById(decoded.id);
+    if (!account || account.isDeleted || !PANEL_ROLES.includes(account.role)) {
+      return res.status(401).json({ status: 401, message: 'Account not found or unauthorized' });
+    }
+
+    if (!account.isActive) {
+      return res.status(403).json({
+        status: 403,
+        message: 'Your account has been deactivated. Please contact the administrator.',
+      });
+    }
+
+    req.staff = account;
+    next();
+  } catch (error) {
+    const status = error.statusCode || 401;
+    return res.status(status).json({ status, message: error.message || 'Not authorized' });
+  }
+};
+
+/**
+ * Developer-only routes (booking test lab).
+ */
+export const protectDeveloper = async (req, res, next) => {
+  const token = readAccessToken(req);
+  if (!token) {
+    return res.status(401).json({ status: 401, message: 'Not authorized, no token' });
+  }
+
+  try {
+    const decoded = verifyAccessToken(token);
+    const decodedAccountType = inferAccountType(decoded);
+
+    if (decodedAccountType !== ACCOUNT_USER) {
+      return res.status(403).json({ status: 403, message: 'Not authorized' });
+    }
+
+    const account = await User.findById(decoded.id);
+    if (!account || account.isDeleted || !isDeveloper(account)) {
+      return res.status(403).json({ status: 403, message: 'Developer access only' });
+    }
+
+    if (!account.isActive) {
+      return res.status(403).json({ status: 403, message: 'Your account has been deactivated.' });
+    }
+
+    req.staff = account;
+    next();
+  } catch (error) {
+    const status = error.statusCode || 401;
+    return res.status(status).json({ status, message: error.message || 'Not authorized' });
+  }
+};
+
+/**
+ * 3. Staff routes (Admin + Team Member) — developers blocked
  */
 export const protectStaff = async (req, res, next) => {
   const token = readAccessToken(req);
@@ -116,6 +187,10 @@ export const protectStaff = async (req, res, next) => {
     const staff = await User.findById(decoded.id);
     if (!staff || staff.isDeleted || !STAFF_ROLES.includes(staff.role)) {
       return res.status(401).json({ status: 401, message: 'Staff account not found or unauthorized' });
+    }
+
+    if (isDeveloper(staff)) {
+      return res.status(403).json({ status: 403, message: 'Developers may only use the dev booking test module' });
     }
 
     if (!staff.isActive) {

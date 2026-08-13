@@ -80,7 +80,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin', 'sub_admin', 'team_member', 'driver'],
+      enum: ['user', 'admin', 'sub_admin', 'team_member', 'developer', 'driver'],
       default: 'user',
     },
     profilePicture: {

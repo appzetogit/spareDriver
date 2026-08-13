@@ -6,6 +6,8 @@ export const USER_ROLES = Object.freeze({
   /** Operational lead — tasks, platform, drivers, kits; not team/payment */
   SUB_ADMIN: 'sub_admin',
   TEAM_MEMBER: 'team_member',
+  /** Internal QA — admin panel dev tools only; not staff ops */
+  DEVELOPER: 'developer',
   DRIVER: 'driver',
 });
 
