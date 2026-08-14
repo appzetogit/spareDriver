@@ -5,11 +5,11 @@ import {
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
   LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag, Headphones,
-  BarChart3, BellRing, Layers, CreditCard,
+  BarChart3, BellRing, Layers, CreditCard, FlaskConical,
 } from 'lucide-react';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import useAdminSidebarCountsStore from '../../../store/admin/useAdminSidebarCountsStore';
-import { roleCanAccess } from '../../../constants/staffRoles';
+import { roleCanAccess, isDeveloper } from '../../../constants/staffRoles';
 import { useSocketEvent } from '../../../hooks/useSocket';
 import { S2C_EVENTS } from '../../../constants/socketEvents';
 import { BOOKING_STATUS } from '../../../constants/bookingStatus';
@@ -39,6 +39,15 @@ function NavBadge({ count }) {
     </span>
   );
 }
+
+const developerNavItems = [
+  {
+    path: '/admin/dev/booking-test',
+    label: 'Dev Booking Test',
+    icon: FlaskConical,
+    end: true,
+  },
+];
 
 const navItems = [
   {
@@ -286,13 +295,17 @@ const Sidebar = ({ isOpen, onClose }) => {
     'Reports & Analytics',
   ]);
 
-  const filteredNavItems = filterNavByRole(navItems, admin?.role);
+  const filteredNavItems = isDeveloper(admin?.role)
+    ? developerNavItems
+    : filterNavByRole(navItems, admin?.role);
 
   useEffect(() => {
+    if (isDeveloper(admin?.role)) return;
     fetchCounts().catch(() => {});
-  }, [fetchCounts]);
+  }, [fetchCounts, admin?.role]);
 
   useEffect(() => {
+    if (isDeveloper(admin?.role)) return;
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         fetchCounts().catch(() => {});
@@ -300,15 +313,17 @@ const Sidebar = ({ isOpen, onClose }) => {
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [fetchCounts]);
+  }, [fetchCounts, admin?.role]);
 
   useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
+    if (isDeveloper(admin?.role)) return;
     if (SIDEBAR_ALERT_KINDS.has(payload?.kind)) {
       fetchCounts().catch(() => {});
     }
   });
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
+    if (isDeveloper(admin?.role)) return;
     if (!payload?.status) return;
     if (
       payload.status === BOOKING_STATUS.IN_EMERGENCY_POOL

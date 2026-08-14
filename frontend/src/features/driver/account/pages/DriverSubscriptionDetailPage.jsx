@@ -15,6 +15,7 @@ import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import useDriverSubscriptionsStore from '../../../../store/driver/useDriverSubscriptionsStore';
 import { formatCurrency } from '../../../../utils/formatters';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -136,12 +137,12 @@ export default function DriverSubscriptionDetailPage() {
           <Row
             icon={MapPin}
             label="Daily pickup"
-            value={detail.dailyPickup?.address || 'Not set'}
+            value={formatLocationLabel(detail.dailyPickup?.address, 'Not set')}
           />
           <Row
             icon={MapPin}
             label="Daily drop-off"
-            value={detail.dailyDropoff?.address || 'Not set'}
+            value={formatLocationLabel(detail.dailyDropoff?.address, 'Not set')}
           />
         </Card>
 

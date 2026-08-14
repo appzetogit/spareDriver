@@ -259,11 +259,14 @@ const DriverAssignedPage = () => {
   const driverId = typeof driver === 'object' ? driver?._id : driver;
 
   // Live driver location via Firebase — only after "Start to pickup"
-  // (EN_ROUTE+). Matches contact-reveal policy so customers don't track
-  // the driver while the booking is merely assigned.
+  // (EN_ROUTE+). Phone/contact unlock later at ARRIVED.
   const { map: firebaseMap, disabled: firebaseDisabled } = useFirebaseDriverLocations();
   const liveDriverRaw = driverId ? firebaseMap[String(driverId)] : null;
-  const driverLocationRevealed = isBookingContactRevealed(booking);
+  const driverLocationRevealed = [
+    BOOKING_STATUS.EN_ROUTE,
+    BOOKING_STATUS.ARRIVED,
+    BOOKING_STATUS.STARTED,
+  ].includes(bookingStatus);
   const liveDriver = driverLocationRevealed ? liveDriverRaw : null;
 
   const pickupPoint = useMemo(() => {
@@ -863,18 +866,14 @@ const DriverAssignedPage = () => {
                     {driver && !isBookingContactRevealed(booking) && !isChatVisibleForBooking(booking) && (
                       <div className="px-5 py-3 border-t border-gray-100">
                         <p className="text-xs text-center text-gray-500">
-                          {isOutstationBooking
-                            ? 'Driver contact unlocks when they arrive at pickup'
-                            : 'Driver contact unlocks when they start heading to pickup'}
+                          Driver contact unlocks when they arrive at pickup
                         </p>
                       </div>
                     )}
                     {driver && !isBookingContactRevealed(booking) && isChatVisibleForBooking(booking) && (
                       <div className="px-5 pb-3">
                         <p className="text-[11px] text-center text-gray-500">
-                          {isOutstationBooking
-                            ? 'Phone unlocks when the driver arrives at pickup — chat is available now'
-                            : 'Phone unlocks when driver starts heading to pickup — chat is available now'}
+                          Phone unlocks when the driver arrives at pickup — chat is available now
                         </p>
                       </div>
                     )}
@@ -1186,9 +1185,13 @@ function formatRideClock(seconds) {
 }
 
 /**
- * Outstation remaining time in calendar days (not raw hours).
- *   ≥ 1 day  → `Nd Nh` (omit hours when 0)
- *   < 1 day  → `Nh Nm` so the last day still ticks
+ * Outstation remaining time until expected return.
+ *   ≥ 1 day  → `Nd Nh`
+ *   ≥ 1 hour → `Nh MMm`
+ *   < 1 hour → `MM:SS` (same as hourly) so we don't drop a minute via
+ *              floor(seconds/60) — a 24m59s remaining window used to
+ *              render as "24m" while admin booked duration still said
+ *              "25 min".
  */
 function formatOutstationRemaining(seconds) {
   const total = Math.max(0, Math.floor(seconds || 0));
@@ -1201,7 +1204,8 @@ function formatOutstationRemaining(seconds) {
   if (hours >= 1) {
     return `${hours}h ${String(minutes).padStart(2, '0')}m`;
   }
-  return `${minutes}m`;
+  const secs = total % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 /**

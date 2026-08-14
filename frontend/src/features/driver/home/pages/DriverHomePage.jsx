@@ -29,6 +29,7 @@ import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { useGeolocation } from '../../../../hooks/useGeolocation';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
 import { reverseGeocode } from '../../../../utils/geocoding';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 import { classifyAccuracy } from '../../../../utils/geolocation';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { formatCurrency } from '../../../../utils/formatters';
@@ -185,7 +186,8 @@ const DriverHomePage = () => {
 
   const locationLine = (() => {
     if (currentLocation?.city) return currentLocation.city;
-    if (currentLocation?.address) return currentLocation.address;
+    const readableAddress = formatLocationLabel(currentLocation?.address, null);
+    if (readableAddress) return readableAddress;
     if (coords && (locating || refreshing)) {
       return accuracyQuality === 'poor' || accuracyQuality === 'acceptable'
         ? 'Improving GPS…'
@@ -265,7 +267,7 @@ const DriverHomePage = () => {
               <MapPin className="w-4 h-4 text-primary shrink-0" />
               <span
                 className="text-text text-sm font-semibold truncate"
-                title={currentLocation?.address || locationLine}
+                title={formatLocationLabel(currentLocation?.address, null) || locationLine}
               >
                 {locationLine}
               </span>

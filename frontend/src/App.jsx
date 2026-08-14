@@ -9,6 +9,8 @@ import MobileLayout from './layouts/MobileLayout';
 import AuthLayout from './layouts/AuthLayout';
 import { UserDashboardLayout, DriverDashboardLayout } from './layouts/DashboardLayout';
 import AdminGuard from './guards/AdminGuard';
+import StaffOnlyGuard from './guards/StaffOnlyGuard';
+import DeveloperOnlyGuard from './guards/DeveloperOnlyGuard';
 import DriverGuard from './guards/DriverGuard';
 import OnboardingGuard from './guards/OnboardingGuard';
 import UserOnboardingGuard from './guards/UserOnboardingGuard';
@@ -194,6 +196,7 @@ const DriverReportsPage = lazy(() => import('./features/admin/pages/reports/Driv
 const BookingReportsPage = lazy(() => import('./features/admin/pages/reports/BookingReportsPage'));
 const RevenueReportsPage = lazy(() => import('./features/admin/pages/reports/RevenueReportsPage'));
 const GstReportsPage = lazy(() => import('./features/admin/pages/reports/GstReportsPage'));
+const DevBookingTestPage = lazy(() => import('./features/admin/pages/DevBookingTestPage'));
 
 function App() {
   const bootstrap = useAuthSessionStore((s) => s.bootstrap);
@@ -366,6 +369,10 @@ function App() {
         <Route path="/admin/inactive" element={<AccountInactive />} />
         <Route element={<AdminGuard />}>
           <Route element={<AdminLayout />}>
+            <Route element={<DeveloperOnlyGuard />}>
+              <Route path="/admin/dev/booking-test" element={<DevBookingTestPage />} />
+            </Route>
+            <Route element={<StaffOnlyGuard />}>
             <Route path="/admin" element={<AdminHomeRedirect />} />
             <Route path="/admin/users" element={<ManageUsers />} />
             <Route path="/admin/users/:userId/profile" element={<UserProfilePage />} />
@@ -444,6 +451,7 @@ function App() {
             <Route path="/admin/account/revenue" element={<ManageRevenue />} />
             <Route path="/admin/account/subscription-revenue" element={<ManageSubscriptionRevenue />} />
             <Route path="/admin/account/kit-revenue" element={<ManageKitRevenue />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

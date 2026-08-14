@@ -12,6 +12,7 @@ import Button from '../../../../components/Button';
 import { formatCurrency, maskPersonName } from '../../../../utils/formatters';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance } from '../../../../utils/geo';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 
 function DetailRow({ icon: Icon, label, value, multi = false }) {
   if (value == null || value === '') return null;
@@ -52,10 +53,12 @@ export default function IncomingTripDetailsSheet({
     request?.kind === 'subscription' || request?.bookingType === 'subscription';
   const isOutstation =
     request?.bookingType === 'outstation' || !!request?.outstation;
-  const pickupLabel =
-    request?.pickup?.address || request?.dailyPickup?.address || null;
-  const dropLabel =
-    request?.dropoff?.address || request?.dailyDropoff?.address || null;
+  const pickupLabel = formatLocationLabel(
+    request?.pickup?.address || request?.dailyPickup?.address,
+  );
+  const dropLabel = formatLocationLabel(
+    request?.dropoff?.address || request?.dailyDropoff?.address,
+  );
   const startAt =
     request?.hourly?.scheduledStartAt
     || request?.outstation?.pickupAt

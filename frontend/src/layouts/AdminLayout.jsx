@@ -33,6 +33,7 @@ const routeTitles = {
   '/admin/reports/revenue': 'Revenue Reports',
   '/admin/reports/gst': 'GST Reports',
   '/admin/profile': 'My Profile',
+  '/admin/dev/booking-test': 'Dev Booking Test',
 };
 
 const AdminLayout = () => {

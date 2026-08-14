@@ -4,11 +4,18 @@ export const STAFF_ROLES = Object.freeze({
   TEAM_MEMBER: 'team_member',
 });
 
+export const DEVELOPER_ROLE = 'developer';
+
 export const STAFF_ROLE_LABELS = {
   [STAFF_ROLES.ADMIN]: 'Super Admin',
   [STAFF_ROLES.SUB_ADMIN]: 'Sub Admin',
   [STAFF_ROLES.TEAM_MEMBER]: 'Team Member',
+  [DEVELOPER_ROLE]: 'Developer',
 };
+
+export function isDeveloper(role) {
+  return role === DEVELOPER_ROLE;
+}
 
 export function isSuperAdmin(role) {
   return role === STAFF_ROLES.ADMIN;

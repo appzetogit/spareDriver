@@ -66,6 +66,7 @@ import {
   verifyBookingExtensionOtp,
   payBookingExtension,
   cancelBookingExtension,
+  declineBookingExtensionPrompt,
   respondToNoShowPrompt,
   rateDriverByCustomer,
 } from '../controllers/booking.controller.js';
@@ -171,6 +172,7 @@ router.post('/bookings/:id/extensions/initiate', initiateBookingExtension);
 router.post('/bookings/:id/extensions/verify-otp', verifyBookingExtensionOtp);
 router.post('/bookings/:id/extensions/pay', payBookingExtension);
 router.post('/bookings/:id/extensions/cancel', cancelBookingExtension);
+router.post('/bookings/:id/extensions/decline-prompt', declineBookingExtensionPrompt);
 router.post('/bookings/:id/noshow/respond', respondToNoShowPrompt);
 // Post-trip rating — customer rates the driver who completed the trip.
 // Once-only; a duplicate submit hits 409 from the service.

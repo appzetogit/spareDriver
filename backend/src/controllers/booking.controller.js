@@ -22,6 +22,7 @@ import {
   cancelExtensionService,
   dismissExtensionByDriverService,
 } from '../services/bookingExtension.service.js';
+import { declineExtensionPromptService } from '../services/bookingRideEndTimeout.service.js';
 import {
   rateDriverService,
   rateCustomerService,
@@ -383,6 +384,20 @@ export const cancelBookingExtension = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, result, 'Extension cancelled'));
+});
+
+/**
+ * POST /auth/bookings/:id/extensions/decline-prompt
+ *
+ * Customer closed the “extend your trip” popup without extending
+ * (“Not now”). Stops outstation pre-return repeat nudges for this
+ * booked window.
+ */
+export const declineBookingExtensionPrompt = asyncHandler(async (req, res) => {
+  const result = await declineExtensionPromptService(req.user._id, req.params.id);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Extension prompt dismissed'));
 });
 
 /**

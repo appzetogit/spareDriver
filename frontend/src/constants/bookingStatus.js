@@ -152,12 +152,10 @@ export function readDispatchNumber(value, fallback) {
 }
 
 /**
- * Hourly instant / scheduled: phone unlocks at "Start to pickup".
- * Outstation waits until ARRIVED. Keep in sync with backend
- * `bookingStatus.js`.
+ * Instant / scheduled / outstation: phone and contact unlock at ARRIVED.
+ * Keep in sync with backend `bookingStatus.js`.
  */
 export const CONTACT_REVEALED_STATUSES = Object.freeze([
-  BOOKING_STATUS.EN_ROUTE,
   BOOKING_STATUS.ARRIVED,
   BOOKING_STATUS.STARTED,
   BOOKING_STATUS.COMPLETED,
@@ -190,11 +188,7 @@ export function isBookingContactRevealed(bookingOrStatus) {
     : CONTACT_REVEALED_STATUSES;
   if (allowed.includes(status)) return true;
   if (status === BOOKING_STATUS.CANCELLED) {
-    if (outstation) return Boolean(bookingOrStatus?.timeline?.arrivedAt);
-    return Boolean(
-      bookingOrStatus?.timeline?.enRouteAt
-      || bookingOrStatus?.timeline?.arrivedAt,
-    );
+    return Boolean(bookingOrStatus?.timeline?.arrivedAt);
   }
   return false;
 }

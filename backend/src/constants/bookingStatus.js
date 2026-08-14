@@ -265,12 +265,10 @@ export const DISPATCH_MODE = Object.freeze({
 });
 
 /**
- * Hourly instant / scheduled: phone/email unlock when the driver taps
- * "Start to pickup" (en_route). Outstation waits until ARRIVED so a
- * long lead window cannot leak contact; chat stays available earlier.
+ * Instant / scheduled / outstation: phone/email unlock at ARRIVED.
+ * Chat stays available earlier. Keep in sync with frontend bookingStatus.js.
  */
 export const CONTACT_REVEALED_STATUSES = Object.freeze([
-  BOOKING_STATUS.EN_ROUTE,
   BOOKING_STATUS.ARRIVED,
   BOOKING_STATUS.STARTED,
   BOOKING_STATUS.COMPLETED,
@@ -293,8 +291,7 @@ function isOutstationContactBooking(booking) {
 
 /**
  * Whether either party may see the other's contact details.
- * Outstation: only after the driver marks arrived.
- * Hourly: after start-to-pickup.
+ * All ride types: only after the driver marks arrived.
  * Cancelled trips keep contact only if it had already unlocked.
  */
 export function isBookingContactRevealed(bookingOrStatus) {
@@ -309,11 +306,7 @@ export function isBookingContactRevealed(bookingOrStatus) {
     : CONTACT_REVEALED_STATUSES;
   if (allowed.includes(status)) return true;
   if (status === BOOKING_STATUS.CANCELLED) {
-    if (outstation) return Boolean(bookingOrStatus?.timeline?.arrivedAt);
-    return Boolean(
-      bookingOrStatus?.timeline?.enRouteAt
-      || bookingOrStatus?.timeline?.arrivedAt,
-    );
+    return Boolean(bookingOrStatus?.timeline?.arrivedAt);
   }
   return false;
 }

@@ -50,6 +50,8 @@ export const WALLET_TXN_SOURCE = Object.freeze({
   WAITING_BUFFER_REFUND: 'waiting_buffer_refund',
   /** Debit when an extension fareDelta is paid from the wallet. */
   BOOKING_EXTENSION_PAYMENT: 'booking_extension_payment',
+  /** Outstation post-grace overtime (per-minute) while auto-complete is off. */
+  BOOKING_OVERTIME_CHARGE: 'booking_overtime_charge',
   /** Credit for a cancellation fee being waived (rare; admin-driven). */
   CANCELLATION_FEE_WAIVED: 'cancellation_fee_waived',
 });

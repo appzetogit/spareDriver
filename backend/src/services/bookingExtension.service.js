@@ -25,11 +25,17 @@ import {
   assertOutstationDaysWithinLimits,
 } from '../utils/outstationDuration.js';
 import {
+  computeOutstationDurationBilling,
+  computeOutstationExactDuration,
+  computeOutstationBillingUnits,
+  assertOutstationDurationWithinLimits,
+} from '../utils/outstationDurationBilling.js';
+import { isOutstationV2Pricing } from '../constants/outstationPricing.js';
+import {
   debitWalletService,
   releaseWalletHoldService,
 } from './wallet.service.js';
 import { scheduleRideEndTimer } from './bookingRideEndTimeout.service.js';
-import { rescheduleOutstationReturnJobs } from './bookingOutstationReturn.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 import { todayKey } from './bookingCancellation.service.js';
 
@@ -134,10 +140,20 @@ function bumpOutstationWindow(
     booking.outstation.pickupAt || booking.outstation.startDate;
   if (pickupSrc) {
     try {
-      const metrics = computeOutstationTripMetrics(pickupSrc, currentEnd);
-      booking.outstation.days = metrics.days;
-      booking.outstation.nights = metrics.nights;
-      booking.outstation.durationMinutes = metrics.durationMinutes;
+      const breakdown = booking.fareSnapshot?.breakdown || {};
+      if (isOutstationV2Pricing(breakdown)) {
+        const metrics = computeOutstationDurationBilling(pickupSrc, currentEnd);
+        booking.outstation.days = metrics.billableFullDays;
+        booking.outstation.nights = metrics.billableNights;
+        booking.outstation.durationMinutes = metrics.durationMinutes;
+        booking.outstation.billableFullDays = metrics.billableFullDays;
+        booking.outstation.billableExtraHours = metrics.billableExtraHours;
+      } else {
+        const metrics = computeOutstationTripMetrics(pickupSrc, currentEnd);
+        booking.outstation.days = metrics.days;
+        booking.outstation.nights = metrics.nights;
+        booking.outstation.durationMinutes = metrics.durationMinutes;
+      }
     } catch {
       // Keep previous days/nights if bounds somehow invert.
     }
@@ -915,6 +931,147 @@ function computeExtensionDelta(pricing, fareBreakdown, additionalHours, rateOver
 }
 
 /**
+ * V2 outstation day extension — incremental delta from duration billing units.
+ */
+function computeOutstationExtensionDeltaV2(
+  pricing,
+  fareBreakdown,
+  booking,
+  additionalDays,
+) {
+  const dailyRate = resolveOutstationDailyRate(pricing, fareBreakdown);
+  if (!dailyRate) {
+    throw new ApiError(
+      400,
+      'Daily-rate pricing is not configured for outstation extensions',
+    );
+  }
+  const extraHourRate = resolveOutstationHourlyRate(pricing, fareBreakdown);
+  const days = Math.max(1, Math.floor(additionalDays));
+  const minDays = Math.max(1, Number(fareBreakdown?.minDays) || 1);
+
+  const pickupSrc =
+    booking?.outstation?.pickupAt || booking?.outstation?.startDate;
+  const endSrc =
+    booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
+
+  let deltaFullDays = days;
+  let deltaExtraHours = 0;
+  let deltaNights = days;
+  let deltaFoodDays = days;
+
+  if (pickupSrc && endSrc) {
+    try {
+      const currentDur = computeOutstationExactDuration(pickupSrc, endSrc);
+      const projectedMinutes =
+        currentDur.durationMinutes + days * 86_400_000 / 60_000;
+      const currentUnits = computeOutstationBillingUnits(
+        currentDur.durationMinutes,
+        { minDays },
+      );
+      const projectedUnits = computeOutstationBillingUnits(projectedMinutes, {
+        minDays,
+      });
+      deltaFullDays = Math.max(
+        0,
+        projectedUnits.billableFullDays - currentUnits.billableFullDays,
+      );
+      deltaExtraHours =
+        projectedUnits.billableExtraHours - currentUnits.billableExtraHours;
+      deltaNights = Math.max(
+        0,
+        projectedUnits.billableNights - currentUnits.billableNights,
+      );
+      deltaFoodDays = Math.max(
+        0,
+        projectedUnits.foodServiceDays - currentUnits.foodServiceDays,
+      );
+    } catch {
+      // Fallback: one billed day per extension day.
+    }
+  }
+
+  const customerArrangesFood = booking?.outstation?.needsFood === true;
+  const customerArrangesStay = booking?.outstation?.needsStay === true;
+
+  const foodRate = resolveOutstationFoodPerDay(pricing, fareBreakdown);
+  const stayRate = resolveOutstationStayPerNight(pricing, fareBreakdown);
+  const legacyRate = resolveOutstationLegacyAllowancePerNight(
+    pricing,
+    fareBreakdown,
+  );
+
+  const foodAllowancePerDay = customerArrangesFood ? 0 : foodRate;
+  const stayAllowancePerNight = customerArrangesStay ? 0 : stayRate;
+  const useLegacy = foodRate <= 0 && stayRate <= 0 && legacyRate > 0;
+  const legacyAllowancePerNight =
+    useLegacy && !(customerArrangesFood && customerArrangesStay)
+      ? legacyRate
+      : 0;
+
+  const dailyRateTotal = dailyRate * deltaFullDays;
+  const extraHourTotal = round2(deltaExtraHours * extraHourRate);
+  const foodAllowanceTotal = foodAllowancePerDay * deltaFoodDays;
+  const stayAllowanceTotal = stayAllowancePerNight * deltaNights;
+  const legacyAllowanceTotal = legacyAllowancePerNight * deltaNights;
+  const allowanceTotal =
+    foodAllowanceTotal + stayAllowanceTotal + legacyAllowanceTotal;
+
+  const subtotal = round2(dailyRateTotal + extraHourTotal + allowanceTotal);
+  const rates = inferRates(fareBreakdown);
+  const { gstPercent } = rates;
+  const serviceCharge = computePlatformFeeFromRates(subtotal, rates);
+  const gst = ((subtotal + serviceCharge) * gstPercent) / 100;
+  const fareDelta = round2(subtotal + serviceCharge + gst);
+
+  const platformCommissionPercent =
+    Number(fareBreakdown?.platformCommissionPercent) ||
+    Number(pricing?.platformCommissionPercent) ||
+    0;
+  const commissionableSubtotal = dailyRateTotal + extraHourTotal;
+  const platformCommission =
+    (commissionableSubtotal * platformCommissionPercent) / 100;
+  const driverFareEarning = Math.max(
+    0,
+    commissionableSubtotal - platformCommission,
+  );
+  const driverAllowanceEarning = allowanceTotal;
+  const driverEarning = round2(driverFareEarning + driverAllowanceEarning);
+
+  return {
+    fareDelta,
+    breakdown: {
+      additionalHours: days * 24,
+      additionalDays: days,
+      additionalNights: deltaNights,
+      deltaFullDays,
+      deltaExtraHours: round2(deltaExtraHours),
+      dailyRate: round2(dailyRate),
+      dailyRateTotal: round2(dailyRateTotal),
+      extraHourTotal: round2(extraHourTotal),
+      foodAllowancePerDay: round2(foodAllowancePerDay),
+      foodAllowanceTotal: round2(foodAllowanceTotal),
+      stayAllowancePerNight: round2(stayAllowancePerNight),
+      stayAllowanceTotal: round2(stayAllowanceTotal),
+      allowanceTotal: round2(allowanceTotal),
+      legacyAllowanceTotal: round2(legacyAllowanceTotal),
+      subtotal: round2(subtotal),
+      serviceCharge: round2(serviceCharge),
+      serviceChargePercent: rates.serviceChargePercent,
+      platformFee: round2(serviceCharge),
+      platformFeeType: rates.platformFeeType,
+      platformFeeAmount: rates.platformFeeAmount,
+      gst: round2(gst),
+      gstPercent,
+      platformCommission: round2(platformCommission),
+      platformCommissionPercent,
+      driverEarning: round2(driverEarning),
+      pricingModelVersion: fareBreakdown?.pricingModelVersion,
+    },
+  };
+}
+
+/**
  * Outstation extension delta — N extra calendar days at the snapshotted
  * daily rate, plus food/stay allowances using the same customer flags
  * as booking-create (`needsFood`/`needsStay` === true → customer
@@ -1208,13 +1365,22 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
           `additionalDays must be at least ${MIN_EXTENSION_DAYS}`,
         );
       }
-      if (additionalDays > MAX_EXTENSION_DAYS_DEFAULT) {
+      additionalDays = Math.floor(additionalDays);
+      const earlyBreakdown = booking.fareSnapshot?.breakdown || {};
+      const maxDaysCfg = resolveOutstationMaxDays(null, earlyBreakdown);
+      const isV2Ext = isOutstationV2Pricing(earlyBreakdown);
+      if (!isV2Ext && additionalDays > MAX_EXTENSION_DAYS_DEFAULT) {
         throw new ApiError(
           400,
           `additionalDays cannot exceed ${MAX_EXTENSION_DAYS_DEFAULT}`,
         );
       }
-      additionalDays = Math.floor(additionalDays);
+      if (isV2Ext && maxDaysCfg > 0 && additionalDays > maxDaysCfg) {
+        throw new ApiError(
+          400,
+          `additionalDays cannot exceed ${maxDaysCfg}`,
+        );
+      }
       // Keep days×24 on additionalHours for legacy aggregations that
       // only read that field (earnings totals etc.).
       additionalHours = additionalDays * 24;
@@ -1245,37 +1411,64 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
   }
   const fareBreakdown = booking.fareSnapshot?.breakdown || {};
 
-  // Outstation: reject extensions that would push calendar days past maxDays.
+  // Outstation: reject extensions that would exceed max service duration.
   if (isOutstation) {
     const pickupSrc =
       booking.outstation?.pickupAt || booking.outstation?.startDate;
     const endSrc =
       booking.outstation?.expectedReturnAt || booking.outstation?.endDate;
     if (pickupSrc && endSrc) {
-      const projectedEnd = new Date(endSrc);
-      if (outstationUnit === 'days' && additionalDays > 0) {
-        projectedEnd.setTime(
-          projectedEnd.getTime() + additionalDays * 86_400_000,
-        );
-      } else if (outstationUnit === 'hours' && additionalHours > 0) {
-        projectedEnd.setTime(
-          projectedEnd.getTime() + Math.round(additionalHours * 3_600_000),
-        );
-      }
-      try {
-        const projected = computeOutstationTripMetrics(pickupSrc, projectedEnd);
-        assertOutstationDaysWithinLimits(projected.days, {
-          minDays: 1,
-          maxDays: resolveOutstationMaxDays(pricing, fareBreakdown),
-        });
-      } catch (err) {
-        if (
-          err.code === 'OUTSTATION_ABOVE_MAX_DAYS' ||
-          err.code === 'OUTSTATION_BELOW_MIN_DAYS'
-        ) {
-          throw new ApiError(400, err.message, err.details || undefined);
+      const isV2Ext = isOutstationV2Pricing(fareBreakdown);
+      const maxDaysCfg = resolveOutstationMaxDays(pricing, fareBreakdown);
+
+      if (isV2Ext) {
+        const current = computeOutstationExactDuration(pickupSrc, endSrc);
+        let projectedMinutes = current.durationMinutes;
+        if (outstationUnit === 'days' && additionalDays > 0) {
+          projectedMinutes += additionalDays * 1440;
+        } else if (outstationUnit === 'hours' && additionalHours > 0) {
+          projectedMinutes += Math.round(additionalHours * 60);
         }
-        throw err;
+        try {
+          assertOutstationDurationWithinLimits(projectedMinutes, {
+            minDays: 1,
+            maxDays: maxDaysCfg,
+          });
+        } catch (err) {
+          if (
+            err.code === 'OUTSTATION_ABOVE_MAX_DAYS' ||
+            err.code === 'OUTSTATION_BELOW_MIN_DAYS'
+          ) {
+            throw new ApiError(400, err.message, err.details || undefined);
+          }
+          throw err;
+        }
+      } else {
+        const projectedEnd = new Date(endSrc);
+        if (outstationUnit === 'days' && additionalDays > 0) {
+          projectedEnd.setTime(
+            projectedEnd.getTime() + additionalDays * 86_400_000,
+          );
+        } else if (outstationUnit === 'hours' && additionalHours > 0) {
+          projectedEnd.setTime(
+            projectedEnd.getTime() + Math.round(additionalHours * 3_600_000),
+          );
+        }
+        try {
+          const projected = computeOutstationTripMetrics(pickupSrc, projectedEnd);
+          assertOutstationDaysWithinLimits(projected.days, {
+            minDays: 1,
+            maxDays: maxDaysCfg,
+          });
+        } catch (err) {
+          if (
+            err.code === 'OUTSTATION_ABOVE_MAX_DAYS' ||
+            err.code === 'OUTSTATION_BELOW_MIN_DAYS'
+          ) {
+            throw new ApiError(400, err.message, err.details || undefined);
+          }
+          throw err;
+        }
       }
     }
   }
@@ -1283,12 +1476,21 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
   let fareDelta;
   let breakdown;
   if (isOutstation && outstationUnit === 'days') {
-    ({ fareDelta, breakdown } = computeOutstationExtensionDelta(
-      pricing,
-      fareBreakdown,
-      booking,
-      additionalDays,
-    ));
+    if (isOutstationV2Pricing(fareBreakdown)) {
+      ({ fareDelta, breakdown } = computeOutstationExtensionDeltaV2(
+        pricing,
+        fareBreakdown,
+        booking,
+        additionalDays,
+      ));
+    } else {
+      ({ fareDelta, breakdown } = computeOutstationExtensionDelta(
+        pricing,
+        fareBreakdown,
+        booking,
+        additionalDays,
+      ));
+    }
   } else if (isOutstation && outstationUnit === 'hours') {
     const hourlyRate = resolveOutstationHourlyRate(pricing, fareBreakdown);
     ({ fareDelta, breakdown } = computeExtensionDelta(
@@ -1610,19 +1812,15 @@ export async function payExtensionService(userId, bookingId, body = {}) {
 
   await booking.save();
 
-  // Push the hourly auto-complete timer out by the newly accepted hours.
-  // No-op for outstation (rideEndsAtMs returns null without hourly hours).
-  scheduleRideEndTimer(booking);
-
-  // Outstation return lifecycle jobs must follow the new expectedReturnAt.
-  if (booking.serviceType === SERVICE_TYPES.OUTSTATION && outstationPatch) {
-    rescheduleOutstationReturnJobs(booking).catch((err) =>
-      console.warn(
-        '[extension] failed to reschedule outstation return jobs:',
-        err?.message,
-      ),
-    );
+  // Clear “Not now” so a new booked window can nudge again; push
+  // in-process ride-end / overtime timers to the new return time.
+  if (booking.serviceType === SERVICE_TYPES.OUTSTATION) {
+    if (booking.outstation) {
+      booking.outstation.extensionPromptDeclinedAt = null;
+      await booking.save();
+    }
   }
+  scheduleRideEndTimer(booking);
 
   const extensionsForUi = booking.extensions.map((e) => serialiseExtensionForCustomer(e));
   const userPayload = {

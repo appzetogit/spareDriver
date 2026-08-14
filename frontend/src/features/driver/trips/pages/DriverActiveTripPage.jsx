@@ -20,6 +20,7 @@ import {
   Wallet as WalletIcon,
   Phone,
   Mail,
+  Navigation,
   ShieldCheck,
 } from 'lucide-react';
 import {
@@ -46,11 +47,13 @@ import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { formatExtensionHours, maskPersonName } from '../../../../utils/formatters';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
 import TripChatEntry from '../../../../components/chat/TripChatEntry';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { isChatVisibleForBooking } from '../../../../constants/chat';
+import { openExternalUrl } from '../../../../utils/openExternalUrl';
 
 /**
  * Driver-side counterpart of `DriverAssignedPage` — one screen that adapts
@@ -340,6 +343,46 @@ const DriverActiveTripPage = () => {
     return { lat: c[1], lng: c[0] };
   }, [booking?.dropoff]);
 
+  const mapsNav = useMemo(() => {
+    const tripStarted = status === BOOKING_STATUS.STARTED;
+    const destCoords =
+      tripStarted && dropoffCoords ? dropoffCoords : pickupCoords;
+    const destQuery = tripStarted
+      ? booking?.dropoff?.address
+        || booking?.outstation?.destinationAddress
+        || booking?.pickup?.address
+      : booking?.pickup?.address;
+    const url = buildGoogleMapsNavUrl({
+      dest: destCoords,
+      destQuery,
+      origin: driverPoint,
+    });
+    const sameDrop =
+      tripStarted
+      && destCoords
+      && pickupCoords
+      && destCoords.lat === pickupCoords.lat
+      && destCoords.lng === pickupCoords.lng;
+    const headingToPickup =
+      status === BOOKING_STATUS.EN_ROUTE
+      || status === BOOKING_STATUS.ARRIVED;
+    const show = headingToPickup || tripStarted;
+    const label = !tripStarted
+      ? 'Navigate to pickup'
+      : sameDrop || !dropoffCoords
+        ? 'Start navigation'
+        : 'Navigate to destination';
+    return { url, label, show };
+  }, [
+    status,
+    pickupCoords,
+    dropoffCoords,
+    driverPoint,
+    booking?.pickup?.address,
+    booking?.dropoff?.address,
+    booking?.outstation?.destinationAddress,
+  ]);
+
   // Tick a heartbeat once a second so the cancel preview's grace-window
   // recompute (in `previewDriverCancellation`) reflects the live wall
   // clock. Without this the preview is frozen at mount time and the
@@ -472,8 +515,13 @@ const DriverActiveTripPage = () => {
       booking?.bookingType === 'outstation';
 
     if (isOutstation) {
-      // Outstation: early completion is allowed once STARTED.
-      return null;
+      const endSrc =
+        booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
+      const endMs = endSrc ? new Date(endSrc).getTime() : NaN;
+      if (!Number.isFinite(endMs)) return null;
+      const remainingMs = endMs - Date.now();
+      if (remainingMs <= 0) return null;
+      return Math.max(1, Math.ceil(remainingMs / 60_000));
     }
 
     const startedAtMs = booking?.timeline?.startedAt
@@ -739,6 +787,7 @@ const DriverActiveTripPage = () => {
   const carHeadline = [carBrand, carModel].filter(Boolean).join(' ') || carType || 'Vehicle';
 
   const locationRevealed = booking.locationRevealed !== false;
+  const pickupAddressLabel = formatLocationLabel(booking.pickup?.address);
   const showMap =
     STATUSES_WITH_MAP.includes(booking.status)
     && pickupCoords
@@ -797,11 +846,7 @@ const DriverActiveTripPage = () => {
           since={customerSince}
           callHref={customerCallHref}
           contactLocked={!contactRevealed}
-          contactUnlockHint={
-            isOutstationBooking
-              ? 'Customer contact unlocks when you arrive at pickup — chat is available now'
-              : 'Customer contact unlocks when you start heading to pickup'
-          }
+          contactUnlockHint="Customer contact unlocks when you arrive at pickup — chat is available now"
           chatSlot={
             isChatVisibleForBooking(booking) ? (
               <TripChatEntry
@@ -887,7 +932,7 @@ const DriverActiveTripPage = () => {
             <div className="min-w-0">
               <p className="text-[11px] text-text-muted">Pickup</p>
               <p className="text-sm font-medium text-text break-words">
-                {booking.pickup?.address}
+                {pickupAddressLabel || 'Pickup location pending'}
               </p>
             </div>
           </div>
@@ -1094,6 +1139,19 @@ const DriverActiveTripPage = () => {
 
   const actionBar = (
     <div className="bg-white border-t border-border-light px-4 py-3 space-y-2">
+      {mapsNav.show && mapsNav.url && booking.locationRevealed !== false && (
+        <Button
+          fullWidth
+          variant="secondary"
+          icon={Navigation}
+          onClick={() => {
+            const opened = openExternalUrl(mapsNav.url);
+            if (!opened) toast.error('Could not open Google Maps');
+          }}
+        >
+          {mapsNav.label}
+        </Button>
+      )}
       {config.cta && (
         <Button
           fullWidth
@@ -1147,8 +1205,8 @@ const DriverActiveTripPage = () => {
               </div>
               <p className="text-base font-bold text-slate-900">Map unlocks on trip day</p>
               <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
-                {booking?.pickup?.address
-                  ? `Pickup address: ${booking.pickup.address}`
+                {pickupAddressLabel
+                  ? `Pickup address: ${pickupAddressLabel}`
                   : 'The live map and pin unlock at midnight on the pickup day.'}
               </p>
             </div>
@@ -1688,7 +1746,7 @@ function CustomerHeroCard({
   since,
   callHref,
   contactLocked = false,
-  contactUnlockHint = 'Customer contact unlocks when you start heading to pickup',
+  contactUnlockHint = 'Customer contact unlocks when you arrive at pickup — chat is available now',
   chatSlot = null,
 }) {
   return (
@@ -1940,6 +1998,25 @@ function formatScheduledLead(minutes) {
   const days = Math.floor(hrs / 24);
   const remHrs = hrs % 24;
   return remHrs ? `${days}d ${remHrs}h` : `${days}d`;
+}
+
+function buildGoogleMapsNavUrl({ dest, destQuery, origin }) {
+  const params = new URLSearchParams({
+    api: '1',
+    travelmode: 'driving',
+    dir_action: 'navigate',
+  });
+  if (dest && Number.isFinite(dest.lat) && Number.isFinite(dest.lng)) {
+    params.set('destination', `${dest.lat},${dest.lng}`);
+  } else {
+    const q = String(destQuery || '').trim();
+    if (!q) return null;
+    params.set('destination', q);
+  }
+  if (origin && Number.isFinite(origin.lat) && Number.isFinite(origin.lng)) {
+    params.set('origin', `${origin.lat},${origin.lng}`);
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
 export default DriverActiveTripPage;

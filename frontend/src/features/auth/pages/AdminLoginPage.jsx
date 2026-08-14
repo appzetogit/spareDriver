@@ -7,6 +7,7 @@ import api from '../../../utils/api';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { useStoreHydration } from '../../../hooks/useStoreHydration';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
+import { isDeveloper } from '../../../constants/staffRoles';
 
 const AdminLoginPage = () => {
   const navigate = useNavigate();
@@ -19,7 +20,8 @@ const AdminLoginPage = () => {
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated || !admin) return;
-    if (admin.role === 'admin') navigate('/admin', { replace: true });
+    if (isDeveloper(admin.role)) navigate('/admin/dev/booking-test', { replace: true });
+    else if (admin.role === 'admin') navigate('/admin', { replace: true });
     else navigate('/admin/tasks', { replace: true });
   }, [hydrated, isAuthenticated, admin, navigate]);
 
@@ -54,7 +56,8 @@ const AdminLoginPage = () => {
       const { admin } = res.data.data;
       
       setAuth(admin);
-      if (admin.role === 'admin') navigate('/admin');
+      if (isDeveloper(admin.role)) navigate('/admin/dev/booking-test');
+      else if (admin.role === 'admin') navigate('/admin');
       else navigate('/admin/tasks');
     } catch (error) {
       console.error('Admin login failed', error);

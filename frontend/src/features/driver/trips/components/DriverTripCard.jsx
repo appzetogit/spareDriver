@@ -2,6 +2,7 @@ import { MapPin, Clock, Navigation, Calendar } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Badge from '../../../../components/Badge';
 import { formatCurrency } from '../../../../utils/formatters';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import {
   BOOKING_STATUS,
@@ -85,8 +86,8 @@ const DriverTripCard = ({ trip, onClick, className = '', style }) => {
   // the customer's gross fare is stripped on the backend.
   const fare = trip?.fareSnapshot?.driverEarning;
   const serviceLabel = SERVICE_TYPE_LABELS[trip.serviceType] || trip.serviceType;
-  const pickupLabel = trip?.pickup?.address || 'Pickup pending';
-  const dropoffLabel = trip?.dropoff?.address;
+  const pickupLabel = formatLocationLabel(trip?.pickup?.address, 'Pickup pending');
+  const dropoffLabel = formatLocationLabel(trip?.dropoff?.address);
   const isOngoing = ACTIVE_BOOKING_STATUSES.includes(trip.status);
 
   return (

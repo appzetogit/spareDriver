@@ -13,12 +13,12 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const LOGO_CANDIDATES = [
+  path.resolve(__dirname, '../../../frontend/public/images/black-logo.png'),
   path.resolve(__dirname, '../../assets/brand-logo.png'),
-  path.resolve(__dirname, '../../../frontend/public/images/logo-white.png'),
 ];
 
-/** logo-white.png ≈ 694×360 */
-const LOGO_ASPECT = 694 / 360;
+/** black-logo.png ≈ 528×473 */
+const LOGO_ASPECT = 528 / 473;
 
 let cachedLogoPath;
 
@@ -50,12 +50,15 @@ export function formatPdfInr(amount) {
 }
 
 /**
- * Draw the SpareDriver logo. Returns the drawn box size (or zeros if
- * the asset is missing).
+ * Draw the SpareDriver logo (black mark for light surfaces). Returns the
+ * drawn box size (or zeros if the asset is missing).
+ *
+ * Pass `backdrop: true` (or a hex color) when placing on a dark fill so
+ * the black artwork stays visible.
  */
 export function drawBrandLogo(
   doc,
-  { x, y, height = 28, align = 'left' } = {},
+  { x, y, height = 28, align = 'left', backdrop = false } = {},
 ) {
   const logoPath = getBrandLogoPath();
   if (!logoPath) return { drawn: false, width: 0, height: 0 };
@@ -67,6 +70,14 @@ export function drawBrandLogo(
   const drawY = y ?? doc.y;
 
   try {
+    if (backdrop) {
+      const pad = Math.max(3, Math.round(h * 0.12));
+      const fill = typeof backdrop === 'string' ? backdrop : '#FFFFFF';
+      doc
+        .roundedRect(drawX - pad, drawY - pad, w + pad * 2, h + pad * 2, pad)
+        .fillColor(fill)
+        .fill();
+    }
     doc.image(logoPath, drawX, drawY, { height: h });
     return { drawn: true, width: w, height: h };
   } catch {

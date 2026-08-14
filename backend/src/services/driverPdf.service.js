@@ -243,12 +243,13 @@ function drawHeaderBanner(doc, driver, profilePicBuffer) {
 
   doc.roundedRect(left, y, width, bannerH, 14).fillColor(PALETTE.headerBg).fill();
 
-  // Brand logo (white/gold on black works on dark banner)
+  // Black logo needs a light chip on the dark banner
   const logo = drawBrandLogo(doc, {
     x: right - 12,
     y: y + 10,
     height: 34,
     align: 'right',
+    backdrop: true,
   });
 
   const avatarSize = 76;
@@ -475,7 +476,7 @@ function addPageChrome(doc) {
     const right = pageRight(doc);
     const isFirst = i === range.start;
 
-    // Subsequent pages: compact dark strip with logo (logo is light-on-dark)
+    // Subsequent pages: compact dark strip with black logo on a light chip
     if (!isFirst && logoPath) {
       const stripH = 36;
       const stripY = 12;
@@ -484,6 +485,7 @@ function addPageChrome(doc) {
         x: left + 10,
         y: stripY + 4,
         height: 28,
+        backdrop: true,
       });
       doc
         .font('Helvetica')

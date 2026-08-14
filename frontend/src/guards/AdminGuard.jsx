@@ -3,7 +3,9 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 import { useStoreHydration } from '../hooks/useStoreHydration';
 import { BootstrapShellSkeleton } from '../components/skeleton/SectionSkeletons';
 
-const STAFF_ROLES = ['admin', 'sub_admin', 'team_member'];
+import { isDeveloper } from '../constants/staffRoles';
+
+const STAFF_ROLES = ['admin', 'sub_admin', 'team_member', 'developer'];
 
 const AdminGuard = () => {
   const hydrated = useStoreHydration(useAdminAuthStore);

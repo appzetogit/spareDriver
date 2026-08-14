@@ -1,98 +1,20 @@
 /**
- * Shared outstation duration math used by the variant + duration pages
- * and the review/confirm displays. Keep this in lockstep with the
- * backend's `computeOutstationTripMetrics` in
- * `backend/src/utils/outstationDuration.js`.
- *
- * Business timezone for billable days/nights: Asia/Kolkata.
+ * Outstation scheduling helpers + V2 duration billing re-exports.
+ * Calendar-date billing (V1) lives only on the backend for legacy bookings.
  */
+
+export {
+  computeOutstationTripMetrics,
+  computeOutstationDuration,
+  formatOutstationDurationLabel,
+} from './outstationDurationBilling.js';
+import { formatOutstationDurationLabel } from './outstationDurationBilling.js';
 
 export const OUTSTATION_BUSINESS_TZ = 'Asia/Kolkata';
 
-const MS_PER_DAY = 86_400_000;
-const MS_PER_MINUTE = 60_000;
-
-function getZonedYmd(value, timeZone = OUTSTATION_BUSINESS_TZ) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(date)
-      .filter((p) => p.type !== 'literal')
-      .map((p) => [p.type, p.value]),
-  );
-  const year = Number(parts.year);
-  const month = Number(parts.month);
-  const day = Number(parts.day);
-  if (!year || !month || !day) return null;
-  return { year, month, day };
-}
-
-function ymdDayIndex({ year, month, day }) {
-  return Math.floor(Date.UTC(year, month - 1, day) / MS_PER_DAY);
-}
-
-/**
- * Full metrics. Soft defaults for missing/invalid input.
- */
-export function computeOutstationTripMetrics(pickupAt, expectedReturnAt) {
-  const fallback = {
-    days: 1,
-    nights: 0,
-    durationMs: 0,
-    durationMinutes: 0,
-    durationHours: 0,
-  };
-  if (!pickupAt || !expectedReturnAt) return fallback;
-  const start = new Date(pickupAt);
-  const end = new Date(expectedReturnAt);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return fallback;
-  }
-  if (end.getTime() <= start.getTime()) return fallback;
-
-  const startYmd = getZonedYmd(start);
-  const endYmd = getZonedYmd(end);
-  if (!startYmd || !endYmd) return fallback;
-
-  const span = ymdDayIndex(endYmd) - ymdDayIndex(startYmd);
-  const days = Math.max(1, span + 1);
-  const nights = Math.max(0, span);
-  const durationMs = end.getTime() - start.getTime();
-  const durationMinutes = Math.floor(durationMs / MS_PER_MINUTE);
-  return {
-    days,
-    nights,
-    durationMs,
-    durationMinutes,
-    durationHours: durationMinutes / 60,
-  };
-}
-
-/**
- * Returns `{ days, nights }` for missing / invalid / inverted inputs
- * so caller math never blows up.
- */
-export function computeOutstationDuration(pickupAt, expectedReturnAt) {
-  const m = computeOutstationTripMetrics(pickupAt, expectedReturnAt);
-  return { days: m.days, nights: m.nights };
-}
-
-/** Human label for exact duration (e.g. "59 hours", "1h 30m"). */
+/** Alias for formatOutstationDurationLabel */
 export function formatOutstationExactDuration(durationMinutes) {
-  const mins = Math.max(0, Math.floor(Number(durationMinutes) || 0));
-  if (mins < 60) return `${mins} min`;
-  const hours = Math.floor(mins / 60);
-  const rem = mins % 60;
-  if (rem === 0) {
-    return `${hours} hour${hours === 1 ? '' : 's'}`;
-  }
-  return `${hours}h ${rem}m`;
+  return formatOutstationDurationLabel(durationMinutes);
 }
 
 function pad(n) {

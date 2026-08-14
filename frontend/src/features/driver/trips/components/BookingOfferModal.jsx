@@ -20,6 +20,7 @@ import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/servic
 import { BOOKING_TYPE } from '../../../../constants/bookingStatus';
 import { formatDistance } from '../../../../utils/geo';
 import { maskPersonName } from '../../../../utils/formatters';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 import Button from '../../../../components/Button';
 
 /**
@@ -223,6 +224,7 @@ const BookingOfferModal = () => {
     typeof offer.distanceMeters === 'number'
       ? formatDistance(offer.distanceMeters)
       : null;
+  const pickupAddressLabel = formatLocationLabel(offer.pickup?.address, 'Pickup location pending');
 
   // Pick the colour scheme based on whether this is an instant or
   // scheduled offer so drivers can identify the ride type at a glance.
@@ -318,7 +320,7 @@ const BookingOfferModal = () => {
             <MapPin className="w-4 h-4 text-success mt-0.5 shrink-0" />
             <div className="min-w-0">
               <p className="text-[11px] text-text-muted">Pickup</p>
-              <p className="text-sm font-medium text-text break-words">{offer.pickup?.address}</p>
+              <p className="text-sm font-medium text-text break-words">{pickupAddressLabel}</p>
               {pickupDistanceLabel && (
                 <p className="text-[11px] text-primary-dark font-semibold mt-0.5">
                   {pickupDistanceLabel} away from you

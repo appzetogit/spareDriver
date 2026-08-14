@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
+import { isOutstationV2Pricing } from '../../../../constants/outstationPricing.js';
+import { formatOutstationDurationLabel } from '../../../../utils/outstationDurationBilling.js';
 
 /**
  * Renders the line-by-line fare breakdown returned by `/auth/bookings/estimate`.
@@ -38,6 +40,64 @@ function buildHourlyRows(bd) {
 }
 
 function buildOutstationRows(bd) {
+  if (isOutstationV2Pricing(bd)) {
+    return buildOutstationV2Rows(bd);
+  }
+  return buildOutstationV1Rows(bd);
+}
+
+function buildOutstationV2Rows(bd) {
+  const billableDays = Number(bd.billableFullDays ?? bd.days) || 1;
+  const extraHours = Number(bd.billableExtraHours) || 0;
+  const extraRate = Number(bd.extraHourCharge) || 0;
+  const nights = Number(bd.billableNights ?? bd.nights) || 0;
+  const dailyRate = Number(bd.dailyRate) || 0;
+  const foodPerDay = Number(bd.foodAllowancePerDay) || 0;
+  const stayPerNight = Number(bd.stayAllowancePerNight) || 0;
+  const foodTotal = Number(bd.foodAllowanceTotal) || 0;
+  const stayTotal = Number(bd.stayAllowanceTotal) || 0;
+  const foodDays = Number(bd.foodServiceDays ?? billableDays) || billableDays;
+  const extraLabel =
+    extraHours % 1 === 0
+      ? `${extraHours}h`
+      : `${extraHours.toFixed(1)}h`;
+
+  const rows = [];
+  if (bd.durationMinutes > 0) {
+    rows.push([
+      'Trip duration',
+      formatOutstationDurationLabel(bd.durationMinutes),
+      false,
+      true,
+    ]);
+  }
+  rows.push(
+    [
+      billableDays === 1 && extraHours <= 0
+        ? `Base service (${rupees(dailyRate)}/day min.)`
+        : `Base service ${rupees(dailyRate)} \u00d7 ${billableDays} day${billableDays === 1 ? '' : 's'}`,
+      bd.dailyRateTotal,
+    ],
+    [
+      `Extra time ${extraLabel} \u00d7 ${rupees(extraRate)}`,
+      bd.extraHourTotal,
+      !(extraHours > 0 && Number(bd.extraHourTotal) > 0),
+    ],
+    [
+      `Driver food ${rupees(foodPerDay)} \u00d7 ${foodDays} day${foodDays === 1 ? '' : 's'}`,
+      foodTotal,
+      !(foodPerDay > 0 && foodTotal > 0),
+    ],
+    [
+      `Driver stay ${rupees(stayPerNight)} \u00d7 ${nights} night${nights === 1 ? '' : 's'}`,
+      stayTotal,
+      !(nights > 0 && stayPerNight > 0 && stayTotal > 0),
+    ],
+  );
+  return rows;
+}
+
+function buildOutstationV1Rows(bd) {
   const days = Number(bd.days) || 1;
   const nights = Number(bd.nights) || 0;
   const dailyRate = Number(bd.dailyRate) || 0;
@@ -106,9 +166,19 @@ const FareCard = ({
       ? buildOutstationRows(breakdown)
       : buildHourlyRows(breakdown);
     return raw
-      .filter(([, value, suppress]) => !suppress && Number(value || 0) !== 0)
-      .map(([label, value]) => [label, Number(value) || 0]);
+      .filter(([, value, suppress, isLabel]) => {
+        if (isLabel) return true;
+        return !suppress && Number(value || 0) !== 0;
+      })
+      .map(([label, value, , isLabel]) => [
+        label,
+        isLabel ? value : Number(value) || 0,
+        isLabel,
+      ]);
   }, [breakdown, isOutstation]);
+
+  const detailRowsDisplay = detailRows.filter(([, , isLabel]) => !isLabel);
+  const durationLabelRow = detailRows.find(([, , isLabel]) => isLabel);
 
   const subtotal = Number(breakdown.subtotal) || 0;
   const couponDiscount = Number(breakdown.couponDiscount) || 0;
@@ -134,7 +204,13 @@ const FareCard = ({
         <div className={dense ? 'space-y-1.5' : 'space-y-2.5'}>
           {/* Per-line breakdown with explicit multipliers (\u00d7 days,
               \u00d7 nights, etc.) so the customer can audit every rupee. */}
-          {detailRows.map(([label, amount]) => (
+          {durationLabelRow && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">{durationLabelRow[0]}</span>
+              <span className="text-sm font-medium text-text">{durationLabelRow[1]}</span>
+            </div>
+          )}
+          {detailRowsDisplay.map(([label, amount]) => (
             <div key={label} className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">{label}</span>
               <span className={`text-sm ${amount < 0 ? 'text-success' : 'text-text'}`}>
@@ -142,7 +218,7 @@ const FareCard = ({
               </span>
             </div>
           ))}
-          {detailRows.length > 0 && (
+          {detailRowsDisplay.length > 0 && (
             <div className="h-px bg-border-light my-1" />
           )}
           {/* Pre-platform subtotal — the boundary between trip costs and

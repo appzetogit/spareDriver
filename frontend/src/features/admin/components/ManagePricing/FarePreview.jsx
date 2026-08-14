@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Calculator } from 'lucide-react';
 import {
   calculateHourlyFare,
-  calculateOutstationFare,
+  calculateOutstationFareV2,
   formatCurrency,
 } from '../../../../utils/fareCalculator';
+import { formatOutstationDurationLabel } from '../../../../utils/outstationDurationBilling.js';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 
 const Row = ({ label, value, highlight, sub, muted }) => (
@@ -178,56 +179,20 @@ const HourlyPreview = ({ form }) => {
 // fallback. Toll & parking are paid by the customer to the driver and
 // are not added to the fare here.
 const OutstationPreview = ({ form }) => {
-  const minDays = Math.max(1, Number(form.outstation?.minDays) || 1);
   const [pickupLocal, setPickupLocal] = useState('2026-08-10T08:00');
   const [returnLocal, setReturnLocal] = useState('2026-08-12T19:00');
   const [customerArrangesAll, setCustomerArrangesAll] = useState(false);
 
-  const metrics = useMemo(() => {
-    try {
-      // Inline Kolkata-safe calendar math (mirrors outstationSchedule).
-      const start = new Date(pickupLocal);
-      const end = new Date(returnLocal);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-        return { days: minDays, nights: Math.max(0, minDays - 1), durationMinutes: 0 };
-      }
-      const tz = 'Asia/Kolkata';
-      const ymd = (d) => {
-        const parts = Object.fromEntries(
-          new Intl.DateTimeFormat('en-US', {
-            timeZone: tz,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-          })
-            .formatToParts(d)
-            .filter((p) => p.type !== 'literal')
-            .map((p) => [p.type, p.value]),
-        );
-        return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
-      };
-      const span = Math.round((ymd(end) - ymd(start)) / 86_400_000);
-      const days = Math.max(1, span + 1);
-      return {
-        days,
-        nights: Math.max(0, span),
-        durationMinutes: Math.floor((end - start) / 60_000),
-      };
-    } catch {
-      return { days: minDays, nights: Math.max(0, minDays - 1), durationMinutes: 0 };
-    }
-  }, [pickupLocal, returnLocal, minDays]);
-
   const breakdown = useMemo(
     () =>
-      calculateOutstationFare({
+      calculateOutstationFareV2({
         pricing: form,
-        days: metrics.days,
-        nights: metrics.nights,
+        pickupAt: new Date(pickupLocal),
+        expectedReturnAt: new Date(returnLocal),
         foodProvided: customerArrangesAll,
         stayProvided: customerArrangesAll,
       }),
-    [form, metrics.days, metrics.nights, customerArrangesAll],
+    [form, pickupLocal, returnLocal, customerArrangesAll],
   );
 
   if (!breakdown || !(Number(form.outstation?.dailyRate) > 0)) {
@@ -241,15 +206,15 @@ const OutstationPreview = ({ form }) => {
   const foodPerDay = Number(breakdown.foodAllowancePerDay) || 0;
   const stayPerNight = Number(breakdown.stayAllowancePerNight) || 0;
   const legacyAllowance = Number(breakdown.legacyAllowanceTotal) || 0;
-  const exactHours = (metrics.durationMinutes / 60).toFixed(
-    metrics.durationMinutes % 60 === 0 ? 0 : 1,
-  );
+  const extraHours = Number(breakdown.billableExtraHours) || 0;
+  const extraLabel =
+    extraHours % 1 === 0 ? `${extraHours}h` : `${extraHours.toFixed(1)}h`;
 
   return (
     <>
       <div className="space-y-2 mb-3">
         <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-          Round trip simulation
+          Round trip simulation (duration-based)
         </p>
         <div className="grid grid-cols-1 gap-2">
           <label className="text-[11px] text-slate-500">
@@ -281,34 +246,47 @@ const OutstationPreview = ({ form }) => {
           />
         </div>
         <p className="text-[10px] text-slate-400">
-          Exact {exactHours}h · Billable {breakdown.days} day(s) · Overnight{' '}
-          {breakdown.nights} night(s)
+          Duration {formatOutstationDurationLabel(breakdown.durationMinutes)} ·
+          Service {breakdown.billableFullDays} day(s)
+          {extraHours > 0 ? ` + ${extraLabel} extra` : ''} · Overnight{' '}
+          {breakdown.billableNights} night(s)
           {customerArrangesAll ? ' · allowances waived' : ''}
         </p>
       </div>
 
       <div className="bg-white rounded-xl p-3 border border-slate-200">
         <Row
-          label={`Daily rate × ${breakdown.days}`}
+          label={
+            breakdown.billableFullDays === 1 && extraHours <= 0
+              ? 'Base service (1-day minimum)'
+              : `Daily rate × ${breakdown.billableFullDays}`
+          }
           value={formatCurrency(breakdown.dailyRateTotal)}
         />
+        {extraHours > 0 && Number(breakdown.extraHourTotal) > 0 && (
+          <Row
+            label={`Extra time ${extraLabel} × ${formatCurrency(breakdown.extraHourCharge)}`}
+            value={formatCurrency(breakdown.extraHourTotal)}
+            sub
+          />
+        )}
         {foodPerDay > 0 && breakdown.foodAllowanceTotal > 0 && (
           <Row
-            label={`Food allowance × ${breakdown.days}`}
+            label={`Food allowance × ${breakdown.foodServiceDays ?? breakdown.billableFullDays}`}
             value={formatCurrency(breakdown.foodAllowanceTotal)}
             sub
           />
         )}
         {stayPerNight > 0 && breakdown.stayAllowanceTotal > 0 && (
           <Row
-            label={`Stay allowance × ${breakdown.nights}`}
+            label={`Stay allowance × ${breakdown.billableNights}`}
             value={formatCurrency(breakdown.stayAllowanceTotal)}
             sub
           />
         )}
         {legacyAllowance > 0 && (
           <Row
-            label={`Allowance (legacy) × ${breakdown.nights}`}
+            label={`Allowance (legacy) × ${breakdown.billableNights}`}
             value={formatCurrency(legacyAllowance)}
             sub
           />

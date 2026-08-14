@@ -48,7 +48,7 @@ backend/src/
                           # chat.service.js — booking chat + unread + authz
   controllers/chat*.js    # chat.controller.js + chatSocket.controller.js
   utils/                  # apiError.js, razorpay.js, asyncHandler, pdfBrand.js, etc.
-  assets/                 # brand-logo.png for PDFKit exports (invoice + admin PDFs)
+  assets/                 # brand-logo.png (= frontend black-logo) for PDFKit exports
   validations/            # zod schemas per route group
 
 frontend/src/

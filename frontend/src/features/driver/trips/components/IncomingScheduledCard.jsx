@@ -13,6 +13,7 @@ import {
 import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import { formatCurrency, maskPersonName } from '../../../../utils/formatters';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { formatDistance } from '../../../../utils/geo';
 import IncomingTripDetailsSheet from './IncomingTripDetailsSheet';
@@ -32,8 +33,13 @@ export default function IncomingScheduledCard({
 
   if (!request) return null;
 
-  const pickupLabel = request?.pickup?.address || request?.dailyPickup?.address || 'Pickup pending';
-  const dropLabel = request?.dropoff?.address || request?.dailyDropoff?.address;
+  const pickupLabel = formatLocationLabel(
+    request?.pickup?.address || request?.dailyPickup?.address,
+    'Pickup pending',
+  );
+  const dropLabel = formatLocationLabel(
+    request?.dropoff?.address || request?.dailyDropoff?.address,
+  );
   const isSubscription =
     request?.kind === 'subscription' || request?.bookingType === 'subscription';
   const isOutstation = request?.bookingType === 'outstation' || !!request?.outstation;

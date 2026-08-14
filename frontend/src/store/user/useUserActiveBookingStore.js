@@ -60,6 +60,38 @@ const useUserActiveBookingStore = create((set, get) => ({
     });
   },
 
+  /**
+   * Persist “Not now” on outstation so the server stops pre-return
+   * repeat nudges for this booked window.
+   */
+  async declineExtensionPrompt() {
+    const id = get().booking?._id;
+    set({
+      extensionPromptOpen: false,
+      extensionPromptDismissedAt: Date.now(),
+    });
+    if (!id) return null;
+    try {
+      const res = await api.post(`/auth/bookings/${id}/extensions/decline-prompt`);
+      const declinedAt = res?.data?.data?.declinedAt || new Date().toISOString();
+      const current = get().booking;
+      if (current?.outstation) {
+        set({
+          booking: {
+            ...current,
+            outstation: {
+              ...current.outstation,
+              extensionPromptDeclinedAt: declinedAt,
+            },
+          },
+        });
+      }
+      return res?.data?.data || null;
+    } catch {
+      return null;
+    }
+  },
+
   setExtensionRejection(rejection) {
     set({ extensionRejection: rejection });
   },

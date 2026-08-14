@@ -5,7 +5,7 @@ import useUserAuthStore from './useUserAuthStore';
 import useDriverAuthStore from './useDriverAuthStore';
 import useAdminAuthStore from './useAdminAuthStore';
 
-const STAFF_ROLES = new Set(['admin', 'sub_admin', 'team_member']);
+const STAFF_ROLES = new Set(['admin', 'sub_admin', 'team_member', 'developer']);
 const LEGACY_SESSION_KEYS = ['user-session', 'driver-session', 'admin-session'];
 
 let bootPromise = null;

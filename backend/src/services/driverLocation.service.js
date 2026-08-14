@@ -3,7 +3,7 @@ import Booking from '../models/booking.model.js';
 import { getRtdb, isFirebaseReady } from '../config/firebase.js';
 import { emitToAdmins } from '../utils/socketEmitters.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
-import { ACTIVE_BOOKING_STATUSES } from '../constants/bookingStatus.js';
+import { ACTIVE_BOOKING_STATUSES, isBookingContactRevealed } from '../constants/bookingStatus.js';
 
 /**
  * Live-location pipeline for drivers.
@@ -76,7 +76,9 @@ function serializeActiveTrip(booking) {
     pickupCoords: placeCoords(booking.pickup),
     dropoffCoords: placeCoords(booking.dropoff),
     customerName: booking.userId?.name || null,
-    customerPhone: booking.userId?.phone_no || null,
+    customerPhone: isBookingContactRevealed(booking)
+      ? booking.userId?.phone_no || null
+      : null,
   };
 }
 

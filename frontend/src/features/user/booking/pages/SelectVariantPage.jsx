@@ -32,7 +32,8 @@ import { useUserServicePricingsStore } from '../../../../store/user/useUserPrici
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import {
-  computeOutstationDuration,
+  computeOutstationTripMetrics,
+  formatOutstationDurationLabel,
   addCalendarDays,
   startOfLocalDay,
 } from '../../../../utils/outstationSchedule';
@@ -385,13 +386,16 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
     return pickupRaw;
   }, [pickupRaw, minPickupDate]);
 
-  // Days = number of distinct calendar dates the trip spans (server
-  // mirrors this exact formula). Nights = days − 1. Falls back to a
-  // 0-day "no trip" placeholder when either endpoint is blank.
-  const { days, nights } = useMemo(() => {
-    if (!pickupAt || !expectedReturnAt) return { days: 0, nights: 0 };
-    return computeOutstationDuration(pickupAt, expectedReturnAt);
+  // V2 duration billing — billable days/nights from 24h blocks, not calendar dates.
+  const outstationMetrics = useMemo(() => {
+    if (!pickupAt || !expectedReturnAt) return null;
+    return computeOutstationTripMetrics(pickupAt, expectedReturnAt);
   }, [pickupAt, expectedReturnAt]);
+
+  const days = outstationMetrics?.billableFullDays ?? 0;
+  const nights = outstationMetrics?.billableNights ?? 0;
+  const durationMinutes = outstationMetrics?.durationMinutes ?? 0;
+  const billableExtraHours = outstationMetrics?.billableExtraHours ?? 0;
 
   // Auto-clear return when pickup pushes past it; keeps the diff
   // non-negative without a separate validation toast.
@@ -831,8 +835,8 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
           }
           priceLabel={
             days >= 1
-              ? `${days} day${days === 1 ? '' : 's'}`
-              : '— day'
+              ? formatOutstationDurationLabel(durationMinutes)
+              : '—'
           }
           primaryLabel="Continue"
           disabled={!canContinue}
@@ -847,8 +851,8 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
         <RefreshCw className="w-4 h-4 text-sky-700 mt-0.5 shrink-0" />
         <p className="text-[12px] leading-snug text-sky-900">
           <strong className="font-semibold">Round trip:</strong> your
-          driver stays with you the whole trip and drops you back at the
-          pickup{days >= 1 ? ` on day ${days}` : ''}.
+          driver stays with you for the full booked duration and drops
+          you back at the pickup.
         </p>
       </div>
 
@@ -1014,8 +1018,17 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
               Trip length
             </span>
             <span className="text-sm font-bold text-text">
-              {days} day{days > 1 ? 's' : ''} · {nights} night
-              {nights === 1 ? '' : 's'}
+              {formatOutstationDurationLabel(durationMinutes)}
+              {days >= 1 && (
+                <>
+                  {' '}
+                  · {days} day{days === 1 ? '' : 's'} service
+                  {billableExtraHours > 0 &&
+                    ` + ${billableExtraHours % 1 === 0 ? billableExtraHours : billableExtraHours.toFixed(1)}h extra`}
+                </>
+              )}
+              {nights > 0 &&
+                ` · ${nights} overnight${nights === 1 ? '' : 's'}`}
             </span>
           </div>
         ) : (

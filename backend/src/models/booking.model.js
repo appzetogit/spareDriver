@@ -62,6 +62,12 @@ const outstationDetailsSchema = new mongoose.Schema(
      * calendar-day fare billing.
      */
     durationMinutes: { type: Number, default: 0, min: 0 },
+    /** V2 duration billing — full 24h blocks charged at daily rate. */
+    billableFullDays: { type: Number, default: null, min: 0 },
+    /** V2 — fractional hours beyond complete 24h blocks. */
+    billableExtraHours: { type: Number, default: null, min: 0 },
+    /** OUTSTATION_V1_CALENDAR | OUTSTATION_V2_DURATION */
+    pricingModelVersion: { type: String, default: null, trim: true },
     needsStay: { type: Boolean, default: true },
     needsFood: { type: Boolean, default: true },
     estimatedKm: { type: Number, default: 0, min: 0 },
@@ -72,10 +78,18 @@ const outstationDetailsSchema = new mongoose.Schema(
     returnReminderSentAt: { type: Date, default: null },
     returnReachedPromptedAt: { type: Date, default: null },
     lastReturnPromptAt: { type: Date, default: null },
+    /** Customer tapped “Not now” on the extend popup — stop pre-end repeats. */
+    extensionPromptDeclinedAt: { type: Date, default: null },
     /** Snapshotted from ServicePricing.outstation at trip start. */
     returnGraceMinutes: { type: Number, default: null, min: 0 },
     returnPromptRepeatMinutes: { type: Number, default: null, min: 0 },
     returnReminderMinutes: { type: Number, default: null, min: 0 },
+    /** 0 = off (overtime by minute); >0 = auto-complete after grace. */
+    returnAutoCompleteHours: { type: Number, default: null, min: 0 },
+    overtimeBillableMinutes: { type: Number, default: 0, min: 0 },
+    overtimeSettledMinutes: { type: Number, default: 0, min: 0 },
+    overtimeChargeRupees: { type: Number, default: 0, min: 0 },
+    overtimeLastSettledAt: { type: Date, default: null },
   },
   { _id: false },
 );

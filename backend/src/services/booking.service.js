@@ -10,6 +10,14 @@ import {
   computeOutstationTripMetrics,
   assertOutstationDaysWithinLimits,
 } from '../utils/outstationDuration.js';
+import {
+  computeOutstationDurationBilling,
+  assertOutstationDurationWithinLimits,
+} from '../utils/outstationDurationBilling.js';
+import {
+  OUTSTATION_PRICING_MODEL_CURRENT,
+  isOutstationV2Pricing,
+} from '../constants/outstationPricing.js';
 import { attachOutstationReturnPhase } from './bookingOutstationReturn.service.js';
 import {
   cancelPaymentTimeout,
@@ -132,7 +140,8 @@ import {
  */
 function buildFareSnapshot(estimate) {
   const bd = estimate?.fareBreakdown || {};
-  const baseFare = bd.packagePrice ?? bd.dailyRateTotal ?? 0;
+  const baseFare =
+    bd.baseServiceSubtotal ?? bd.packagePrice ?? bd.dailyRateTotal ?? 0;
   const subtotal = bd.subtotal ?? 0;
   const extras = Math.max(0, Number(subtotal) - Number(baseFare));
   return {
@@ -342,7 +351,7 @@ export function sanitizeBookingForDriver(booking) {
     });
   }
 
-  // Hide customer phone/email until the driver starts heading to pickup.
+  // Hide customer phone/email until the driver marks arrived.
   if (!isBookingContactRevealed(obj) && obj.userId && typeof obj.userId === 'object') {
     stripContactIfHidden(obj.userId);
   }
@@ -353,7 +362,7 @@ export function sanitizeBookingForDriver(booking) {
 }
 
 /**
- * User-facing booking view: hide the driver's phone until start-to-pickup.
+ * User-facing booking view: hide the driver's phone until arrived.
  */
 export function sanitizeBookingForUser(booking) {
   if (!booking) return booking;
@@ -928,21 +937,25 @@ export async function createBookingService(userId, body) {
       : null;
   const outstationMetrics =
     serviceType === SERVICE_TYPES.OUTSTATION
-      ? computeOutstationTripMetrics(outstationPickupAt, outstationReturnAt)
+      ? computeOutstationDurationBilling(outstationPickupAt, outstationReturnAt)
       : null;
   const outstationDuration = outstationMetrics
-    ? { days: outstationMetrics.days, nights: outstationMetrics.nights }
+    ? {
+        days: outstationMetrics.billableFullDays,
+        nights: outstationMetrics.billableNights,
+        billableFullDays: outstationMetrics.billableFullDays,
+        billableExtraHours: outstationMetrics.billableExtraHours,
+      }
     : null;
 
-  // Enforce admin minDays / maxDays before fare estimate (server-side
-  // only — never trust client-supplied days).
+  // Enforce admin min/max service duration before fare estimate (V2).
   if (serviceType === SERVICE_TYPES.OUTSTATION && outstationMetrics) {
     const livePricing = await getServicePricingByTypeService(
       SERVICE_TYPES.OUTSTATION,
     );
     const o = livePricing?.outstation || {};
     try {
-      assertOutstationDaysWithinLimits(outstationMetrics.days, {
+      assertOutstationDurationWithinLimits(outstationMetrics.durationMinutes, {
         minDays: o.minDays,
         maxDays: o.maxDays,
       });
@@ -1104,6 +1117,9 @@ export async function createBookingService(userId, body) {
               days: outstationDuration.days,
               nights: outstationDuration.nights,
               durationMinutes: outstationMetrics.durationMinutes,
+              billableFullDays: outstationDuration.billableFullDays,
+              billableExtraHours: outstationMetrics.billableExtraHours,
+              pricingModelVersion: OUTSTATION_PRICING_MODEL_CURRENT,
               needsStay: outstation.needsStay ?? true,
               needsFood: outstation.needsFood ?? true,
               estimatedKm: outstation.estimatedKm || 0,
@@ -1689,17 +1705,31 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
       throw new ApiError(400, 'Expected return must be after the new pickup time');
     }
 
-    const duration = computeOutstationTripMetrics(nextPickup, nextReturn);
+    const duration = computeOutstationDurationBilling(nextPickup, nextReturn);
+    const bookingIsV2 = isOutstationV2Pricing(
+      booking.fareSnapshot?.breakdown,
+    );
     try {
       const livePricing = await getServicePricingByTypeService(
         SERVICE_TYPES.OUTSTATION,
       );
-      assertOutstationDaysWithinLimits(duration.days, {
-        minDays: livePricing?.outstation?.minDays,
-        maxDays: livePricing?.outstation?.maxDays,
-      });
+      if (bookingIsV2) {
+        assertOutstationDurationWithinLimits(duration.durationMinutes, {
+          minDays: livePricing?.outstation?.minDays,
+          maxDays: livePricing?.outstation?.maxDays,
+        });
+      } else {
+        const calendar = computeOutstationTripMetrics(nextPickup, nextReturn);
+        assertOutstationDaysWithinLimits(calendar.days, {
+          minDays: livePricing?.outstation?.minDays,
+          maxDays: livePricing?.outstation?.maxDays,
+        });
+      }
     } catch (err) {
-      if (err.code === 'OUTSTATION_BELOW_MIN_DAYS' || err.code === 'OUTSTATION_ABOVE_MAX_DAYS') {
+      if (
+        err.code === 'OUTSTATION_BELOW_MIN_DAYS' ||
+        err.code === 'OUTSTATION_ABOVE_MAX_DAYS'
+      ) {
         throw new ApiError(400, err.message, err.details || undefined);
       }
       throw err;
@@ -1714,13 +1744,19 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
         outstation: {
           pickupAt: nextPickup.toISOString(),
           expectedReturnAt: nextReturn.toISOString(),
-          days: duration.days,
+          days: duration.billableFullDays,
         },
       },
     });
     nextPickupIso = nextPickup.toISOString();
     nextReturnIso = nextReturn.toISOString();
-    outstationDays = duration;
+    outstationDays = {
+      days: duration.billableFullDays,
+      nights: duration.billableNights,
+      durationMinutes: duration.durationMinutes,
+      billableFullDays: duration.billableFullDays,
+      billableExtraHours: duration.billableExtraHours,
+    };
   }
 
   const { withdrawCurrentOfferService, broadcastScheduledInboxService } =
@@ -1753,6 +1789,12 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
     freshBooking.outstation.nights = outstationDays.nights;
     if (outstationDays.durationMinutes != null) {
       freshBooking.outstation.durationMinutes = outstationDays.durationMinutes;
+    }
+    if (outstationDays.billableFullDays != null) {
+      freshBooking.outstation.billableFullDays = outstationDays.billableFullDays;
+    }
+    if (outstationDays.billableExtraHours != null) {
+      freshBooking.outstation.billableExtraHours = outstationDays.billableExtraHours;
     }
   }
 

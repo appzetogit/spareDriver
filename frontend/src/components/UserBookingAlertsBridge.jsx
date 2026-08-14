@@ -36,6 +36,7 @@ export function UserBookingAlertsBridge() {
   const extensionRejection = useUserActiveBookingStore((s) => s.extensionRejection);
   const openExtensionPrompt = useUserActiveBookingStore((s) => s.openExtensionPrompt);
   const closeExtensionPrompt = useUserActiveBookingStore((s) => s.closeExtensionPrompt);
+  const declineExtensionPrompt = useUserActiveBookingStore((s) => s.declineExtensionPrompt);
   const setExtensionRejection = useUserActiveBookingStore((s) => s.setExtensionRejection);
   const clearExtensionRejection = useUserActiveBookingStore((s) => s.clearExtensionRejection);
   const wallet = useUserWalletStore((s) => s.wallet);
@@ -45,9 +46,9 @@ export function UserBookingAlertsBridge() {
   const lastExtendRingAtRef = useRef(0);
 
   const [noShowPrompt, setNoShowPrompt] = useState(null);
-  const [outstationReturnPrompt, setOutstationReturnPrompt] = useState(null);
 
   const openExtendWithRing = () => {
+    if (booking?.outstation?.extensionPromptDeclinedAt) return;
     const alreadyOpen = useUserActiveBookingStore.getState().extensionPromptOpen;
     openExtensionPrompt();
     if (Date.now() - lastExtendRingAtRef.current < 4_000) return;
@@ -121,12 +122,14 @@ export function UserBookingAlertsBridge() {
   useEffect(() => {
     if (!rideTimer.shouldPromptExtension) return;
     if (extensionPromptOpen) return;
+    if (booking?.outstation?.extensionPromptDeclinedAt) return;
     if (extensionPromptDismissedAt && Date.now() - extensionPromptDismissedAt < 60_000) return;
     openExtendWithRing();
   }, [
     rideTimer.shouldPromptExtension,
     extensionPromptOpen,
     extensionPromptDismissedAt,
+    booking?.outstation?.extensionPromptDeclinedAt,
   ]);
 
   useEffect(() => {
@@ -170,32 +173,6 @@ export function UserBookingAlertsBridge() {
     });
   });
 
-  useSocketEvent(S2C_EVENTS.BOOKING_OUTSTATION_RETURN, (payload) => {
-    if (!isAuthenticated || !payload?.bookingId) return;
-    applyUpdate(payload);
-    setOutstationReturnPrompt({
-      bookingId: String(payload.bookingId),
-      returnPhase: payload.returnPhase || 'approaching',
-      expectedReturnAt: payload.expectedReturnAt,
-    });
-    playRideEndingAlert();
-  });
-
-  useEffect(() => {
-    if (searchParams.get('return') !== '1') return;
-    if (booking?.status !== BOOKING_STATUS.STARTED) return;
-    if (booking?.serviceType !== SERVICE_TYPES.OUTSTATION) return;
-    setOutstationReturnPrompt({
-      bookingId: String(booking._id),
-      returnPhase: booking.returnPhase || 'approaching',
-      expectedReturnAt:
-        booking.outstation?.expectedReturnAt || booking.outstation?.endDate,
-    });
-    const next = new URLSearchParams(searchParams);
-    next.delete('return');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, booking]);
-
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     if (!payload?.bookingId) return;
     applyUpdate(payload);
@@ -205,14 +182,6 @@ export function UserBookingAlertsBridge() {
       || payload.status === BOOKING_STATUS.STARTED
     ) {
       setNoShowPrompt((prev) =>
-        prev && String(prev.bookingId) === String(payload.bookingId) ? null : prev,
-      );
-    }
-    if (
-      payload.status === BOOKING_STATUS.CANCELLED
-      || payload.status === BOOKING_STATUS.COMPLETED
-    ) {
-      setOutstationReturnPrompt((prev) =>
         prev && String(prev.bookingId) === String(payload.bookingId) ? null : prev,
       );
     }
@@ -311,21 +280,15 @@ export function UserBookingAlertsBridge() {
 
   if (!isAuthenticated) return null;
 
-  const returnPhase = outstationReturnPrompt?.returnPhase || 'approaching';
-  const returnIsApproaching = returnPhase === 'approaching';
-  const returnClock = (() => {
-    const src = outstationReturnPrompt?.expectedReturnAt;
-    if (!src) return null;
-    try {
-      return new Intl.DateTimeFormat('en-IN', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }).format(new Date(src));
-    } catch {
-      return null;
+  const handleCloseExtend = () => {
+    // Outstation: persist “Not now” so server stops repeat nudges.
+    if (isOutstation) {
+      declineExtensionPrompt().catch(() => {});
+    } else {
+      closeExtensionPrompt();
     }
-  })();
+    fetchWallet().catch(() => {});
+  };
 
   return (
     <>
@@ -338,63 +301,9 @@ export function UserBookingAlertsBridge() {
         onYes={() => handleNoShowAnswer('on_my_way')}
         onNo={() => handleNoShowAnswer('not_coming')}
       />
-      {outstationReturnPrompt && (
-        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl space-y-3">
-            <h3 className="text-base font-bold text-slate-900">
-              {returnIsApproaching
-                ? 'Trip ending soon'
-                : 'Expected return time passed'}
-            </h3>
-            <p className="text-sm text-slate-600">
-              {returnIsApproaching
-                ? `Your trip is expected to end${returnClock ? ` at ${returnClock}` : ''}. Do you need more time with your driver?`
-                : 'Your expected return time has passed. Are you still travelling with the driver?'}
-            </p>
-            <div className="flex flex-col gap-2 pt-1">
-              {returnIsApproaching ? (
-                <button
-                  type="button"
-                  className="w-full rounded-xl bg-slate-900 text-white py-2.5 text-sm font-semibold"
-                  onClick={() => setOutstationReturnPrompt(null)}
-                >
-                  Continue as planned
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="w-full rounded-xl bg-slate-900 text-white py-2.5 text-sm font-semibold"
-                  onClick={() => {
-                    setOutstationReturnPrompt(null);
-                    toast(
-                      'Ask your driver to tap Complete trip when you arrive.',
-                      { duration: 5000 },
-                    );
-                  }}
-                >
-                  Complete trip
-                </button>
-              )}
-              <button
-                type="button"
-                className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-800"
-                onClick={() => {
-                  setOutstationReturnPrompt(null);
-                  openExtensionPrompt();
-                }}
-              >
-                Extend trip
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <ExtendRideModal
         open={extensionPromptOpen && booking?.status === BOOKING_STATUS.STARTED}
-        onClose={() => {
-          closeExtensionPrompt();
-          fetchWallet().catch(() => {});
-        }}
+        onClose={handleCloseExtend}
         onInitiate={(amount, opts) => initiateExtension(amount, opts)}
         onVerifyOtp={(args) => verifyExtensionOtp(args)}
         onPay={async (args) => {

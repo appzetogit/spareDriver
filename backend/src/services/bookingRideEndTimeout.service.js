@@ -3,6 +3,7 @@ import { Driver } from '../models/driverModels/driver.model.js';
 import {
   BOOKING_STATUS,
   BOOKING_PAYMENT_STATUS,
+  BOOKING_TYPE,
   PAYMENT_MODE,
   PAYMENT_POLICY,
 } from '../constants/bookingStatus.js';
@@ -26,47 +27,101 @@ import {
   notifyUserRideEndingSoon,
   notifyDriverEarningsCredited,
 } from '../utils/notificationDispatch.js';
+import { debitWalletService } from './wallet.service.js';
+import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 
 /**
- * Hourly / scheduled-hourly ride-end auto-complete + extend nudge.
+ * Hourly + outstation ride-end / extend nudge (in-process timers).
  *
- * After `startedAt + (durationHours + accepted extensions)` the
- * customer gets `RIDE_END_EXTENSION_GRACE_SECONDS` (default 10 min) to
- * extend. If they don't, the ride auto-completes — same settlement
- * path as a normal driver complete.
+ * Hourly / scheduled-hourly:
+ *   - Lead: PAYMENT_POLICY.EXTENSION_PROMPT_LEAD_SECONDS
+ *   - Grace: PAYMENT_POLICY.RIDE_END_EXTENSION_GRACE_SECONDS
+ *   - Always auto-completes after grace
  *
- * `EXTENSION_PROMPT_LEAD_SECONDS` before booked end we also push
- * "Ride ending soon — do you want to extend?" so backgrounded clients
- * still get a chance to open the extend flow.
+ * Outstation (admin Return lifecycle snapshotted on the booking):
+ *   - returnReminderMinutes → first extend push/popup before return
+ *   - returnPromptRepeatMinutes → re-prompt BEFORE return until user declines
+ *   - returnGraceMinutes → no overtime during grace after return
+ *   - returnAutoCompleteHours → 0 = off (minute overtime billing);
+ *     >0 = auto-complete after grace
  *
- * In-process timers (same trade-off as no-show / payment timeout):
- * a restart drops them; `resumeRideEndScheduleIfNeeded` re-attaches
+ * Same FCM (`ride_ending_soon`) + socket (`BOOKING_EXTENSION_OFFERED`)
+ * as hourly. Redis/BullMQ is not used.
+ *
+ * Restart drops timers; `resumeRideEndScheduleIfNeeded` re-attaches
  * from booking fetch paths.
  */
 
-/** bookingId → { handle, autoCompleteAt, promptHandle, endsAt } */
+/** bookingId → { handle, autoCompleteAt, promptHandle, overtimeHandle, endsAt } */
 const rideEndTimers = new Map();
 
 /**
- * Ends-at timestamps we already nudged for (avoids duplicate FCM when
- * scheduleRideEndTimer is re-entered for the same booked window).
- * Cleared when the booked end moves (accepted extension) or the trip ends.
+ * Ends-at timestamps we already nudged for (hourly one-shot).
+ * Outstation repeats until declined; tracked separately on the booking.
  */
 const promptSentForEndsAt = new Map();
+
+const DEFAULT_OUTSTATION_REMINDER_MINUTES = 120;
+const DEFAULT_OUTSTATION_GRACE_MINUTES = 30;
+const DEFAULT_OUTSTATION_PROMPT_REPEAT_MINUTES = 30;
+const OVERTIME_TICK_MS = 60_000;
 
 function key(id) {
   return String(id);
 }
 
-const graceMs = () =>
+function numOr(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function round2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+export function isOutstationRideEndBooking(booking) {
+  return (
+    booking?.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking?.bookingType === BOOKING_TYPE.OUTSTATION
+  );
+}
+
+function isHourlyBooking(booking) {
+  return booking?.serviceType === SERVICE_TYPES.HOURLY;
+}
+
+export function resolveOutstationRideEndConfig(booking) {
+  const o = booking?.outstation || {};
+  const bd = booking?.fareSnapshot?.breakdown || {};
+  return {
+    reminderMinutes: numOr(
+      o.returnReminderMinutes ?? bd.returnReminderMinutes,
+      DEFAULT_OUTSTATION_REMINDER_MINUTES,
+    ),
+    graceMinutes: numOr(
+      o.returnGraceMinutes ?? bd.returnGraceMinutes,
+      DEFAULT_OUTSTATION_GRACE_MINUTES,
+    ),
+    promptRepeatMinutes: numOr(
+      o.returnPromptRepeatMinutes ?? bd.returnPromptRepeatMinutes,
+      DEFAULT_OUTSTATION_PROMPT_REPEAT_MINUTES,
+    ),
+    autoCompleteHours: numOr(
+      o.returnAutoCompleteHours ?? bd.returnAutoCompleteHours,
+      0,
+    ),
+  };
+}
+
+const hourlyGraceMs = () =>
   Math.max(0, Number(PAYMENT_POLICY.RIDE_END_EXTENSION_GRACE_SECONDS) || 0) *
   1000;
 
-const promptLeadMs = () =>
+const hourlyPromptLeadMs = () =>
   Math.max(0, Number(PAYMENT_POLICY.EXTENSION_PROMPT_LEAD_SECONDS) || 0) *
   1000;
 
-/** Booked length in ms (base hours + accepted extensions). */
+/** Booked length in ms (base hours + accepted extensions). Hourly only. */
 export function bookedRideDurationMs(booking) {
   const base = Number(booking?.hourly?.durationHours) || 0;
   if (base <= 0) return 0;
@@ -81,9 +136,16 @@ export function bookedRideDurationMs(booking) {
 /** Wall-clock booked-end instant (before grace), or null. */
 export function rideEndsAtMs(booking) {
   if (!booking) return null;
-  if (booking.serviceType && booking.serviceType !== SERVICE_TYPES.HOURLY) {
-    return null;
+
+  if (isOutstationRideEndBooking(booking)) {
+    const src =
+      booking.outstation?.expectedReturnAt || booking.outstation?.endDate;
+    if (!src) return null;
+    const ms = new Date(src).getTime();
+    return Number.isFinite(ms) ? ms : null;
   }
+
+  if (!isHourlyBooking(booking)) return null;
   const startedAtMs = booking.timeline?.startedAt
     ? new Date(booking.timeline.startedAt).getTime()
     : NaN;
@@ -92,18 +154,52 @@ export function rideEndsAtMs(booking) {
   return startedAtMs + durationMs;
 }
 
-/** When the extend push should fire = booked end − lead time. */
+/** When the first extend push should fire = booked end − lead time. */
 export function rideExtensionPromptAtMs(booking) {
   const endsAt = rideEndsAtMs(booking);
   if (endsAt == null) return null;
-  return endsAt - promptLeadMs();
+  if (isOutstationRideEndBooking(booking)) {
+    const { reminderMinutes } = resolveOutstationRideEndConfig(booking);
+    if (reminderMinutes <= 0) return endsAt;
+    return endsAt - reminderMinutes * 60_000;
+  }
+  return endsAt - hourlyPromptLeadMs();
 }
 
-/** When auto-complete fires = booked end + extension grace. */
-export function rideAutoCompleteAtMs(booking) {
+export function rideGraceEndsAtMs(booking) {
   const endsAt = rideEndsAtMs(booking);
   if (endsAt == null) return null;
-  return endsAt + graceMs();
+  if (isOutstationRideEndBooking(booking)) {
+    const { graceMinutes } = resolveOutstationRideEndConfig(booking);
+    return endsAt + graceMinutes * 60_000;
+  }
+  return endsAt + hourlyGraceMs();
+}
+
+/**
+ * When auto-complete fires. Outstation: null when auto-complete is off
+ * (returnAutoCompleteHours === 0).
+ */
+export function rideAutoCompleteAtMs(booking) {
+  const graceEnds = rideGraceEndsAtMs(booking);
+  if (graceEnds == null) return null;
+  if (isOutstationRideEndBooking(booking)) {
+    const { autoCompleteHours } = resolveOutstationRideEndConfig(booking);
+    if (autoCompleteHours <= 0) return null;
+    return graceEnds;
+  }
+  return graceEnds;
+}
+
+function outstationOvertimePerMinuteRupees(booking) {
+  const bd = booking?.fareSnapshot?.breakdown || {};
+  const hourly =
+    Number(bd.outstationExtraHourCharge)
+    || Number(bd.extraHourChargeRate)
+    || Number(bd.extraHourCharge)
+    || 0;
+  if (!(hourly > 0)) return 0;
+  return round2(hourly / 60);
 }
 
 function clearPromptHandle(entry) {
@@ -111,31 +207,46 @@ function clearPromptHandle(entry) {
   if (entry) entry.promptHandle = null;
 }
 
+function clearOvertimeHandle(entry) {
+  if (entry?.overtimeHandle) clearTimeout(entry.overtimeHandle);
+  if (entry) entry.overtimeHandle = null;
+}
+
 export function cancelRideEndSchedule(bookingId) {
   const k = key(bookingId);
   const entry = rideEndTimers.get(k);
   if (entry?.handle) clearTimeout(entry.handle);
   clearPromptHandle(entry);
+  clearOvertimeHandle(entry);
   rideEndTimers.delete(k);
   promptSentForEndsAt.delete(k);
 }
 
-function scheduleExtensionPrompt(booking, entry) {
+function extensionPromptDeclined(booking) {
+  return Boolean(booking?.outstation?.extensionPromptDeclinedAt);
+}
+
+function scheduleExtensionPrompt(booking, entry, { forceAt = null } = {}) {
   const endsAt = rideEndsAtMs(booking);
-  const promptAt = rideExtensionPromptAtMs(booking);
+  const promptAt = forceAt != null ? forceAt : rideExtensionPromptAtMs(booking);
   if (endsAt == null || promptAt == null) return;
 
   clearPromptHandle(entry);
 
-  // Booked window moved (extension paid) — allow a fresh nudge.
+  if (isOutstationRideEndBooking(booking) && extensionPromptDeclined(booking)) {
+    return;
+  }
+
   const sentFor = promptSentForEndsAt.get(key(booking._id));
   if (sentFor != null && sentFor !== endsAt) {
     promptSentForEndsAt.delete(key(booking._id));
   }
 
-  // Past auto-complete — nothing useful to nudge about.
   const autoCompleteAt = rideAutoCompleteAtMs(booking);
   if (autoCompleteAt != null && autoCompleteAt <= Date.now()) return;
+
+  // Outstation: stop pre-end repeats once return time is reached.
+  if (isOutstationRideEndBooking(booking) && Date.now() >= endsAt) return;
 
   const delay = Math.max(0, promptAt - Date.now());
   const bookingId = booking._id;
@@ -161,7 +272,11 @@ async function sendRideEndingSoonPrompt(bookingId) {
   const booking = await Booking.findById(bookingId);
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.STARTED) return;
-  if (booking.serviceType !== SERVICE_TYPES.HOURLY) return;
+  if (!isHourlyBooking(booking) && !isOutstationRideEndBooking(booking)) return;
+
+  if (isOutstationRideEndBooking(booking) && extensionPromptDeclined(booking)) {
+    return;
+  }
 
   const endsAt = rideEndsAtMs(booking);
   const promptAt = rideExtensionPromptAtMs(booking);
@@ -174,53 +289,248 @@ async function sendRideEndingSoonPrompt(bookingId) {
     return;
   }
 
+  // Outstation: only nudge before booked return.
+  if (isOutstationRideEndBooking(booking) && Date.now() >= endsAt) return;
+
   const autoCompleteAt = rideAutoCompleteAtMs(booking);
   if (autoCompleteAt != null && autoCompleteAt <= Date.now()) return;
 
-  if (promptSentForEndsAt.get(k) === endsAt) return;
-  promptSentForEndsAt.set(k, endsAt);
+  const isOutstation = isOutstationRideEndBooking(booking);
+  if (!isOutstation) {
+    if (promptSentForEndsAt.get(k) === endsAt) return;
+    promptSentForEndsAt.set(k, endsAt);
+  } else {
+    booking.outstation = booking.outstation || {};
+    booking.outstation.lastReturnPromptAt = new Date();
+    if (!booking.outstation.returnReminderSentAt) {
+      booking.outstation.returnReminderSentAt = booking.outstation.lastReturnPromptAt;
+    }
+    await booking.save();
+  }
+
+  const graceEnds = rideGraceEndsAtMs(booking);
+  const graceSeconds =
+    graceEnds != null && endsAt != null
+      ? Math.max(0, Math.round((graceEnds - endsAt) / 1000))
+      : Number(PAYMENT_POLICY.RIDE_END_EXTENSION_GRACE_SECONDS) || 0;
 
   const payload = {
     bookingId: String(booking._id),
     status: booking.status,
     endsAt: new Date(endsAt).toISOString(),
-    graceSeconds: Number(PAYMENT_POLICY.RIDE_END_EXTENSION_GRACE_SECONDS) || 0,
+    graceSeconds,
+    serviceType: booking.serviceType,
   };
 
   notifyUserRideEndingSoon(booking.userId, booking).catch(() => null);
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_EXTENSION_OFFERED, payload);
   emitToBooking(booking._id, S2C_EVENTS.BOOKING_EXTENSION_OFFERED, payload);
+
+  // Outstation: re-prompt before return until user declines.
+  if (isOutstation && entry) {
+    const { promptRepeatMinutes } = resolveOutstationRideEndConfig(booking);
+    if (promptRepeatMinutes > 0) {
+      const nextAt = Date.now() + promptRepeatMinutes * 60_000;
+      if (nextAt < endsAt) {
+        scheduleExtensionPrompt(booking, entry, { forceAt: nextAt });
+      }
+    }
+  }
+}
+
+function scheduleOvertimeTicker(booking, entry) {
+  if (!isOutstationRideEndBooking(booking)) return;
+  const { autoCompleteHours } = resolveOutstationRideEndConfig(booking);
+  if (autoCompleteHours > 0) return;
+
+  const graceEnds = rideGraceEndsAtMs(booking);
+  if (graceEnds == null) return;
+
+  clearOvertimeHandle(entry);
+  const delay = Math.max(0, graceEnds - Date.now());
+  const bookingId = booking._id;
+  entry.overtimeHandle = setTimeout(() => {
+    settleOutstationOvertimeTick(bookingId).catch((err) =>
+      console.warn('[rideEnd] overtime tick failed:', err?.message),
+    );
+  }, delay === 0 ? OVERTIME_TICK_MS : delay);
 }
 
 /**
- * Schedule (or replace) the auto-complete timer for a STARTED hourly
- * booking. Fires after booked end + grace. Also arms the extend push
- * at lead-time before booked end. Safe to call after start and after
- * every accepted extension.
+ * Bill unpaid minutes past grace (auto-complete off) and debit wallet.
+ * Safe to call repeatedly; also used at trip complete.
+ */
+export async function settleOutstationOvertimeTick(bookingId, { final = false } = {}) {
+  const k = key(bookingId);
+  const entry = rideEndTimers.get(k);
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) return { skipped: true, reason: 'missing' };
+  if (!isOutstationRideEndBooking(booking)) return { skipped: true, reason: 'not_outstation' };
+  if (booking.status !== BOOKING_STATUS.STARTED && !final) {
+    return { skipped: true, reason: 'not_started' };
+  }
+
+  const { autoCompleteHours, graceMinutes } = resolveOutstationRideEndConfig(booking);
+  if (autoCompleteHours > 0) {
+    clearOvertimeHandle(entry);
+    return { skipped: true, reason: 'auto_complete_on' };
+  }
+
+  const endsAt = rideEndsAtMs(booking);
+  const graceEnds = rideGraceEndsAtMs(booking);
+  if (endsAt == null || graceEnds == null) {
+    return { skipped: true, reason: 'no_window' };
+  }
+
+  const nowMs = final && booking.timeline?.completedAt
+    ? new Date(booking.timeline.completedAt).getTime()
+    : Date.now();
+
+  if (nowMs < graceEnds) {
+    if (!final && entry) scheduleOvertimeTicker(booking, entry);
+    return { skipped: true, reason: 'in_grace' };
+  }
+
+  const perMin = outstationOvertimePerMinuteRupees(booking);
+  if (!(perMin > 0)) {
+    if (!final && booking.status === BOOKING_STATUS.STARTED && entry) {
+      entry.overtimeHandle = setTimeout(() => {
+        settleOutstationOvertimeTick(bookingId).catch(() => null);
+      }, OVERTIME_TICK_MS);
+    }
+    return { skipped: true, reason: 'no_rate' };
+  }
+
+  const totalOvertimeMinutes = Math.max(
+    0,
+    Math.floor((nowMs - graceEnds) / 60_000),
+  );
+  const already = Math.max(0, Number(booking.outstation?.overtimeSettledMinutes) || 0);
+  const deltaMinutes = totalOvertimeMinutes - already;
+  if (deltaMinutes <= 0) {
+    if (!final && booking.status === BOOKING_STATUS.STARTED && entry) {
+      entry.overtimeHandle = setTimeout(() => {
+        settleOutstationOvertimeTick(bookingId).catch(() => null);
+      }, OVERTIME_TICK_MS);
+    }
+    return { ok: true, charged: 0, deltaMinutes: 0 };
+  }
+
+  const charge = round2(deltaMinutes * perMin);
+  if (!(charge > 0)) {
+    return { ok: true, charged: 0, deltaMinutes };
+  }
+
+  try {
+    await debitWalletService({
+      userId: booking.userId,
+      amount: charge,
+      source: WALLET_TXN_SOURCE.BOOKING_OVERTIME_CHARGE,
+      description: `Outstation overtime ${deltaMinutes} min (after ${graceMinutes}m grace)`,
+      refType: 'Booking',
+      refId: String(booking._id),
+    });
+  } catch (err) {
+    // Keep ticking so a later top-up can settle; surface via socket.
+    emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, {
+      bookingId: String(booking._id),
+      status: booking.status,
+      overtimeWalletError: err?.message || 'Insufficient wallet for overtime',
+      overtimePendingRupees: charge,
+    });
+    if (!final && booking.status === BOOKING_STATUS.STARTED && entry) {
+      entry.overtimeHandle = setTimeout(() => {
+        settleOutstationOvertimeTick(bookingId).catch(() => null);
+      }, OVERTIME_TICK_MS);
+    }
+    return { ok: false, reason: 'wallet', charge, err: err?.message };
+  }
+
+  booking.outstation = booking.outstation || {};
+  booking.outstation.overtimeSettledMinutes = already + deltaMinutes;
+  booking.outstation.overtimeBillableMinutes = totalOvertimeMinutes;
+  booking.outstation.overtimeChargeRupees = round2(
+    (Number(booking.outstation.overtimeChargeRupees) || 0) + charge,
+  );
+  booking.outstation.overtimeLastSettledAt = new Date();
+
+  if (booking.fareSnapshot) {
+    booking.fareSnapshot.total = round2(
+      (Number(booking.fareSnapshot.total) || 0) + charge,
+    );
+    const bd = booking.fareSnapshot.breakdown || {};
+    bd.overtimeChargeRupees = booking.outstation.overtimeChargeRupees;
+    bd.overtimeBillableMinutes = totalOvertimeMinutes;
+    booking.fareSnapshot.breakdown = bd;
+    booking.markModified('fareSnapshot');
+  }
+
+  await booking.save();
+
+  emitToUser(booking.userId, S2C_EVENTS.BOOKING_UPDATED, {
+    bookingId: String(booking._id),
+    status: booking.status,
+    outstation: {
+      overtimeChargeRupees: booking.outstation.overtimeChargeRupees,
+      overtimeBillableMinutes: booking.outstation.overtimeBillableMinutes,
+      overtimeSettledMinutes: booking.outstation.overtimeSettledMinutes,
+    },
+    fareSnapshot: booking.fareSnapshot,
+  });
+
+  if (!final && booking.status === BOOKING_STATUS.STARTED && entry) {
+    entry.overtimeHandle = setTimeout(() => {
+      settleOutstationOvertimeTick(bookingId).catch(() => null);
+    }, OVERTIME_TICK_MS);
+  }
+
+  return { ok: true, charged: charge, deltaMinutes };
+}
+
+/**
+ * Schedule (or replace) ride-end timers for a STARTED hourly or
+ * outstation booking. Safe after start and after every accepted extension.
  */
 export function scheduleRideEndTimer(booking) {
   if (!booking?._id) return;
   if (booking.status !== BOOKING_STATUS.STARTED) return;
+  if (!isHourlyBooking(booking) && !isOutstationRideEndBooking(booking)) return;
 
-  const autoCompleteAt = rideAutoCompleteAtMs(booking);
-  if (autoCompleteAt == null) return;
+  const endsAt = rideEndsAtMs(booking);
+  if (endsAt == null) return;
 
   const k = key(booking._id);
   const prev = rideEndTimers.get(k);
   if (prev?.handle) clearTimeout(prev.handle);
   clearPromptHandle(prev);
+  clearOvertimeHandle(prev);
 
-  const delay = Math.max(0, autoCompleteAt - Date.now());
-  const bookingId = booking._id;
-  const handle = setTimeout(
-    () =>
-      autoCompleteExpiredRide(bookingId).catch((err) =>
-        console.warn('[rideEnd] auto-complete failed:', err?.message),
-      ),
-    delay,
-  );
-  const entry = { handle, autoCompleteAt, promptHandle: null, endsAt: null };
+  const entry = {
+    handle: null,
+    autoCompleteAt: null,
+    promptHandle: null,
+    overtimeHandle: null,
+    endsAt,
+  };
   rideEndTimers.set(k, entry);
+
+  const autoCompleteAt = rideAutoCompleteAtMs(booking);
+  if (autoCompleteAt != null) {
+    entry.autoCompleteAt = autoCompleteAt;
+    const delay = Math.max(0, autoCompleteAt - Date.now());
+    const bookingId = booking._id;
+    entry.handle = setTimeout(
+      () =>
+        autoCompleteExpiredRide(bookingId).catch((err) =>
+          console.warn('[rideEnd] auto-complete failed:', err?.message),
+        ),
+      delay,
+    );
+  } else if (isOutstationRideEndBooking(booking)) {
+    scheduleOvertimeTicker(booking, entry);
+  }
+
   scheduleExtensionPrompt(booking, entry);
 }
 
@@ -232,12 +542,46 @@ export function resumeRideEndScheduleIfNeeded(booking) {
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.STARTED) return;
   if (rideEndTimers.has(key(booking._id))) return;
-  if (rideAutoCompleteAtMs(booking) == null) return;
+  if (rideEndsAtMs(booking) == null) return;
   scheduleRideEndTimer(booking);
 }
 
 /**
- * Complete a STARTED hourly ride once booked end + grace have elapsed
+ * Customer declined the extend popup — stop pre-end repeats.
+ * Does not affect auto-complete / overtime after return.
+ */
+export async function declineExtensionPromptService(userId, bookingId) {
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    userId,
+    isDeleted: false,
+  });
+  if (!booking) {
+    const { ApiError } = await import('../utils/apiError.js');
+    throw new ApiError(404, 'Booking not found');
+  }
+  if (booking.status !== BOOKING_STATUS.STARTED) {
+    return { ok: true, skipped: true };
+  }
+
+  if (isOutstationRideEndBooking(booking)) {
+    booking.outstation = booking.outstation || {};
+    booking.outstation.extensionPromptDeclinedAt = new Date();
+    await booking.save();
+  }
+
+  const entry = rideEndTimers.get(key(booking._id));
+  clearPromptHandle(entry);
+
+  return {
+    ok: true,
+    bookingId: String(booking._id),
+    declinedAt: booking.outstation?.extensionPromptDeclinedAt || null,
+  };
+}
+
+/**
+ * Complete a STARTED ride once booked end + grace have elapsed
  * without a further extension. Mirrors `completeTripService`
  * side-effects without the driver auth gate.
  */
@@ -245,13 +589,19 @@ async function autoCompleteExpiredRide(bookingId) {
   const k = key(bookingId);
   const entry = rideEndTimers.get(k);
   clearPromptHandle(entry);
+  clearOvertimeHandle(entry);
   rideEndTimers.delete(k);
   promptSentForEndsAt.delete(k);
 
   const booking = await Booking.findById(bookingId);
   if (!booking) return;
   if (booking.status !== BOOKING_STATUS.STARTED) return;
-  if (booking.serviceType !== SERVICE_TYPES.HOURLY) return;
+  if (!isHourlyBooking(booking) && !isOutstationRideEndBooking(booking)) return;
+
+  if (isOutstationRideEndBooking(booking)) {
+    const { autoCompleteHours } = resolveOutstationRideEndConfig(booking);
+    if (autoCompleteHours <= 0) return;
+  }
 
   const autoCompleteAt = rideAutoCompleteAtMs(booking);
   if (autoCompleteAt == null) return;

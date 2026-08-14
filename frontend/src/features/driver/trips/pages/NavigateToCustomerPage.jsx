@@ -10,6 +10,7 @@ import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { formatDistance, estimateEtaMinutes, haversineMeters } from '../../../../utils/geo';
 import { BOOKING_STATUS, isBookingContactRevealed } from '../../../../constants/bookingStatus';
 import { maskPersonName } from '../../../../utils/formatters';
+import { formatLocationLabel } from '../../../../utils/locationLabel';
 
 /**
  * Driver-side "navigate to customer" screen — replaces the static mock
@@ -53,6 +54,7 @@ const NavigateToCustomerPage = () => {
     ? customer?.phone_no || customer?.phone || null
     : null;
   const customerPhoto = customer?.profilePicture || null;
+  const pickupAddressLabel = formatLocationLabel(booking?.pickup?.address);
 
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
@@ -96,7 +98,7 @@ const NavigateToCustomerPage = () => {
                 {customerPhone ||
                   (contactRevealed
                     ? booking?.bookingNumber || '—'
-                    : 'Contact unlocks when you start heading to pickup')}
+                    : 'Contact unlocks when you arrive at pickup')}
               </p>
             </div>
           </div>
@@ -139,11 +141,11 @@ const NavigateToCustomerPage = () => {
           </div>
         </Card>
 
-        {booking?.pickup?.address ? (
+        {pickupAddressLabel ? (
           <Card>
             <p className="text-[11px] uppercase tracking-wide text-text-muted">Pickup address</p>
             <p className="text-sm font-medium text-text mt-0.5 break-words">
-              {booking.pickup.address}
+              {pickupAddressLabel}
             </p>
           </Card>
         ) : null}

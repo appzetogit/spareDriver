@@ -7,6 +7,7 @@ import ConfirmDialog from '../../../../components/ConfirmDialog';
 import api from '../../../../utils/api';
 import { BOOKING_STATUS, BOOKING_STATUS_LIST } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
+import { isOutstationV2Pricing } from '../../../../constants/outstationPricing.js';
 import useAdminAuthStore from '../../../../store/useAdminAuthStore';
 import {
   CalendarClock,
@@ -138,30 +139,45 @@ function buildAdminFareRows(booking) {
   const rows = [];
 
   if (isOutstation) {
-    const days = Number(bd.days) || booking?.outstation?.days || 0;
-    const nights = Number(bd.nights) || booking?.outstation?.nights || 0;
+    const isV2 = isOutstationV2Pricing(bd);
+    const days =
+      Number(bd.billableFullDays ?? bd.days) || booking?.outstation?.days || 0;
+    const nights =
+      Number(bd.billableNights ?? bd.nights) || booking?.outstation?.nights || 0;
     const dailyRate = Number(bd.dailyRate) || 0;
     const daily = Number(bd.dailyRateTotal) || 0;
+    const extraHourTotal = Number(bd.extraHourTotal) || 0;
+    const extraHours = Number(bd.billableExtraHours) || 0;
+    const extraRate = Number(bd.extraHourCharge) || 0;
     const food = Number(bd.foodAllowanceTotal) || 0;
     const stay = Number(bd.stayAllowanceTotal) || 0;
     const legacy = Number(bd.legacyAllowanceTotal) || 0;
     const foodPerDay = Number(bd.foodAllowancePerDay) || 0;
     const stayPerNight = Number(bd.stayAllowancePerNight) || 0;
+    const foodDays = Number(bd.foodServiceDays ?? days) || days;
 
     if (daily > 0) {
       rows.push({
         label:
-          days > 0
-            ? `Daily rate ${fmtMoney(dailyRate)} \u00d7 ${days} day${days === 1 ? '' : 's'}`
-            : 'Daily rate',
+          isV2 && days > 0 && extraHours <= 0 && days === 1
+            ? `Base service (${fmtMoney(dailyRate)}/day min.)`
+            : days > 0
+              ? `Daily rate ${fmtMoney(dailyRate)} \u00d7 ${days} day${days === 1 ? '' : 's'}`
+              : 'Daily rate',
         value: daily,
+      });
+    }
+    if (extraHourTotal > 0) {
+      rows.push({
+        label: `Extra time ${extraHours}h \u00d7 ${fmtMoney(extraRate)}`,
+        value: extraHourTotal,
       });
     }
     if (food > 0) {
       rows.push({
         label:
-          days > 0
-            ? `Driver food ${fmtMoney(foodPerDay)} \u00d7 ${days} day${days === 1 ? '' : 's'}`
+          foodDays > 0
+            ? `Driver food ${fmtMoney(foodPerDay)} \u00d7 ${foodDays} day${foodDays === 1 ? '' : 's'}`
             : 'Driver food',
         value: food,
       });
@@ -601,15 +617,29 @@ const BookingDetailsModal = ({
               />
               <Field
                 label="Duration"
-                value={
-                  outstation.days != null || outstation.nights != null
-                    ? `${outstation.days || 0} day${
-                        outstation.days === 1 ? '' : 's'
-                      } · ${outstation.nights || 0} night${
-                        outstation.nights === 1 ? '' : 's'
-                      }`
-                    : null
-                }
+                value={(() => {
+                  const mins = Number(outstation.durationMinutes) || 0;
+                  const exact =
+                    mins > 0
+                      ? mins < 60
+                        ? `${mins} min`
+                        : `${Math.floor(mins / 60)}h ${mins % 60}m`
+                      : null;
+                  const days = Number(outstation.billableFullDays ?? outstation.days);
+                  const nights = Number(
+                    outstation.billableNights ?? outstation.nights,
+                  );
+                  const service =
+                    Number.isFinite(days) && days >= 0
+                      ? `${days} day${days === 1 ? '' : 's'}${
+                          Number.isFinite(nights)
+                            ? ` · ${nights} night${nights === 1 ? '' : 's'}`
+                            : ''
+                        }`
+                      : null;
+                  if (exact && service) return `${exact} (${service})`;
+                  return exact || service || null;
+                })()}
               />
               {outstation.estimatedKm ? (
                 <Field

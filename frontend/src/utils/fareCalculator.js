@@ -4,6 +4,11 @@
  * and frontend booking review (no HTTP round-trip needed).
  */
 import { SERVICE_TYPES } from '../constants/serviceTypes';
+import { OUTSTATION_PRICING_MODEL_CURRENT } from '../constants/outstationPricing.js';
+import {
+  computeOutstationDurationBilling,
+  computeOutstationBillingUnits,
+} from './outstationDurationBilling.js';
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -370,6 +375,126 @@ export function calculateOutstationFare({
     foodProvided: foodProvided === true,
     stayProvided: stayProvided === true,
     // Legacy fields — always 0 in the new model.
+    kmIncludedTotal: 0,
+    extraKm: 0,
+    extraKmCharge: 0,
+    nightHaltCharge: 0,
+    nightHaltTotal: 0,
+    stayChargePerNight: 0,
+    stayChargeTotal: 0,
+    tollParking: 0,
+    subtotal: round2(subtotal),
+    ...layers,
+  };
+}
+
+/**
+ * Outstation V2 — duration-based (24h blocks + fractional extra hours).
+ */
+export function calculateOutstationFareV2({
+  pricing,
+  pickupAt,
+  expectedReturnAt,
+  durationMinutes: durationMinutesIn = null,
+  foodProvided = true,
+  stayProvided = true,
+  subscription = null,
+  coupon = null,
+} = {}) {
+  if (!pricing) return null;
+  const o = pricing.outstation || {};
+  const minDays = Math.max(1, Number(o.minDays) || 1);
+
+  let billing;
+  if (durationMinutesIn != null && Number.isFinite(Number(durationMinutesIn))) {
+    const mins = Math.max(0, Math.floor(Number(durationMinutesIn)));
+    billing = {
+      durationMinutes: mins,
+      durationHours: mins / 60,
+      durationMs: mins * 60_000,
+      ...computeOutstationBillingUnits(mins, { minDays }),
+    };
+  } else if (pickupAt && expectedReturnAt) {
+    billing = computeOutstationDurationBilling(pickupAt, expectedReturnAt, {
+      minDays,
+      soft: true,
+    });
+  } else {
+    return null;
+  }
+
+  const dailyRate = Number(o.dailyRate) || 0;
+  const configuredExtraHour = Number(o.extraHourCharge) || 0;
+  const extraHourCharge =
+    configuredExtraHour > 0
+      ? configuredExtraHour
+      : dailyRate > 0
+        ? round2(dailyRate / 24)
+        : 0;
+  const foodAllowancePerDay = Number(o.foodAllowancePerDay) || 0;
+  const stayAllowancePerNight = Number(o.stayAllowancePerNight) || 0;
+  const legacyAllowancePerNight = Number(o.allowancePerNight) || 0;
+  const useLegacyAllowance =
+    foodAllowancePerDay <= 0 &&
+    stayAllowancePerNight <= 0 &&
+    legacyAllowancePerNight > 0;
+
+  const dailyRateTotal = dailyRate * billing.billableFullDays;
+  const extraHourTotal = round2(billing.billableExtraHours * extraHourCharge);
+  const baseServiceSubtotal = round2(dailyRateTotal + extraHourTotal);
+
+  let foodAllowanceTotal = 0;
+  let stayAllowanceTotal = 0;
+  let legacyAllowanceTotal = 0;
+  if (useLegacyAllowance) {
+    const bothProvided = foodProvided === true && stayProvided === true;
+    legacyAllowanceTotal = bothProvided
+      ? 0
+      : legacyAllowancePerNight * billing.billableNights;
+  } else {
+    foodAllowanceTotal =
+      foodProvided === true ? 0 : foodAllowancePerDay * billing.foodServiceDays;
+    stayAllowanceTotal =
+      stayProvided === true ? 0 : stayAllowancePerNight * billing.billableNights;
+  }
+  const allowanceTotal =
+    foodAllowanceTotal + stayAllowanceTotal + legacyAllowanceTotal;
+
+  const subtotal = round2(baseServiceSubtotal + allowanceTotal);
+  const layers = applyPlatformLayers(
+    subtotal,
+    pricing,
+    subscription,
+    allowanceTotal,
+    coupon,
+  );
+
+  return {
+    serviceType: SERVICE_TYPES.OUTSTATION,
+    pricingModelVersion: OUTSTATION_PRICING_MODEL_CURRENT,
+    durationMinutes: billing.durationMinutes,
+    durationHours: billing.durationHours,
+    billableFullDays: billing.billableFullDays,
+    billableExtraHours: billing.billableExtraHours,
+    billableNights: billing.billableNights,
+    foodServiceDays: billing.foodServiceDays,
+    days: billing.billableFullDays,
+    nights: billing.billableNights,
+    dailyRate: round2(dailyRate),
+    dailyRateTotal: round2(dailyRateTotal),
+    extraHourCharge: round2(extraHourCharge),
+    extraHourTotal: round2(extraHourTotal),
+    baseServiceSubtotal: round2(baseServiceSubtotal),
+    foodAllowancePerDay: round2(foodAllowancePerDay),
+    foodAllowanceTotal: round2(foodAllowanceTotal),
+    stayAllowancePerNight: round2(stayAllowancePerNight),
+    stayAllowanceTotal: round2(stayAllowanceTotal),
+    allowanceTotal: round2(allowanceTotal),
+    allowancePerNight: round2(legacyAllowancePerNight),
+    legacyAllowanceTotal: round2(legacyAllowanceTotal),
+    customerArrangesAll: foodProvided === true && stayProvided === true,
+    foodProvided: foodProvided === true,
+    stayProvided: stayProvided === true,
     kmIncludedTotal: 0,
     extraKm: 0,
     extraKmCharge: 0,

@@ -9,14 +9,14 @@ import {
   cancelNoShowSchedule,
 } from './bookingNoShowTimeout.service.js';
 import {
-  scheduleRideEndTimer,
-  cancelRideEndSchedule,
-} from './bookingRideEndTimeout.service.js';
-import {
-  scheduleOutstationReturnJobs,
   cancelOutstationReturnJobs,
   snapshotOutstationReturnConfig,
 } from './bookingOutstationReturn.service.js';
+import {
+  scheduleRideEndTimer,
+  cancelRideEndSchedule,
+  settleOutstationOvertimeTick,
+} from './bookingRideEndTimeout.service.js';
 import {
   BOOKING_STATUS,
   BOOKING_TYPE,
@@ -614,12 +614,9 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
 
   await booking.save();
 
-  // Hourly / scheduled-hourly: auto-complete when the booked window
-  // (plus any later accepted extensions) elapses without a further
-  // extension. Outstation is day-based and is not auto-closed here.
-  scheduleRideEndTimer(booking);
-
-  // Outstation: arm return-approaching / return-reached jobs.
+  // Hourly + outstation: in-process extend nudge / auto-complete /
+  // overtime timers (see bookingRideEndTimeout.service.js).
+  // Snapshot outstation Return lifecycle knobs BEFORE arming timers.
   if (
     booking.serviceType === SERVICE_TYPES.OUTSTATION
     || booking.bookingType === BOOKING_TYPE.OUTSTATION
@@ -632,13 +629,11 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
       .lean();
     snapshotOutstationReturnConfig(booking, pricing?.outstation);
     await booking.save();
-    scheduleOutstationReturnJobs(booking).catch((err) =>
-      console.warn(
-        '[trip] failed to schedule outstation return jobs:',
-        err?.message,
-      ),
-    );
+    // Drop any legacy Redis return jobs from older builds.
+    cancelOutstationReturnJobs(booking._id).catch(() => null);
   }
+
+  scheduleRideEndTimer(booking);
 
   broadcastUpdate(booking);
   notifyUserTripStarted(booking.userId, booking).catch(() => null);
@@ -744,7 +739,7 @@ async function applyWaitingChargeOnStart(booking, startedAt, flags = {}) {
 /**
  * Booked ride length in ms for hourly trips (base hours + accepted
  * extensions). Returns 0 for outstation — that path uses
- * {@link earliestCompleteAtMs} against the calendar return instead.
+ * {@link earliestCompleteAtMs} against expectedReturnAt instead.
  */
 function bookedDurationMs(booking) {
   if (
@@ -766,8 +761,7 @@ function bookedDurationMs(booking) {
 /**
  * Earliest wall-clock instant the driver may mark COMPLETED.
  *   - Hourly: startedAt + booked hours (+ paid extensions)
- *   - Outstation: null — early completion is allowed any time after STARTED
- *     (no unused-time refund in V1)
+ *   - Outstation: expectedReturnAt (already bumped by paid extensions)
  */
 function earliestCompleteAtMs(booking) {
   if (!booking) return null;
@@ -777,7 +771,10 @@ function earliestCompleteAtMs(booking) {
     || booking.bookingType === BOOKING_TYPE.OUTSTATION;
 
   if (isOutstation) {
-    return null;
+    const endSrc =
+      booking.outstation?.expectedReturnAt || booking.outstation?.endDate;
+    const endMs = endSrc ? new Date(endSrc).getTime() : NaN;
+    return Number.isFinite(endMs) ? endMs : null;
   }
 
   const startedAtMs = booking.timeline?.startedAt
@@ -792,8 +789,8 @@ export async function completeTripService(driverId, bookingId) {
   const booking = await loadDriverBooking(driverId, bookingId);
   assertStatus(booking, [BOOKING_STATUS.STARTED], 'complete the ride');
 
-  // Do not allow completing before the booked window ends (hourly only).
-  // Outstation allows early completion once STARTED.
+  // Do not allow completing before the booked window ends.
+  // Hourly: startedAt + booked hours. Outstation: expectedReturnAt.
   const earliestCompleteMs = earliestCompleteAtMs(booking);
   if (earliestCompleteMs != null) {
     const remainingMs = earliestCompleteMs - Date.now();
@@ -806,7 +803,9 @@ export async function completeTripService(driverId, bookingId) {
       throw new ApiError(
         409,
         isOutstation
-          ? `This round trip runs until the booked return — you can complete it in about ${remainingDays} day(s).`
+          ? remainingMin >= 60
+            ? `This round trip runs until the booked return — you can complete it in about ${Math.floor(remainingMin / 60)}h.`
+            : `This round trip runs until the booked return — you can complete it in about ${remainingMin} min.`
           : `This ride is booked for ${(earliestCompleteMs - new Date(booking.timeline.startedAt).getTime()) / 3_600_000} hour(s) — you can complete it in about ${remainingMin} min.`,
         {
           code: 'TRIP_DURATION_NOT_ELAPSED',
@@ -818,9 +817,26 @@ export async function completeTripService(driverId, bookingId) {
     }
   }
 
-  // Stop the auto-complete timer — we're completing manually.
+  // Stop the auto-complete / overtime timers — we're completing manually.
   cancelRideEndSchedule(booking._id);
   cancelOutstationReturnJobs(booking._id).catch(() => null);
+
+  // Outstation auto-complete-off: settle any unpaid post-grace minutes
+  // while still STARTED (wallet debit + fareSnapshot bump).
+  if (
+    booking.serviceType === SERVICE_TYPES.OUTSTATION
+    || booking.bookingType === BOOKING_TYPE.OUTSTATION
+  ) {
+    await settleOutstationOvertimeTick(booking._id, { final: true }).catch(
+      (err) =>
+        console.warn('[trip] overtime final settle failed:', err?.message),
+    );
+    const fresh = await Booking.findById(booking._id);
+    if (fresh) {
+      booking.outstation = fresh.outstation;
+      booking.fareSnapshot = fresh.fareSnapshot;
+    }
+  }
 
   booking.status = BOOKING_STATUS.COMPLETED;
   booking.timeline.completedAt = new Date();

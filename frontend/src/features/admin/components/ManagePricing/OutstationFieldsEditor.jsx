@@ -1,25 +1,12 @@
 import Input from '../../../../components/Input';
 
 /**
- * Outstation pricing has three knobs:
+ * Outstation V2 duration-based pricing:
  *
- *   - Daily rate (₹/day)               — flat base fare for every
- *                                        calendar day of the round trip.
- *   - Food allowance (₹/day)           — driver food. Charged per day,
- *                                        waived when the customer
- *                                        agrees to feed the driver.
- *   - Stay allowance (₹/night)         — driver accommodation. Charged
- *                                        per overnight halt (= days − 1),
- *                                        waived when the customer hosts
- *                                        the driver.
- *
- * The customer UI currently exposes a single all-or-nothing toggle
- * that waives BOTH allowances together. The split exists here so
- * admins can tune the two costs independently (food scales with days,
- * stay with nights) and future UIs can split the toggle.
- *
- * Toll & parking are NOT billed by the platform — the customer settles
- * those directly with the driver.
+ *   Base = dailyRate × 24h blocks (+ min 1 day under 24h)
+ *        + extraHourCharge × remaining hours
+ *   Food = foodAllowancePerDay × service days
+ *   Stay = stayAllowancePerNight × overnight halts (≥24h trips only)
  */
 const OutstationFieldsEditor = ({ outstation, onChange }) => {
   const update = (patch) => onChange({ ...outstation, ...patch });
@@ -45,12 +32,12 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
           </span>
         </h4>
         <p className="text-xs text-slate-500">
-          Fare = daily rate × days + food allowance × days + stay
-          allowance × nights. Food and stay allowances are waived when
-          the customer agrees to arrange the driver&rsquo;s meals and
-          accommodation themselves. Service charge and GST are added on
-          top. Toll &amp; parking are paid directly by the customer to
-          the driver and are not added to the fare.
+          Fare is calculated from exact trip duration (not calendar dates):
+          daily rate × 24-hour blocks (minimum 1 day under 24h) + extra
+          hour charge for remaining hours + food/stay allowances. Min/max
+          days enforce minimum and maximum trip length in hours (minDays ×
+          24h). Service charge and GST are added on top. Toll &amp; parking
+          are paid directly by the customer to the driver.
         </p>
       </div>
 
@@ -61,7 +48,7 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
           min={0}
           value={o.dailyRate ?? 0}
           onChange={(e) => update({ dailyRate: Number(e.target.value) })}
-          helper="Flat ₹ billed for every calendar day of the round trip."
+          helper="Charged per complete 24-hour block (minimum 1 block under 24h)."
         />
         <Input
           label="Extra hour charge (₹/hr)"
@@ -79,7 +66,7 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
           onChange={(e) =>
             update({ foodAllowancePerDay: Number(e.target.value) })
           }
-          helper="Charged once per day of the trip. Waived when the customer agrees to feed the driver."
+          helper="Charged once per billed 24h service block. Waived when the customer feeds the driver."
         />
         <Input
           label="Stay allowance (₹/night)"
@@ -89,7 +76,7 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
           onChange={(e) =>
             update({ stayAllowancePerNight: Number(e.target.value) })
           }
-          helper="Charged for every overnight halt (= days − 1). Waived when the customer hosts the driver."
+          helper="Charged when trip spans ≥24h (one per 24h block). Waived when the customer hosts the driver."
         />
         <div />
         <div className="grid grid-cols-2 gap-3 md:col-span-2">
@@ -114,9 +101,10 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
         <div>
           <h4 className="text-sm font-bold text-slate-900">Return lifecycle</h4>
           <p className="text-xs text-slate-500">
-            Outstation-only prompts around expected return. Never charges
-            overtime automatically. Auto-complete stays off unless you set
-            hours &gt; 0.
+            Outstation extend nudge uses the same in-app popup +{' '}
+            <code className="text-[10px]">ride_ending_soon</code> push as
+            hourly (no Redis). Values below are snapshotted when the trip
+            starts.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -128,7 +116,7 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
             onChange={(e) =>
               update({ returnReminderMinutes: Number(e.target.value) })
             }
-            helper="Default 120 — “Your trip is expected to end at …”"
+            helper="First “extend your trip” popup + push before expected return."
           />
           <Input
             label="Return grace (minutes after)"
@@ -148,7 +136,7 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
             onChange={(e) =>
               update({ returnPromptRepeatMinutes: Number(e.target.value) })
             }
-            helper="How often to re-prompt after grace if still no decision."
+            helper="Re-prompt before return until the user taps Not now. 0 = once only."
           />
           <Input
             label="Return auto-complete (hours, 0 = off)"
@@ -158,7 +146,7 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
             onChange={(e) =>
               update({ returnAutoCompleteHours: Number(e.target.value) })
             }
-            helper="Leave 0 — do not silently complete trips."
+            helper="0 = off (charge overtime per minute after grace). Any value &gt; 0 = auto-complete after grace."
           />
         </div>
       </div>

@@ -102,13 +102,26 @@ export function useRideTimer(booking) {
     return Math.floor((now - startedAt) / 1000);
   }, [startedAt, now]);
 
-  // Hourly-only auto-prompt near the end of the booked window.
-  // Outstation uses a persistent "Extend trip" card instead.
+  // Hourly + outstation: auto-prompt near the end of the booked window
+  // (server also pushes BOOKING_EXTENSION_OFFERED / ride_ending_soon).
+  const outstationLeadSeconds = (() => {
+    if (!isOutstation) return null;
+    const mins = Number(
+      booking?.outstation?.returnReminderMinutes
+        ?? booking?.fareSnapshot?.breakdown?.returnReminderMinutes,
+    );
+    if (!Number.isFinite(mins) || mins < 0) return 120 * 60;
+    return mins * 60;
+  })();
+
   const shouldPromptExtension =
-    !isOutstation &&
     status === BOOKING_STATUS.STARTED &&
     remainingSeconds != null &&
-    remainingSeconds <= PAYMENT_POLICY.EXTENSION_PROMPT_LEAD_SECONDS;
+    remainingSeconds > 0 &&
+    !booking?.outstation?.extensionPromptDeclinedAt &&
+    (isOutstation
+      ? remainingSeconds <= outstationLeadSeconds
+      : remainingSeconds <= PAYMENT_POLICY.EXTENSION_PROMPT_LEAD_SECONDS);
 
   return {
     startedAt,
