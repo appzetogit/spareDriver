@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 /** Temporary kill-switch — notifications/popups unchanged; rings only. */
-export const NOTIFICATION_SOUND_MUTED = true;
+export const NOTIFICATION_SOUND_MUTED = false;
 
 /**
  * Reusable notification-sound hook.
