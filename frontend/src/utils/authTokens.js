@@ -23,8 +23,15 @@ export function clearAuthTokens() {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+function isJwtLike(value) {
+  return typeof value === 'string' && value.split('.').length === 3 && value.length > 20;
+}
+
 /** Persist tokens when an auth response includes them. */
 export function persistTokensFromPayload(payload) {
-  if (!payload?.accessToken && !payload?.refreshToken) return;
-  setAuthTokens(payload);
+  if (!payload || typeof payload !== 'object') return;
+  const accessToken = isJwtLike(payload.accessToken) ? payload.accessToken : undefined;
+  const refreshToken = isJwtLike(payload.refreshToken) ? payload.refreshToken : undefined;
+  if (!accessToken && !refreshToken) return;
+  setAuthTokens({ accessToken, refreshToken });
 }

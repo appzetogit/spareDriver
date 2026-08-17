@@ -54,6 +54,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshInFlight = null;
+
+async function refreshSession() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = getRefreshToken();
+    await api.post('/auth/refresh-token', refreshToken ? { refreshToken } : {});
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 api.interceptors.response.use(
   (response) => {
     persistTokensFromPayload(response?.data?.data);
@@ -69,8 +82,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const refreshToken = getRefreshToken();
-        await api.post('/auth/refresh-token', refreshToken ? { refreshToken } : {});
+        await refreshSession();
         const accessToken = getAccessToken();
         if (accessToken) {
           originalRequest.headers = originalRequest.headers || {};

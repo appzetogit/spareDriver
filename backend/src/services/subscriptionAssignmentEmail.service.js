@@ -2,7 +2,7 @@ import Zone from '../models/zone.model.js';
 import User from '../models/user.model.js';
 import LegalDocument, { LEGAL_DOCUMENT_TYPES } from '../models/legalDocument.model.js';
 import { sendEmail } from './email.service.js';
-import { isPlaceholderUserEmail } from '../utils/email.util.js';
+import { isPlaceholderUserEmail, escapeHtml } from '../utils/email.util.js';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -11,14 +11,6 @@ function formatDate(d) {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function escapeHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function buildCarLabel(car) {

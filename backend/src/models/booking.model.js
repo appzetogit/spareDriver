@@ -683,6 +683,13 @@ const bookingSchema = new mongoose.Schema(
       },
     },
 
+    /**
+     * Set after a completed-trip invoice email is successfully queued
+     * (or skipped because the user has no real email). Prevents duplicate
+     * sends when driver complete, auto-complete, and admin override race.
+     */
+    invoiceEmailSentAt: { type: Date, default: null },
+
     isDeleted: { type: Boolean, default: false, index: true },
   },
   { timestamps: true },

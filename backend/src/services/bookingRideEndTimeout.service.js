@@ -27,6 +27,7 @@ import {
   notifyUserRideEndingSoon,
   notifyDriverEarningsCredited,
 } from '../utils/notificationDispatch.js';
+import { queueBookingInvoiceEmail } from './bookingInvoiceEmail.service.js';
 import { debitWalletService } from './wallet.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 
@@ -665,6 +666,7 @@ async function autoCompleteExpiredRide(bookingId) {
   }
 
   notifyUserTripCompleted(booking.userId, booking).catch(() => null);
+  queueBookingInvoiceEmail(booking);
 
   if (booking.driverId) {
     const earning =

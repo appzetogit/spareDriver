@@ -164,24 +164,11 @@ function drawSellerGstBlock(doc, gst, pageLeft, pageRight) {
   doc.moveDown(0.8);
 }
 
-/**
- * Stream a trip invoice PDF for a completed booking. Caller pipes `doc`
- * into the HTTP response.
- */
-export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
-  const [booking, gstDetails] = await Promise.all([
-    Booking.findOne({ _id: bookingId, userId })
-      .populate('userId', 'name email phone_no')
-      .populate('driverId', 'name phone_no')
-      .lean(),
-    getGstDetailsService(),
-  ]);
+function invoiceFilename(invoiceNumber) {
+  return `invoice-${String(invoiceNumber).replace(/[^a-zA-Z0-9-_]/g, '-')}.pdf`;
+}
 
-  if (!booking) throw new ApiError(404, 'Booking not found');
-  if (booking.status !== BOOKING_STATUS.COMPLETED) {
-    throw new ApiError(400, 'Invoice is available only for completed trips');
-  }
-
+export function summarizeBookingInvoice(booking) {
   const invoiceNumber = booking.invoiceNumber || booking.bookingNumber || String(booking._id);
   const completedAt = booking.timeline?.completedAt || booking.timeline?.createdAt;
   const startedAt = booking.timeline?.startedAt;
@@ -206,26 +193,85 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
   const driverName =
     typeof booking.driverId === 'object' ? booking.driverId?.name : null;
 
-  const doc = new PDFDocument({
+  return {
+    invoiceNumber,
+    filename: invoiceFilename(invoiceNumber),
+    completedAt,
+    startedAt,
+    durationMinutes,
+    distanceMeters,
+    fare,
+    extensionTotal,
+    waitingTotal,
+    grandTotal,
+    serviceLabel,
+    customerName,
+    driverName,
+  };
+}
+
+function ownerUserId(userId) {
+  if (!userId) return userId;
+  if (typeof userId === 'object') return userId._id || userId;
+  return userId;
+}
+
+async function loadCompletedInvoiceBooking(bookingId, { userId } = {}) {
+  const filter = { _id: bookingId };
+  if (userId) filter.userId = ownerUserId(userId);
+
+  const [booking, gstDetails] = await Promise.all([
+    Booking.findOne(filter)
+      .populate('userId', 'name email phone_no')
+      .populate('driverId', 'name phone_no')
+      .lean(),
+    getGstDetailsService(),
+  ]);
+
+  if (!booking) throw new ApiError(404, 'Booking not found');
+  if (booking.status !== BOOKING_STATUS.COMPLETED) {
+    throw new ApiError(400, 'Invoice is available only for completed trips');
+  }
+
+  return { booking, gstDetails, summary: summarizeBookingInvoice(booking) };
+}
+
+function createInvoicePdfDocument(booking, summary) {
+  return new PDFDocument({
     size: 'A4',
     margin: 48,
     bufferPages: true,
     info: {
-      Title: `Invoice ${invoiceNumber}`,
+      Title: `Invoice ${summary.invoiceNumber}`,
       Author: 'SpareDriver',
       Subject: `Trip invoice for booking ${booking.bookingNumber}`,
       CreationDate: new Date(),
     },
   });
+}
 
-  if (res) {
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="invoice-${invoiceNumber.replace(/[^a-zA-Z0-9-_]/g, '-')}.pdf"`,
-    );
-    doc.pipe(res);
-  }
+function pdfDocumentToBuffer(doc) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+}
+
+function renderInvoicePdf(doc, { booking, gstDetails, summary }) {
+  const {
+    invoiceNumber,
+    completedAt,
+    durationMinutes,
+    distanceMeters,
+    fare,
+    waitingTotal,
+    grandTotal,
+    serviceLabel,
+    customerName,
+    driverName,
+  } = summary;
 
   const pageLeft = doc.page.margins.left;
   const pageRight = doc.page.width - doc.page.margins.right;
@@ -365,6 +411,40 @@ export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
     }
     doc.switchToPage(range.start + range.count - 1);
   }
+}
 
+function pipeInvoiceHeaders(res, summary) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${summary.filename}"`,
+  );
+}
+
+/**
+ * Stream a trip invoice PDF for a completed booking. Caller pipes `doc`
+ * into the HTTP response.
+ */
+export async function buildBookingInvoicePdf(bookingId, { userId, res } = {}) {
+  const data = await loadCompletedInvoiceBooking(bookingId, { userId });
+  const doc = createInvoicePdfDocument(data.booking, data.summary);
+  if (res) {
+    pipeInvoiceHeaders(res, data.summary);
+    doc.pipe(res);
+  }
+  renderInvoicePdf(doc, data);
   doc.end();
+}
+
+/**
+ * Build the same trip invoice PDF as a Buffer (for email attachments).
+ */
+export async function buildBookingInvoicePdfBuffer(bookingId, { userId } = {}) {
+  const data = await loadCompletedInvoiceBooking(bookingId, { userId });
+  const doc = createInvoicePdfDocument(data.booking, data.summary);
+  const bufferPromise = pdfDocumentToBuffer(doc);
+  renderInvoicePdf(doc, data);
+  doc.end();
+  const buffer = await bufferPromise;
+  return { buffer, ...data };
 }

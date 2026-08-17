@@ -15,7 +15,6 @@ import { BOOKING_PAYMENT_STATUS } from '../../../../constants/bookingStatus';
 const PaymentStatusPage = () => {
   const navigate = useNavigate();
   const booking = useDriverActiveTripStore((s) => s.booking);
-  const clear = useDriverActiveTripStore((s) => s.clear);
 
   // If the store was cleared (e.g. user opened this URL directly after a
   // refresh) drop the driver back on the home dashboard rather than
@@ -80,8 +79,11 @@ const PaymentStatusPage = () => {
         <Button
           fullWidth
           onClick={() => {
-            clear();
-            navigate('/driver/home', { replace: true });
+            const id = booking?._id;
+            navigate(
+              id ? `/driver/trip/rate?bookingId=${id}` : '/driver/home',
+              { replace: true },
+            );
           }}
         >
           Continue

@@ -26,6 +26,7 @@ import {
 } from '../utils/socketEmitters.js';
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { notifyDriverOrderAssigned } from '../utils/notificationDispatch.js';
+import { queueBookingInvoiceEmail } from './bookingInvoiceEmail.service.js';
 import { ApiError } from '../utils/apiError.js';
 import {
   applyBuffer,
@@ -383,8 +384,10 @@ export async function adminUpdateBookingStatusService(
     }
   }
 
+  let justCompleted = false;
   if (status === BOOKING_STATUS.COMPLETED && !booking.timeline.completedAt) {
     booking.timeline.completedAt = now;
+    justCompleted = true;
     cancelPaymentTimeout(booking._id);
     if (booking.driverId) {
       await Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } });
@@ -396,6 +399,10 @@ export async function adminUpdateBookingStatusService(
   }
 
   await booking.save();
+
+  if (justCompleted) {
+    queueBookingInvoiceEmail(booking);
+  }
 
   if (status === BOOKING_STATUS.ARRIVED && mintedOtp) {
     // Hourly no-show prompts only — outstation uses admin settle.

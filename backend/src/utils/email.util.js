@@ -1,5 +1,13 @@
 const PLACEHOLDER_EMAIL_SUFFIX = '@phone.sparedriver.local';
 
+export function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function isPlaceholderUserEmail(email) {
   if (!email || typeof email !== 'string') return true;
   const normalized = email.trim().toLowerCase();

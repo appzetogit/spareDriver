@@ -87,6 +87,7 @@ export function UserBookingAlertsBridge() {
         || (typeof data.path === 'string' && data.path.startsWith('/') ? data.path : '')
         || (data.bookingId ? `/user/book/assigned/${data.bookingId}` : '');
       if (!path || path === '/') return;
+      if (path.startsWith('/driver') || path.startsWith('/admin')) return;
       const current = `${window.location.pathname}${window.location.search}`;
       if (current === path) return;
       navigate(path);
@@ -174,7 +175,9 @@ export function UserBookingAlertsBridge() {
   });
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
-    if (!payload?.bookingId) return;
+    if (!isAuthenticated || !payload?.bookingId) return;
+    const path = window.location.pathname || '';
+    if (path.startsWith('/driver') || path.startsWith('/admin')) return;
     applyUpdate(payload);
     if (
       payload.status === BOOKING_STATUS.CANCELLED
@@ -187,7 +190,6 @@ export function UserBookingAlertsBridge() {
     }
     if (payload.status === BOOKING_STATUS.COMPLETED && payload.bookingId) {
       if (payload.rating?.customer?.stars != null) return;
-      const path = window.location.pathname || '';
       if (
         path.startsWith('/user/tracking/completed')
         || path.startsWith('/user/tracking/rate')

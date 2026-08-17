@@ -340,10 +340,8 @@ function App() {
             <Route path="/driver/help-support" element={<HelpSupportPage audience="driver" />} />
 
             {/* ========== Driver Trip Flow ========== */}
-            {/* Live status-driven page (the one BookingOfferModal navigates to) */}
-            <Route path="/driver/trip/:id" element={<DriverActiveTripPage />} />
-            {/* Legacy static mockups kept around for design reference; remove
-                once Phase 5 ships the live equivalents. */}
+            {/* Static segments MUST sit above `/driver/trip/:id` so paths
+                like `/rate` and `/completed` are not treated as booking ids. */}
             <Route path="/driver/trip/new-request" element={<NewBookingRequestPage />} />
             <Route path="/driver/trip/navigate" element={<NavigateToCustomerPage />} />
             <Route path="/driver/trip/arrived" element={<ArrivedStartTripPage />} />
@@ -351,6 +349,7 @@ function App() {
             <Route path="/driver/trip/completed" element={<DriverTripCompletedPage />} />
             <Route path="/driver/trip/payment" element={<PaymentStatusPage />} />
             <Route path="/driver/trip/rate" element={<RateCustomerPage />} />
+            <Route path="/driver/trip/:id" element={<DriverActiveTripPage />} />
           </Route>
 
           {/* ========== Dev-only Sandbox ========== */}

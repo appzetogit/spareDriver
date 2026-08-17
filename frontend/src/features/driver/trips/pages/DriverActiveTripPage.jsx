@@ -276,8 +276,11 @@ const DriverActiveTripPage = () => {
       toast.success('Trip completed');
       clearOfferStoreActive();
       invalidateDriverDashboardCaches();
-      clear();
-      navigate('/driver/home', { replace: true });
+      const id = booking?._id;
+      navigate(
+        id ? `/driver/trip/rate?bookingId=${id}` : '/driver/home',
+        { replace: true },
+      );
     } else if (
       status === BOOKING_STATUS.CANCELLED ||
       status === BOOKING_STATUS.NO_DRIVERS_FOUND ||
@@ -306,7 +309,7 @@ const DriverActiveTripPage = () => {
       clearOfferStoreActive();
       navigate('/driver/home', { replace: true });
     }
-  }, [status, cancellationReason, clear, clearOfferStoreActive, navigate]);
+  }, [status, cancellationReason, booking?._id, clear, clearOfferStoreActive, navigate]);
 
   // OTP-entry sheet: opened from the Start CTA when the booking is at
   // ARRIVED. We keep it page-local rather than baking it into the store

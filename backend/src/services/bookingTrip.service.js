@@ -41,6 +41,7 @@ import {
   notifyUserTripCompleted,
   notifyDriverEarningsCredited,
 } from '../utils/notificationDispatch.js';
+import { queueBookingInvoiceEmail } from './bookingInvoiceEmail.service.js';
 import { isTestOtp } from '../utils/otpService.js';
 import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
@@ -911,6 +912,7 @@ export async function completeTripService(driverId, bookingId) {
 
   broadcastUpdate(booking);
   notifyUserTripCompleted(booking.userId, booking).catch(() => null);
+  queueBookingInvoiceEmail(booking);
   if (booking.driverId) {
     const earning = driverEarningFromFareSnapshot(booking.fareSnapshot);
     if (earning > 0) {
