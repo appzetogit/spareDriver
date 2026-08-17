@@ -8,7 +8,7 @@ import {
 } from '../utils/jwt.util.js';
 import { USER_ROLES } from '../constants/roles.js';
 
-import { isPlaceholderUserEmail, userNeedsEmail as computeUserNeedsEmail } from '../utils/email.util.js';
+import { isPlaceholderUserEmail, userNeedsEmail as computeUserNeedsEmail, isValidUserEmail, normalizeUserEmail } from '../utils/email.util.js';
 import { EmailVerification } from '../models/emailVerification.model.js';
 import { sendEmail } from './email.service.js';
 import { resolveAuthFcm } from './fcmToken.service.js';
@@ -28,12 +28,9 @@ import { RegistrationDraft } from '../models/registrationDraft.model.js';
 const REGISTRATION_DRAFT_TTL_MS = 30 * 60 * 1000;
 
 function assertValidEmail(email) {
-  const normalized = String(email || '').trim().toLowerCase();
-  if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-    throw new ApiError(400, 'Valid email address required');
-  }
-  if (isPlaceholderUserEmail(normalized)) {
-    throw new ApiError(400, 'Valid email address required');
+  const normalized = normalizeUserEmail(email);
+  if (!isValidUserEmail(normalized)) {
+    throw new ApiError(400, 'Enter a valid email address');
   }
   return normalized;
 }
@@ -562,10 +559,7 @@ export const getRegistrationStatusService = async (userId) => {
 };
 
 export const sendUserEmailVerificationOtpService = async (userId, email) => {
-  const normalized = String(email || '').trim().toLowerCase();
-  if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-    throw new ApiError(400, 'Valid email address required');
-  }
+  const normalized = assertValidEmail(email);
   if (isPlaceholderUserEmail(normalized)) {
     throw new ApiError(400, 'Please enter your personal email address');
   }

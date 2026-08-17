@@ -8,6 +8,7 @@ import Modal from '../../../../components/Modal';
 import api from '../../../../utils/api';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { userNeedsEmail } from '../../../auth/utils/authNavigation';
+import { isValidUserEmail, normalizeUserEmail, sanitizeEmailInput } from '../../../../utils/email';
 
 function isRealEmail(email) {
   if (!email || typeof email !== 'string') return false;
@@ -74,9 +75,9 @@ const VerifyEmailPage = () => {
   }, [isAuthenticated, user, navigate, leaveAfterEmail]);
 
   const handleSendOtp = async () => {
-    const trimmed = email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setError('Enter a valid email address');
+    const trimmed = normalizeUserEmail(email);
+    if (!isValidUserEmail(trimmed)) {
+      setError('Enter a valid email address (example: name@gmail.com)');
       return;
     }
     setLoading(true);
@@ -98,7 +99,7 @@ const VerifyEmailPage = () => {
     setError('');
     try {
       const res = await api.post('/auth/onboarding/email/verify', {
-        email: email.trim(),
+        email: normalizeUserEmail(email),
         otp,
       });
       const verifiedUser = res.data?.data?.user;
@@ -142,8 +143,9 @@ const VerifyEmailPage = () => {
           type="email"
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => !emailLocked && setEmail(e.target.value)}
+          onChange={(e) => !emailLocked && setEmail(sanitizeEmailInput(e.target.value))}
           autoComplete="email"
+          maxLength={254}
           disabled={emailLocked}
         />
 
@@ -153,10 +155,19 @@ const VerifyEmailPage = () => {
           </p>
         )}
 
+        {email && !isValidUserEmail(email) && (
+          <p className="text-xs text-rose-600 mt-2">Enter a valid email address (example: name@gmail.com)</p>
+        )}
+
         {error && <p className="text-sm text-rose-600 mt-3">{error}</p>}
 
         <div className="mt-8 space-y-3">
-          <Button onClick={handleSendOtp} loading={loading} className="w-full">
+          <Button
+            onClick={handleSendOtp}
+            loading={loading}
+            disabled={!isValidUserEmail(email)}
+            className="w-full"
+          >
             Send verification code
           </Button>
         </div>

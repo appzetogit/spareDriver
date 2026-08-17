@@ -1,7 +1,9 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 
-const EMAIL_FROM = process.env.EMAIL_FROM || 'SpareDriver <noreply@sparedriver.com>';
+function getEmailFrom() {
+  return process.env.EMAIL_FROM || 'SpareDriver <noreply@sparedriver.com>';
+}
 
 let smtpTransporter = null;
 
@@ -97,7 +99,7 @@ function toSmtpAttachments(attachments) {
 
 async function sendViaResend({ to, subject, html, text, attachments }) {
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const from = parseFromAddress(EMAIL_FROM);
+  const from = parseFromAddress(getEmailFrom());
   const { error } = await resend.emails.send({
     from: from.name ? `${from.name} <${from.email}>` : from.email,
     to: [to],
@@ -114,7 +116,7 @@ async function sendViaResend({ to, subject, html, text, attachments }) {
 async function sendViaSmtp({ to, subject, html, text, attachments }) {
   const transporter = getSmtpTransporter();
   await transporter.sendMail({
-    from: EMAIL_FROM,
+    from: getEmailFrom(),
     to,
     subject,
     html,
@@ -180,6 +182,6 @@ export function getEmailProviderStatus() {
     resend: isResendConfigured(),
     smtp: isSmtpConfigured(),
     order: resolveProviderOrder(),
-    from: EMAIL_FROM,
+    from: getEmailFrom(),
   };
 }

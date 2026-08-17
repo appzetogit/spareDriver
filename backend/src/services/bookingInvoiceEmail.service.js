@@ -5,7 +5,6 @@ import { sendEmail } from './email.service.js';
 import { buildBookingInvoicePdfBuffer } from './bookingInvoicePdf.service.js';
 import {
   escapeHtml,
-  getClientOrigin,
   isPlaceholderUserEmail,
 } from '../utils/email.util.js';
 
@@ -72,7 +71,6 @@ function buildHtml({
   duration,
   paymentStatus,
   grandTotal,
-  invoiceUrl,
 }) {
   const rows = [
     ['Invoice', invoiceNumber],
@@ -108,11 +106,6 @@ function buildHtml({
       </div>
       <div style="padding:24px;">
         <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">${detailRows}</table>
-        ${
-          invoiceUrl
-            ? `<p style="margin:0 0 16px;"><a href="${escapeHtml(invoiceUrl)}" style="display:inline-block;background:#0d9488;color:#fff;text-decoration:none;padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;">View invoice in app</a></p>`
-            : ''
-        }
         <p style="margin:0;font-size:12px;color:#94a3b8;">This is a computer-generated tax invoice. If you have questions, contact SpareDriver support from the app.</p>
       </div>
     </div>
@@ -141,7 +134,6 @@ function buildText(payload) {
     `Total: ${payload.grandTotal}`,
     '',
   );
-  if (payload.invoiceUrl) lines.push(`View: ${payload.invoiceUrl}`, '');
   return lines.join('\n');
 }
 
@@ -189,8 +181,6 @@ export async function sendBookingInvoiceEmail(bookingOrId) {
     }
 
     const tripLabel = tripKindLabel(booking, summary.serviceLabel);
-    const bookingIdStr = String(booking._id);
-    const invoiceUrl = `${getClientOrigin()}/user/tracking/completed?bookingId=${bookingIdStr}`;
     const payload = {
       userName: user?.name || 'there',
       tripLabel,
@@ -203,7 +193,6 @@ export async function sendBookingInvoiceEmail(bookingOrId) {
       duration: summary.durationMinutes != null ? `${summary.durationMinutes} min` : '—',
       paymentStatus: pretty(booking.paymentStatus),
       grandTotal: formatInr(summary.grandTotal),
-      invoiceUrl,
     };
 
     const result = await sendEmail({

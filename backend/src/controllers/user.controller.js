@@ -2,6 +2,13 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { setAuthCookies } from '../utils/cookie.util.js';
 import * as userService from '../services/user.service.js';
+import {
+  sendRegistrationEmailOtpSchema,
+  verifyRegistrationEmailOtpSchema,
+  completeRegistrationSchema,
+  sendOnboardingEmailOtpSchema,
+  verifyOnboardingEmailOtpSchema,
+} from '../validations/user.validation.js';
 
 export const sendUserOtp = asyncHandler(async (req, res) => {
   const result = await userService.sendUserOtpService(req.body.phone);
@@ -35,19 +42,20 @@ export const verifyRegistrationPhoneOtp = asyncHandler(async (req, res) => {
 });
 
 export const sendRegistrationEmailOtp = asyncHandler(async (req, res) => {
-  const { phone, email } = req.body;
+  const { phone, email } = sendRegistrationEmailOtpSchema.parse(req.body || {});
   const result = await userService.sendRegistrationEmailOtpService(phone, email);
   return res.status(200).json(new ApiResponse(200, result, 'Verification code sent'));
 });
 
 export const verifyRegistrationEmailOtp = asyncHandler(async (req, res) => {
-  const { phone, email, otp } = req.body;
+  const { phone, email, otp } = verifyRegistrationEmailOtpSchema.parse(req.body || {});
   const result = await userService.verifyRegistrationEmailOtpService(phone, email, otp);
   return res.status(200).json(new ApiResponse(200, result, 'Email verified'));
 });
 
 export const completeRegistration = asyncHandler(async (req, res) => {
-  const result = await userService.completeRegistrationService(req.body);
+  const parsed = completeRegistrationSchema.parse(req.body || {});
+  const result = await userService.completeRegistrationService({ ...req.body, ...parsed });
   setAuthCookies(res, {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
@@ -104,15 +112,17 @@ export const getRegistrationStatus = asyncHandler(async (req, res) => {
 });
 
 export const sendUserEmailVerificationOtp = asyncHandler(async (req, res) => {
+  const { email } = sendOnboardingEmailOtpSchema.parse(req.body || {});
   const result = await userService.sendUserEmailVerificationOtpService(
     req.user._id,
-    req.body.email,
+    email,
   );
   return res.status(200).json(new ApiResponse(200, result, 'Verification code sent'));
 });
 
 export const verifyUserEmailOtp = asyncHandler(async (req, res) => {
-  const user = await userService.verifyUserEmailOtpService(req.user._id, req.body);
+  const body = verifyOnboardingEmailOtpSchema.parse(req.body || {});
+  const user = await userService.verifyUserEmailOtpService(req.user._id, body);
   return res.status(200).json(new ApiResponse(200, { user }, 'Email verified successfully'));
 });
 
