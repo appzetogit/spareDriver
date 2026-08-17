@@ -18,6 +18,11 @@ const appSettingsSchema = new mongoose.Schema(
     },
     androidAppUrl: { type: String, default: '', trim: true },
     iosAppUrl: { type: String, default: '', trim: true },
+    instagramUrl: { type: String, default: '', trim: true },
+    facebookUrl: { type: String, default: '', trim: true },
+    twitterUrl: { type: String, default: '', trim: true },
+    linkedinUrl: { type: String, default: '', trim: true },
+    youtubeUrl: { type: String, default: '', trim: true },
     /**
      * Platform GST / tax identity printed on customer invoices.
      * Leave gstin empty to omit the block from PDFs.

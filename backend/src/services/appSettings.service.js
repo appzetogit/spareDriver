@@ -15,6 +15,11 @@ function toPublicConfig(doc) {
     supportHours: doc.supportHours || '',
     androidAppUrl: doc.androidAppUrl || '',
     iosAppUrl: doc.iosAppUrl || '',
+    instagramUrl: doc.instagramUrl || '',
+    facebookUrl: doc.facebookUrl || '',
+    twitterUrl: doc.twitterUrl || '',
+    linkedinUrl: doc.linkedinUrl || '',
+    youtubeUrl: doc.youtubeUrl || '',
   };
 }
 
@@ -54,6 +59,11 @@ export async function updateSupportConfigService(data, staffId) {
     supportHours,
     androidAppUrl,
     iosAppUrl,
+    instagramUrl,
+    facebookUrl,
+    twitterUrl,
+    linkedinUrl,
+    youtubeUrl,
   } = data || {};
 
   if (!supportPhone?.trim() || !supportWhatsapp?.trim() || !supportEmail?.trim()) {
@@ -71,6 +81,11 @@ export async function updateSupportConfigService(data, staffId) {
         supportHours: (supportHours ?? '').trim(),
         androidAppUrl: (androidAppUrl ?? '').trim(),
         iosAppUrl: (iosAppUrl ?? '').trim(),
+        instagramUrl: (instagramUrl ?? '').trim(),
+        facebookUrl: (facebookUrl ?? '').trim(),
+        twitterUrl: (twitterUrl ?? '').trim(),
+        linkedinUrl: (linkedinUrl ?? '').trim(),
+        youtubeUrl: (youtubeUrl ?? '').trim(),
         updatedBy: staffId || null,
       },
     },

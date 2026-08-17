@@ -37,6 +37,11 @@ const EMPTY_SUPPORT_FORM = {
   supportHours: '',
   androidAppUrl: '',
   iosAppUrl: '',
+  instagramUrl: '',
+  facebookUrl: '',
+  twitterUrl: '',
+  linkedinUrl: '',
+  youtubeUrl: '',
 };
 
 const EMPTY_GST_FORM = {
@@ -58,6 +63,11 @@ function normalizeSupportForm(data = {}) {
     supportHours: data.supportHours || '',
     androidAppUrl: data.androidAppUrl || '',
     iosAppUrl: data.iosAppUrl || '',
+    instagramUrl: data.instagramUrl || '',
+    facebookUrl: data.facebookUrl || '',
+    twitterUrl: data.twitterUrl || '',
+    linkedinUrl: data.linkedinUrl || '',
+    youtubeUrl: data.youtubeUrl || '',
   };
 }
 
@@ -362,7 +372,7 @@ const PlatformSettings = () => {
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Website & Contact</h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  Contact details shown on the landing page / Contact Us, plus Android and iOS download links.
+                  Contact details shown on the landing page / Contact Us, plus app download and social links.
                 </p>
               </div>
               <form onSubmit={handleSupportSave} className="space-y-4">
@@ -421,6 +431,41 @@ const PlatformSettings = () => {
                   value={supportForm.iosAppUrl || ''}
                   onChange={(e) => setSupportForm((prev) => ({ ...prev, iosAppUrl: e.target.value }))}
                   placeholder="https://apps.apple.com/app/..."
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="Instagram URL"
+                  value={supportForm.instagramUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, instagramUrl: e.target.value }))}
+                  placeholder="https://www.instagram.com/sparedriver"
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="Facebook URL"
+                  value={supportForm.facebookUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, facebookUrl: e.target.value }))}
+                  placeholder="https://www.facebook.com/sparedriver"
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="X (Twitter) URL"
+                  value={supportForm.twitterUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, twitterUrl: e.target.value }))}
+                  placeholder="https://x.com/sparedriver"
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="LinkedIn URL"
+                  value={supportForm.linkedinUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
+                  placeholder="https://www.linkedin.com/company/sparedriver"
+                  disabled={!canEdit}
+                />
+                <Input
+                  label="YouTube URL"
+                  value={supportForm.youtubeUrl || ''}
+                  onChange={(e) => setSupportForm((prev) => ({ ...prev, youtubeUrl: e.target.value }))}
+                  placeholder="https://www.youtube.com/@sparedriver"
                   disabled={!canEdit}
                 />
                 {canEdit && (

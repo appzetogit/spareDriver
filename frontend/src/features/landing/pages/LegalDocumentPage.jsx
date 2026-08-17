@@ -59,7 +59,7 @@ const LegalDocumentPage = ({ type }) => {
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-6 py-16">
         <div className="space-y-4 mb-12 border-b border-border pb-8">
-          <div className="inline-flex p-3 bg-primary/10 rounded-2xl text-primary-dark mb-2">
+          <div className="inline-flex p-3 bg-[#F5C400] rounded-2xl text-black mb-2">
             <FileText className="w-6 h-6" />
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-dark">{heading}</h1>
