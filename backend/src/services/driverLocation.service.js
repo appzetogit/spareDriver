@@ -329,3 +329,51 @@ export async function listLiveDriverMapMetadata() {
 export function isLiveLocationReady() {
   return isFirebaseReady();
 }
+
+/** REST ingest is slower than the socket path — native only posts while backgrounded. */
+const HTTP_MIN_INTERVAL_MS = 8_000;
+const lastHttpWriteAt = new Map();
+
+/**
+ * HTTP ingest used by the Flutter wrapper when the WebView (and its socket)
+ * is frozen in the background. Same Firebase + Mongo write as the socket path.
+ *
+ * `stopTracking: true` means native should tear down the GPS service
+ * (driver went offline / is no longer approved).
+ */
+export async function recordDriverLocationHttp(driver, coords) {
+  if (!driver?._id) {
+    return { accepted: false, firebase: false, mongoSnapshot: false, reason: 'no_driver', stopTracking: true };
+  }
+
+  if (driver.isDeleted || driver.approvalStatus !== 'approved') {
+    return {
+      accepted: false,
+      firebase: false,
+      mongoSnapshot: false,
+      reason: 'not_approved',
+      stopTracking: true,
+    };
+  }
+
+  if (!driver.isOnline && !driver.isOnTrip) {
+    return {
+      accepted: false,
+      firebase: false,
+      mongoSnapshot: false,
+      reason: 'not_sharing',
+      stopTracking: true,
+    };
+  }
+
+  const key = String(driver._id);
+  const now = nowMs();
+  const last = lastHttpWriteAt.get(key) || 0;
+  if (now - last < HTTP_MIN_INTERVAL_MS) {
+    return { accepted: false, firebase: false, mongoSnapshot: false, reason: 'throttled', stopTracking: false };
+  }
+  lastHttpWriteAt.set(key, now);
+
+  const result = await recordDriverLocation(driver._id, coords);
+  return { ...result, stopTracking: false };
+}

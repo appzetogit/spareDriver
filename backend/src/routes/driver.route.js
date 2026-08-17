@@ -42,6 +42,7 @@ import {
 } from '../controllers/kitOrder.controller.js';
 import { verifyKitPayment } from '../controllers/payment.controller.js';
 import { getOnlineStatus, setOnlineStatus } from '../controllers/driverOnline.controller.js';
+import { postDriverLocation } from '../controllers/driverLocation.controller.js';
 import {
   getMyOrders,
   getMyOrderById,
@@ -148,6 +149,7 @@ router.post('/payments/verify', protectDriver, verifyKitPayment);
 
 router.get('/online/status', protectDriver, getOnlineStatus);
 router.put('/online', protectDriver, setOnlineStatus);
+router.post('/location', protectDriver, postDriverLocation);
 
 // Dashboard: today summary, paginated trip history, earnings analytics
 router.get('/home/summary', protectDriver, getDriverHomeSummary);

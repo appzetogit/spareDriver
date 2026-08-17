@@ -3,6 +3,8 @@ import { useDriverLocation } from '../hooks/useDriverLocation';
 import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
 import useDriverActiveTripStore from '../store/driver/useDriverActiveTripStore';
 import useDriverAuthStore from '../store/useDriverAuthStore';
+import { onAuthTokensChanged } from '../utils/authTokens';
+import { syncNativeBackgroundLocation } from '../utils/nativeBackgroundLocation';
 import {
   BOOKING_STATUS,
   ACTIVE_BOOKING_STATUSES,
@@ -31,12 +33,23 @@ export function DriverLocationBridge() {
   const bookingStatus = useDriverActiveTripStore((s) => s.booking?.status);
   const onTrip = Boolean(bookingStatus && ON_TRIP_STATUSES.has(bookingStatus));
 
+  const enabled = authOnline || storeOnline || onTrip;
+  const driverId = useDriverAuthStore((s) => s.driver?._id);
+
   useEffect(() => {
     useDriverOnlineStore.getState().fetch(ONLINE_CACHE_KEY, {}).catch(() => {});
     useDriverActiveTripStore.getState().fetchActive?.().catch(() => {});
   }, []);
 
-  useDriverLocation({ enabled: authOnline || storeOnline || onTrip });
+  useEffect(() => {
+    const sync = () => syncNativeBackgroundLocation({ enabled, driverId });
+    sync();
+    return onAuthTokensChanged(sync);
+  }, [enabled, driverId]);
+
+  useEffect(() => () => syncNativeBackgroundLocation({ enabled: false }), []);
+
+  useDriverLocation({ enabled });
 
   return null;
 }
