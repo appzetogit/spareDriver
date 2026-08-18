@@ -30,7 +30,7 @@ const fixSchema = z.object({
   capturedAt: isoDate,
 });
 
-export const locationBatchSchema = z.object({
+const batchBodySchema = z.object({
   fixes: z
     .array(fixSchema)
     .min(1, 'fixes must contain at least one entry')
@@ -39,3 +39,31 @@ export const locationBatchSchema = z.object({
       `fixes may contain at most ${LOCATION_BATCH.MAX_FIXES} entries per request`,
     ),
 });
+
+/**
+ * Single-fix body, kept for compatibility with the shape `main` was posting
+ * before the two location implementations were merged. `capturedAt` is
+ * optional here because that caller never sent one — it is filled in with
+ * receipt time, which is the best available answer for a payload that did not
+ * record when the fix was taken.
+ */
+const singleFixBodySchema = z.object({
+  lat: z.coerce.number().gte(-90).lte(90),
+  lng: z.coerce.number().gte(-180).lte(180),
+  accuracy: z.coerce.number().nonnegative().optional().nullable(),
+  heading: z.coerce.number().optional().nullable(),
+  speed: z.coerce.number().optional().nullable(),
+  capturedAt: isoDate.optional(),
+});
+
+/**
+ * Accepts either shape and always yields `{ fixes: [...] }`, so the ingest
+ * service has exactly one input to reason about.
+ */
+export const locationBatchSchema = z
+  .union([batchBodySchema, singleFixBodySchema])
+  .transform((body) =>
+    'fixes' in body
+      ? body
+      : { fixes: [{ ...body, capturedAt: body.capturedAt ?? Date.now() }] },
+  );

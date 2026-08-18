@@ -21,6 +21,14 @@ function parseSortOrder(val) {
   return Number.isNaN(n) ? 0 : n;
 }
 
+function safePublicLink(url) {
+  try {
+    return sanitizeLink(url);
+  } catch {
+    return '';
+  }
+}
+
 function buildCreatePayload(body, file, createdBy) {
   if (!file) throw new ApiError(400, 'Ad media file is required');
   if (!body?.mediaType || !ALLOWED_MEDIA_TYPES.has(body.mediaType)) {
@@ -63,9 +71,22 @@ export async function createAdService(body, createdBy) {
   });
 }
 
+function toPublicAd(ad) {
+  return {
+    _id: ad._id,
+    title: ad.title || '',
+    mediaType: ad.mediaType,
+    mediaUrl: ad.mediaUrl,
+    linkUrl: safePublicLink(ad.linkUrl || ''),
+    sortOrder: ad.sortOrder || 0,
+  };
+}
+
 export async function listAdsService({ onlyActive = false } = {}) {
   const filter = onlyActive ? { isActive: true } : {};
-  return Ad.find(filter).sort({ sortOrder: 1, createdAt: -1 }).lean();
+  const ads = await Ad.find(filter).sort({ sortOrder: 1, createdAt: -1 }).lean();
+  if (!onlyActive) return ads;
+  return ads.map((ad) => toPublicAd(ad));
 }
 
 export async function updateAdService(id, body) {

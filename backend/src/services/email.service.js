@@ -1,7 +1,9 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 
-const EMAIL_FROM = process.env.EMAIL_FROM || 'SpareDriver <noreply@sparedriver.com>';
+function getEmailFrom() {
+  return process.env.EMAIL_FROM || 'SpareDriver <noreply@sparedriver.com>';
+}
 
 let smtpTransporter = null;
 
@@ -75,29 +77,51 @@ function parseFromAddress(from) {
   return { email: from.trim() };
 }
 
-async function sendViaResend({ to, subject, html, text }) {
+function toResendAttachments(attachments) {
+  if (!attachments?.length) return undefined;
+  return attachments.map((a) => ({
+    filename: a.filename,
+    content: Buffer.isBuffer(a.content)
+      ? a.content.toString('base64')
+      : a.content,
+    contentType: a.contentType || undefined,
+  }));
+}
+
+function toSmtpAttachments(attachments) {
+  if (!attachments?.length) return undefined;
+  return attachments.map((a) => ({
+    filename: a.filename,
+    content: a.content,
+    contentType: a.contentType || undefined,
+  }));
+}
+
+async function sendViaResend({ to, subject, html, text, attachments }) {
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const from = parseFromAddress(EMAIL_FROM);
+  const from = parseFromAddress(getEmailFrom());
   const { error } = await resend.emails.send({
     from: from.name ? `${from.name} <${from.email}>` : from.email,
     to: [to],
     subject,
     html,
     text: text || undefined,
+    attachments: toResendAttachments(attachments),
   });
   if (error) {
     throw new Error(error.message || 'Resend failed to send email');
   }
 }
 
-async function sendViaSmtp({ to, subject, html, text }) {
+async function sendViaSmtp({ to, subject, html, text, attachments }) {
   const transporter = getSmtpTransporter();
   await transporter.sendMail({
-    from: EMAIL_FROM,
+    from: getEmailFrom(),
     to,
     subject,
     html,
     text: text || undefined,
+    attachments: toSmtpAttachments(attachments),
   });
 }
 
@@ -112,7 +136,7 @@ async function sendViaSmtp({ to, subject, html, text }) {
  *
  * Logs to console when no provider is configured (dev).
  */
-export async function sendEmail({ to, subject, html, text }) {
+export async function sendEmail({ to, subject, html, text, attachments }) {
   if (!to || !subject || !html) {
     throw new Error('Email requires to, subject, and html');
   }
@@ -122,6 +146,11 @@ export async function sendEmail({ to, subject, html, text }) {
     console.log(`[MOCK EMAIL] To: ${to}`);
     console.log(`[MOCK EMAIL] Subject: ${subject}`);
     if (text) console.log(`[MOCK EMAIL] Text:\n${text}`);
+    if (attachments?.length) {
+      console.log(
+        `[MOCK EMAIL] Attachments: ${attachments.map((a) => a.filename).join(', ')}`,
+      );
+    }
     console.log('=========================================\n');
     return { success: true, mocked: true, provider: 'mock' };
   }
@@ -132,9 +161,9 @@ export async function sendEmail({ to, subject, html, text }) {
   for (const provider of order) {
     try {
       if (provider === 'smtp') {
-        await sendViaSmtp({ to, subject, html, text });
+        await sendViaSmtp({ to, subject, html, text, attachments });
       } else {
-        await sendViaResend({ to, subject, html, text });
+        await sendViaResend({ to, subject, html, text, attachments });
       }
       return { success: true, mocked: false, provider };
     } catch (err) {
@@ -153,6 +182,6 @@ export function getEmailProviderStatus() {
     resend: isResendConfigured(),
     smtp: isSmtpConfigured(),
     order: resolveProviderOrder(),
-    from: EMAIL_FROM,
+    from: getEmailFrom(),
   };
 }

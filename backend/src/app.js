@@ -84,6 +84,14 @@ app.use((err, req, res, _next) => {
     });
   }
 
+  if (err?.name === 'ZodError' && Array.isArray(err.issues)) {
+    const message = err.issues[0]?.message || 'Invalid request';
+    return res.status(400).json({
+      status: 400,
+      message,
+    });
+  }
+
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
   console.error(`[ERROR] ${req.method} ${req.url} - ${err.stack}`);

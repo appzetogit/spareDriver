@@ -159,6 +159,9 @@ const useDriverActiveTripStore = create((set, get) => ({
 
   async fetchById(bookingId) {
     if (!bookingId) return null;
+    // `/driver/trip/:id` must never treat static segments (rate, completed, …)
+    // as Mongo ids — that 400/500 can race a token refresh and look like logout.
+    if (!/^[a-fA-F0-9]{24}$/.test(String(bookingId))) return null;
     set({ loading: true, error: null });
     try {
       const res = await api.get(`/driver/bookings/${bookingId}`);

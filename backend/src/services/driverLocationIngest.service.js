@@ -18,7 +18,7 @@ import { normalizeFixes, trackingDirective } from '../utils/locationFix.util.js'
  * would be eight minutes of wasted writes ending on the same coordinate.
  */
 
-const DRIVER_STATE_FIELDS = 'isOnline isOnTrip lastFixAt';
+const DRIVER_STATE_FIELDS = 'isOnline isOnTrip lastFixAt approvalStatus isDeleted';
 
 function emptyResult({ driver, rejected, duplicates, deduped = 0 }) {
   return {

@@ -7,6 +7,21 @@ import Button from '../../../../components/Button';
 import Avatar from '../../../../components/Avatar';
 import StarRating from '../../../../components/StarRating';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
+import useUserAuthStore from '../../../../store/useUserAuthStore';
+import useDriverAuthStore from '../../../../store/useDriverAuthStore';
+
+function driverPhoto(driver) {
+  if (!driver || typeof driver !== 'object') return null;
+  const selfie = driver.documents?.find((d) => d.type === 'selfie');
+  return selfie?.fileUrl || driver.profilePicture || null;
+}
+
+function isDriverOnlySession() {
+  return (
+    useDriverAuthStore.getState().isAuthenticated
+    && !useUserAuthStore.getState().isAuthenticated
+  );
+}
 
 /**
  * Post-ride summary — duration/distance, inline driver rating, and
@@ -32,19 +47,29 @@ const TripCompletedPage = () => {
   const [review, setReview] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Prefer an explicit booking id (push / trip-details deep link). Fall
-  // back to the in-memory active booking, then `/active` as a last resort.
   useEffect(() => {
+    if (!isDriverOnlySession()) return undefined;
+    navigate(
+      bookingIdParam
+        ? `/driver/trip/rate?bookingId=${bookingIdParam}`
+        : '/driver/home',
+      { replace: true },
+    );
+    return undefined;
+  }, [bookingIdParam, navigate]);
+
+  // Always refetch by id so admin-complete / socket patches still show
+  // the populated driver (name, photo) instead of a bare ObjectId.
+  useEffect(() => {
+    if (isDriverOnlySession()) return undefined;
     let cancelled = false;
     (async () => {
       try {
         if (bookingIdParam) {
-          if (!booking || String(booking._id) !== String(bookingIdParam)) {
-            await fetchById(bookingIdParam);
-          }
+          await fetchById(bookingIdParam);
           return;
         }
-        if (!booking) {
+        if (!useUserActiveBookingStore.getState().booking) {
           await fetchActive();
         }
       } catch {
@@ -56,7 +81,7 @@ const TripCompletedPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [bookingIdParam, booking, fetchById, fetchActive]);
+  }, [bookingIdParam, fetchById, fetchActive]);
 
   const previousRating = booking?.rating?.customer;
   const alreadyRated = previousRating?.stars != null;
@@ -69,6 +94,7 @@ const TripCompletedPage = () => {
 
   const driverObj = typeof booking?.driverId === 'object' ? booking?.driverId : null;
   const driverName = driverObj?.name || 'Your driver';
+  const driverAvatar = driverPhoto(driverObj);
 
   const handleDownloadInvoice = async () => {
     if (downloading) return;
@@ -125,7 +151,7 @@ const TripCompletedPage = () => {
 
       <div className="w-full flex-1 flex flex-col animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
         <div className="flex items-center gap-3 mb-4">
-          <Avatar name={driverName} size="lg" src={driverObj?.profilePicture} />
+          <Avatar name={driverName} size="lg" src={driverAvatar} />
           <div className="min-w-0">
             <p className="text-xs text-text-muted">Rate your driver</p>
             <p className="font-semibold text-text truncate">{driverName}</p>
@@ -181,7 +207,13 @@ const TripCompletedPage = () => {
         >
           Download Invoice
         </Button>
-        <Button fullWidth variant="ghost" onClick={() => navigate('/user/home')}>
+        <Button
+          fullWidth
+          variant="ghost"
+          onClick={() => {
+            navigate(isDriverOnlySession() ? '/driver/home' : '/user/home');
+          }}
+        >
           Done
         </Button>
       </div>

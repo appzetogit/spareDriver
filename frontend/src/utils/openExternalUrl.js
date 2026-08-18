@@ -3,7 +3,24 @@
  *
  * Prefers `window.SpareDriverNative.openExternalUrl` (Flutter injects this),
  * then common WebView bridges, then Android intent / window.open fallbacks.
+ *
+ * `flutter_inappwebview.callHandler` exists even when no handler is
+ * registered, so it is fired but never treated as exclusive success.
  */
+
+const BLOCKED_SCHEMES = /^(javascript|data|vbscript):/i;
+
+/**
+ * Accept http(s)/mailto/tel, or a bare domain (prefix https://).
+ * Returns '' when the value is empty or an unsafe scheme.
+ */
+export function normalizeExternalUrl(url) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed || BLOCKED_SCHEMES.test(trimmed)) return '';
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
+  if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(trimmed)) return `https://${trimmed}`;
+  return '';
+}
 
 function toAndroidIntentUrl(url) {
   try {
@@ -51,6 +68,13 @@ function callFlutterInAppWebView(url) {
   } catch {
     return false;
   }
+}
+
+function inNativeShell() {
+  return Boolean(
+    globalThis.SpareDriverNative?.platform === 'mobile'
+    || globalThis.flutter_inappwebview,
+  );
 }
 
 function postJavascriptChannel(url) {
@@ -104,17 +128,19 @@ function openViaAnchor(url) {
  * @returns {boolean} true if an open attempt was made
  */
 export function openExternalUrl(url) {
-  const targetUrl = String(url || '').trim();
+  const targetUrl = normalizeExternalUrl(url);
   if (!targetUrl) return false;
 
   if (callSpareDriverNative(targetUrl)) return true;
-  if (callFlutterInAppWebView(targetUrl)) return true;
   if (postJavascriptChannel(targetUrl)) return true;
 
-  const inNativeShell = Boolean(globalThis.SpareDriverNative?.platform === 'mobile');
+  // Ping the InAppWebView handler, but do not treat it as success — the
+  // object is injected even when `openExternalUrl` was never registered.
+  const flutterPinged = callFlutterInAppWebView(targetUrl);
 
-  // Android WebView: Chrome intent often escapes the wrapper when no JS bridge exists.
-  if (inNativeShell && isAndroidUa()) {
+  // Android intent fallback only when no Flutter bridge object exists
+  // (otherwise we can open Maps/Chrome twice).
+  if (!flutterPinged && inNativeShell() && isAndroidUa()) {
     try {
       globalThis.location.href = toAndroidIntentUrl(targetUrl);
       return true;

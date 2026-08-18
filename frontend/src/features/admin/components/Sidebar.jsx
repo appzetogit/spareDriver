@@ -371,9 +371,9 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className="flex items-center justify-between px-5 h-16 shrink-0 border-b border-white/10">
           <div className="flex items-center gap-2.5">
             <img
-              src="/images/logo-white.png"
+              src="/images/yellow-logo.jpeg"
               alt="SpareDriver Logo"
-              className="h-8 w-auto object-contain"
+              className="h-8 w-auto object-contain rounded-md"
             />
             <span className="text-white/50 text-xs font-semibold px-2 py-0.5 rounded bg-white/10">
               Admin

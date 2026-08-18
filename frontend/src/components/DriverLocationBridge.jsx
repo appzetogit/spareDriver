@@ -4,6 +4,7 @@ import { useDriverLocation } from '../hooks/useDriverLocation';
 import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
 import useDriverActiveTripStore from '../store/driver/useDriverActiveTripStore';
 import useDriverAuthStore from '../store/useDriverAuthStore';
+import { onAuthTokensChanged } from '../utils/authTokens';
 import {
   hasNativeTracking,
   startNativeTracking,
@@ -41,6 +42,12 @@ const ON_TRIP_STATUSES = new Set(
  * native refuses — permission not granted, location switched off — or we are
  * in a plain browser, the watch stays on so the driver is not silently
  * untracked.
+ *
+ * Merge note: this replaced `syncNativeBackgroundLocation`, which pushed the
+ * access and refresh tokens into native and let it drive its own polling loop.
+ * The contract here is deliberately narrower — the web app says only *when* to
+ * track and at what cadence, and native authenticates with its own long-lived,
+ * per-device, revocable credential instead of borrowing the session's.
  */
 export function DriverLocationBridge() {
   const authOnline = useDriverAuthStore((s) => s.driver?.isOnline === true);
@@ -53,6 +60,12 @@ export function DriverLocationBridge() {
 
   /** True once native has confirmed it is doing the tracking. */
   const [nativeTracking, setNativeTracking] = useState(false);
+
+  /**
+   * Forces the sync effect to re-run when none of its inputs changed value —
+   * specifically after the session's tokens rotate.
+   */
+  const [syncNonce, setSyncNonce] = useState(0);
 
   const refreshDriverState = useCallback(async () => {
     await Promise.allSettled([
@@ -70,6 +83,12 @@ export function DriverLocationBridge() {
   // started or ended while the app was frozen, and the tracking cadence has to
   // follow it. The effect below re-issues start/stop from whatever this finds.
   useAppResumeSync(refreshDriverState);
+
+  // Tokens rotated — login, logout, or a refresh. Minting a tracking token
+  // needs a live access token, so a start that failed for want of one has to be
+  // retried once the session is good again. (Kept from the `main` side of this
+  // merge; it is the one piece of that approach that still applies.)
+  useEffect(() => onAuthTokensChanged(() => setSyncNonce((n) => n + 1)), []);
 
   useEffect(() => {
     if (!hasNativeTracking()) return undefined;
@@ -96,7 +115,15 @@ export function DriverLocationBridge() {
     return () => {
       cancelled = true;
     };
-  }, [shouldTrack, onTrip]);
+  }, [shouldTrack, onTrip, syncNonce]);
+
+  // Leaving the driver area entirely: stand native tracking down rather than
+  // leave a foreground service running with nothing watching it.
+  useEffect(() => {
+    return () => {
+      if (hasNativeTracking()) stopNativeTracking();
+    };
+  }, []);
 
   // Hand GPS duty to native only once it has actually confirmed.
   useDriverLocation({ enabled: shouldTrack && !nativeTracking });

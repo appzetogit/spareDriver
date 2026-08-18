@@ -425,3 +425,16 @@ export async function listLiveDriverMapMetadata() {
 export function isLiveLocationReady() {
   return isFirebaseReady();
 }
+
+/*
+ * MERGE NOTE: `recordDriverLocationHttp` from `main` lived here.
+ *
+ * It has been superseded by `driverLocationIngest.service.js`, which does the
+ * same job and more: it takes a batch instead of one fix, dedupes replays with
+ * a watermark that is safe across instances, and keeps its throttle in Redis
+ * rather than a per-process Map. Its guards — suspended or deleted accounts
+ * must stop transmitting, not merely stop being dispatched — were kept and now
+ * live in `trackingDirective()`.
+ *
+ * Recover the original with:  git show 758cd11 -- backend/src/services/driverLocation.service.js
+ */

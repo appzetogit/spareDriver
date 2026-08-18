@@ -85,10 +85,19 @@ export function normalizeFixes(rawFixes, now) {
  * off every response, so toggling offline on one device stands the background
  * service down on the others without waiting for a push.
  *
- * @param {{ isOnline?: boolean, isOnTrip?: boolean } | null} driver
+ * The approval and deletion checks came from the `main` side of the location
+ * merge: a driver whose account is suspended or pending re-approval must stop
+ * transmitting immediately, not merely stop being dispatched.
+ *
+ * @param {{ isOnline?: boolean, isOnTrip?: boolean, approvalStatus?: string,
+ *           isDeleted?: boolean } | null} driver
  */
 export function trackingDirective(driver) {
   if (!driver) return { stopTracking: true, mode: 'stopped' };
+  if (driver.isDeleted) return { stopTracking: true, mode: 'stopped' };
+  if (driver.approvalStatus && driver.approvalStatus !== 'approved') {
+    return { stopTracking: true, mode: 'stopped' };
+  }
   if (driver.isOnTrip) return { stopTracking: false, mode: 'onTrip' };
   if (driver.isOnline) return { stopTracking: false, mode: 'idle' };
   return { stopTracking: true, mode: 'stopped' };

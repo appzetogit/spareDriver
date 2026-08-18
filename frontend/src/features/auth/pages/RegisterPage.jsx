@@ -10,6 +10,7 @@ import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 import { useOtpResendCooldown } from '../../../hooks/useOtpResendCooldown';
+import { isValidUserEmail, normalizeUserEmail, sanitizeEmailInput } from '../../../utils/email';
 
 function VerifiedBadge() {
   return (
@@ -46,7 +47,8 @@ const RegisterPage = () => {
   const emailCooldown = useOtpResendCooldown();
 
   const handleChange = (field) => (e) => {
-    const value = e.target.value;
+    const raw = e.target.value;
+    const value = field === 'email' ? sanitizeEmailInput(raw) : raw;
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (error) setError('');
     if (phoneAlreadyRegistered) setPhoneAlreadyRegistered(false);
@@ -114,9 +116,9 @@ const RegisterPage = () => {
   };
 
   const handleSendEmailOtp = async () => {
-    const email = formData.email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Enter a valid email address');
+    const email = normalizeUserEmail(formData.email);
+    if (!isValidUserEmail(email)) {
+      setError('Enter a valid email address (example: name@gmail.com)');
       return;
     }
     if (!phoneVerified) {
@@ -147,7 +149,7 @@ const RegisterPage = () => {
     try {
       await api.post('/auth/register/email/verify', {
         phone: formData.phone,
-        email: formData.email.trim(),
+        email: normalizeUserEmail(formData.email),
         otp: emailOtp,
       });
       setEmailVerified(true);
@@ -193,7 +195,7 @@ const RegisterPage = () => {
       const res = await api.post('/auth/register/complete', await withFcmAuthPayload({
         name: formData.name.trim(),
         phone: formData.phone,
-        email: formData.email.trim(),
+        email: normalizeUserEmail(formData.email),
         password: formData.password,
         ...(alternatePhone ? { alternatePhone } : {}),
       }));
@@ -208,10 +210,11 @@ const RegisterPage = () => {
   };
 
   const canVerifyPhone = /^[0-9]{10}$/.test(formData.phone) && !phoneVerified;
+  const emailLooksInvalid = formData.email.length > 0 && !isValidUserEmail(formData.email);
   const canVerifyEmail =
-  phoneVerified &&
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim()) &&
-  !emailVerified;
+    phoneVerified &&
+    isValidUserEmail(formData.email) &&
+    !emailVerified;
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
@@ -315,6 +318,7 @@ const RegisterPage = () => {
                 onChange={handleChange('email')}
                 icon={Mail}
                 autoComplete="email"
+                maxLength={254}
                 disabled={emailVerified || !phoneVerified}
                 required
                 containerClassName="flex-grow flex-1"
@@ -333,6 +337,9 @@ const RegisterPage = () => {
             </div>
             {!phoneVerified && (
               <p className="text-xs text-text-muted">Verify mobile number first to enable email verification.</p>
+            )}
+            {phoneVerified && emailLooksInvalid && (
+              <p className="text-xs text-rose-600">Enter a valid email address (example: name@gmail.com)</p>
             )}
             {emailOtpSent && !emailVerified && (
               <div className="mt-2 space-y-2 animate-fade-in">
@@ -360,7 +367,7 @@ const RegisterPage = () => {
               <span className="font-normal text-text-muted">(optional)</span>
             </label>
             <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+              <div className="absolute left-3 top-0 h-12 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
                 <Phone className="w-4 h-4 text-text-muted" />
                 <span>+91</span>
               </div>
@@ -372,9 +379,11 @@ const RegisterPage = () => {
                 maxLength={10}
                 className="pl-[4.5rem]"
                 containerClassName="w-full"
-                helper="Used if we cannot reach you on your primary number"
               />
             </div>
+            <p className="text-xs text-text-muted">
+              Used if we cannot reach you on your primary number
+            </p>
           </div>
 
           {error && <p className="text-danger text-xs font-medium">{error}</p>}

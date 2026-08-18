@@ -9,6 +9,7 @@ import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 import { useStoreHydration } from '../../../hooks/useStoreHydration';
 import { BootstrapShellSkeleton } from '../../../components/skeleton/SectionSkeletons';
+import { isValidUserEmail, normalizeUserEmail } from '../../../utils/email';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -37,7 +38,7 @@ const LoginPage = () => {
       else if (!/^[0-9]{10}$/.test(phone)) newErrors.identifier = 'Enter valid 10-digit number';
     } else {
       if (!email.trim()) newErrors.identifier = 'Email is required';
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      else if (!isValidUserEmail(email)) {
         newErrors.identifier = 'Enter a valid email address';
       }
     }
@@ -56,7 +57,7 @@ const LoginPage = () => {
       const payload = await withFcmAuthPayload(
         mode === 'phone'
           ? { phone, password }
-          : { email: email.trim().toLowerCase(), password },
+          : { email: normalizeUserEmail(email), password },
       );
       const res = await api.post('/auth/login', payload);
       const { user } = res.data.data;
