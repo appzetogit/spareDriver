@@ -367,7 +367,7 @@ const RegisterPage = () => {
               <span className="font-normal text-text-muted">(optional)</span>
             </label>
             <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+              <div className="absolute left-3 top-0 h-12 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
                 <Phone className="w-4 h-4 text-text-muted" />
                 <span>+91</span>
               </div>
@@ -379,9 +379,11 @@ const RegisterPage = () => {
                 maxLength={10}
                 className="pl-[4.5rem]"
                 containerClassName="w-full"
-                helper="Used if we cannot reach you on your primary number"
               />
             </div>
+            <p className="text-xs text-text-muted">
+              Used if we cannot reach you on your primary number
+            </p>
           </div>
 
           {error && <p className="text-danger text-xs font-medium">{error}</p>}

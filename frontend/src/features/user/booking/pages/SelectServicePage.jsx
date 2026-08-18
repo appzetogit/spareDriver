@@ -89,8 +89,8 @@ const SelectServicePage = () => {
               return (
                 <ServiceCard
                   key={service._id}
-                  title={service.name || catalog.title}
-                  tagline={service.description || catalog.tagline}
+                  title={catalog.title}
+                  tagline={catalog.tagline}
                   priceLabel={catalog.priceLabel(service)}
                   ctaHint={catalog.ctaHint}
                   imageSrc={catalog.imageSrc}
