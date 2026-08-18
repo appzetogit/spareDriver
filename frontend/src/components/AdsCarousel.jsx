@@ -3,7 +3,7 @@ import { useCachedQuery } from '../hooks/useCachedQuery';
 import { useWhenVisible } from '../hooks/useWhenVisible';
 import { buildCacheKey } from '../store/lib/buildCacheKey';
 import { useAdsStore } from '../store/user/useAdsStore';
-import { openExternalUrl } from '../utils/openExternalUrl';
+import { normalizeExternalUrl, openExternalUrl } from '../utils/openExternalUrl';
 import { AdsCarouselSkeleton } from './skeleton/SectionSkeletons';
 
 /**
@@ -40,9 +40,11 @@ const AdsCarousel = () => {
     return () => clearInterval(tick);
   }, [ads.length]);
 
-  const handleAdClick = (ad) => {
-    if (!ad?.linkUrl) return;
-    openExternalUrl(ad.linkUrl);
+  const handleAdClick = (event, ad) => {
+    const href = normalizeExternalUrl(ad?.linkUrl);
+    if (!href) return;
+    event?.preventDefault?.();
+    openExternalUrl(href);
   };
 
   if (visible && loading && !isFetched) {
@@ -83,7 +85,7 @@ const AdsCarousel = () => {
         pausedRef.current = false;
       }}
     >
-      <AdCard key={ad._id} ad={ad} onClick={() => handleAdClick(ad)} />
+      <AdCard key={ad._id} ad={ad} onClick={(event) => handleAdClick(event, ad)} />
       {ads.length > 1 && (
         <div className="flex items-center justify-center gap-1.5 mt-2">
           {ads.map((item, idx) => (
@@ -106,22 +108,14 @@ const AdsCarousel = () => {
 
 function AdCard({ ad, onClick }) {
   const isVideo = ad.mediaType === 'video';
-  const clickable = !!ad.linkUrl;
-  const Tag = clickable ? 'button' : 'div';
+  const href = normalizeExternalUrl(ad.linkUrl);
   return (
-    <Tag
-      type={clickable ? 'button' : undefined}
-      onClick={clickable ? onClick : undefined}
-      aria-label={ad.title ? `Open: ${ad.title}` : 'Open ad'}
-      className={`w-full rounded-2xl overflow-hidden bg-slate-900 shadow-card relative ${
-        clickable ? 'cursor-pointer active:scale-[0.98] transition-transform' : ''
-      }`}
-    >
+    <div className="w-full rounded-2xl overflow-hidden bg-slate-900 shadow-card relative">
       <div className="aspect-[16/9] w-full">
         {isVideo ? (
           <video
             src={ad.mediaUrl}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover pointer-events-none"
             muted
             playsInline
             autoPlay
@@ -131,17 +125,27 @@ function AdCard({ ad, onClick }) {
           <img
             src={ad.mediaUrl}
             alt={ad.title || 'Promotional banner'}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover pointer-events-none"
             loading="lazy"
           />
         )}
       </div>
       {ad.title && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 pt-6 pb-2 text-left">
+        <div className="absolute inset-x-0 bottom-0 z-[1] bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 pt-6 pb-2 text-left pointer-events-none">
           <p className="text-white text-sm font-semibold truncate">{ad.title}</p>
         </div>
       )}
-    </Tag>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={ad.title ? `Open: ${ad.title}` : 'Open ad'}
+          onClick={onClick}
+          className="absolute inset-0 z-10 cursor-pointer active:scale-[0.98] transition-transform"
+        />
+      ) : null}
+    </div>
   );
 }
 

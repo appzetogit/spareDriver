@@ -87,12 +87,12 @@ const LandingPage = () => {
   return (
     <div className="w-full min-h-screen bg-[#FAFAF7] text-neutral-900 selection:bg-[#F5C400]/40 antialiased font-sans">
       <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/90 border-b border-black/8">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
           <a href="#home" className="flex items-center gap-2 group" onClick={(e) => handleNavClick(e, 'home')}>
             <img
               src={LANDING_LOGO_SRC}
               alt="SpareDriver"
-              className="h-11 w-auto object-contain rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
+              className="h-16 w-auto object-contain rounded-xl transition-transform duration-300 group-hover:scale-[1.02]"
               loading="eager"
             />
           </a>

@@ -347,43 +347,23 @@ const DriverActiveTripPage = () => {
   }, [booking?.dropoff]);
 
   const mapsNav = useMemo(() => {
-    const tripStarted = status === BOOKING_STATUS.STARTED;
-    const destCoords =
-      tripStarted && dropoffCoords ? dropoffCoords : pickupCoords;
-    const destQuery = tripStarted
-      ? booking?.dropoff?.address
-        || booking?.outstation?.destinationAddress
-        || booking?.pickup?.address
-      : booking?.pickup?.address;
-    const url = buildGoogleMapsNavUrl({
-      dest: destCoords,
-      destQuery,
-      origin: driverPoint,
-    });
-    const sameDrop =
-      tripStarted
-      && destCoords
-      && pickupCoords
-      && destCoords.lat === pickupCoords.lat
-      && destCoords.lng === pickupCoords.lng;
+    // Pickup nav only — hide once the trip OTP is entered (STARTED).
     const headingToPickup =
       status === BOOKING_STATUS.EN_ROUTE
       || status === BOOKING_STATUS.ARRIVED;
-    const show = headingToPickup || tripStarted;
-    const label = !tripStarted
-      ? 'Navigate to pickup'
-      : sameDrop || !dropoffCoords
-        ? 'Start navigation'
-        : 'Navigate to destination';
-    return { url, label, show };
+    const url = headingToPickup
+      ? buildGoogleMapsNavUrl({
+          dest: pickupCoords,
+          destQuery: booking?.pickup?.address,
+          origin: driverPoint,
+        })
+      : null;
+    return { url, label: 'Navigate to pickup', show: headingToPickup };
   }, [
     status,
     pickupCoords,
-    dropoffCoords,
     driverPoint,
     booking?.pickup?.address,
-    booking?.dropoff?.address,
-    booking?.outstation?.destinationAddress,
   ]);
 
   // Tick a heartbeat once a second so the cancel preview's grace-window

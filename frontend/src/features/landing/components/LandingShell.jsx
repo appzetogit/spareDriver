@@ -83,13 +83,13 @@ export function LandingSocialLinks({ urls = EMPTY_SOCIAL, className = '' }) {
 
 export function LandingHeader({ backToHome = false }) {
   return (
-    <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/90 border-b border-black/8 h-20 flex items-center">
+    <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/90 border-b border-black/8 h-24 flex items-center">
       <div className="max-w-7xl mx-auto px-6 w-full flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 group">
           <img
             src={LANDING_LOGO_SRC}
             alt="SpareDriver"
-            className="h-11 w-auto object-contain rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
+            className="h-16 w-auto object-contain rounded-xl transition-transform duration-300 group-hover:scale-[1.02]"
           />
         </Link>
         {backToHome ? (
@@ -136,7 +136,7 @@ export function LandingFooter({ socialUrls }) {
           <img
             src={LANDING_LOGO_SRC}
             alt="SpareDriver"
-            className="h-12 w-auto object-contain rounded-lg"
+            className="h-16 w-auto object-contain rounded-xl"
           />
           <p className="text-sm text-neutral-400 max-w-sm leading-relaxed">
             Reclaim your travel time. Hire premium, fully background-checked professional drivers
