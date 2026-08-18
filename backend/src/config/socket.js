@@ -14,6 +14,7 @@ import {
 import { SOS_SOCKET_ROOMS } from '../constants/sos.js';
 import { attachDriverSocketHandlers } from '../controllers/driverSocket.controller.js';
 import { attachChatSocketHandlers } from '../controllers/chatSocket.controller.js';
+import Booking from '../models/booking.model.js';
 
 /**
  * Socket.IO server bootstrap.
@@ -134,6 +135,37 @@ async function authMiddleware(socket, next) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Authorization                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * May this principal watch this booking's room?
+ *
+ * The customer who booked it, the driver assigned to it, and staff. Nobody
+ * else — the room carries live GPS.
+ */
+async function canWatchBooking(principal, bookingId) {
+  if (!principal || !bookingId) return false;
+
+  // Staff (admin / sub_admin / team_member) authenticate as `user` with a
+  // staff role and oversee every ride.
+  if (principal.type === 'user' && STAFF_ROLES.includes(principal.role)) {
+    return true;
+  }
+
+  const booking = await Booking.findById(bookingId).select('userId driverId').lean();
+  if (!booking) return false;
+
+  if (principal.type === 'user') {
+    return String(booking.userId) === String(principal.id);
+  }
+  if (principal.type === 'driver') {
+    return Boolean(booking.driverId) && String(booking.driverId) === String(principal.id);
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
 /* Room helpers                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -198,9 +230,29 @@ function attachConnectionHandlers(socket) {
     if (typeof ack === 'function') ack(reply);
   });
 
-  socket.on(C2S_EVENTS.BOOKING_JOIN, ({ bookingId } = {}) => {
-    if (!bookingId) return;
-    socket.join(roomForBooking(bookingId));
+  // Booking rooms carry the driver's live GPS (`trip:location:updated`) as
+  // well as lifecycle events, so membership has to be checked. Previously any
+  // authenticated socket could join any room by guessing an id and watch a
+  // stranger's ride.
+  socket.on(C2S_EVENTS.BOOKING_JOIN, async ({ bookingId } = {}, ack) => {
+    try {
+      if (!bookingId) {
+        if (typeof ack === 'function') ack({ ok: false, reason: 'bookingId_required' });
+        return;
+      }
+
+      const allowed = await canWatchBooking(principal, bookingId);
+      if (!allowed) {
+        if (typeof ack === 'function') ack({ ok: false, reason: 'forbidden' });
+        return;
+      }
+
+      socket.join(roomForBooking(bookingId));
+      if (typeof ack === 'function') ack({ ok: true });
+    } catch (err) {
+      console.warn('[socket] booking join failed:', err.message);
+      if (typeof ack === 'function') ack({ ok: false, reason: 'server_error' });
+    }
   });
 
   socket.on(C2S_EVENTS.BOOKING_LEAVE, ({ bookingId } = {}) => {

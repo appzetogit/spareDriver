@@ -1,0 +1,21 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "drivers": {
+      ".read": "auth != null && auth.token.role === 'staff'",
+      "$driverId": {
+        ".read": "auth != null && auth.token.role === 'staff'"
+      }
+    },
+
+    "trips": {
+      "$bookingId": {
+        "driver": {
+          ".read": "auth != null && (auth.token.role === 'staff' || auth.token.bookingId === $bookingId)"
+        }
+      }
+    }
+  }
+}

@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
 import { onValue, ref, off } from 'firebase/database';
 import { getRealtimeDb, isFirebaseConfigured } from '../config/firebase';
+import { ensureFirebaseAuth } from '../config/firebaseAuth';
 
 /**
  * Subscribe to every driver entry under `/drivers` in Firebase Realtime DB.
  *
- * Returns a stable list of driver presence objects keyed by driverId, plus a
- * readiness flag. When Firebase isn't configured (Phase 2 dev mode), this
- * hook silently returns an empty list and `disabled: true` so the consumer
- * can render a "live map disabled" hint instead of an empty page.
+ * STAFF ONLY. The database rules grant this path to `role: 'staff'` and nobody
+ * else, because the payload is the whole fleet's live positions plus the
+ * `activeTrip` block carrying customer names and phone numbers.
+ *
+ * Customer surfaces must use `useTripDriverLocation`, which is scoped to the
+ * one booking they are watching.
+ *
+ * Returns a list of driver presence objects keyed by driverId, plus a
+ * readiness flag. When Firebase isn't configured, or the caller is not staff,
+ * this returns an empty list so the consumer can render a "live map disabled"
+ * hint instead of an empty page.
  */
 export function useFirebaseDriverLocations({ enabled = true } = {}) {
   const [drivers, setDrivers] = useState({});
@@ -18,10 +26,9 @@ export function useFirebaseDriverLocations({ enabled = true } = {}) {
     if (!enabled) return undefined;
     if (!isFirebaseConfigured()) return undefined;
 
-    const db = getRealtimeDb();
-    if (!db) return undefined;
+    let cancelled = false;
+    let detach = null;
 
-    const driversRef = ref(db, 'drivers');
     const handler = (snapshot) => {
       const raw = snapshot.val() || {};
       const next = {};
@@ -49,10 +56,26 @@ export function useFirebaseDriverLocations({ enabled = true } = {}) {
       setError(err.message || 'Firebase subscription error');
     };
 
-    onValue(driversRef, handler, errorHandler);
+    (async () => {
+      // The rules require a staff claim; without a session the read is denied.
+      const authed = await ensureFirebaseAuth('admin');
+      if (cancelled) return;
+      if (!authed) {
+        setError('Not authorised for the live driver feed');
+        return;
+      }
+
+      const db = getRealtimeDb();
+      if (!db) return;
+
+      const driversRef = ref(db, 'drivers');
+      onValue(driversRef, handler, errorHandler);
+      detach = () => off(driversRef, 'value', handler);
+    })();
 
     return () => {
-      off(driversRef, 'value', handler);
+      cancelled = true;
+      detach?.();
     };
   }, [enabled]);
 

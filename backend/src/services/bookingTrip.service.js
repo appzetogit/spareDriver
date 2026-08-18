@@ -46,6 +46,10 @@ import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
 import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
 import { cancelScheduledBookingJobs } from './bookingScheduled.service.js';
 import {
+  clearTripLocation,
+  invalidateDriverTripCache,
+} from './driverLocation.service.js';
+import {
   loadCancellationPolicy,
   computeDriverCancellation,
   computeUserCancellation,
@@ -871,6 +875,12 @@ export async function completeTripService(driverId, bookingId) {
     Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } }).catch((err) =>
       console.warn('[bookingTrip] failed to clear driver.isOnTrip:', err?.message),
     );
+
+    // The ride is over for this driver: drop the node the customer was
+    // watching, and invalidate the cached active-trip lookup so the next
+    // GPS fix does not republish to it.
+    clearTripLocation(String(booking._id)).catch(() => {});
+    invalidateDriverTripCache(booking.driverId).catch(() => {});
   }
 
   // Book the platform's revenue from this trip:
@@ -1071,6 +1081,12 @@ async function redispatchAfterDriverCancel(booking, driverId, policy, chance) {
     ),
   );
 
+  // The ride is over for this driver: drop the node the customer was
+  // watching, and invalidate the cached active-trip lookup so the next
+  // GPS fix does not republish to it.
+  clearTripLocation(String(booking._id)).catch(() => {});
+  invalidateDriverTripCache(driverId).catch(() => {});
+
   // Tell the user app to surface the "driver cancelled — searching
   // again" popup, and broadcast the new SEARCHING state to everyone.
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_DRIVER_REASSIGNING, {
@@ -1150,6 +1166,12 @@ async function terminateBookingByDriver(
       err?.message,
     ),
   );
+
+  // The ride is over for this driver: drop the node the customer was
+  // watching, and invalidate the cached active-trip lookup so the next
+  // GPS fix does not republish to it.
+  clearTripLocation(String(booking._id)).catch(() => {});
+  invalidateDriverTripCache(driverId).catch(() => {});
 
   // Record the refund. Wallet-paid bookings credit instantly and land
   // on the admin ledger as processed; Razorpay stays pending for admin.
@@ -1310,6 +1332,12 @@ async function cancelOutstationByDriver(booking, driverId, reason = '') {
         ),
     );
 
+  // The ride is over for this driver: drop the node the customer was
+  // watching, and invalidate the cached active-trip lookup so the next
+  // GPS fix does not republish to it.
+  clearTripLocation(String(booking._id)).catch(() => {});
+  invalidateDriverTripCache(driverId).catch(() => {});
+
     // No refund record is opened for the mid-ride path — refunds for
     // outstation mid-ride are handled by support per the policy spec.
 
@@ -1405,6 +1433,12 @@ async function cancelOutstationByDriver(booking, driverId, reason = '') {
         err?.message,
       ),
   );
+
+  // The ride is over for this driver: drop the node the customer was
+  // watching, and invalidate the cached active-trip lookup so the next
+  // GPS fix does not republish to it.
+  clearTripLocation(String(booking._id)).catch(() => {});
+  invalidateDriverTripCache(driverId).catch(() => {});
 
   const payload = {
     bookingId: String(booking._id),

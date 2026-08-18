@@ -43,6 +43,14 @@ import {
 import { verifyKitPayment } from '../controllers/payment.controller.js';
 import { getOnlineStatus, setOnlineStatus } from '../controllers/driverOnline.controller.js';
 import {
+  issueDriverTrackingToken,
+  revokeDriverTrackingToken,
+  ingestDriverLocation,
+} from '../controllers/driverTracking.controller.js';
+import { protectDriverTracking } from '../middlewares/trackingAuth.js';
+import { getDriverFirebaseToken } from '../controllers/firebaseAuth.controller.js';
+import { driverLocationRateLimiter } from '../middlewares/rateLimit.js';
+import {
   getMyOrders,
   getMyOrderById,
   getMyPaymentHistory,
@@ -148,6 +156,16 @@ router.post('/payments/verify', protectDriver, verifyKitPayment);
 
 router.get('/online/status', protectDriver, getOnlineStatus);
 router.put('/online', protectDriver, setOnlineStatus);
+
+// Live tracking — the native background uploader.
+// `/tracking/token` is driver-authenticated (the app has a fresh access token
+// when the driver goes online). `/location` accepts either the long-lived
+// tracking token or a driver access token, so the background service and the
+// web app can share one ingest path.
+router.post('/tracking/token', protectDriver, issueDriverTrackingToken);
+router.delete('/tracking/token', protectDriver, revokeDriverTrackingToken);
+router.post('/location', protectDriverTracking, driverLocationRateLimiter, ingestDriverLocation);
+router.get('/firebase-token', protectDriver, getDriverFirebaseToken);
 
 // Dashboard: today summary, paginated trip history, earnings analytics
 router.get('/home/summary', protectDriver, getDriverHomeSummary);

@@ -23,6 +23,13 @@ const MIN_LOCATION_INTERVAL_MS = 1_500;
 /** Grace period before marking a disconnected driver offline (handles tab reloads). */
 const OFFLINE_GRACE_MS = 8_000;
 
+/**
+ * How recent a native GPS fix has to be to keep a driver present without a
+ * socket. The background uploader posts at most every 60s in idle mode, so
+ * this has to clear that with room for a retry.
+ */
+const LOCATION_GRACE_MS = 3 * 60_000;
+
 /** driverId → last accepted location timestamp. */
 const lastEventAt = new Map();
 
@@ -141,21 +148,45 @@ export function attachDriverSocketHandlers(socket) {
     }
   });
 
-  // When the socket drops, schedule a delayed offline write. A quick reload
-  // or transient network blip won't be enough to wipe the driver's presence.
+  // When the socket drops, schedule a delayed presence teardown. A quick
+  // reload or transient network blip reconnects inside the grace period and
+  // cancels it.
+  //
+  // The previous version only tore down when Mongo ALSO said `isOnline: false`
+  // — which is the one case the REST toggle has already handled. A driver who
+  // went online and then force-quit stayed online forever: still on the admin
+  // live map, still winning dispatch offers, still showing a frozen car to any
+  // customer watching. Presence now follows the connection, which is what
+  // presence means.
   socket.on('disconnect', () => {
     clearOfflineTimer(driverId);
     const handle = setTimeout(async () => {
       offlineTimers.delete(driverId);
       try {
-        const driver = await Driver.findById(driverId).select('isOnline');
-        // Only clear Firebase if the DB also says they're not online (a
-        // toggle-off racing the reconnect would have updated the DB).
-        if (!driver?.isOnline) {
-          await markDriverOfflineLive(driverId);
+        // Native background tracking can outlive the socket, so a recent fix
+        // is proof the driver is still there even with no websocket. Only tear
+        // down presence when nothing has been heard either way.
+        const driver = await Driver.findById(driverId)
+          .select('isOnline lastFixAt')
+          .lean();
+        if (!driver) return;
+
+        const lastFixAgeMs = driver.lastFixAt
+          ? Date.now() - new Date(driver.lastFixAt).getTime()
+          : Number.POSITIVE_INFINITY;
+
+        if (lastFixAgeMs <= LOCATION_GRACE_MS) {
+          return;
         }
+
+        // Clear the Mongo flag too, otherwise the driver keeps matching
+        // `$geoNear` on `isOnline: true` from a position nobody is updating.
+        if (driver.isOnline) {
+          await Driver.updateOne({ _id: driverId }, { $set: { isOnline: false } });
+        }
+        await markDriverOfflineLive(driverId);
       } catch (err) {
-        console.warn('[driverSocket] post-disconnect offline check failed:', err.message);
+        console.warn('[driverSocket] post-disconnect teardown failed:', err.message);
       }
     }, OFFLINE_GRACE_MS);
     offlineTimers.set(driverId, handle);

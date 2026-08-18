@@ -261,6 +261,15 @@ const driverSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    /**
+     * `capturedAt` of the newest GPS fix accepted from this driver — the
+     * dedupe watermark for batch ingest. Distinct from `lastLocationAt`,
+     * which only moves when the throttled Mongo snapshot actually writes.
+     */
+    lastFixAt: {
+      type: Date,
+      default: null,
+    },
     city: {
       type: String,
       default: '',

@@ -8,6 +8,7 @@ import { initSuperAdmin } from './utils/initAdmin.js';
 import { initializeSocket } from './config/socket.js';
 import { initializeFirebase } from './config/firebase.js';
 import { startScheduledBookingWorker } from './queues/scheduledBooking.worker.js';
+import { startPresenceSweeper } from './services/driverPresenceSweeper.service.js';
 import app from './app.js';
 
 const PORT = process.env.PORT || 9000;
@@ -36,6 +37,11 @@ async function bootstrap() {
   // Scheduled-ride dispatcher + emergency-pool escalator. No-ops with
   // a warning when REDIS_URL is unset so dev/CI boots without Redis.
   await startScheduledBookingWorker();
+
+  // Reconcile driver presence. A socket disconnect is not proof a driver has
+  // gone (background tracking outlives the websocket), so someone has to
+  // notice when the GPS stream itself goes quiet.
+  startPresenceSweeper();
 
   httpServer.listen(PORT, () => {
     console.log(`API listening on port ${PORT}`);

@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useFirebaseDriverLocations } from './useFirebaseDriverLocations';
 import { haversineMeters } from '../utils/geo';
 import { useDebouncedValue } from './useDebouncedValue';
 import { useCachedQuery } from './useCachedQuery';
@@ -31,14 +30,18 @@ function snapCenter(center) {
  *                       Cached in Zustand so route remounts reuse the
  *                       snapshot; refetched when the snapped centre cell
  *                       changes or the caller forces `refresh()`.
- *   2. Firebase live  — `useFirebaseDriverLocations` overrides the position
- *                       with the second-resolution GPS feed. We recompute
- *                       the distance client-side so pin-to-pin distances
- *                       stay correct even when the driver moves.
+ * This used to also subscribe to Firebase and overlay second-resolution GPS.
+ * It no longer does, for two reasons: a customer browsing the home screen has
+ * no business holding a live feed of the fleet's positions, and the database
+ * rules now deny that read anyway. The REST snapshot is at most ~60s stale,
+ * which is well inside what a "drivers near you" widget needs — the pins are
+ * an availability hint, not a tracking view.
  *
- * Drivers that are outside the requested `radiusMeters` based on their
- * latest live position get filtered out — the radius is the contract for
- * the consumer.
+ * Live second-by-second position is scoped to the ride the customer actually
+ * booked. See `useTripDriverLocation`.
+ *
+ * Drivers that are outside the requested `radiusMeters` get filtered out —
+ * the radius is the contract for the consumer.
  *
  * @param {object} params
  * @param {{ lat:number, lng:number } | null} params.center
@@ -83,28 +86,20 @@ export function useNearbyDrivers({
     enabled: enabled && !!queryParams,
   });
 
-  const { map: firebaseMap } = useFirebaseDriverLocations({ enabled });
-
   const drivers = useMemo(() => {
     if (!center?.lat || !center?.lng) return [];
     const list = Array.isArray(seed?.drivers) ? seed.drivers : [];
     const merged = list.map((d) => {
-      const live = firebaseMap[String(d._id)];
-      const lat = live?.lat ?? d.lat;
-      const lng = live?.lng ?? d.lng;
       const distanceMeters = haversineMeters(
         { lat: center.lat, lng: center.lng },
-        { lat, lng },
+        { lat: d.lat, lng: d.lng },
       );
       return {
         ...d,
-        lat,
-        lng,
-        heading: live?.heading ?? null,
-        speed: live?.speed ?? null,
-        updatedAt: live?.updatedAt ?? d.lastLocationAt ?? null,
-        isOnTrip: live?.isOnTrip ?? d.isOnTrip,
-        live: !!live,
+        heading: null,
+        speed: null,
+        updatedAt: d.lastLocationAt ?? null,
+        live: false,
         distanceMeters,
       };
     });
@@ -112,7 +107,7 @@ export function useNearbyDrivers({
     return merged
       .filter((d) => Number.isFinite(d.distanceMeters) && d.distanceMeters <= radiusMeters)
       .sort((a, b) => a.distanceMeters - b.distanceMeters);
-  }, [seed?.drivers, firebaseMap, center, radiusMeters]);
+  }, [seed?.drivers, center, radiusMeters]);
 
   return {
     drivers,

@@ -5,7 +5,8 @@ import Card from '../../../../components/Card';
 import Button from '../../../../components/Button';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
-import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverLocations';
+import { useTripDriverLocation } from '../../../../hooks/useTripDriverLocation';
+import useAppResumeSync from '../../../../hooks/useAppResumeSync';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
@@ -25,10 +26,12 @@ const TripInProgressPage = () => {
     if (!booking) fetchActive().catch(() => {});
   }, [booking, fetchActive]);
 
-  const driverObj = typeof booking?.driverId === 'object' ? booking?.driverId : null;
-  const driverId = driverObj?._id || (typeof booking?.driverId === 'string' ? booking.driverId : null);
-  const { map: liveDrivers } = useFirebaseDriverLocations();
-  const liveDriver = driverId ? liveDrivers[String(driverId)] : null;
+  // Coming back from the background: reconnect the socket and re-read the
+  // booking, rather than waiting on reconnect backoff.
+  useAppResumeSync(fetchActive);
+
+  const { driver: liveDriver, isStale: driverLocationStale } =
+    useTripDriverLocation(booking?._id);
 
   const pickupPoint = useMemo(() => {
     const c = booking?.pickup?.location?.coordinates;
@@ -111,6 +114,7 @@ const TripInProgressPage = () => {
           followDriver
           emphasis="driver"
           bookingStatus={booking?.status || BOOKING_STATUS.STARTED}
+          isStale={driverLocationStale}
         />
       ) : (
         <div className="h-56 bg-[#f4efe6] flex items-center justify-center">

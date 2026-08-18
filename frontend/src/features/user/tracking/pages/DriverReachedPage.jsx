@@ -8,7 +8,8 @@ import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import TripChatEntry from '../../../../components/chat/TripChatEntry';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
-import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverLocations';
+import { useTripDriverLocation } from '../../../../hooks/useTripDriverLocation';
+import useAppResumeSync from '../../../../hooks/useAppResumeSync';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
 import { isChatVisibleForBooking } from '../../../../constants/chat';
 import { maskPersonName } from '../../../../utils/formatters';
@@ -28,10 +29,11 @@ const DriverReachedPage = () => {
     if (!booking) fetchActive().catch(() => {});
   }, [booking, fetchActive]);
 
+  useAppResumeSync(fetchActive);
+
   const driverObj = typeof booking?.driverId === 'object' ? booking?.driverId : null;
-  const driverId = driverObj?._id || (typeof booking?.driverId === 'string' ? booking.driverId : null);
-  const { map: liveDrivers } = useFirebaseDriverLocations();
-  const liveDriver = driverId ? liveDrivers[String(driverId)] : null;
+  const { driver: liveDriver, isStale: driverLocationStale } =
+    useTripDriverLocation(booking?._id);
 
   const pickupPoint = useMemo(() => {
     const c = booking?.pickup?.location?.coordinates;
@@ -96,6 +98,7 @@ const DriverReachedPage = () => {
             showRoute={false}
             emphasis="driver"
             bookingStatus={booking?.status || BOOKING_STATUS.ARRIVED}
+            isStale={driverLocationStale}
           />
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-success/95 backdrop-blur-sm px-4 py-2 rounded-full shadow-md">
             <div className="flex items-center gap-2">

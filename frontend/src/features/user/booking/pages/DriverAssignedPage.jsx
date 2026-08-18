@@ -25,7 +25,7 @@ import Avatar from '../../../../components/Avatar';
 import useUserActiveBookingStore from '../../../../store/user/useUserActiveBookingStore';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
-import { useFirebaseDriverLocations } from '../../../../hooks/useFirebaseDriverLocations';
+import { useTripDriverLocation } from '../../../../hooks/useTripDriverLocation';
 import { useRideTimer } from '../hooks/useRideTimer';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import {
@@ -258,16 +258,19 @@ const DriverAssignedPage = () => {
   const driver = booking?.driverId;
   const driverId = typeof driver === 'object' ? driver?._id : driver;
 
-  // Live driver location via Firebase — only after "Start to pickup"
-  // (EN_ROUTE+). Phone/contact unlock later at ARRIVED.
-  const { map: firebaseMap, disabled: firebaseDisabled } = useFirebaseDriverLocations();
-  const liveDriverRaw = driverId ? firebaseMap[String(driverId)] : null;
+  // Live driver location, scoped to this booking. The backend only publishes
+  // the node while the ride is EN_ROUTE / ARRIVED / STARTED, so the reveal gate
+  // is enforced server-side now; this flag just avoids a pointless subscribe.
   const driverLocationRevealed = [
     BOOKING_STATUS.EN_ROUTE,
     BOOKING_STATUS.ARRIVED,
     BOOKING_STATUS.STARTED,
   ].includes(bookingStatus);
-  const liveDriver = driverLocationRevealed ? liveDriverRaw : null;
+
+  const { driver: liveDriver, isStale: driverLocationStale } =
+    useTripDriverLocation(routeBookingId || booking?._id, {
+      enabled: driverLocationRevealed,
+    });
 
   const pickupPoint = useMemo(() => {
     const c = booking?.pickup?.location?.coordinates;
@@ -574,6 +577,7 @@ const DriverAssignedPage = () => {
             controlClassName="!bottom-[28dvh] sm:!bottom-[26dvh]"
             // Lock only the canvas — Recenter stays tappable.
             mapInteractive={!mapLocked}
+            isStale={driverLocationStale}
           />
         </div>
       ) : !driverLocationRevealed ? (

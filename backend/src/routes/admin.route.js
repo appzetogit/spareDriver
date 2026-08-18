@@ -80,6 +80,7 @@ import {
   deliverKitOrder,
 } from '../controllers/kitOrder.controller.js';
 import { getLiveDriversSnapshot } from '../controllers/driverLocation.controller.js';
+import { getStaffFirebaseToken } from '../controllers/firebaseAuth.controller.js';
 import {
   createZone,
   listZones,
@@ -477,6 +478,7 @@ router.post(
 
 router.get('/drivers', protectStaff, restrictTo(...ALL_STAFF), getDrivers);
 router.get('/drivers/live', protectStaff, restrictTo(...ALL_STAFF), getLiveDriversSnapshot);
+router.get('/firebase-token', protectStaff, restrictTo(...ALL_STAFF), getStaffFirebaseToken);
 router.get(
   '/drivers/:driverId/analytics',
   protectStaff,

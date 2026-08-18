@@ -43,6 +43,12 @@ function DriverMarker({
   size = 46,
   rotate = true,
   pulse = true,
+  /**
+   * True when the last fix is past its freshness window. Dims the pin and
+   * kills the pulse and the coast — both exist to imply live movement, which
+   * is exactly the wrong signal for a driver who has stopped reporting.
+   */
+  isStale = false,
   ariaLabel = 'Driver',
   /** Fired each animation frame with the on-screen { lat, lng, heading }. */
   onAnimatedPositionChange,
@@ -236,12 +242,14 @@ function DriverMarker({
         height: size,
         transform: rotate ? `rotate(${screenHeading}deg)` : 'none',
         transformOrigin: '50% 50%',
-        transition: 'transform 80ms linear',
+        transition: 'transform 80ms linear, opacity 300ms ease',
         pointerEvents: 'none',
         willChange: 'transform',
+        opacity: isStale ? 0.45 : 1,
+        filter: isStale ? 'grayscale(0.7)' : 'none',
       };
     },
-    [size, rotate, renderedHeading, mapHeading],
+    [size, rotate, renderedHeading, mapHeading, isStale],
   );
 
   if (!renderedPosition) return null;
@@ -253,8 +261,11 @@ function DriverMarker({
       zIndex={MAP_Z_INDEX.DRIVER_MARKER}
       getPixelPositionOffset={getPixelPositionOffset}
     >
-      <div style={containerStyle} aria-label={ariaLabel}>
-        {pulse && (
+      <div
+        style={containerStyle}
+        aria-label={isStale ? `${ariaLabel} (last known position)` : ariaLabel}
+      >
+        {pulse && !isStale && (
           <span
             style={{
               position: 'absolute',

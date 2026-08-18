@@ -51,6 +51,7 @@ import {
   deleteUserNotifications,
 } from '../controllers/notification.controller.js';
 import { getNearbyDriversForUser } from '../controllers/driverLocation.controller.js';
+import { getUserFirebaseToken } from '../controllers/firebaseAuth.controller.js';
 import {
   createBooking,
   getMyBookings,
@@ -204,6 +205,9 @@ router.delete('/saved-locations/:id', deleteSavedLocation);
 
 // Nearby drivers (home screen widget + future surfaces)
 router.get('/drivers/nearby', getNearbyDriversForUser);
+
+// Realtime Database sign-in, scoped to this customer's active ride.
+router.get('/firebase-token', getUserFirebaseToken);
 
 // Emergency contacts for SOS
 router.get('/emergency-contacts', listEmergencyContacts);
