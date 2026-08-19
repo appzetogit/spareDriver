@@ -67,3 +67,16 @@ export const sosLocationRateLimiter = createRateLimiter({
   windowMs: 60_000,
   max: 60,
 });
+
+/**
+ * Location batch ingest. Generous on purpose — the native uploader batches, so
+ * a healthy driver makes ~6 calls/min on trip and ~1/min idle. The ceiling is
+ * there to stop a broken client from hammering, not to shape normal traffic.
+ * Keyed per driver by the shared `keyFn` fallback (`req.driver._id`), which
+ * `protectDriverTracking` sets before this runs.
+ */
+export const driverLocationRateLimiter = createRateLimiter({
+  keyPrefix: 'driver:location',
+  windowMs: 60_000,
+  max: 40,
+});

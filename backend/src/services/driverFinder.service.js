@@ -19,6 +19,16 @@ import { Driver } from '../models/driverModels/driver.model.js';
 
 const ONE_KM_METERS = 1000;
 
+/**
+ * How stale a driver's Mongo position may be and still be offered a ride.
+ *
+ * Sized off the slowest legitimate cadence: the native uploader posts every
+ * 60s while idle-online, and `MONGO_SNAPSHOT_MIN_INTERVAL_MS` throttles the
+ * write to once a minute on top of that. Three minutes clears both with room
+ * for one failed upload.
+ */
+const LOCATION_FRESHNESS_MS = 3 * 60_000;
+
 function toObjectId(value) {
   if (!value) return null;
   if (value instanceof mongoose.Types.ObjectId) return value;
@@ -112,6 +122,12 @@ export async function findDriversWithinRadius({
     isOnline: true,
     approvalStatus: 'approved',
     isDeleted: false,
+    // Freshness gate. Mongo's position snapshot is written at most once a
+    // minute, so a driver whose app died an hour ago still carries a perfectly
+    // valid-looking coordinate. Without this they keep winning offers from
+    // wherever they were last seen, and the customer waits out a full offer
+    // timeout for someone who is not there.
+    lastLocationAt: { $gte: new Date(Date.now() - LOCATION_FRESHNESS_MS) },
     ...(extraMatch && typeof extraMatch === 'object' ? extraMatch : {}),
   };
   if (!includeOnTrip) match.isOnTrip = false;

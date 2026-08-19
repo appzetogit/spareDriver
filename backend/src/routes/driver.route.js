@@ -42,7 +42,14 @@ import {
 } from '../controllers/kitOrder.controller.js';
 import { verifyKitPayment } from '../controllers/payment.controller.js';
 import { getOnlineStatus, setOnlineStatus } from '../controllers/driverOnline.controller.js';
-import { postDriverLocation } from '../controllers/driverLocation.controller.js';
+import {
+  issueDriverTrackingToken,
+  revokeDriverTrackingToken,
+  ingestDriverLocation,
+} from '../controllers/driverTracking.controller.js';
+import { protectDriverTracking } from '../middlewares/trackingAuth.js';
+import { getDriverFirebaseToken } from '../controllers/firebaseAuth.controller.js';
+import { driverLocationRateLimiter } from '../middlewares/rateLimit.js';
 import {
   getMyOrders,
   getMyOrderById,
@@ -149,7 +156,24 @@ router.post('/payments/verify', protectDriver, verifyKitPayment);
 
 router.get('/online/status', protectDriver, getOnlineStatus);
 router.put('/online', protectDriver, setOnlineStatus);
-router.post('/location', protectDriver, postDriverLocation);
+
+// Live tracking — the native background uploader.
+//
+// MERGE NOTE: `main` also registered `POST /location` here, bound to
+// `postDriverLocation` with `protectDriver`. Two registrations of the same
+// path is not an error in Express — the first one wins and the second becomes
+// unreachable — so this had to be collapsed to one. The surviving handler is
+// the superset: it takes a batch, dedupes replays, and accepts EITHER the
+// long-lived tracking token (which is what lets the background service keep
+// posting once the 15-minute access token has expired) OR a driver access
+// token. It also still accepts the single-fix body `main` was sending.
+//
+// `/tracking/token` is driver-authenticated because the app has a fresh access
+// token at the moment the driver goes online, which is exactly when it is called.
+router.post('/tracking/token', protectDriver, issueDriverTrackingToken);
+router.delete('/tracking/token', protectDriver, revokeDriverTrackingToken);
+router.post('/location', protectDriverTracking, driverLocationRateLimiter, ingestDriverLocation);
+router.get('/firebase-token', protectDriver, getDriverFirebaseToken);
 
 // Dashboard: today summary, paginated trip history, earnings analytics
 router.get('/home/summary', protectDriver, getDriverHomeSummary);

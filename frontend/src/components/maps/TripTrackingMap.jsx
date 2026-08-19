@@ -75,6 +75,12 @@ function TripTrackingMap({
   mapInteractive = true,
   /** `driver` uses first-person copy on the ETA pill. */
   audience = 'customer',
+  /**
+   * True when the last fix is past its freshness window. The marker dims and
+   * the ETA freezes: a car that stopped reporting must not keep advertising a
+   * countdown derived from where it was ten minutes ago.
+   */
+  isStale = false,
 }) {
   const { isLoaded, loadError, maps } = useGoogleMap();
   const viewRef = useRef(null);
@@ -333,6 +339,7 @@ function TripTrackingMap({
               imageSrc={driverPinSrc}
               size={emphasis === 'driver' ? 54 : 46}
               animateMs={1400}
+              isStale={isStale}
               onAnimatedPositionChange={onAnimatedPositionChange}
             />
           )}
@@ -366,17 +373,33 @@ function TripTrackingMap({
       {distanceMeters != null && etaMinutes != null && (
         <div className="absolute top-3 left-3 right-3 flex justify-center pointer-events-none z-[2]">
           <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-md px-4 py-2.5 min-w-[200px] text-center">
-            <div className="flex items-baseline justify-center gap-2">
-              <span className="text-xl font-bold text-slate-900 tracking-tight tabular-nums">
-                {etaMinutes} min
-              </span>
-              <span className="text-sm font-semibold text-slate-500 tabular-nums">
-                {formatDistance(distanceMeters)}
-              </span>
-            </div>
-            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-              {statusText}
-            </p>
+            {isStale ? (
+              <>
+                <div className="flex items-center justify-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-sm font-semibold text-slate-700">
+                    Reconnecting to driver…
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                  Last seen {formatDistance(distanceMeters)} away
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-baseline justify-center gap-2">
+                  <span className="text-xl font-bold text-slate-900 tracking-tight tabular-nums">
+                    {etaMinutes} min
+                  </span>
+                  <span className="text-sm font-semibold text-slate-500 tabular-nums">
+                    {formatDistance(distanceMeters)}
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                  {statusText}
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}

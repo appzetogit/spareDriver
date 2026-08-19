@@ -52,6 +52,27 @@ app.get('/', (_req, res) => {
 });
 
 app.use((err, req, res, _next) => {
+  // Zod validation failures are client errors, not server errors. Without this
+  // they fall through to the 500 branch and surface a raw JSON blob as the
+  // message, which is unreadable in the app and unhelpful in the logs.
+  if (err?.name === 'ZodError') {
+    const issues = err.issues || err.errors || [];
+    const first = issues[0];
+    const field = first?.path?.length ? first.path.join('.') : null;
+    return res.status(400).json({
+      status: 400,
+      message: first
+        ? `${field ? `${field}: ` : ''}${first.message}`
+        : 'Invalid request body',
+      data: {
+        issues: issues.map((i) => ({
+          field: i.path?.join('.') || '',
+          message: i.message,
+        })),
+      },
+    });
+  }
+
   if (err.code === 11000) {
     const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'field';
     const fieldName = field === 'phone_no' ? 'phone number' : field;

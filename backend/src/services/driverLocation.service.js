@@ -1,33 +1,66 @@
 import { Driver } from '../models/driverModels/driver.model.js';
 import Booking from '../models/booking.model.js';
 import { getRtdb, isFirebaseReady } from '../config/firebase.js';
-import { emitToAdmins } from '../utils/socketEmitters.js';
+import { emitToAdmins, emitToBooking } from '../utils/socketEmitters.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
-import { ACTIVE_BOOKING_STATUSES, isBookingContactRevealed } from '../constants/bookingStatus.js';
+import { ACTIVE_BOOKING_STATUSES, BOOKING_STATUS, isBookingContactRevealed } from '../constants/bookingStatus.js';
+import { LOCATION_STALE_AFTER_MS } from '../constants/driverTracking.js';
+import { acquireThrottle, getJson, setJson, deleteKeys } from '../utils/ephemeralStore.js';
 
 /**
  * Live-location pipeline for drivers.
  *
- * Storage split:
- *   - Firebase Realtime DB → /drivers/{driverId}/location  ← every emit (5s)
- *     Authoritative source for "where is this driver right now". User apps
- *     and the admin live map subscribe here.
- *   - MongoDB → Driver.location + Driver.lastLocationAt    ← throttled (>=60s)
- *     Used for `$nearSphere` matching during booking. Drivers don't teleport
- *     so a 60s-stale snapshot is fine for dispatch.
+ * Three destinations, each with a different audience and freshness need:
  *
- * Anything in this file silently no-ops when Firebase isn't configured so
- * Phase 2 deployments keep working until the env is filled in.
+ *   - Firebase RTDB `/drivers/{driverId}`   ← every fix
+ *     Staff only. Powers the admin live map and nothing else.
+ *
+ *   - Firebase RTDB `/trips/{bookingId}/driver`   ← every fix, while the ride
+ *     is in a customer-visible phase. Exactly what that ride's customer is
+ *     allowed to see, and nothing more. Customers subscribe here instead of to
+ *     the whole `/drivers` tree, which used to hand every client the live
+ *     position of every driver in the fleet.
+ *
+ *   - MongoDB `Driver.location`   ← throttled (>=60s)
+ *     Feeds `$nearSphere` dispatch matching. Drivers don't teleport, so a
+ *     60s-stale snapshot is fine for choosing who to offer a ride to.
+ *
+ * Every RTDB write carries `updatedAt` and `staleAfter` so a reader can tell a
+ * live position from a frozen one. Without that a driver whose app was killed
+ * leaves a car parked on the customer's map forever, with an ETA that keeps
+ * counting down from a coordinate that stopped moving an hour ago.
+ *
+ * Anything here silently no-ops when Firebase isn't configured.
  */
 
 const MONGO_SNAPSHOT_MIN_INTERVAL_MS = 60_000;
 const STATUS_TRIP_CACHE_MS = 30_000;
 
-/** In-memory map of driverId → last Mongo write timestamp (per process). */
-const lastMongoWriteAt = new Map();
-const onlineSinceByDriver = new Map();
-const lastStatusFingerprint = new Map();
-const activeTripCache = new Map();
+/**
+ * Ride phases whose driver position the customer is entitled to see.
+ * Before EN_ROUTE the driver hasn't set off; after STARTED the ride is over.
+ * This is the authoritative gate — the client-side equivalent it replaces was
+ * cosmetic, because the data had already been delivered to the device.
+ */
+const CUSTOMER_VISIBLE_STATUSES = new Set([
+  BOOKING_STATUS.EN_ROUTE,
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+]);
+
+/* ------------------------------------------------------------------ */
+/* Shared-state keys (Redis when configured, per-process Map otherwise) */
+/* ------------------------------------------------------------------ */
+
+const KEY = {
+  mongoThrottle: (id) => `driverloc:mongo:${id}`,
+  onlineSince: (id) => `driverloc:since:${id}`,
+  statusPrint: (id) => `driverloc:print:${id}`,
+  activeTrip: (id) => `driverloc:trip:${id}`,
+};
+
+const ONLINE_SINCE_TTL_MS = 24 * 60 * 60 * 1000;
+const STATUS_PRINT_TTL_MS = 10 * 60_000;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -43,6 +76,10 @@ function validateCoords({ lat, lng }) {
 
 function driverPath(driverId) {
   return `drivers/${driverId}`;
+}
+
+function tripPath(bookingId) {
+  return `trips/${bookingId}/driver`;
 }
 
 function nowMs() {
@@ -83,12 +120,9 @@ function serializeActiveTrip(booking) {
 }
 
 async function loadActiveTripForDriver(driverId) {
-  const key = String(driverId);
-  const cached = activeTripCache.get(key);
-  const now = nowMs();
-  if (cached && now - cached.at < STATUS_TRIP_CACHE_MS) {
-    return cached.trip;
-  }
+  const key = KEY.activeTrip(driverId);
+  const cached = await getJson(key);
+  if (cached) return cached.trip;
 
   const booking = await Booking.findOne({
     driverId,
@@ -100,7 +134,7 @@ async function loadActiveTripForDriver(driverId) {
     .lean();
 
   const trip = serializeActiveTrip(booking);
-  activeTripCache.set(key, { at: now, trip });
+  await setJson(key, { trip }, STATUS_TRIP_CACHE_MS);
   return trip;
 }
 
@@ -119,17 +153,19 @@ export async function syncFirebaseDriverStatus(driverId) {
     activeTrip = await loadActiveTripForDriver(driverId);
   }
 
+  const since = (await getJson(KEY.onlineSince(driverId)))?.at || nowMs();
   const payload = {
     isOnline: true,
     isOnTrip: Boolean(driver.isOnTrip),
-    since: onlineSinceByDriver.get(String(driverId)) || nowMs(),
+    since,
     activeTrip,
   };
+
   const fingerprint = JSON.stringify(payload);
-  if (lastStatusFingerprint.get(String(driverId)) === fingerprint) {
-    return true;
-  }
-  lastStatusFingerprint.set(String(driverId), fingerprint);
+  const printKey = KEY.statusPrint(driverId);
+  const lastPrint = await getJson(printKey);
+  if (lastPrint?.fp === fingerprint) return true;
+  await setJson(printKey, { fp: fingerprint }, STATUS_PRINT_TTL_MS);
 
   return writeFirebaseStatus(driverId, payload);
 }
@@ -146,6 +182,25 @@ async function writeFirebaseLocation(driverId, payload) {
     return true;
   } catch (err) {
     console.warn('[driverLocation] Firebase write failed:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Publish to the per-trip node the ride's customer reads.
+ *
+ * Carries position and freshness only — no driver identity, no customer
+ * contact details. Whatever the customer app needs beyond this comes from the
+ * authenticated booking API, not from a database anyone can subscribe to.
+ */
+async function writeFirebaseTripLocation(bookingId, payload) {
+  const rtdb = getRtdb();
+  if (!rtdb) return false;
+  try {
+    await rtdb.ref(tripPath(bookingId)).set(payload);
+    return true;
+  } catch (err) {
+    console.warn('[driverLocation] Firebase trip write failed:', err.message);
     return false;
   }
 }
@@ -174,6 +229,26 @@ async function clearFirebaseDriver(driverId) {
   }
 }
 
+/**
+ * Remove a finished ride's location node.
+ *
+ * Called from every path that releases a driver from a booking. Leaving it
+ * behind would let the customer keep watching a driver who has moved on to
+ * someone else's ride.
+ */
+export async function clearTripLocation(bookingId) {
+  if (!bookingId) return false;
+  const rtdb = getRtdb();
+  if (!rtdb) return false;
+  try {
+    await rtdb.ref(tripPath(bookingId)).remove();
+    return true;
+  } catch (err) {
+    console.warn('[driverLocation] Firebase trip clear failed:', err.message);
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Mongo writes                                                        */
 /* ------------------------------------------------------------------ */
@@ -188,7 +263,6 @@ async function snapshotMongoLocation(driverId, { lat, lng }) {
       },
     },
   );
-  lastMongoWriteAt.set(String(driverId), nowMs());
 }
 
 /* ------------------------------------------------------------------ */
@@ -198,18 +272,14 @@ async function snapshotMongoLocation(driverId, { lat, lng }) {
 /**
  * Persist a driver's current GPS position.
  *
- * Behavior:
- *   - Always writes to Firebase (cheap, broadcast).
- *   - Writes to Mongo at most once every `MONGO_SNAPSHOT_MIN_INTERVAL_MS`.
- *
  * @param {string} driverId
  * @param {{ lat:number; lng:number; accuracy?:number; heading?:number; speed?:number }} coords
- * @returns {{ accepted: boolean; firebase: boolean; mongoSnapshot: boolean; reason?: string }}
+ * @returns {{ accepted: boolean; firebase: boolean; mongoSnapshot: boolean; trip: boolean; reason?: string }}
  */
 export async function recordDriverLocation(driverId, coords) {
-  if (!driverId) return { accepted: false, firebase: false, mongoSnapshot: false, reason: 'no driverId' };
+  if (!driverId) return { accepted: false, firebase: false, mongoSnapshot: false, trip: false, reason: 'no driverId' };
   if (!validateCoords(coords)) {
-    return { accepted: false, firebase: false, mongoSnapshot: false, reason: 'invalid coordinates' };
+    return { accepted: false, firebase: false, mongoSnapshot: false, trip: false, reason: 'invalid coordinates' };
   }
 
   const { lat, lng, accuracy, heading, speed } = coords;
@@ -222,6 +292,9 @@ export async function recordDriverLocation(driverId, coords) {
     heading: isFiniteNum(heading) ? heading : null,
     speed: isFiniteNum(speed) ? speed : null,
     updatedAt: now,
+    // Readers treat a fix past this instant as stale rather than live. It is
+    // written alongside the position so no reader has to guess the policy.
+    staleAfter: now + LOCATION_STALE_AFTER_MS,
   };
 
   const firebaseOk = await writeFirebaseLocation(driverId, fbPayload);
@@ -230,9 +303,27 @@ export async function recordDriverLocation(driverId, coords) {
     console.warn('[driverLocation] Firebase status sync failed:', err.message);
   });
 
+  // Fan out to the customer, but only for a ride actually in flight.
+  let tripOk = false;
+  const activeTrip = await loadActiveTripForDriver(driverId);
+  if (activeTrip && CUSTOMER_VISIBLE_STATUSES.has(activeTrip.status)) {
+    tripOk = await writeFirebaseTripLocation(activeTrip.bookingId, {
+      ...fbPayload,
+      bookingId: activeTrip.bookingId,
+      status: activeTrip.status,
+    });
+
+    // Socket mirror of the same point. Firebase is the primary channel; this
+    // is the fallback that keeps the map alive when RTDB is unreachable or the
+    // client has no Firebase config.
+    emitToBooking(activeTrip.bookingId, S2C_EVENTS.TRIP_LOCATION_UPDATED, {
+      bookingId: activeTrip.bookingId,
+      ...fbPayload,
+    });
+  }
+
   let mongoSnapshot = false;
-  const lastMongoAt = lastMongoWriteAt.get(String(driverId)) || 0;
-  if (now - lastMongoAt >= MONGO_SNAPSHOT_MIN_INTERVAL_MS) {
+  if (await acquireThrottle(KEY.mongoThrottle(driverId), MONGO_SNAPSHOT_MIN_INTERVAL_MS)) {
     try {
       await snapshotMongoLocation(driverId, { lat, lng });
       mongoSnapshot = true;
@@ -241,7 +332,7 @@ export async function recordDriverLocation(driverId, coords) {
     }
   }
 
-  return { accepted: true, firebase: firebaseOk, mongoSnapshot };
+  return { accepted: true, firebase: firebaseOk, mongoSnapshot, trip: tripOk };
 }
 
 /**
@@ -251,9 +342,8 @@ export async function recordDriverLocation(driverId, coords) {
 export async function markDriverOnlineLive(driverId) {
   if (!driverId) return;
   const key = String(driverId);
-  onlineSinceByDriver.set(key, nowMs());
-  lastStatusFingerprint.delete(key);
-  activeTripCache.delete(key);
+  await setJson(KEY.onlineSince(key), { at: nowMs() }, ONLINE_SINCE_TTL_MS);
+  await deleteKeys(KEY.statusPrint(key), KEY.activeTrip(key));
   await syncFirebaseDriverStatus(driverId);
   emitToAdmins(S2C_EVENTS.DRIVER_STATUS_CHANGED, {
     driverId: key,
@@ -265,21 +355,29 @@ export async function markDriverOnlineLive(driverId) {
 /**
  * Tear down a driver's live presence. Called when:
  *   - REST online toggle flips off
- *   - Their socket disconnects (with a small grace period to absorb reloads)
+ *   - Their socket disconnects and the grace period expires
  */
 export async function markDriverOfflineLive(driverId) {
   if (!driverId) return;
   const key = String(driverId);
   await clearFirebaseDriver(driverId);
-  lastMongoWriteAt.delete(key);
-  onlineSinceByDriver.delete(key);
-  lastStatusFingerprint.delete(key);
-  activeTripCache.delete(key);
+  await deleteKeys(
+    KEY.mongoThrottle(key),
+    KEY.onlineSince(key),
+    KEY.statusPrint(key),
+    KEY.activeTrip(key),
+  );
   emitToAdmins(S2C_EVENTS.DRIVER_STATUS_CHANGED, {
     driverId: key,
     isOnline: false,
     at: nowMs(),
   });
+}
+
+/** Drop the cached active-trip lookup so the next write re-reads Mongo. */
+export async function invalidateDriverTripCache(driverId) {
+  if (!driverId) return;
+  await deleteKeys(KEY.activeTrip(String(driverId)), KEY.statusPrint(String(driverId)));
 }
 
 /**
@@ -323,57 +421,20 @@ export async function listLiveDriverMapMetadata() {
 
 /**
  * Returns true when the live pipeline is fully usable (Firebase initialized).
- * Routes can use this to surface a friendly "feature disabled" message instead
- * of failing silently.
  */
 export function isLiveLocationReady() {
   return isFirebaseReady();
 }
 
-/** REST ingest is slower than the socket path — native only posts while backgrounded. */
-const HTTP_MIN_INTERVAL_MS = 8_000;
-const lastHttpWriteAt = new Map();
-
-/**
- * HTTP ingest used by the Flutter wrapper when the WebView (and its socket)
- * is frozen in the background. Same Firebase + Mongo write as the socket path.
+/*
+ * MERGE NOTE: `recordDriverLocationHttp` from `main` lived here.
  *
- * `stopTracking: true` means native should tear down the GPS service
- * (driver went offline / is no longer approved).
+ * It has been superseded by `driverLocationIngest.service.js`, which does the
+ * same job and more: it takes a batch instead of one fix, dedupes replays with
+ * a watermark that is safe across instances, and keeps its throttle in Redis
+ * rather than a per-process Map. Its guards — suspended or deleted accounts
+ * must stop transmitting, not merely stop being dispatched — were kept and now
+ * live in `trackingDirective()`.
+ *
+ * Recover the original with:  git show 758cd11 -- backend/src/services/driverLocation.service.js
  */
-export async function recordDriverLocationHttp(driver, coords) {
-  if (!driver?._id) {
-    return { accepted: false, firebase: false, mongoSnapshot: false, reason: 'no_driver', stopTracking: true };
-  }
-
-  if (driver.isDeleted || driver.approvalStatus !== 'approved') {
-    return {
-      accepted: false,
-      firebase: false,
-      mongoSnapshot: false,
-      reason: 'not_approved',
-      stopTracking: true,
-    };
-  }
-
-  if (!driver.isOnline && !driver.isOnTrip) {
-    return {
-      accepted: false,
-      firebase: false,
-      mongoSnapshot: false,
-      reason: 'not_sharing',
-      stopTracking: true,
-    };
-  }
-
-  const key = String(driver._id);
-  const now = nowMs();
-  const last = lastHttpWriteAt.get(key) || 0;
-  if (now - last < HTTP_MIN_INTERVAL_MS) {
-    return { accepted: false, firebase: false, mongoSnapshot: false, reason: 'throttled', stopTracking: false };
-  }
-  lastHttpWriteAt.set(key, now);
-
-  const result = await recordDriverLocation(driver._id, coords);
-  return { ...result, stopTracking: false };
-}
