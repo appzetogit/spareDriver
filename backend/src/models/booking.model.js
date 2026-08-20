@@ -34,6 +34,12 @@ const hourlyDetailsSchema = new mongoose.Schema(
   {
     scheduledStartAt: { type: Date, required: true },
     durationHours: { type: Number, required: true, min: 1 },
+    /**
+     * Extra booked time added when a post-grace extension is paid so
+     * the chosen minutes start from now (not from the original end).
+     * Does not change the extension fare.
+     */
+    windowPadHours: { type: Number, default: 0, min: 0 },
     slabId: { type: mongoose.Schema.Types.ObjectId, default: null },
     /** True when the user booked via the custom-hours option (no slab). */
     isCustomDuration: { type: Boolean, default: false },
@@ -73,7 +79,8 @@ const outstationDetailsSchema = new mongoose.Schema(
     estimatedKm: { type: Number, default: 0, min: 0 },
     /**
      * Outstation return-lifecycle stamps (idempotent prompts).
-     * Phase is derived at read time — no new top-level booking status.
+     * Phase is derived at read time — overtime lives on booking.overtime,
+     * not a new top-level booking status.
      */
     returnReminderSentAt: { type: Date, default: null },
     returnReachedPromptedAt: { type: Date, default: null },
@@ -84,7 +91,11 @@ const outstationDetailsSchema = new mongoose.Schema(
     returnGraceMinutes: { type: Number, default: null, min: 0 },
     returnPromptRepeatMinutes: { type: Number, default: null, min: 0 },
     returnReminderMinutes: { type: Number, default: null, min: 0 },
-    /** 0 = off (overtime by minute); >0 = auto-complete after grace. */
+    /**
+     * @deprecated Auto-complete after grace is retired. Hourly and
+     * outstation enter overtime payment instead. Kept for snapshot
+     * back-compat on older bookings.
+     */
     returnAutoCompleteHours: { type: Number, default: null, min: 0 },
     overtimeBillableMinutes: { type: Number, default: 0, min: 0 },
     overtimeSettledMinutes: { type: Number, default: 0, min: 0 },
@@ -355,6 +366,41 @@ export const BOOKING_PAYMENT_METHOD = Object.freeze({
 });
 const BOOKING_PAYMENT_METHOD_LIST = Object.values(BOOKING_PAYMENT_METHOD);
 
+/**
+ * Post-grace overtime. Booking.status stays `started` until the extra
+ * charge is paid online, then the trip completes. Amounts are snapshots
+ * so later pricing edits cannot rewrite history.
+ */
+const overtimeSchema = new mongoose.Schema(
+  {
+    required: { type: Boolean, default: false },
+    startedAt: { type: Date, default: null },
+    bookedEndAt: { type: Date, default: null },
+    graceEndedAt: { type: Date, default: null },
+    lastCalculatedAt: { type: Date, default: null },
+    billableMinutes: { type: Number, default: 0, min: 0 },
+    ratePerHour: { type: Number, default: 0, min: 0 },
+    subtotal: { type: Number, default: 0, min: 0 },
+    platformFee: { type: Number, default: 0, min: 0 },
+    gst: { type: Number, default: 0, min: 0 },
+    amountRupees: { type: Number, default: 0, min: 0 },
+    breakdown: { type: mongoose.Schema.Types.Mixed, default: {} },
+    paymentStatus: {
+      type: String,
+      enum: ['none', 'pending', 'paid', 'failed'],
+      default: 'none',
+    },
+    razorpayOrderId: { type: String, default: null, trim: true },
+    razorpayPaymentId: { type: String, default: null, trim: true },
+    razorpaySignature: { type: String, default: null, trim: true },
+    lockedAmountRupees: { type: Number, default: null, min: 0 },
+    lockedAmountPaise: { type: Number, default: null, min: 0 },
+    lockedMinutes: { type: Number, default: null, min: 0 },
+    paidAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
 /* ------------------------------------------------------------------ */
 /* Main schema                                                         */
 /* ------------------------------------------------------------------ */
@@ -503,6 +549,7 @@ const bookingSchema = new mongoose.Schema(
 
     dispatch: { type: dispatchSchema, default: () => ({}) },
     extensions: { type: [extensionSchema], default: [] },
+    overtime: { type: overtimeSchema, default: () => ({}) },
     rideStartOtp: { type: rideStartOtpSchema, default: () => ({}) },
     payment: { type: paymentLedgerSchema, default: () => ({}) },
 

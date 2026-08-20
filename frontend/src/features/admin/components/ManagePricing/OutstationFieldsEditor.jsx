@@ -139,14 +139,14 @@ const OutstationFieldsEditor = ({ outstation, onChange }) => {
             helper="Re-prompt before return until the user taps Not now. 0 = once only."
           />
           <Input
-            label="Return auto-complete (hours, 0 = off)"
+            label="Return auto-complete (deprecated)"
             type="number"
             min={0}
             value={o.returnAutoCompleteHours ?? 0}
             onChange={(e) =>
               update({ returnAutoCompleteHours: Number(e.target.value) })
             }
-            helper="0 = off (charge overtime per minute after grace). Any value &gt; 0 = auto-complete after grace."
+            helper="Deprecated. After grace the trip stays active and the customer pays overtime online. This knob no longer auto-completes the trip."
           />
         </div>
       </div>

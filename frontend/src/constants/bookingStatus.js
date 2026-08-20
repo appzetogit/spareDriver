@@ -99,7 +99,7 @@ export const PAYMENT_POLICY = Object.freeze({
   RIDE_OTP_LENGTH: 4,
   RIDE_OTP_MAX_ATTEMPTS: 5,
   EXTENSION_PROMPT_LEAD_SECONDS: 15 * 60,
-  /** After booked end, seconds left to extend before auto-complete. */
+  /** After booked end, seconds left to extend before overtime payment. */
   RIDE_END_EXTENSION_GRACE_SECONDS: 10 * 60,
 });
 

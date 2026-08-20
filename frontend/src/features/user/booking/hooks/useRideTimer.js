@@ -2,6 +2,42 @@ import { useEffect, useMemo, useState } from 'react';
 import { BOOKING_STATUS, PAYMENT_POLICY } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 
+const DEFAULT_OUTSTATION_GRACE_MINUTES = 30;
+
+export function resolveOutstationGraceMinutes(booking) {
+  const n = Number(
+    booking?.outstation?.returnGraceMinutes
+      ?? booking?.fareSnapshot?.breakdown?.returnGraceMinutes,
+  );
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_OUTSTATION_GRACE_MINUTES;
+}
+
+export function resolveOutstationScheduledEndAt(booking) {
+  const endSrc =
+    booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
+  if (!endSrc) return null;
+  let ms = new Date(endSrc).getTime();
+  if (!Number.isFinite(ms)) return null;
+  const unappliedMs = (booking?.extensions || []).reduce((sum, ext) => {
+    if (ext?.status !== 'accepted') return sum;
+    if (ext.windowAppliedAt) return sum;
+    const days = Number(ext.additionalDays) || 0;
+    if (days > 0) return sum + days * 86_400_000;
+    const hours = Number(ext.additionalHours) || 0;
+    if (hours > 0) return sum + hours * 3_600_000;
+    return sum;
+  }, 0);
+  return ms + unappliedMs;
+}
+
+/** Outstation overdue UI/sheet only after booked return + grace. Hourly unchanged. */
+export function isOutstationOvertimePastGrace(booking, scheduledEndAt, now = Date.now()) {
+  if (booking?.serviceType !== SERVICE_TYPES.OUTSTATION) return true;
+  const end = scheduledEndAt ?? resolveOutstationScheduledEndAt(booking);
+  if (end == null) return false;
+  return now >= end + resolveOutstationGraceMinutes(booking) * 60_000;
+}
+
 /**
  * Drives the in-ride countdown for the user side. Given the active booking,
  * it returns:
@@ -45,34 +81,11 @@ export function useRideTimer(booking) {
         sum + (ext?.status === 'accepted' ? Number(ext.additionalHours) || 0 : 0),
       0,
     );
-    return base + extra;
-  }, [isOutstation, booking?.hourly?.durationHours, booking?.extensions]);
+    return base + extra + (Number(booking?.hourly?.windowPadHours) || 0);
+  }, [isOutstation, booking?.hourly?.durationHours, booking?.hourly?.windowPadHours, booking?.extensions]);
 
   const scheduledEndAt = useMemo(() => {
-    if (isOutstation) {
-      // Paid extensions bump `expectedReturnAt` / `endDate` and stamp
-      // `windowAppliedAt` on the extension row. Legacy accepted rows
-      // (pre-bump) still need their additionalDays added here so the
-      // countdown doesn't snap back to the original return.
-      const endSrc =
-        booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
-      if (!endSrc) return null;
-      let ms = new Date(endSrc).getTime();
-      if (!Number.isFinite(ms)) return null;
-      const unappliedMs = (booking?.extensions || []).reduce((sum, ext) => {
-        if (ext?.status !== 'accepted') return sum;
-        if (ext.windowAppliedAt) return sum;
-        const days = Number(ext.additionalDays) || 0;
-        if (days > 0) return sum + days * 86_400_000;
-        const hours = Number(ext.additionalHours) || 0;
-        if (hours > 0) return sum + hours * 3_600_000;
-        return sum;
-      }, 0);
-      if (unappliedMs > 0) {
-        ms += unappliedMs;
-      }
-      return ms;
-    }
+    if (isOutstation) return resolveOutstationScheduledEndAt(booking);
     if (!startedAt || !totalHours) return null;
     return startedAt + totalHours * 3600 * 1000;
   }, [
@@ -123,6 +136,12 @@ export function useRideTimer(booking) {
       ? remainingSeconds <= outstationLeadSeconds
       : remainingSeconds <= PAYMENT_POLICY.EXTENSION_PROMPT_LEAD_SECONDS);
 
+  const outstationGraceEndsAt = isOutstation && scheduledEndAt
+    ? scheduledEndAt + resolveOutstationGraceMinutes(booking) * 60_000
+    : null;
+  const isPastOutstationGrace =
+    !isOutstation || (outstationGraceEndsAt != null && now >= outstationGraceEndsAt);
+
   return {
     startedAt,
     scheduledEndAt,
@@ -132,5 +151,7 @@ export function useRideTimer(booking) {
     totalHours,
     shouldPromptExtension,
     isOutstation,
+    outstationGraceEndsAt,
+    isPastOutstationGrace,
   };
 }

@@ -587,7 +587,7 @@ const ExtendRideModal = ({
                 disabled={busy}
                 className="mt-5"
               >
-                Pay ₹{lockedFareDelta} from wallet
+                Pay ₹{lockedFareDelta.toFixed(2)} from wallet
               </Button>
             ) : (
               <Button
@@ -721,10 +721,10 @@ function HoursStep({
 
         <div className="mt-4 flex items-center justify-between text-sm">
           <span className="text-text-muted">Approx extra fare</span>
-          <span className="text-base font-bold text-text">₹{previewCost}</span>
+          <span className="text-base font-bold text-text">₹{round2(previewCost).toFixed(2)}</span>
         </div>
         <p className="text-[11px] text-text-muted mt-1 leading-snug">
-          ~₹{extraHourRate}/hr (final amount shown after your driver shares the code).
+          ~₹{round2(extraHourRate).toFixed(2)}/hr (final amount shown after your driver shares the code).
         </p>
       </>
     );
@@ -766,10 +766,10 @@ function HoursStep({
 
       <div className="mt-4 flex items-center justify-between text-sm">
         <span className="text-text-muted">Approx extra fare</span>
-        <span className="text-base font-bold text-text">₹{previewCost}</span>
-      </div>
-      <p className="text-[11px] text-text-muted mt-1 leading-snug">
-        ~₹{extraHourRate}/day (final amount shown after your driver shares the code).
+          <span className="text-base font-bold text-text">₹{round2(previewCost).toFixed(2)}</span>
+        </div>
+        <p className="text-[11px] text-text-muted mt-1 leading-snug">
+          ~₹{round2(extraHourRate).toFixed(2)}/day (final amount shown after your driver shares the code).
       </p>
     </>
   );
@@ -826,7 +826,11 @@ function OtpStep({ otp, setOtp, otpError, extension, busy, formatAmount, isDays 
           You&rsquo;re about to extend by{' '}
           <strong className="text-text">{formatAmount(extAmount)}</strong>{' '}
           for{' '}
-          <strong className="text-text">₹{extension.fareDelta}</strong>.
+          <strong className="text-text">₹{round2(extension.fareDelta).toFixed(2)}</strong>
+          {Number(extension?.breakdown?.overtimeAmountRupees) > 0
+            ? ` (includes ₹${extension.breakdown.overtimeAmountRupees} overdue time)`
+            : ''}
+          .
         </div>
       )}
       <p className="text-[11px] text-text-muted mt-3 leading-snug">
@@ -849,6 +853,12 @@ function PayStep({
     ? extension?.additionalDays || 0
     : extension?.additionalHours || 0;
   const fareDelta = Number(extension?.fareDelta || 0);
+  const overtimeAmt = Number(extension?.breakdown?.overtimeAmountRupees) || 0;
+  const extensionFare = Number(
+    extension?.breakdown?.extensionFare != null
+      ? extension.breakdown.extensionFare
+      : fareDelta - overtimeAmt,
+  );
   return (
     <>
       <div className="bg-bg rounded-2xl p-4 space-y-1.5">
@@ -856,10 +866,26 @@ function PayStep({
           <span className="text-text-muted">Add to your ride</span>
           <strong className="text-text">+{formatAmount(additionalAmount)}</strong>
         </div>
+        {overtimeAmt > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-muted">
+              Overdue time ({extension?.breakdown?.overtimeMinutes || 0} min)
+            </span>
+            <strong className="text-text">₹{round2(overtimeAmt).toFixed(2)}</strong>
+          </div>
+        )}
         <div className="flex items-center justify-between text-sm">
-          <span className="text-text-muted">Extra fare</span>
-          <strong className="text-text">₹{fareDelta}</strong>
+          <span className="text-text-muted">
+            {overtimeAmt > 0 ? 'Extension fare' : 'Extra fare'}
+          </span>
+          <strong className="text-text">₹{round2(overtimeAmt > 0 ? extensionFare : fareDelta).toFixed(2)}</strong>
         </div>
+        {overtimeAmt > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-muted">Total</span>
+            <strong className="text-text">₹{round2(fareDelta).toFixed(2)}</strong>
+          </div>
+        )}
         <div className="h-px bg-border-light my-1" />
         <div className="flex items-center justify-between text-sm">
           <span className="text-text-muted inline-flex items-center gap-1.5">

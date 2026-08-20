@@ -15,8 +15,8 @@ import {
 import {
   scheduleRideEndTimer,
   cancelRideEndSchedule,
-  settleOutstationOvertimeTick,
 } from './bookingRideEndTimeout.service.js';
+import { isOvertimeUnpaid } from './bookingOvertime.service.js';
 import {
   BOOKING_STATUS,
   BOOKING_TYPE,
@@ -199,6 +199,9 @@ function buildUpdatePayload(booking, audience = 'room') {
     timeline: booking.timeline ? booking.timeline.toObject?.() || booking.timeline : null,
     cancellation: booking.cancellation
       ? booking.cancellation.toObject?.() || booking.cancellation
+      : null,
+    overtime: booking.overtime
+      ? booking.overtime.toObject?.() || booking.overtime
       : null,
   };
 
@@ -619,8 +622,7 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
 
   await booking.save();
 
-  // Hourly + outstation: in-process extend nudge / auto-complete /
-  // overtime timers (see bookingRideEndTimeout.service.js).
+  // Hourly + outstation: in-process extend nudge / overtime timers
   // Snapshot outstation Return lifecycle knobs BEFORE arming timers.
   if (
     booking.serviceType === SERVICE_TYPES.OUTSTATION
@@ -822,83 +824,90 @@ export async function completeTripService(driverId, bookingId) {
     }
   }
 
-  // Stop the auto-complete / overtime timers — we're completing manually.
+  if (isOvertimeUnpaid(booking)) {
+    throw new ApiError(
+      409,
+      'Please ask the customer to pay for the overdue time before you can complete this trip.',
+      {
+        code: 'OVERTIME_PAYMENT_REQUIRED',
+        overtime: booking.overtime?.toObject?.() || booking.overtime || null,
+      },
+    );
+  }
+
+  const completed = await finalizeTripCompletionService(booking, {
+    reason: 'driver_complete',
+  });
+  return completed.toObject?.() || completed;
+}
+
+/**
+ * Shared completion: driver complete, overtime payment, or any other
+ * authorized path. Idempotent if already COMPLETED.
+ */
+export async function finalizeTripCompletionService(booking, { reason = 'completed' } = {}) {
+  if (!booking) return booking;
+  if (booking.status === BOOKING_STATUS.COMPLETED) return booking;
+
   cancelRideEndSchedule(booking._id);
   cancelOutstationReturnJobs(booking._id).catch(() => null);
 
-  // Outstation auto-complete-off: settle any unpaid post-grace minutes
-  // while still STARTED (wallet debit + fareSnapshot bump).
-  if (
-    booking.serviceType === SERVICE_TYPES.OUTSTATION
-    || booking.bookingType === BOOKING_TYPE.OUTSTATION
-  ) {
-    await settleOutstationOvertimeTick(booking._id, { final: true }).catch(
-      (err) =>
-        console.warn('[trip] overtime final settle failed:', err?.message),
-    );
-    const fresh = await Booking.findById(booking._id);
-    if (fresh) {
-      booking.outstation = fresh.outstation;
-      booking.fareSnapshot = fresh.fareSnapshot;
-    }
+  const now = booking.timeline?.completedAt || new Date();
+  const claimed = await Booking.findOneAndUpdate(
+    { _id: booking._id, status: BOOKING_STATUS.STARTED },
+    { $set: { status: BOOKING_STATUS.COMPLETED, 'timeline.completedAt': now } },
+    { new: true },
+  );
+  if (!claimed) {
+    const latest = await Booking.findById(booking._id);
+    return latest || booking;
   }
 
-  booking.status = BOOKING_STATUS.COMPLETED;
-  booking.timeline.completedAt = new Date();
+  // Re-apply in-memory fare/overtime/payment patches onto the claimed doc
+  // (overtime pay path mutates fareSnapshot before calling finalize).
+  if (booking.fareSnapshot) {
+    claimed.fareSnapshot = booking.fareSnapshot;
+    claimed.markModified('fareSnapshot');
+  }
+  if (booking.overtime) {
+    claimed.overtime = booking.overtime;
+    claimed.markModified('overtime');
+  }
+  if (booking.payment) claimed.payment = booking.payment;
+  if (booking.outstation) claimed.outstation = booking.outstation;
+  claimed.paymentStatus = booking.paymentStatus || claimed.paymentStatus;
+  claimed.timeline = claimed.timeline || {};
+  claimed.timeline.completedAt = now;
 
-  // Post-pay bookings move from `not_due_yet` → `pending` so the user app
-  // knows to surface a "pay now" screen. Pre-pay bookings were already
-  // paid before EN_ROUTE.
   if (
-    booking.paymentMode === PAYMENT_MODE.POST_RIDE &&
-    booking.paymentStatus === BOOKING_PAYMENT_STATUS.NOT_DUE_YET
+    claimed.paymentMode === PAYMENT_MODE.POST_RIDE &&
+    claimed.paymentStatus === BOOKING_PAYMENT_STATUS.NOT_DUE_YET
   ) {
-    booking.paymentStatus = BOOKING_PAYMENT_STATUS.PENDING;
+    claimed.paymentStatus = BOOKING_PAYMENT_STATUS.PENDING;
   }
 
-  // Settle the pre-collected waiting buffer: caps `waiting.chargeRupees`
-  // at the buffer and credits the unused portion back to the user's
-  // wallet. Best-effort — wallet failure is logged inside the helper so
-  // trip completion never wedges on a refund.
-  await settleWaitingBuffer(booking);
+  await settleWaitingBuffer(claimed);
+  await clearPendingExtensionsOnTerminate(claimed, reason);
 
-  // Sweep any mid-flow extension intents (OTP unverified / unpaid).
-  // The customer no longer has the ride active, so a stale row would
-  // leave the driver's OTP banner glued to their screen and would also
-  // be a fraud vector if the FE ever resumed it.
-  await clearPendingExtensionsOnTerminate(booking, 'trip_completed');
+  await claimed.save();
 
-  await booking.save();
-
-  // Free the driver up for new offers. Failure here is non-fatal — admins
-  // can clear stale isOnTrip flags from the admin panel if needed.
-  if (booking.driverId) {
-    Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } }).catch((err) =>
+  if (claimed.driverId) {
+    Driver.updateOne({ _id: claimed.driverId }, { $set: { isOnTrip: false } }).catch((err) =>
       console.warn('[bookingTrip] failed to clear driver.isOnTrip:', err?.message),
     );
 
-    // The ride is over for this driver: drop the node the customer was
-    // watching, and invalidate the cached active-trip lookup so the next
-    // GPS fix does not republish to it.
-    clearTripLocation(String(booking._id)).catch(() => {});
-    invalidateDriverTripCache(booking.driverId).catch(() => {});
+    clearTripLocation(String(claimed._id)).catch(() => {});
+    invalidateDriverTripCache(claimed.driverId).catch(() => {});
   }
 
-  // Book the platform's revenue from this trip:
-  //   - commission (cut of the ride subtotal, pre-coupon)
-  //   - platform fee (customer-facing fee)
-  //   - coupon discount as a negative line (admin bears the cost)
-  // Best-effort: a failure here logs but never wedges trip completion.
-  const snap = booking.fareSnapshot || {};
-  recordCompletedTripPlatformRevenue(booking).catch((err) =>
+  const snap = claimed.fareSnapshot || {};
+  recordCompletedTripPlatformRevenue(claimed).catch((err) =>
     console.warn(
       '[bookingTrip] failed to log trip platform revenue:',
       err?.message,
     ),
   );
 
-  // Credit limited-use coupon only on a completed trip (not on cancel /
-  // no-drivers). Idempotent at the business level: completion runs once.
   if (snap.couponId) {
     incrementCouponUsageService(snap.couponId).catch((err) =>
       console.warn(
@@ -908,31 +917,26 @@ export async function completeTripService(driverId, bookingId) {
     );
   }
 
-  // Settle the driver's earning into their wallet. Mirrors the
-  // commission revenue write above — booking ↔ accounting are now
-  // both balanced at COMPLETED. Best-effort: a failure here just
-  // logs (admin can reconcile from the booking later) so trip
-  // completion never wedges on a wallet write.
-  await settleDriverEarning(booking).catch((err) =>
+  await settleDriverEarning(claimed).catch((err) =>
     console.warn(
       '[bookingTrip] failed to settle driver earning:',
       err?.message,
     ),
   );
 
-  broadcastUpdate(booking);
-  notifyUserTripCompleted(booking.userId, booking).catch(() => null);
-  queueBookingInvoiceEmail(booking);
-  if (booking.driverId) {
-    const earning = driverEarningFromFareSnapshot(booking.fareSnapshot);
+  broadcastUpdate(claimed);
+  notifyUserTripCompleted(claimed.userId, claimed).catch(() => null);
+  queueBookingInvoiceEmail(claimed);
+  if (claimed.driverId) {
+    const earning = driverEarningFromFareSnapshot(claimed.fareSnapshot);
     if (earning > 0) {
-      notifyDriverEarningsCredited(booking.driverId, {
+      notifyDriverEarningsCredited(claimed.driverId, {
         amountRupees: earning,
-        bookingId: booking._id,
+        bookingId: claimed._id,
       }).catch(() => null);
     }
   }
-  return booking.toObject();
+  return claimed;
 }
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;

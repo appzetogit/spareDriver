@@ -144,7 +144,8 @@ export const DISPATCH = Object.freeze({
  *                                  stay in lockstep.
  *   RIDE_END_EXTENSION_GRACE_SECONDS  After booked duration ends, how long
  *                                  the customer still has to extend before
- *                                  the server auto-completes the ride.
+ *                                  overtime payment is required (the trip
+ *                                  stays started; it is not auto-completed).
  */
 export const PAYMENT_POLICY = Object.freeze({
   PAYMENT_DEADLINE_SECONDS: 60,

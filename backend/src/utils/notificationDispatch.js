@@ -129,6 +129,60 @@ export function notifyUserRideEndingSoon(userId, booking) {
   );
 }
 
+export function notifyUserTripOvertimeStarted(userId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'Trip duration exceeded',
+      body: 'Your trip has exceeded the allowed duration and additional charges are now applicable. Please complete the additional payment to finish the trip.',
+      type: USER_NOTIFICATION.TRIP_OVERTIME_STARTED,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'started',
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}?overtime=1`
+          : '/user/book/assigned?overtime=1',
+      },
+    },
+  );
+}
+
+export function notifyUserOvertimePaymentFailed(userId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  return sendPushNotification(
+    { userId },
+    {
+      title: 'Additional payment failed',
+      body: 'Your trip is still active. Please retry the payment.',
+      type: USER_NOTIFICATION.OVERTIME_PAYMENT_FAILED,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'started',
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}?overtime=1`
+          : '/user/book/assigned?overtime=1',
+      },
+    },
+  );
+}
+
+export function notifyDriverTripOvertimeStarted(driverId, booking) {
+  const bookingId = String(booking._id || booking.id || '');
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Trip duration exceeded',
+      body: 'Please ask the customer to pay for the overdue time. You cannot complete the trip until they pay.',
+      type: DRIVER_NOTIFICATION.TRIP_OVERTIME_STARTED,
+      data: {
+        bookingId,
+        path: bookingId ? `/driver/trip/${bookingId}` : '/driver/trips',
+      },
+    },
+  );
+}
+
 function formatReturnClock(booking) {
   const src =
     booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
@@ -244,7 +298,10 @@ export function notifyUserTripCompleted(userId, booking) {
     { userId },
     {
       title: 'Trip completed',
-      body: 'Your trip has been completed. Rate your driver!',
+      body:
+        booking?.overtime?.paymentStatus === 'paid'
+          ? 'Your overtime charge has been successfully paid and your trip is now completed.'
+          : 'Your trip has been completed. Rate your driver!',
       severity: 'success',
       type: USER_NOTIFICATION.TRIP_COMPLETED,
       data: {

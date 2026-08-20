@@ -38,7 +38,7 @@ import {
 } from '../../../../constants/bookingStatus';
 import { MAX_USER_CARS } from '../../../../constants/limits';
 import { formatPickupDateTime } from '../../../../utils/datetime';
-import { computeOutstationDuration, addCalendarDays, startOfLocalDay } from '../../../../utils/outstationSchedule';
+import { computeOutstationDuration, addCalendarDays, startOfLocalDay, notBeforeNow } from '../../../../utils/outstationSchedule';
 import { getCarBrandName, getCarModelName } from '../../../../utils/vehicleCatalog';
 import FareCard from '../components/FareCard';
 import CouponCodeInput from '../components/CouponCodeInput';
@@ -242,9 +242,10 @@ const ConfirmAndPayPage = () => {
   const [nowAnchorMs] = useState(() => Date.now());
   const minPickupDate = useMemo(() => {
     if (isOutstation) {
-      return (
+      return notBeforeNow(
         addCalendarDays(new Date(nowAnchorMs), minLeadDays)
-        || startOfLocalDay(new Date(nowAnchorMs))
+        || startOfLocalDay(new Date(nowAnchorMs)),
+        new Date(nowAnchorMs),
       );
     }
     return new Date(nowAnchorMs + minLeadHours * 60 * 60 * 1000);

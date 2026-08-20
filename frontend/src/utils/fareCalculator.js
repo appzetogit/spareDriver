@@ -263,6 +263,7 @@ export function calculateHourlyFare({
     packagePrice: round2(packagePrice),
     extraHours,
     extraHourCharge: round2(extraHourCharge),
+    extraHourChargeRate: round2(pricing.extraHourCharge || 0),
     waitingMinutes: waitingMinutes || 0,
     waitingCharge: round2(waitingCharge),
     nightCharge: round2(nightCharge),

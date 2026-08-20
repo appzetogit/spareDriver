@@ -99,6 +99,8 @@ function resolveNotificationOpenUrl(data) {
     || kind === 'driver_accepted'
     || kind === 'trip_started'
     || kind === 'ride_ending_soon'
+    || kind === 'trip_overtime_started'
+    || kind === 'overtime_payment_failed'
   )) {
     return '/user/book/assigned/' + bookingId;
   }

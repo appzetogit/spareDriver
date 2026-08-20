@@ -45,6 +45,11 @@ import {
   verifyBookingPaymentService,
 } from '../services/bookingPayment.service.js';
 import {
+  getOvertimeQuoteService,
+  createOvertimePaymentOrderService,
+  verifyOvertimePaymentService,
+} from '../services/bookingOvertime.service.js';
+import {
   markDriverEnRouteService,
   markDriverArrivedService,
   startTripService,
@@ -174,6 +179,21 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
 export const verifyBookingPayment = asyncHandler(async (req, res) => {
   const booking = await verifyBookingPaymentService(req.user._id, req.params.id, req.body);
   return res.status(200).json(new ApiResponse(200, { booking }, 'Payment verified'));
+});
+
+export const getBookingOvertime = asyncHandler(async (req, res) => {
+  const data = await getOvertimeQuoteService(req.user._id, req.params.id);
+  return res.status(200).json(new ApiResponse(200, data, 'Overtime quote'));
+});
+
+export const createBookingOvertimePayment = asyncHandler(async (req, res) => {
+  const order = await createOvertimePaymentOrderService(req.user._id, req.params.id);
+  return res.status(200).json(new ApiResponse(200, { razorpay: order }, 'Overtime payment order created'));
+});
+
+export const verifyBookingOvertimePayment = asyncHandler(async (req, res) => {
+  const booking = await verifyOvertimePaymentService(req.user._id, req.params.id, req.body);
+  return res.status(200).json(new ApiResponse(200, { booking }, 'Overtime payment verified'));
 });
 
 /* ------------------------------------------------------------------ */

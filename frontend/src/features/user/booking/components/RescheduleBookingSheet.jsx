@@ -16,7 +16,7 @@ import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import { useUserServicePricingsStore } from '../../../../store/user/useUserPricingStore';
 import api from '../../../../utils/api';
-import { addCalendarDays, startOfLocalDay } from '../../../../utils/outstationSchedule';
+import { addCalendarDays, startOfLocalDay, notBeforeNow } from '../../../../utils/outstationSchedule';
 
 const EDITABLE_STATUSES = new Set([
   BOOKING_STATUS.PENDING_ASSIGNMENT,
@@ -104,7 +104,9 @@ function RescheduleBookingSheetBody({ booking, onClose, onSaved }) {
   );
   const minPickupDate = useMemo(() => {
     if (isOutstation) {
-      return addCalendarDays(new Date(), minLeadDays) || startOfLocalDay(new Date());
+      return notBeforeNow(
+        addCalendarDays(new Date(), minLeadDays) || startOfLocalDay(new Date()),
+      );
     }
     return new Date(Date.now() + minLeadHours * 60 * 60 * 1000);
   }, [isOutstation, minLeadHours, minLeadDays]);

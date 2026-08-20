@@ -25,6 +25,7 @@ import {
   formatOutstationExactDuration,
   addCalendarDays,
   startOfLocalDay,
+  notBeforeNow,
 } from '../../../../utils/outstationSchedule';
 import {
   mergeScheduledDispatchConfig,
@@ -242,8 +243,11 @@ function OutstationBranch({ pricing, draft, onPatch, onContinue }) {
   const [nowAnchorMs] = useState(() => Date.now());
   const minPickupDate = useMemo(
     () =>
-      addCalendarDays(new Date(nowAnchorMs), minLeadDays)
-      || startOfLocalDay(new Date(nowAnchorMs)),
+      notBeforeNow(
+        addCalendarDays(new Date(nowAnchorMs), minLeadDays)
+        || startOfLocalDay(new Date(nowAnchorMs)),
+        new Date(nowAnchorMs),
+      ),
     [nowAnchorMs, minLeadDays],
   );
 

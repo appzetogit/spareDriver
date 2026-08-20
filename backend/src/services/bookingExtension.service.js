@@ -36,6 +36,13 @@ import {
   releaseWalletHoldService,
 } from './wallet.service.js';
 import { scheduleRideEndTimer } from './bookingRideEndTimeout.service.js';
+import {
+  clearOvertimeIfWindowMoved,
+  mergeUnpaidOvertimeIntoExtension,
+  clearOvertimeAfterExtensionPaid,
+  tickOvertimeQuote,
+  emitOvertimeUpdated,
+} from './bookingOvertime.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 import { todayKey } from './bookingCancellation.service.js';
 
@@ -113,6 +120,53 @@ async function toDriverBooking(booking) {
  * (Hour-extension FARE still uses extraHourCharge only — see delta
  * helpers below.)
  */
+function stretchRideEndFromNowIfOverdue(booking, ext) {
+  const overdueMin = Number(ext?.breakdown?.overtimeMinutes) || 0;
+  const overdueAmt = Number(ext?.breakdown?.overtimeAmountRupees) || 0;
+  if (!(overdueMin > 0 || overdueAmt > 0)) return null;
+
+  const extraHours = Number(ext.additionalHours) || 0;
+  const extraDays = Math.max(0, Math.floor(Number(ext.additionalDays) || 0));
+  const addMs = extraDays > 0
+    ? extraDays * 86_400_000
+    : Math.round(extraHours * 3_600_000);
+  if (addMs <= 0) return null;
+  const desiredEnd = Date.now() + addMs;
+
+  if (booking.serviceType === SERVICE_TYPES.OUTSTATION && booking.outstation) {
+    const current = new Date(
+      booking.outstation.expectedReturnAt || booking.outstation.endDate || 0,
+    ).getTime();
+    if (Number.isFinite(current) && desiredEnd > current) {
+      return bumpOutstationWindow(booking, {
+        additionalDays: 0,
+        additionalHours: (desiredEnd - current) / 3_600_000,
+      });
+    }
+    return null;
+  }
+
+  if (booking.hourly && booking.timeline?.startedAt) {
+    const startMs = new Date(booking.timeline.startedAt).getTime();
+    const neededHours = (desiredEnd - startMs) / 3_600_000;
+    const currentHours =
+      (Number(booking.hourly.durationHours) || 0)
+      + (Number(booking.hourly.windowPadHours) || 0)
+      + (booking.extensions || []).reduce(
+        (sum, e) =>
+          sum + (e.status === 'accepted' ? Number(e.additionalHours) || 0 : 0),
+        0,
+      );
+    const pad = neededHours - currentHours;
+    if (pad > 0.0001) {
+      booking.hourly.windowPadHours = round2(
+        (Number(booking.hourly.windowPadHours) || 0) + pad,
+      );
+    }
+  }
+  return null;
+}
+
 function bumpOutstationWindow(
   booking,
   { additionalDays = 0, additionalHours = 0 } = {},
@@ -1513,6 +1567,15 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
     ));
   }
 
+  await tickOvertimeQuote(booking._id);
+  const overtimeFresh = await Booking.findById(booking._id).select('overtime');
+  if (overtimeFresh?.overtime) booking.overtime = overtimeFresh.overtime;
+  ({ fareDelta, breakdown } = mergeUnpaidOvertimeIntoExtension(
+    booking,
+    fareDelta,
+    breakdown,
+  ));
+
   const otpCode = generateExtensionOtp();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + EXTENSION_OTP_WINDOW_MINUTES * 60 * 1000);
@@ -1722,6 +1785,28 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     throw new ApiError(400, 'Please verify the OTP from your driver before paying');
   }
 
+  await tickOvertimeQuote(booking._id);
+  const overtimeFresh = await Booking.findById(booking._id).select('overtime');
+  if (overtimeFresh?.overtime) booking.overtime = overtimeFresh.overtime;
+  const extBd = ext.breakdown || {};
+  const extensionOnlyFare = round2(
+    extBd.extensionFare != null
+      ? extBd.extensionFare
+      : (Number(ext.fareDelta) || 0) - (Number(extBd.overtimeAmountRupees) || 0),
+  );
+  const extensionOnlyBreakdown = {
+    ...extBd,
+    driverEarning: extBd.extensionDriverEarning ?? extBd.driverEarning,
+    platformCommission: extBd.extensionPlatformCommission ?? extBd.platformCommission,
+  };
+  const merged = mergeUnpaidOvertimeIntoExtension(
+    booking,
+    extensionOnlyFare,
+    extensionOnlyBreakdown,
+  );
+  ext.fareDelta = merged.fareDelta;
+  ext.breakdown = merged.breakdown;
+
   const fareDelta = round2(ext.fareDelta || 0);
   if (fareDelta <= 0) {
     // Free extension (admin testing path) — just mark accepted.
@@ -1737,7 +1822,11 @@ export async function payExtensionService(userId, bookingId, body = {}) {
         Number(ext.additionalDays) > 0
           ? `${ext.additionalDays}d`
           : formatExtensionHoursLabel(ext.additionalHours)
-      })`,
+      })${
+        Number(merged.breakdown?.overtimeAmountRupees) > 0
+          ? ` + overdue ${merged.breakdown.overtimeMinutes || 0} min`
+          : ''
+      }`,
       refType: 'Booking',
       refId: String(booking._id),
     });
@@ -1810,6 +1899,13 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     }
   }
 
+  const overdueStretch = stretchRideEndFromNowIfOverdue(booking, ext);
+  if (overdueStretch) {
+    outstationPatch = { ...(outstationPatch || {}), ...overdueStretch };
+    ext.windowAppliedAt = ext.windowAppliedAt || new Date();
+  }
+
+  clearOvertimeAfterExtensionPaid(booking);
   await booking.save();
 
   // Clear “Not now” so a new booked window can nudge again; push
@@ -1821,6 +1917,8 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     }
   }
   scheduleRideEndTimer(booking);
+  await clearOvertimeIfWindowMoved(booking);
+  emitOvertimeUpdated(booking);
 
   const extensionsForUi = booking.extensions.map((e) => serialiseExtensionForCustomer(e));
   const userPayload = {
@@ -1831,6 +1929,15 @@ export async function payExtensionService(userId, bookingId, body = {}) {
     effectiveTotal: effectiveTotalForBooking(booking),
     amountDue: amountDueForBooking(booking),
     ...(outstationPatch ? { outstation: outstationPatch } : {}),
+    overtime: booking.overtime?.toObject?.() || booking.overtime || null,
+    ...(booking.hourly
+      ? {
+          hourly: {
+            durationHours: booking.hourly.durationHours,
+            windowPadHours: booking.hourly.windowPadHours || 0,
+          },
+        }
+      : {}),
   };
 
   emitToUser(booking.userId, S2C_EVENTS.BOOKING_EXTENSION_PAID, userPayload);
@@ -1846,6 +1953,15 @@ export async function payExtensionService(userId, bookingId, body = {}) {
       extension: serialiseExtensionForDriver(ext),
       extensions: booking.extensions.map((e) => serialiseExtensionForDriver(e)),
       ...(outstationPatch ? { outstation: outstationPatch } : {}),
+      overtime: booking.overtime?.toObject?.() || booking.overtime || null,
+      ...(booking.hourly
+        ? {
+            hourly: {
+              durationHours: booking.hourly.durationHours,
+              windowPadHours: booking.hourly.windowPadHours || 0,
+            },
+          }
+        : {}),
     };
     emitToDriver(booking.driverId, S2C_EVENTS.BOOKING_EXTENSION_PAID, driverPayload);
     emitToBooking(booking._id, S2C_EVENTS.BOOKING_UPDATED, driverPayload);

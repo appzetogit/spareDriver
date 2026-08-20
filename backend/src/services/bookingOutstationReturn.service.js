@@ -14,12 +14,14 @@ import {
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES } from '../constants/serviceTypes.js';
 import { getScheduledBookingQueue } from '../queues/scheduledBooking.queue.js';
+import { rideEndsAtMs } from './bookingRideWindow.js';
 
 export const OUTSTATION_RETURN_PHASE = Object.freeze({
   NONE: 'none',
   APPROACHING: 'approaching',
   REACHED: 'reached',
   GRACE: 'grace',
+  OVERTIME: 'overtime',
   AWAITING_DECISION: 'awaiting_decision',
 });
 
@@ -32,14 +34,6 @@ function isOutstationBooking(booking) {
     booking?.serviceType === SERVICE_TYPES.OUTSTATION ||
     booking?.bookingType === BOOKING_TYPE.OUTSTATION
   );
-}
-
-function expectedReturnMs(booking) {
-  const src =
-    booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
-  if (!src) return null;
-  const ms = new Date(src).getTime();
-  return Number.isFinite(ms) ? ms : null;
 }
 
 function numOr(value, fallback) {
@@ -55,10 +49,10 @@ function resolveReturnConfig(booking) {
       o.returnReminderMinutes ?? bd.returnReminderMinutes,
       DEFAULT_REMINDER_MINUTES,
     ),
-    graceMinutes: numOr(
-      o.returnGraceMinutes ?? bd.returnGraceMinutes,
-      DEFAULT_GRACE_MINUTES,
-    ),
+    graceMinutes: (() => {
+      const n = Number(o.returnGraceMinutes ?? bd.returnGraceMinutes);
+      return Number.isFinite(n) && n > 0 ? n : DEFAULT_GRACE_MINUTES;
+    })(),
     promptRepeatMinutes: numOr(
       o.returnPromptRepeatMinutes ?? bd.returnPromptRepeatMinutes,
       DEFAULT_PROMPT_REPEAT_MINUTES,
@@ -74,7 +68,7 @@ export function deriveOutstationReturnPhase(booking, nowMs = Date.now()) {
   if (booking.status !== BOOKING_STATUS.STARTED) {
     return OUTSTATION_RETURN_PHASE.NONE;
   }
-  const endMs = expectedReturnMs(booking);
+  const endMs = rideEndsAtMs(booking);
   if (endMs == null) return OUTSTATION_RETURN_PHASE.NONE;
 
   const cfg = resolveReturnConfig(booking);
@@ -84,6 +78,9 @@ export function deriveOutstationReturnPhase(booking, nowMs = Date.now()) {
   if (nowMs < reminderAt) return OUTSTATION_RETURN_PHASE.NONE;
   if (nowMs < endMs) return OUTSTATION_RETURN_PHASE.APPROACHING;
   if (nowMs < graceEndsAt) return OUTSTATION_RETURN_PHASE.GRACE;
+  if (booking.overtime?.required || booking.overtime?.paymentStatus === 'pending') {
+    return OUTSTATION_RETURN_PHASE.OVERTIME;
+  }
   if (booking.outstation?.returnReachedPromptedAt) {
     return OUTSTATION_RETURN_PHASE.AWAITING_DECISION;
   }
@@ -148,12 +145,14 @@ export function snapshotOutstationReturnConfig(booking, pricingOutstation = {}) 
       o.returnReminderMinutes,
     DEFAULT_REMINDER_MINUTES,
   );
-  booking.outstation.returnGraceMinutes = numOr(
-    booking.outstation.returnGraceMinutes ??
-      bd.returnGraceMinutes ??
-      o.returnGraceMinutes,
-    DEFAULT_GRACE_MINUTES,
-  );
+  booking.outstation.returnGraceMinutes = (() => {
+    const n = Number(
+      booking.outstation.returnGraceMinutes
+        ?? bd.returnGraceMinutes
+        ?? o.returnGraceMinutes,
+    );
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_GRACE_MINUTES;
+  })();
   booking.outstation.returnPromptRepeatMinutes = numOr(
     booking.outstation.returnPromptRepeatMinutes ??
       bd.returnPromptRepeatMinutes ??

@@ -22,9 +22,9 @@ import Button from '../Button';
  *      (default 14). Each chip is disabled when no time on that day
  *      satisfies the `minDate` floor (e.g. lead-time pushes "today"
  *      entirely into tomorrow).
- *   2. Time grid  — 30-min slots between `dayStartHour` and
- *      `dayEndHour`. Slots earlier than `minDate` on the chosen day
- *      are visually disabled.
+ *   2. Time grid  — 30-min slots for the full 24-hour day
+ *      (`dayStartHour` 0 → `dayEndHour` 24). Slots earlier than `minDate`
+ *      (and never in the past) on the chosen day are disabled.
  *
  * The picker is **blank by default**: when `value` is `null/undefined`,
  * no day or time is preselected and the bottom Confirm button stays
@@ -42,7 +42,7 @@ import Button from '../Button';
  *   │ ─── Choose a day ───                       │
  *   │ [Today][Tomorrow][Sat 14][Sun 15] …        │
  *   │ ─── Choose a time ───                      │
- *   │ [06:00][06:30][07:00] …                    │
+ *   │ [12:00 AM][12:30 AM] … [11:00 PM][11:30 PM] │
  *   │ ─── Or pick a specific date ───            │
  *   │ < native date input >                      │
  *   │ [ Confirm ]                                │
@@ -64,8 +64,8 @@ import Button from '../Button';
  *                      (defaults to `<CalendarClock>`).
  *   - `sheetTitle`     Bottom-sheet heading (defaults to `label`).
  *   - `dayWindow`      How many days to show as chips (default 14).
- *   - `dayStartHour`   Earliest slot to show (default 5 → 05:00).
- *   - `dayEndHour`     Latest slot to show, exclusive (default 24).
+ *   - `dayStartHour`   Earliest slot to show (default 0 → 12:00 AM).
+ *   - `dayEndHour`     Latest slot to show, exclusive (default 24 → last slot 11:30 PM).
  *   - `stepMinutes`    Grid step in minutes (default 30).
  *   - `disabled`       Disable the field button entirely.
  */
@@ -81,7 +81,7 @@ export default function DateTimePickerField({
   icon: Icon = CalendarClock,
   sheetTitle,
   dayWindow = 14,
-  dayStartHour = 5,
+  dayStartHour = 0,
   dayEndHour = 24,
   stepMinutes = 30,
   disabled = false,
@@ -195,6 +195,8 @@ function DateTimeSheetBody({
     () => (minDate instanceof Date ? minDate.getTime() : 0),
     [minDate],
   );
+  const [nowMs] = useState(() => Date.now());
+  const effectiveMinMs = Math.max(minMs, nowMs);
   const maxMs = useMemo(
     () =>
       maxDate instanceof Date ? maxDate.getTime() : Number.POSITIVE_INFINITY,
@@ -251,13 +253,13 @@ function DateTimeSheetBody({
     const last = timeSlots[timeSlots.length - 1];
     if (!last) return false;
     const lastMs = combine(day, last.h, last.m).getTime();
-    return lastMs >= minMs;
+    return lastMs >= effectiveMinMs;
   };
 
   const isSlotDisabled = (slot) => {
     if (!draftDay) return true;
     const ms = combine(draftDay, slot.h, slot.m).getTime();
-    if (ms < minMs) return true;
+    if (ms < effectiveMinMs) return true;
     if (ms > maxMs) return true;
     return false;
   };
@@ -270,8 +272,8 @@ function DateTimeSheetBody({
   const draftOutOfRange = useMemo(() => {
     if (!draftMoment) return false;
     const ms = draftMoment.getTime();
-    return ms < minMs || ms > maxMs;
-  }, [draftMoment, minMs, maxMs]);
+    return ms < effectiveMinMs || ms > maxMs;
+  }, [draftMoment, effectiveMinMs, maxMs]);
 
   const canConfirm = !!draftMoment && !draftOutOfRange;
 
@@ -298,17 +300,16 @@ function DateTimeSheetBody({
     setDraftDay(next);
     // Drop a now-invalid time when the new day pushes us before the
     // lead-time floor so the user re-picks it.
-    if (draftTime && combine(next, draftTime.h, draftTime.m).getTime() < minMs) {
+    if (draftTime && combine(next, draftTime.h, draftTime.m).getTime() < effectiveMinMs) {
       setDraftTime(null);
     }
   };
 
   const minCustomDate = useMemo(() => {
-    if (!Number.isFinite(minMs) || minMs <= 0) return undefined;
-    const floor = new Date(minMs);
+    const floor = new Date(effectiveMinMs);
     floor.setHours(0, 0, 0, 0);
     return dateInputValue(floor);
-  }, [minMs]);
+  }, [effectiveMinMs]);
 
   const maxCustomDate = useMemo(() => {
     if (!Number.isFinite(maxMs)) return undefined;
@@ -343,7 +344,7 @@ function DateTimeSheetBody({
                     setCustomDateStr(dateInputValue(day));
                     if (
                       draftTime &&
-                      combine(day, draftTime.h, draftTime.m).getTime() < minMs
+                      combine(day, draftTime.h, draftTime.m).getTime() < effectiveMinMs
                     ) {
                       setDraftTime(null);
                     }

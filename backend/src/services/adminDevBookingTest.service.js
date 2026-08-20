@@ -12,7 +12,7 @@ import {
   bookedRideDurationMs,
   rideEndsAtMs,
   rideExtensionPromptAtMs,
-  rideAutoCompleteAtMs,
+  rideOvertimeStartsAtMs,
   scheduleRideEndTimer,
   cancelRideEndSchedule,
   triggerExtensionPromptNow,
@@ -36,21 +36,23 @@ function buildTimingSnapshot(booking) {
   const now = Date.now();
   const endsAt = rideEndsAtMs(booking);
   const promptAt = rideExtensionPromptAtMs(booking);
-  const autoCompleteAt = rideAutoCompleteAtMs(booking);
+  const overtimeAt = rideOvertimeStartsAtMs(booking);
 
   return {
     now: new Date(now).toISOString(),
     bookedDurationMs: bookedRideDurationMs(booking),
     endsAt: endsAt != null ? new Date(endsAt).toISOString() : null,
     extensionPromptAt: promptAt != null ? new Date(promptAt).toISOString() : null,
-    autoCompleteAt: autoCompleteAt != null ? new Date(autoCompleteAt).toISOString() : null,
+    autoCompleteAt: overtimeAt != null ? new Date(overtimeAt).toISOString() : null,
+    overtimeAt: overtimeAt != null ? new Date(overtimeAt).toISOString() : null,
     msUntilEnd: endsAt != null ? Math.max(0, endsAt - now) : null,
     msUntilPrompt: promptAt != null ? promptAt - now : null,
-    msUntilAutoComplete: autoCompleteAt != null ? autoCompleteAt - now : null,
+    msUntilAutoComplete: overtimeAt != null ? overtimeAt - now : null,
+    msUntilOvertime: overtimeAt != null ? overtimeAt - now : null,
     phase:
       booking.status !== BOOKING_STATUS.STARTED
         ? 'not_started'
-        : autoCompleteAt != null && autoCompleteAt <= now
+        : overtimeAt != null && overtimeAt <= now
           ? 'past_grace'
           : endsAt != null && endsAt <= now
             ? 'in_grace'
@@ -297,7 +299,8 @@ export async function devBookingActionService(bookingRef, action, payload = {}) 
       const booking = await Booking.findById(id).populate(POPULATE).lean();
       return { action, timing: buildTimingSnapshot(booking), booking };
     }
-    case 'auto_complete': {
+    case 'auto_complete':
+    case 'force_overtime': {
       const result = await triggerAutoCompleteNow(id);
       const booking = await Booking.findById(id).populate(POPULATE).lean();
       return { action, result, timing: buildTimingSnapshot(booking), booking };

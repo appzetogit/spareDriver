@@ -226,8 +226,8 @@ const outstationSchema = new mongoose.Schema(
      */
     returnPromptRepeatMinutes: { type: Number, default: 30, min: 0 },
     /**
-     * Optional auto-complete hours after expectedReturnAt.
-     * 0 = disabled (default) — never silently complete.
+     * 0 = disabled (default). Auto-complete after grace is retired;
+     * trips enter overtime payment instead. Kept for back-compat.
      */
     returnAutoCompleteHours: { type: Number, default: 0, min: 0 },
 

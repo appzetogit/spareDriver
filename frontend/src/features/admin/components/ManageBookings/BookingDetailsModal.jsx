@@ -254,6 +254,21 @@ function buildAdminFareRows(booking) {
     }
   }
 
+  const overtimeCharge =
+    Number(booking?.overtime?.amountRupees) || Number(bd.overtimeChargeRupees) || 0;
+  const overtimeMinutes =
+    Number(booking?.overtime?.billableMinutes) || Number(bd.overtimeBillableMinutes) || 0;
+  if (overtimeCharge > 0) {
+    rows.push({
+      label:
+        overtimeMinutes > 0
+          ? `Overtime (${overtimeMinutes} min)`
+          : 'Overtime',
+      value: overtimeCharge,
+      cost: true,
+    });
+  }
+
   // Legacy / incomplete snapshots: fall back to flattened fields.
   if (rows.length === 0) {
     if (Number(snap.baseFare) > 0) {
@@ -382,7 +397,11 @@ const BookingDetailsModal = ({
   );
   const baseTotal = Number(fareSnapshot.total) || 0;
   const waitingCharge = Number(waiting.chargeRupees) || 0;
-  const effectiveTotal = Math.round((baseTotal + waitingCharge + extensionTotal) * 100) / 100;
+  const unpaidOvertime =
+    booking.overtime?.paymentStatus === 'paid'
+      ? 0
+      : Number(booking.overtime?.amountRupees) || 0;
+  const effectiveTotal = Math.round((baseTotal + waitingCharge + extensionTotal + unpaidOvertime) * 100) / 100;
   const amountPaid = Number(payment.amountPaidRupees) || 0;
   const amountDue = Math.max(0, Math.round((effectiveTotal - amountPaid) * 100) / 100);
   const fareRows = buildAdminFareRows(booking);
@@ -1018,6 +1037,83 @@ const BookingDetailsModal = ({
             )}
           </div>
         </Section>
+
+        {booking.overtime?.required || booking.overtime?.paymentStatus === 'paid' ? (
+          <Section title="Overtime" icon={Clock}>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Payment</span>
+                <Badge
+                  variant={
+                    booking.overtime.paymentStatus === 'paid'
+                      ? 'success'
+                      : booking.overtime.paymentStatus === 'failed'
+                        ? 'danger'
+                        : 'warning'
+                  }
+                  className="capitalize"
+                >
+                  {(booking.overtime.paymentStatus || 'none').replace(/_/g, ' ')}
+                </Badge>
+              </div>
+              {booking.overtime.bookedEndAt && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Booked end</span>
+                  <span>{fmtDate(booking.overtime.bookedEndAt)}</span>
+                </div>
+              )}
+              {booking.overtime.graceEndedAt && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Grace ended</span>
+                  <span>{fmtDate(booking.overtime.graceEndedAt)}</span>
+                </div>
+              )}
+              {booking.overtime.startedAt && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Overtime started</span>
+                  <span>{fmtDate(booking.overtime.startedAt)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">Chargeable</span>
+                <span>
+                  {booking.overtime.billableMinutes || 0} min
+                  {booking.overtime.ratePerHour
+                    ? ` · ₹${booking.overtime.ratePerHour}/hr`
+                    : ''}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount</span>
+                <span className="font-semibold">
+                  ₹{Number(booking.overtime.amountRupees || 0).toFixed(2)}
+                </span>
+              </div>
+              {booking.overtime.razorpayOrderId && (
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Order</span>
+                  <span className="font-mono text-xs truncate">
+                    {booking.overtime.razorpayOrderId}
+                  </span>
+                </div>
+              )}
+              {booking.overtime.razorpayPaymentId && (
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Payment ID</span>
+                  <span className="font-mono text-xs truncate">
+                    {booking.overtime.razorpayPaymentId}
+                  </span>
+                </div>
+              )}
+              {booking.overtime.paidAt && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Paid at</span>
+                  <span>{fmtDate(booking.overtime.paidAt)}</span>
+                </div>
+              )}
+            </div>
+          </Section>
+        ) : null}
 
         {(timeline.searchingAt ||
           timeline.driverAssignedAt ||

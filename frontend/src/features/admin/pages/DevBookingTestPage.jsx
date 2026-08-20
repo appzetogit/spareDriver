@@ -40,7 +40,7 @@ const PHASE_LABELS = {
   in_ride: 'In ride',
   extend_window: 'Extend window (prompt due)',
   in_grace: 'Grace period (past booked end)',
-  past_grace: 'Past grace — auto-complete due',
+  past_grace: 'Past grace — overtime payment required',
 };
 
 const statusVariant = (status) => {
@@ -409,10 +409,10 @@ const DevBookingTestPage = () => {
                     </div>
                     <div>Booked end: {timing.endsAt || '—'}</div>
                     <div>Extend prompt: {timing.extensionPromptAt || '—'}</div>
-                    <div>Auto-complete: {timing.autoCompleteAt || '—'}</div>
+                    <div>Overtime starts: {timing.overtimeAt || timing.autoCompleteAt || '—'}</div>
                     <div>Until end: {formatDurationMs(timing.msUntilEnd)}</div>
                     <div>Until prompt: {formatDurationMs(timing.msUntilPrompt)}</div>
-                    <div>Until auto-complete: {formatDurationMs(timing.msUntilAutoComplete)}</div>
+                    <div>Until overtime: {formatDurationMs(timing.msUntilOvertime ?? timing.msUntilAutoComplete)}</div>
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
@@ -446,7 +446,7 @@ const DevBookingTestPage = () => {
                     loading={actionLoading === 'auto_complete'}
                     onClick={() => runAction('auto_complete')}
                   >
-                    Force auto-complete
+                    Force overtime required
                   </Button>
                   <Button
                     size="sm"

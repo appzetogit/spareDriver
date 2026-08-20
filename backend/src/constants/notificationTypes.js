@@ -22,6 +22,9 @@ export const USER_NOTIFICATION = Object.freeze({
   TRIP_STARTED: 'trip_started',
   /** Hourly ride nearing booked end — offer to extend. */
   RIDE_ENDING_SOON: 'ride_ending_soon',
+  /** Grace ended — additional online payment required. */
+  TRIP_OVERTIME_STARTED: 'trip_overtime_started',
+  OVERTIME_PAYMENT_FAILED: 'overtime_payment_failed',
   /** Outstation: ~2h before expectedReturnAt. */
   OUTSTATION_RETURN_APPROACHING: 'outstation_return_approaching',
   /** Outstation: expectedReturnAt reached / grace / repeat prompt. */
@@ -68,6 +71,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   CUSTOMER_CANCELLED: 'customer_cancelled',
   ORDER_ASSIGNED: 'order_assigned',
   EARNINGS_CREDITED: 'earnings_credited',
+  TRIP_OVERTIME_STARTED: 'trip_overtime_started',
   WITHDRAWAL_REQUESTED: 'withdrawal_requested',
   WITHDRAWAL_APPROVED: 'withdrawal_approved',
   WITHDRAWAL_REJECTED: 'withdrawal_rejected',

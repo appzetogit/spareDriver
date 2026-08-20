@@ -54,6 +54,9 @@ import { isChatVisibleForBooking } from '../../../../constants/chat';
  * short enough to surface promos quickly". */
 const MAP_AUTO_COLLAPSE_MS = 7000;
 
+const roundMoney = (n) =>
+  Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+
 /**
  * Maps every status the user can be on while their booking is live to the
  * header copy + icon they see at the top of the page. Adding a new status
@@ -101,8 +104,9 @@ function StatusIcon({ icon }) {
 const DriverAssignedPage = () => {
   const navigate = useNavigate();
   const { id: routeBookingId } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const booking = useUserActiveBookingStore((s) => s.booking);
+  const fetchOvertimeQuote = useUserActiveBookingStore((s) => s.fetchOvertimeQuote);
   const fetchById = useUserActiveBookingStore((s) => s.fetchById);
   const refreshCurrentOrActive = useUserActiveBookingStore(
     (s) => s.refreshCurrentOrActive,
@@ -151,6 +155,24 @@ const DriverAssignedPage = () => {
     emit(C2S_EVENTS.BOOKING_JOIN, { bookingId: booking._id });
     return () => emit(C2S_EVENTS.BOOKING_LEAVE, { bookingId: booking._id });
   }, [booking?._id, isConnected, emit]);
+
+  useEffect(() => {
+    if (booking?.status !== BOOKING_STATUS.STARTED) return undefined;
+    if (!booking?.overtime?.required || booking?.overtime?.paymentStatus === 'paid') {
+      return undefined;
+    }
+    fetchOvertimeQuote().catch(() => null);
+    const id = setInterval(() => {
+      fetchOvertimeQuote().catch(() => null);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [
+    booking?._id,
+    booking?.status,
+    booking?.overtime?.required,
+    booking?.overtime?.paymentStatus,
+    fetchOvertimeQuote,
+  ]);
 
   useSocketEvent(S2C_EVENTS.BOOKING_UPDATED, (payload) => {
     applyUpdate(payload);
@@ -520,12 +542,24 @@ const DriverAssignedPage = () => {
       sum + (ext?.status === 'accepted' ? Number(ext.fareDelta) || 0 : 0),
     0,
   );
-  const total = baseTotal + extensionsTotal;
-  const amountPaid = booking.payment?.amountPaidRupees || 0;
-  const payNowAmount = Math.max(0, total - amountPaid);
+  const total = roundMoney(baseTotal + extensionsTotal);
+  const amountPaid = Number(booking.payment?.amountPaidRupees || 0);
+  const payNowAmount = roundMoney(Math.max(0, total - amountPaid));
 
   const view = STATUS_VIEW[booking.status] || STATUS_VIEW[BOOKING_STATUS.DRIVER_ASSIGNED];
   const isTripStarted = booking.status === BOOKING_STATUS.STARTED;
+  const overtime = booking.overtime || {};
+  const overdueOpen =
+    isTripStarted
+    && Boolean(overtime.required)
+    && overtime.paymentStatus !== 'paid'
+    && (!isOutstationBooking || rideTimer.isPastOutstationGrace);
+  const overdueAmount = overdueOpen
+    ? roundMoney(overtime.amountRupees || overtime.totalPayable || 0)
+    : 0;
+  const overdueMinutes = Number(overtime.billableMinutes) || 0;
+  const overdueRate = roundMoney(overtime.ratePerHour || 0);
+  const overdueDue = overdueOpen;
   const rawDriverName = driver?.name || 'Driver';
   const displayDriverName = isTripStarted
     ? rawDriverName
@@ -731,7 +765,7 @@ const DriverAssignedPage = () => {
               </span>
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm font-extrabold text-gray-900 tabular-nums">
-                  {'\u20B9'}{total}
+                  {'\u20B9'}{total.toFixed(2)}
                 </span>
                 <div className={`w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center transition-transform duration-300 shrink-0 ${sheetExpanded ? 'rotate-180' : ''}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-500">
@@ -887,6 +921,50 @@ const DriverAssignedPage = () => {
                 {/* Trip details card */}
                 <TripDetailsCard booking={booking} />
 
+                {overdueDue && (
+                  <Card className="border border-amber-200 bg-amber-50">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                          Overdue amount
+                        </p>
+                        <p className="text-2xl font-extrabold text-amber-950 tabular-nums">
+                          ₹{overdueAmount.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          {overdueRate > 0
+                            ? `Charged at ₹${overdueRate.toFixed(2)}/hr`
+                            : 'Overdue extra-hour rate'}
+                          {overdueMinutes > 0 ? ` · ${overdueMinutes} min past grace` : ''}
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            disabled={!(overdueAmount > 0)}
+                            onClick={() => {
+                              const next = new URLSearchParams(searchParams);
+                              next.set('overtime', '1');
+                              setSearchParams(next);
+                            }}
+                          >
+                            Pay overdue
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => openExtensionPrompt()}
+                          >
+                            Extend trip
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
                 {/* In-ride duration tracker (hourly only). Outstation
                     uses the calendar-day card below so we never show
                     both "Extend ride" and "Extend trip". */}
@@ -905,6 +983,12 @@ const DriverAssignedPage = () => {
                         <p className={`text-base font-bold ${rideTimer.remainingSeconds < 0 ? 'text-danger' : 'text-text'}`}>
                           {formatRideClock(Math.abs(rideTimer.remainingSeconds))}
                         </p>
+                        {overdueDue && overdueAmount > 0 && (
+                          <p className="text-xs font-semibold text-amber-800 mt-0.5">
+                            Overdue amount ₹{overdueAmount.toFixed(2)}
+                            {overdueRate > 0 ? ` · ₹${overdueRate.toFixed(2)}/hr` : ''}
+                          </p>
+                        )}
                       </div>
                       <Button size="sm" variant="secondary" onClick={() => openExtensionPrompt()}>
                         Extend ride
@@ -941,6 +1025,12 @@ const DriverAssignedPage = () => {
                                 Math.abs(rideTimer.remainingSeconds),
                               )}
                             </p>
+                            {overdueDue && overdueAmount > 0 && (
+                              <p className="text-xs font-semibold text-amber-800 mt-0.5">
+                                Overdue amount ₹{overdueAmount.toFixed(2)}
+                                {overdueRate > 0 ? ` · ₹${overdueRate.toFixed(2)}/hr` : ''}
+                              </p>
+                            )}
                             <p className="text-xs text-text-muted mt-0.5">
                               Extend by hours
                               {outstationHourlyRate > 0
@@ -984,6 +1074,11 @@ const DriverAssignedPage = () => {
                         <p className="text-sm font-semibold text-text truncate">
                           {paymentSummary({ isPaid, isAwaitingPayment, total, payNowAmount })}
                         </p>
+                        {overdueDue && overdueAmount > 0 && (
+                          <p className="text-sm font-bold text-amber-800 tabular-nums mt-0.5">
+                            Overdue amount · ₹{overdueAmount.toFixed(2)}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1163,13 +1258,12 @@ function DetailTile({ icon, label, value, full }) {
 }
 
 function paymentSummary({ isPaid, isAwaitingPayment, total, payNowAmount }) {
-  // `total` here already includes accepted extensions; `payNowAmount`
-  // already subtracts whatever the user has paid so far. Together they
-  // give the user a single honest number on every status.
-  if (isPaid && payNowAmount <= 0) return `Paid · ₹${total}`;
-  if (isPaid && payNowAmount > 0) return `Extra due · ₹${payNowAmount}`;
-  if (isAwaitingPayment) return `Awaiting payment · ₹${payNowAmount}`;
-  return `Total · ₹${total}`;
+  const t = roundMoney(total);
+  const due = roundMoney(payNowAmount);
+  if (isPaid && due <= 0) return `Paid · ₹${t.toFixed(2)}`;
+  if (isPaid && due > 0) return `Extra due · ₹${due.toFixed(2)}`;
+  if (isAwaitingPayment) return `Awaiting payment · ₹${due.toFixed(2)}`;
+  return `Total · ₹${t.toFixed(2)}`;
 }
 
 /**

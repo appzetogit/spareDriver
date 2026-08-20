@@ -19,6 +19,7 @@ import {
   isOutstationV2Pricing,
 } from '../constants/outstationPricing.js';
 import { attachOutstationReturnPhase } from './bookingOutstationReturn.service.js';
+import { attachOvertimeQuote, tickOvertimeQuote } from './bookingOvertime.service.js';
 import {
   cancelPaymentTimeout,
   releaseDriverFromBooking,
@@ -358,7 +359,7 @@ export function sanitizeBookingForDriver(booking) {
 
   applyOutstationLocationPrivacy(obj);
 
-  return attachOutstationReturnPhase(obj);
+  return attachOvertimeQuote(attachOutstationReturnPhase(obj));
 }
 
 /**
@@ -373,7 +374,7 @@ export function sanitizeBookingForUser(booking) {
   ) {
     stripContactIfHidden(booking.driverId);
   }
-  return attachOutstationReturnPhase(booking);
+  return attachOvertimeQuote(attachOutstationReturnPhase(booking));
 }
 
 /**
@@ -512,6 +513,19 @@ function rankActiveBooking(b) {
   return statusRank * 1e15 + new Date(pickupAt || 0).getTime();
 }
 
+async function refreshOvertimeOnRead(booking) {
+  if (!booking?._id || booking.status !== BOOKING_STATUS.STARTED) return booking;
+  try {
+    const tick = await tickOvertimeQuote(booking._id);
+    if (tick?.quote) {
+      booking.overtime = { ...(booking.overtime || {}), ...tick.quote };
+    }
+  } catch {
+    /* best-effort live quote */
+  }
+  return booking;
+}
+
 export async function getActiveBookingForUserService(userId) {
   if (!userId) return null;
   const candidates = await Booking.find({
@@ -530,6 +544,7 @@ export async function getActiveBookingForUserService(userId) {
   // missing for an active customer fetch.
   resumeNoShowScheduleIfNeeded(booking).catch(() => {});
   resumeRideEndScheduleIfNeeded(booking);
+  await refreshOvertimeOnRead(booking);
   return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
 }
 
@@ -593,6 +608,7 @@ export async function getBookingByIdService(bookingId, { userId, driverId } = {}
   if (!booking) throw new ApiError(404, 'Booking not found');
   resumeNoShowScheduleIfNeeded(booking).catch(() => {});
   resumeRideEndScheduleIfNeeded(booking);
+  await refreshOvertimeOnRead(booking);
   if (driverId) {
     return attachCancellationPreview(
       sanitizeBookingForDriver(booking),
@@ -619,6 +635,7 @@ export async function getActiveBookingForDriverService(driverId) {
     .lean();
   resumeNoShowScheduleIfNeeded(booking).catch(() => {});
   resumeRideEndScheduleIfNeeded(booking);
+  await refreshOvertimeOnRead(booking);
   return attachCancellationPreview(
     sanitizeBookingForDriver(booking),
     'driver',
@@ -903,6 +920,9 @@ export async function createBookingService(userId, body) {
     const startMs = new Date(pickupRaw).getTime();
     if (!Number.isFinite(startMs)) {
       throw new ApiError(400, 'Outstation: pickupAt is invalid');
+    }
+    if (startMs < Date.now()) {
+      throw new ApiError(422, 'Pickup time cannot be in the past. Pick a later time.');
     }
     const daysUntil = calendarDaysUntilPickup(pickupRaw);
     if (!Number.isFinite(daysUntil) || daysUntil < minLeadDays) {
@@ -1675,6 +1695,9 @@ export async function rescheduleBookingService(userId, bookingId, body = {}) {
     const nextPickup = new Date(body.pickupAt);
     if (!Number.isFinite(nextPickup.getTime())) {
       throw new ApiError(400, 'pickupAt is required');
+    }
+    if (nextPickup.getTime() < Date.now()) {
+      throw new ApiError(422, 'Pickup time cannot be in the past. Pick a later time.');
     }
     const daysUntil = calendarDaysUntilPickup(nextPickup);
     if (!Number.isFinite(daysUntil) || daysUntil < minLeadDays) {

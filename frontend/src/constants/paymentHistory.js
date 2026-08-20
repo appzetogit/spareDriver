@@ -7,6 +7,6 @@ export const PAYMENT_TYPE_LABELS = {
 
 export const PAYMENT_PURPOSE_LABELS = {
   driver_kit: 'Driver kit',
-  trip_fare: 'Trip fare',
-  withdrawal: 'Withdrawal',
+  booking_overtime: 'Trip overtime',
+  wallet_topup: 'Wallet top-up',
 };

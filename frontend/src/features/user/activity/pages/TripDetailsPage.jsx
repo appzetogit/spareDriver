@@ -53,6 +53,7 @@ import { maskPersonName, formatExtensionHours } from '../../../../utils/formatte
 import RescheduleBookingSheet, {
   canRescheduleBooking,
 } from '../../booking/components/RescheduleBookingSheet';
+import { useRideTimer, isOutstationOvertimePastGrace } from '../../booking/hooks/useRideTimer';
 
 /**
  * Per-booking detail screen, reachable from any card on /user/activity.
@@ -245,6 +246,22 @@ const TripDetailsPage = () => {
     fetchBooking();
   }, [fetchBooking]);
 
+  useEffect(() => {
+    if (booking?.status !== BOOKING_STATUS.STARTED) return undefined;
+    if (!booking?.overtime?.required || booking?.overtime?.paymentStatus === 'paid') {
+      return undefined;
+    }
+    const id = setInterval(() => {
+      fetchBooking();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [
+    booking?.status,
+    booking?.overtime?.required,
+    booking?.overtime?.paymentStatus,
+    fetchBooking,
+  ]);
+
   // Live refresh for active bookings — anyone watching this detail
   // page benefits from the same socket stream the live tracking pages
   // use. Joins the booking room so emits scoped to the room land too.
@@ -265,6 +282,7 @@ const TripDetailsPage = () => {
   });
 
   const status = booking?.status;
+  const rideTimer = useRideTimer(booking);
   const statusStyle = STATUS_STYLES[status] || FALLBACK_STATUS_STYLE;
   const StatusIcon = statusStyle.icon;
   const isLive = status && ACTIVE_BOOKING_STATUSES.includes(status);
@@ -304,9 +322,19 @@ const TripDetailsPage = () => {
     (sum, ext) => sum + (Number(ext?.fareDelta) || 0),
     0,
   );
+  const overtime = booking?.overtime || {};
+  const overtimeOpen =
+    status === BOOKING_STATUS.STARTED
+    && Boolean(overtime.required)
+    && overtime.paymentStatus !== 'paid'
+    && rideTimer.isPastOutstationGrace;
+  const overtimeUnpaid = overtimeOpen
+    ? Number(overtime.amountRupees || overtime.totalPayable || 0)
+    : 0;
+  const overtimeRate = Number(overtime.ratePerHour) || 0;
   const effectiveTotal = round2(baseTotal + waitingCharge + extensionTotal);
   const amountPaid = Number(booking?.payment?.amountPaidRupees || 0);
-  const amountDue = Math.max(0, round2(effectiveTotal - amountPaid));
+  const amountDue = Math.max(0, round2(effectiveTotal - amountPaid + overtimeUnpaid));
 
   const serviceLabel =
     SERVICE_TYPE_LABELS[booking?.serviceType] || booking?.serviceType || 'Trip';
@@ -413,7 +441,9 @@ const TripDetailsPage = () => {
           </div>
           {amountDue > 0 && (
             <span className="px-3 py-1 rounded-full bg-rose-500/30 border border-white/30 text-[11px] font-semibold">
-              {formatRupees(amountDue)} due
+              {overtimeUnpaid > 0
+                ? `${formatRupees(overtimeUnpaid)} overdue`
+                : `${formatRupees(amountDue)} due`}
             </span>
           )}
           {amountDue <= 0 && amountPaid > 0 && (
@@ -435,6 +465,38 @@ const TripDetailsPage = () => {
           canReschedule={canRescheduleBooking(booking)}
           onReschedule={() => setRescheduleOpen(true)}
         />
+
+        {overtimeOpen && (
+          <Card className="border border-amber-200 bg-amber-50">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+              Overdue amount
+            </p>
+            <p className="text-2xl font-extrabold text-amber-950 tabular-nums mt-1">
+              {formatRupees(overtimeUnpaid)}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              {overtimeRate > 0
+                ? `Charged at ${formatRupees(overtimeRate)}/hr`
+                : 'Overdue extra-hour rate'}
+              {Number(overtime.billableMinutes) > 0
+                ? ` · ${overtime.billableMinutes} min past grace`
+                : ''}
+            </p>
+            {liveRoute && (
+              <Button
+                size="sm"
+                className="mt-3"
+                disabled={!(overtimeUnpaid > 0)}
+                onClick={() => {
+                  setActiveBooking(booking);
+                  navigate(`${liveRoute}?overtime=1`);
+                }}
+              >
+                Pay overdue
+              </Button>
+            )}
+          </Card>
+        )}
 
         {/* Pickup OTP — only visible during the driver-en-route window
             so the customer can read it out at pickup. After STARTED it
@@ -946,6 +1008,29 @@ function FareCard({
       value: ext.fareDelta,
     });
   });
+  const ot = booking?.overtime || {};
+  const overtimeUnpaid =
+    booking?.status === BOOKING_STATUS.STARTED
+    && ot.required
+    && ot.paymentStatus !== 'paid'
+    && isOutstationOvertimePastGrace(booking)
+      ? Number(ot.amountRupees || 0)
+      : 0;
+  if (overtimeUnpaid > 0) {
+    lines.push({
+      label: `Overdue time (${ot.billableMinutes || 0} min)`,
+      value: overtimeUnpaid,
+      pillNote: 'Due now',
+    });
+  } else {
+    const overtimePaid = Number(breakdown?.overtimeChargeRupees) || 0;
+    if (overtimePaid > 0) {
+      lines.push({
+        label: `Overdue time (${breakdown.overtimeBillableMinutes || ot.billableMinutes || 0} min)`,
+        value: overtimePaid,
+      });
+    }
+  }
   const bufferRefund = Number(waiting?.bufferRefundRupees) || 0;
   // Surface any waiting-buffer money we sent back to the wallet as
   // its own muted row so the customer can reconcile it against their

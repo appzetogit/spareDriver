@@ -123,6 +123,21 @@ const useDriverActiveTripStore = create((set, get) => ({
     if (patch.outstation) {
       merged.outstation = { ...(current.outstation || {}), ...patch.outstation };
     }
+    if (patch.hourly) {
+      merged.hourly = { ...(current.hourly || {}), ...patch.hourly };
+    }
+    if ('overtime' in patch) {
+      merged.overtime = patch.overtime
+        ? { ...(current.overtime || {}), ...patch.overtime }
+        : {
+            ...(current.overtime || {}),
+            required: false,
+            amountRupees: 0,
+            billableMinutes: 0,
+            totalPayable: 0,
+            paymentStatus: 'none',
+          };
+    }
     // Rating patch — surfaced when the customer rates this driver so
     // the driver app can show "Customer rated you ⭐ 5" badges without
     // a refetch. Merged shallow so a customer-only patch doesn't drop

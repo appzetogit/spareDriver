@@ -169,6 +169,18 @@ const useUserActiveBookingStore = create((set, get) => ({
     if (patch.outstation) {
       merged.outstation = { ...(current.outstation || {}), ...patch.outstation };
     }
+    if ('overtime' in patch) {
+      merged.overtime = patch.overtime
+        ? { ...(current.overtime || {}), ...patch.overtime }
+        : {
+            ...(current.overtime || {}),
+            required: false,
+            amountRupees: 0,
+            billableMinutes: 0,
+            totalPayable: 0,
+            paymentStatus: 'none',
+          };
+    }
     // Same null-handling rule for `cancellation`. The re-dispatch flow
     // sends `cancellation: null` once a new driver accepts so the
     // "driver bailed" popup goes away.
@@ -365,6 +377,56 @@ const useUserActiveBookingStore = create((set, get) => ({
     });
     const booking = res?.data?.data?.booking || null;
     set({ booking });
+    return booking;
+  },
+
+  async fetchOvertimeQuote() {
+    const id = get().booking?._id;
+    if (!id) return null;
+    const res = await api.get(`/auth/bookings/${id}/overtime`);
+    const overtime = res?.data?.data?.overtime ?? null;
+    const current = get().booking;
+    if (current) {
+      set({
+        booking: {
+          ...current,
+          overtime: overtime || {
+            ...(current.overtime || {}),
+            required: false,
+            amountRupees: 0,
+            billableMinutes: 0,
+            totalPayable: 0,
+            paymentStatus: 'none',
+          },
+        },
+      });
+    }
+    return overtime;
+  },
+
+  async createOvertimePaymentOrder() {
+    const id = get().booking?._id;
+    if (!id) throw new Error('No active booking');
+    const res = await api.post(`/auth/bookings/${id}/overtime/payment`);
+    const razorpay = res?.data?.data?.razorpay;
+    const overtime = razorpay?.overtime;
+    const current = get().booking;
+    if (current && overtime) {
+      set({ booking: { ...current, overtime } });
+    }
+    return razorpay;
+  },
+
+  async verifyOvertimePayment({ orderId, paymentId, signature }) {
+    const id = get().booking?._id;
+    if (!id) throw new Error('No active booking');
+    const res = await api.post(`/auth/bookings/${id}/overtime/payment/verify`, {
+      orderId,
+      paymentId,
+      signature,
+    });
+    const booking = res?.data?.data?.booking || null;
+    if (booking) set({ booking });
     return booking;
   },
 

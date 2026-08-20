@@ -27,6 +27,7 @@ const STATUS_META = {
 const PURPOSE_OPTIONS = [
   { value: '', label: 'All purposes' },
   { value: 'booking', label: 'Booking' },
+  { value: 'booking_overtime', label: 'Trip overtime' },
   { value: 'subscription', label: 'Subscription' },
   { value: 'wallet_topup', label: 'Wallet top-up' },
   { value: 'driver_kit', label: 'Driver kit' },

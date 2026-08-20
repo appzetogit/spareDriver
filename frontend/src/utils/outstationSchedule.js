@@ -65,6 +65,16 @@ export function addCalendarDays(day, n) {
   return out;
 }
 
+/** Never allow a pickup floor earlier than the current clock. */
+export function notBeforeNow(date, now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(nowMs)) return date || new Date();
+  if (!date) return new Date(nowMs);
+  const ms = date instanceof Date ? date.getTime() : new Date(date).getTime();
+  if (!Number.isFinite(ms)) return new Date(nowMs);
+  return ms < nowMs ? new Date(nowMs) : date instanceof Date ? date : new Date(ms);
+}
+
 export function isOutstationLocationRevealed(pickupAt, now = new Date()) {
   const tripDay = startOfLocalDay(pickupAt);
   if (!tripDay) return false;

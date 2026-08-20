@@ -45,6 +45,7 @@ import useDriverActiveTripStore, {
 import useDriverIncomingOfferStore from '../../../../store/driver/useDriverIncomingOfferStore';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
+import { isOutstationOvertimePastGrace } from '../../../user/booking/hooks/useRideTimer';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
 import { formatExtensionHours, maskPersonName } from '../../../../utils/formatters';
 import { formatLocationLabel } from '../../../../utils/locationLabel';
@@ -517,8 +518,9 @@ const DriverActiveTripPage = () => {
         sum + (ext?.status === 'accepted' ? Number(ext.additionalHours) || 0 : 0),
       0,
     );
+    const pad = Number(booking?.hourly?.windowPadHours) || 0;
     const remainingMs =
-      startedAtMs + (base + extra) * 3_600_000 - Date.now();
+      startedAtMs + (base + extra + pad) * 3_600_000 - Date.now();
     if (remainingMs <= 0) return null;
     return Math.max(1, Math.ceil(remainingMs / 60_000));
   }, [
@@ -529,9 +531,17 @@ const DriverActiveTripPage = () => {
     booking?.outstation?.endDate,
     booking?.timeline?.startedAt,
     booking?.hourly?.durationHours,
+    booking?.hourly?.windowPadHours,
     booking?.extensions,
     heartbeat,
   ]);
+
+  const overtimePaymentRequired =
+    status === BOOKING_STATUS.STARTED
+    && Boolean(booking?.overtime?.required)
+    && booking?.overtime?.paymentStatus !== 'paid'
+    && Number(booking?.overtime?.amountRupees) > 0
+    && isOutstationOvertimePastGrace(booking);
 
   const isOutstationTrip =
     booking?.serviceType === SERVICE_TYPES.OUTSTATION ||
@@ -569,6 +579,12 @@ const DriverActiveTripPage = () => {
     if (action === 'startTrip' && startTooEarly) {
       toast.error(
         `Pickup is still ${minutesUntilPickup} min away — you can start the ride at the scheduled time.`,
+      );
+      return;
+    }
+    if (action === 'completeTrip' && overtimePaymentRequired) {
+      toast.error(
+        'Please tell the user to make payment of the overdue time. You cannot complete the ride until they pay.',
       );
       return;
     }
@@ -617,6 +633,7 @@ const DriverActiveTripPage = () => {
     startTooEarly,
     minutesUntilPickup,
     enRouteUnlockMinutes,
+    overtimePaymentRequired,
     completeTooEarlyMinutes,
     completeTooEarlyLabel,
   ]);
@@ -785,7 +802,8 @@ const DriverActiveTripPage = () => {
     (config.cta?.action === 'markEnRoute' && enRouteTooEarly) ||
     (config.cta?.action === 'markArrived' && arrivedTooEarly) ||
     (config.cta?.action === 'startTrip' && startTooEarly) ||
-    (config.cta?.action === 'completeTrip' && completeTooEarlyMinutes != null);
+    (config.cta?.action === 'completeTrip' && completeTooEarlyMinutes != null) ||
+    (config.cta?.action === 'completeTrip' && overtimePaymentRequired);
 
   const ctaLabel = !config.cta
     ? null
@@ -795,7 +813,9 @@ const DriverActiveTripPage = () => {
         ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
         : config.cta.action === 'startTrip' && startTooEarly
           ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
-          : config.cta.action === 'completeTrip' && completeTooEarlyMinutes != null
+              : config.cta.action === 'completeTrip' && overtimePaymentRequired
+            ? 'Ask customer to pay overdue'
+            : config.cta.action === 'completeTrip' && completeTooEarlyMinutes != null
             ? `Complete in ${completeTooEarlyLabel}`
             : config.cta.label;
 
@@ -1096,6 +1116,32 @@ const DriverActiveTripPage = () => {
                 {arrivedTooEarly
                   ? '"I\'ve arrived" unlocks at the scheduled pickup time.'
                   : 'Starting the ride unlocks at the scheduled pickup time.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {overtimePaymentRequired && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-amber-100 text-amber-700">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-amber-900">
+                Overdue amount
+                {Number(booking?.overtime?.amountRupees) > 0
+                  ? ` ₹${Number(booking.overtime.amountRupees).toFixed(2)}`
+                  : ''}
+              </p>
+              <p className="text-[12px] leading-snug mt-1 text-amber-800">
+                Please tell the user to make payment of the overdue time
+                {booking?.overtime?.billableMinutes
+                  ? ` (${booking.overtime.billableMinutes} min)`
+                  : ''}
+                {Number(booking?.overtime?.amountRupees) > 0
+                  ? ` — ₹${Number(booking.overtime.amountRupees).toFixed(2)}`
+                  : ''}
+                . You cannot complete the ride until they pay.
               </p>
             </div>
           </div>

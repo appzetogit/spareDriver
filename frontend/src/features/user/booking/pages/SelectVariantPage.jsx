@@ -36,6 +36,7 @@ import {
   formatOutstationDurationLabel,
   addCalendarDays,
   startOfLocalDay,
+  notBeforeNow,
 } from '../../../../utils/outstationSchedule';
 import {
   mergeScheduledDispatchConfig,
@@ -344,7 +345,7 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
   const [nowAnchorMs] = useState(() => Date.now());
   const minPickupDate = useMemo(() => {
     const day = addCalendarDays(new Date(nowAnchorMs), minLeadDays);
-    return day || startOfLocalDay(new Date(nowAnchorMs));
+    return notBeforeNow(day || startOfLocalDay(new Date(nowAnchorMs)), new Date(nowAnchorMs));
   }, [nowAnchorMs, minLeadDays]);
 
   // Blank-by-default: neither pickup nor return is preselected. We do

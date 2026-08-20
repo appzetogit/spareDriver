@@ -92,6 +92,14 @@ export const handleRazorpayWebhookService = async (event, payload) => {
   if (event === 'payment.captured') {
     const paymentEntity = payload?.payment?.entity;
     const orderEntity = payload?.order?.entity;
+    const orderId = paymentEntity?.order_id || orderEntity?.id;
+    const paymentId = paymentEntity?.id;
+    if (orderId) {
+      const { handleOvertimePaymentCaptured } = await import('./bookingOvertime.service.js');
+      const overtime = await handleOvertimePaymentCaptured({ orderId, paymentId });
+      if (overtime?.handled) return overtime;
+    }
+
     if (!paymentEntity?.id || !orderEntity?.id) return { handled: false };
 
     const kitOrder = await KitOrder.findOne({ razorpayOrderId: orderEntity.id });
@@ -117,6 +125,11 @@ export const handleRazorpayWebhookService = async (event, payload) => {
   if (event === 'payment.failed') {
     const orderEntity = payload?.payment?.entity;
     const razorpayOrderId = orderEntity?.order_id;
+    if (razorpayOrderId) {
+      const { handleOvertimePaymentFailed } = await import('./bookingOvertime.service.js');
+      const overtime = await handleOvertimePaymentFailed({ orderId: razorpayOrderId });
+      if (overtime?.handled) return overtime;
+    }
     if (!razorpayOrderId) return { handled: false };
 
     const kitOrder = await KitOrder.findOne({ razorpayOrderId });

@@ -35,6 +35,8 @@ export const PAYMENT_PURPOSE = Object.freeze({
   SUBSCRIPTION: 'subscription',
   /** User Razorpay charge for a booking (pre-pay / settle / extension). */
   BOOKING: 'booking',
+  /** User Razorpay charge for post-grace overtime on an active trip. */
+  BOOKING_OVERTIME: 'booking_overtime',
   /** User Razorpay wallet top-up. */
   WALLET_TOPUP: 'wallet_topup',
   /** Driver-side credit: their share of the daily-rate × commission split. */

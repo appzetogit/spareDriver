@@ -10,6 +10,7 @@ import { SERVICE_TYPES } from '../constants/serviceTypes';
 import { BOOKING_STATUS } from '../constants/bookingStatus';
 import NoShowPromptModal from '../features/user/booking/components/NoShowPromptModal';
 import ExtendRideModal from '../features/user/booking/components/ExtendRideModal';
+import OvertimePaymentSheet from '../features/user/booking/components/OvertimePaymentSheet';
 import { useRideTimer } from '../features/user/booking/hooks/useRideTimer';
 import { useInAppAlertRing } from '../hooks/useInAppAlertRing';
 
@@ -31,6 +32,9 @@ export function UserBookingAlertsBridge() {
   const verifyExtensionOtp = useUserActiveBookingStore((s) => s.verifyExtensionOtp);
   const payExtension = useUserActiveBookingStore((s) => s.payExtension);
   const cancelExtension = useUserActiveBookingStore((s) => s.cancelExtension);
+  const fetchOvertimeQuote = useUserActiveBookingStore((s) => s.fetchOvertimeQuote);
+  const createOvertimePaymentOrder = useUserActiveBookingStore((s) => s.createOvertimePaymentOrder);
+  const verifyOvertimePayment = useUserActiveBookingStore((s) => s.verifyOvertimePayment);
   const extensionPromptOpen = useUserActiveBookingStore((s) => s.extensionPromptOpen);
   const extensionPromptDismissedAt = useUserActiveBookingStore((s) => s.extensionPromptDismissedAt);
   const extensionRejection = useUserActiveBookingStore((s) => s.extensionRejection);
@@ -46,6 +50,13 @@ export function UserBookingAlertsBridge() {
   const lastExtendRingAtRef = useRef(0);
 
   const [noShowPrompt, setNoShowPrompt] = useState(null);
+  const [overtimeSheetOpen, setOvertimeSheetOpen] = useState(false);
+
+  const overtimeDue =
+    booking?.status === BOOKING_STATUS.STARTED
+    && Boolean(booking?.overtime?.required)
+    && booking?.overtime?.paymentStatus !== 'paid'
+    && rideTimer.isPastOutstationGrace;
 
   const openExtendWithRing = () => {
     if (booking?.outstation?.extensionPromptDeclinedAt) return;
@@ -78,6 +89,10 @@ export function UserBookingAlertsBridge() {
       const url = typeof msg.url === 'string' ? msg.url.trim() : '';
       const data = msg.payload || {};
       const kind = data.kind || '';
+      if (kind === 'trip_overtime_started' || kind === 'overtime_payment_failed' || url.includes('overtime=1')) {
+        setOvertimeSheetOpen(true);
+        return;
+      }
       if (kind === 'ride_ending_soon' || url.includes('extend=1')) {
         openExtendWithRing();
         return;
@@ -132,6 +147,44 @@ export function UserBookingAlertsBridge() {
     extensionPromptDismissedAt,
     booking?.outstation?.extensionPromptDeclinedAt,
   ]);
+
+  useEffect(() => {
+    if (!overtimeDue) {
+      setOvertimeSheetOpen(false);
+      return undefined;
+    }
+    setOvertimeSheetOpen(true);
+    fetchOvertimeQuote().catch(() => null);
+    const id = setInterval(() => {
+      fetchOvertimeQuote().catch(() => null);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [overtimeDue, fetchOvertimeQuote]);
+
+  useEffect(() => {
+    if (booking?.serviceType !== SERVICE_TYPES.OUTSTATION) return;
+    if (booking?.status !== BOOKING_STATUS.STARTED) return;
+    if (!booking?.overtime?.required) return;
+    if (booking?.overtime?.paymentStatus === 'paid') return;
+    if (rideTimer.isPastOutstationGrace) return;
+    fetchOvertimeQuote().catch(() => null);
+  }, [
+    booking?.serviceType,
+    booking?.status,
+    booking?.overtime?.required,
+    booking?.overtime?.paymentStatus,
+    rideTimer.isPastOutstationGrace,
+    fetchOvertimeQuote,
+  ]);
+
+  useEffect(() => {
+    if (searchParams.get('overtime') !== '1') return;
+    if (booking?.status !== BOOKING_STATUS.STARTED) return;
+    setOvertimeSheetOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('overtime');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, booking?.status, booking?._id]);
 
   useEffect(() => {
     if (searchParams.get('extend') !== '1') return;
@@ -304,7 +357,10 @@ export function UserBookingAlertsBridge() {
         onNo={() => handleNoShowAnswer('not_coming')}
       />
       <ExtendRideModal
-        open={extensionPromptOpen && booking?.status === BOOKING_STATUS.STARTED}
+        open={
+          extensionPromptOpen
+          && booking?.status === BOOKING_STATUS.STARTED
+        }
         onClose={handleCloseExtend}
         onInitiate={(amount, opts) => initiateExtension(amount, opts)}
         onVerifyOtp={(args) => verifyExtensionOtp(args)}
@@ -338,6 +394,18 @@ export function UserBookingAlertsBridge() {
         perDayRate={outstationPerDayRate}
         minDays={1}
         maxDays={14}
+      />
+      <OvertimePaymentSheet
+        open={overtimeSheetOpen && overtimeDue && !extensionPromptOpen}
+        onClose={() => setOvertimeSheetOpen(false)}
+        overtime={booking?.overtime}
+        onCreateOrder={() => createOvertimePaymentOrder()}
+        onVerify={(args) => verifyOvertimePayment(args)}
+        onRefresh={() => fetchOvertimeQuote()}
+        onExtend={() => {
+          setOvertimeSheetOpen(false);
+          openExtensionPrompt();
+        }}
       />
     </>
   );
