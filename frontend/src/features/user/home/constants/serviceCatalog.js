@@ -8,10 +8,10 @@ import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
  * different illustration between the home tile and the booking flow.
  *
  *   key:          backend serviceType enum value
+ *   title/tagline: fallbacks only — prefer ServicePricing.name / description
  *   imageSrc:     public-path asset shown as the hero
  *   gradient:     Tailwind classes for the card background
  *   accent:       hex used for the "From ₹X" pill border + accent text
- *   tagline:      one-line value prop shown under the title
  *   priceLabel:   how the "From X" hint is phrased (varies by service)
  *   ctaHint:      small text under the CTA chevron
  */

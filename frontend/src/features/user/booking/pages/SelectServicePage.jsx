@@ -86,15 +86,16 @@ const SelectServicePage = () => {
             .map((service, idx) => {
               const catalog = SERVICE_CATALOG[service.serviceType];
               if (!catalog) return null;
+              const title = service.name?.trim() || catalog.title;
               return (
                 <ServiceCard
                   key={service._id}
-                  title={catalog.title}
-                  tagline={catalog.tagline}
+                  title={title}
+                  tagline={service.description?.trim() || catalog.tagline}
                   priceLabel={catalog.priceLabel(service)}
                   ctaHint={catalog.ctaHint}
                   imageSrc={catalog.imageSrc}
-                  imageAlt={`${catalog.title} service`}
+                  imageAlt={`${title} service`}
                   gradient={catalog.gradient}
                   accent={catalog.accent}
                   accentText={catalog.accentText}

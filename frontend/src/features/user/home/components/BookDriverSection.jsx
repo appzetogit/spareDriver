@@ -72,15 +72,16 @@ const BookDriverSection = () => {
       <div className="grid grid-cols-2 gap-3">
         {SERVICE_CATALOG_LIST.map((catalog, idx) => {
           const pricing = pricingByType[catalog.key];
+          const title = pricing?.name?.trim() || catalog.title;
           return (
             <ServiceCard
               key={catalog.key}
-              title={catalog.title}
-              tagline={catalog.tagline}
+              title={title}
+              tagline={pricing?.description?.trim() || catalog.tagline}
               priceLabel={catalog.priceLabel(pricing)}
               ctaHint={catalog.ctaHint}
               imageSrc={catalog.imageSrc}
-              imageAlt={`${catalog.title} service`}
+              imageAlt={`${title} service`}
               gradient={catalog.gradient}
               accent={catalog.accent}
               accentText={catalog.accentText}

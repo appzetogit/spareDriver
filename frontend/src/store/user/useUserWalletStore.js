@@ -14,8 +14,9 @@ import api from '../../utils/api';
  *   POST /auth/wallet/topup           → Razorpay order
  *   POST /auth/wallet/topup/verify    → credit on signature OK
  *
- * Pages should call `fetchWallet` on mount and `refresh()` (or use the
- * value returned by mutators) afterwards — we don't poll.
+ * Pages should call `fetchWallet` on mount — balance is never session-cached
+ * (always refetched; logout clears the store). Concurrent mounts share one
+ * in-flight request.
  */
 
 const EMPTY_WALLET = {
@@ -81,12 +82,9 @@ const useUserWalletStore = create((set, get) => ({
     set((state) => ({ wallet: normaliseWallet(wallet, state.wallet) }));
   },
 
-  async fetchWallet({ force = false } = {}) {
-    // Reuse a fresh snapshot — home, account, and confirm screens all call
-    // this on mount; StrictMode + tab switches must not spam the API.
-    if (!force && get().fetched && !get().loading) {
-      return get().wallet;
-    }
+  async fetchWallet() {
+    // Always hit the API — balance must not survive logout / account switch.
+    // Inflight dedupe still collapses StrictMode + concurrent mounts.
     if (walletInflight) return walletInflight;
 
     set({ loading: true, error: null });
@@ -190,6 +188,7 @@ const useUserWalletStore = create((set, get) => ({
   },
 
   reset() {
+    walletInflight = null;
     set({
       wallet: EMPTY_WALLET,
       transactions: [],
