@@ -156,9 +156,8 @@ const LandingPage = () => {
         )}
       </header>
 
-      <section id="home" className="relative overflow-hidden bg-[#FFF8D6] pt-16 pb-20 md:pt-24 md:pb-28">
-        <div className="absolute -top-24 -left-24 w-[420px] h-[420px] rounded-full bg-[#F5C400]/50 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-[380px] h-[380px] rounded-full bg-[#F5C400]/30 blur-3xl pointer-events-none" />
+      <section id="home" className="relative overflow-hidden bg-white pt-16 pb-20 md:pt-24 md:pb-28">
+        <div className="absolute -top-20 -left-10 w-[130%] h-24 bg-[#FAFAF7] rotate-[-2deg] origin-top-left pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-6 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
           <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 md:space-y-7 animate-fade-in-up">
