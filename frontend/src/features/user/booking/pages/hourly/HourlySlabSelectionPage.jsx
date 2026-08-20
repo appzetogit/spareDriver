@@ -255,9 +255,12 @@ const HourlySlabSelectionPage = () => {
                   <SlabRow
                     key={id}
                     active={selectedKey === id}
-                    title={slab.label || `Up to ${slab.maxHours} hours`}
-                    subtitle={`Up to ${slab.maxHours} h${pricing.extraHourCharge ? ` · extra ₹${pricing.extraHourCharge}/hr` : ''
-                      }`}
+                    title={slab.label || `${slab.minHours}–${slab.maxHours} hours`}
+                    subtitle={
+                      pricing.extraHourCharge
+                        ? `Extra ₹${pricing.extraHourCharge}/hr`
+                        : undefined
+                    }
                     price={`₹${slab.price}`}
                     onClick={() => setSelectedKey(id)}
                   />
@@ -421,7 +424,7 @@ function SlabRow({ active, title, subtitle, price, onClick }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-text">{title}</p>
-        <p className="text-[11px] text-text-muted">{subtitle}</p>
+        {subtitle ? <p className="text-[11px] text-text-muted">{subtitle}</p> : null}
       </div>
       <p className="text-base font-bold text-text">{price}</p>
     </button>
