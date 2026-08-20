@@ -1,9 +1,7 @@
 import { Outlet, Navigate } from 'react-router-dom';
 import useAdminAuthStore from '../store/useAdminAuthStore';
 import { useStoreHydration } from '../hooks/useStoreHydration';
-import { BootstrapShellSkeleton } from '../components/skeleton/SectionSkeletons';
-
-import { isDeveloper } from '../constants/staffRoles';
+import { AdminBootstrapSkeleton } from '../components/skeleton/SectionSkeletons';
 
 const STAFF_ROLES = ['admin', 'sub_admin', 'team_member', 'developer'];
 
@@ -12,7 +10,7 @@ const AdminGuard = () => {
   const { isAuthenticated, admin } = useAdminAuthStore();
 
   if (!hydrated) {
-    return <BootstrapShellSkeleton />;
+    return <AdminBootstrapSkeleton />;
   }
 
   if (!isAuthenticated || !admin || !STAFF_ROLES.includes(admin.role)) {
