@@ -88,7 +88,7 @@ export function LandingHeader({ backToHome = false }) {
         <Link to="/" className="flex items-center gap-2 group">
           <img
             src={LANDING_LOGO_SRC}
-            alt="SpareDriver"
+            alt="sparedriver"
             className="h-16 w-auto object-contain rounded-xl transition-transform duration-300 group-hover:scale-[1.02]"
           />
         </Link>
@@ -135,7 +135,7 @@ export function LandingFooter({ socialUrls }) {
         <div className="md:col-span-6 space-y-5">
           <img
             src={LANDING_LOGO_SRC}
-            alt="SpareDriver"
+            alt="sparedriver"
             className="h-16 w-auto object-contain rounded-xl"
           />
           <p className="text-sm text-neutral-400 max-w-sm leading-relaxed">
@@ -173,7 +173,7 @@ export function LandingFooter({ socialUrls }) {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 pt-12 mt-12 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-4">
-        <p>© {new Date().getFullYear()} SpareDriver. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} sparedriver. All rights reserved.</p>
       </div>
     </footer>
   );

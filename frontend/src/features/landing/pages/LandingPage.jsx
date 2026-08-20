@@ -41,7 +41,7 @@ const LandingPage = () => {
   });
 
   useEffect(() => {
-    document.title = 'SpareDriver - Professional Driver for Your Car | Safe, Verified, On-Time';
+    document.title = 'sparedriver - Professional Driver for Your Car | Safe, Verified, On-Time';
 
     let metaDesc = document.querySelector('meta[name="description"]');
     if (!metaDesc) {
@@ -51,7 +51,7 @@ const LandingPage = () => {
     }
     metaDesc.setAttribute(
       'content',
-      'Get safe, verified, and professional drivers for your car on-demand. SpareDriver offers hourly bookings, round trips, and subscription benefits with real-time tracking.',
+      'Get safe, verified, and professional drivers for your car on-demand. sparedriver offers hourly bookings, round trips, and subscription benefits with real-time tracking.',
     );
 
     let cancelled = false;
@@ -91,7 +91,7 @@ const LandingPage = () => {
           <a href="#home" className="flex items-center gap-2 group" onClick={(e) => handleNavClick(e, 'home')}>
             <img
               src={LANDING_LOGO_SRC}
-              alt="SpareDriver"
+              alt="sparedriver"
               className="h-16 w-auto object-contain rounded-xl transition-transform duration-300 group-hover:scale-[1.02]"
               loading="eager"
             />
@@ -328,7 +328,7 @@ const LandingPage = () => {
           <div className="lg:col-span-7 space-y-6 md:space-y-8">
             <div className="space-y-2">
               <span className="text-xs uppercase tracking-wider font-bold text-black bg-[#F5C400] px-3.5 py-1.5 rounded-full">
-                About SpareDriver
+                About sparedriver
               </span>
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-black pt-2">
                 Professional drivers, your car
@@ -336,7 +336,7 @@ const LandingPage = () => {
             </div>
 
             <p className="text-neutral-600 text-sm md:text-base leading-relaxed">
-              SpareDriver connects vetted chauffeurs with private car owners. Driving can be
+              sparedriver connects vetted chauffeurs with private car owners. Driving can be
               stressful, tiring, or a distraction from your day — hire a safe, expert driver and
               reclaim that time.
             </p>
@@ -365,7 +365,7 @@ const LandingPage = () => {
           <div className="lg:col-span-5 flex justify-center">
             <div className="relative w-full max-w-sm rounded-3xl overflow-hidden bg-white border border-neutral-100 shadow-xl p-8 flex flex-col justify-center gap-8">
               <h4 className="text-lg font-bold text-black text-center border-b border-neutral-100 pb-4">
-                Why users trust SpareDriver
+                Why users trust sparedriver
               </h4>
               <ul className="space-y-4">
                 <li className="flex gap-3.5">
@@ -413,7 +413,7 @@ const LandingPage = () => {
             Ready to travel stress-free?
           </h2>
           <p className="text-neutral-800 text-base md:text-lg max-w-xl mx-auto leading-relaxed">
-            Get the SpareDriver app to book verified drivers, schedule round trips, and track every
+            Get the sparedriver app to book verified drivers, schedule round trips, and track every
             ride in real time.
           </p>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-2">

@@ -8,7 +8,7 @@ const ContactUsPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    document.title = 'Contact Us - SpareDriver';
+    document.title = 'Contact Us - sparedriver';
     let metaDesc = document.querySelector('meta[name="description"]');
     if (!metaDesc) {
       metaDesc = document.createElement('meta');
@@ -17,7 +17,7 @@ const ContactUsPage = () => {
     }
     metaDesc.setAttribute(
       'content',
-      'Contact SpareDriver support by phone, email, or visit our office address.',
+      'Contact sparedriver support by phone, email, or visit our office address.',
     );
     window.scrollTo(0, 0);
 

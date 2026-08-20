@@ -14,7 +14,7 @@ const LegalDocumentPage = ({ type }) => {
 
   useEffect(() => {
     const title = meta?.titleFallback || 'Legal';
-    document.title = `${title} - SpareDriver`;
+    document.title = `${title} - sparedriver`;
 
     let metaDesc = document.querySelector('meta[name="description"]');
     if (!metaDesc) {
