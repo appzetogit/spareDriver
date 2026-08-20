@@ -253,16 +253,24 @@ export async function clearTripLocation(bookingId) {
 /* Mongo writes                                                        */
 /* ------------------------------------------------------------------ */
 
-async function snapshotMongoLocation(driverId, { lat, lng }) {
+async function snapshotMongoLocation(driverId, { lat, lng, at }) {
   await Driver.updateOne(
     { _id: driverId },
     {
       $set: {
         location: { type: 'Point', coordinates: [lng, lat] },
-        lastLocationAt: new Date(),
+        lastLocationAt: new Date(at),
+        // Keep the presence watermark in lockstep with the snapshot path so a
+        // throttled write never leaves lastFixAt behind lastLocationAt.
+        lastFixAt: new Date(at),
       },
     },
   );
+}
+
+/** Presence watermark — every accepted fix, not only the throttled snapshot. */
+async function touchLastFixAt(driverId, at) {
+  await Driver.updateOne({ _id: driverId }, { $set: { lastFixAt: new Date(at) } });
 }
 
 /* ------------------------------------------------------------------ */
@@ -325,10 +333,19 @@ export async function recordDriverLocation(driverId, coords) {
   let mongoSnapshot = false;
   if (await acquireThrottle(KEY.mongoThrottle(driverId), MONGO_SNAPSHOT_MIN_INTERVAL_MS)) {
     try {
-      await snapshotMongoLocation(driverId, { lat, lng });
+      await snapshotMongoLocation(driverId, { lat, lng, at: now });
       mongoSnapshot = true;
     } catch (err) {
       console.warn('[driverLocation] Mongo snapshot failed:', err.message);
+    }
+  } else {
+    // Socket + HTTP ingest both land here. Without this, only the native batch
+    // path advanced lastFixAt and the presence sweeper treated foreground
+    // socket traffic as "gone" after a few quiet minutes in the background.
+    try {
+      await touchLastFixAt(driverId, now);
+    } catch (err) {
+      console.warn('[driverLocation] lastFixAt touch failed:', err.message);
     }
   }
 

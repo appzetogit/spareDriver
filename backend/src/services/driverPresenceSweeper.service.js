@@ -2,29 +2,30 @@ import { Driver } from '../models/driverModels/driver.model.js';
 import { markDriverOfflineLive } from './driverLocation.service.js';
 
 /**
- * Periodic reconciliation of "who is actually online".
+ * Periodic reconciliation of live map presence — not the driver's online toggle.
  *
  * A socket disconnect alone is not proof a driver has gone: with native
  * background tracking the app backgrounds, the websocket drops, and location
- * keeps flowing. So the disconnect handler only tears presence down when it
- * has ALSO heard nothing from the GPS uploader.
+ * keeps flowing. The disconnect handler already keys off a recent fix.
  *
- * That leaves one hole, and it is the common one. A driver who force-quits
- * mid-shift has a fresh `lastFixAt` at the moment their socket dies, so the
- * disconnect check spares them — and nothing ever looks again. They stayed
- * "online" indefinitely: on the admin live map, in the dispatch pool, and
- * frozen on a customer's map.
+ * When GPS itself goes quiet (force-quit, native killed by the OS, permission
+ * revoked), we still need to clear the Firebase live node so admin maps and
+ * customer tracking do not show a frozen car. We deliberately do NOT flip
+ * Mongo `isOnline` here: that flag is owned by the driver's explicit toggle.
+ * Flipping it after ~5 minutes of silence was marking minimized drivers
+ * offline, and the next native upload then received `stopTracking` and shut
+ * itself down for good.
  *
- * This sweeper is the thing that looks again. It is deliberately dumb and
- * idempotent, so running it on several instances at once is harmless.
+ * Dispatch safety does not depend on this sweeper — `driverFinder` already
+ * refuses drivers whose `lastLocationAt` is stale.
  */
 
-/** Nothing heard for this long means gone. */
+/** Nothing heard for this long → clear live Firebase presence. */
 const STALE_FIX_MS = 5 * 60_000;
 
 /**
  * Allowance for a driver who has just toggled online and whose first fix has
- * not landed yet. Without it, going online would be undone seconds later.
+ * not landed yet.
  */
 const WARMUP_MS = 5 * 60_000;
 
@@ -33,8 +34,9 @@ const SWEEP_INTERVAL_MS = 60_000;
 let timer = null;
 
 /**
- * Mark every driver who has stopped reporting as offline.
- * Exported separately so it can be triggered from a test or an admin action.
+ * Tear down live presence for every driver who has stopped reporting.
+ * Leaves Mongo `isOnline` alone so a minimized / briefly-silent app stays
+ * online until the driver toggles off.
  *
  * @returns {Promise<{ sweptCount: number }>}
  */
@@ -47,9 +49,7 @@ export async function sweepStalePresence() {
     isOnline: true,
     isDeleted: false,
     $or: [
-      // Reporting, then stopped.
       { lastFixAt: { $lt: staleBefore } },
-      // Never reported at all, and past the warm-up allowance.
       {
         lastFixAt: null,
         $or: [
@@ -67,16 +67,9 @@ export async function sweepStalePresence() {
 
   const ids = stale.map((d) => d._id);
 
-  await Driver.updateMany(
-    { _id: { $in: ids } },
-    { $set: { isOnline: false, isOnTrip: false } },
-  );
-
-  // Firebase teardown one at a time — the writes are independent and a single
-  // failure should not strand the rest.
   await Promise.allSettled(ids.map((id) => markDriverOfflineLive(String(id))));
 
-  console.log(`[presenceSweeper] marked ${ids.length} stale driver(s) offline`);
+  console.log(`[presenceSweeper] cleared live presence for ${ids.length} stale driver(s)`);
   return { sweptCount: ids.length };
 }
 

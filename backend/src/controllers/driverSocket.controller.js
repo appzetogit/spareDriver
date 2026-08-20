@@ -148,24 +148,21 @@ export function attachDriverSocketHandlers(socket) {
     }
   });
 
-  // When the socket drops, schedule a delayed presence teardown. A quick
+  // When the socket drops, schedule a delayed live-presence teardown. A quick
   // reload or transient network blip reconnects inside the grace period and
   // cancels it.
   //
-  // The previous version only tore down when Mongo ALSO said `isOnline: false`
-  // — which is the one case the REST toggle has already handled. A driver who
-  // went online and then force-quit stayed online forever: still on the admin
-  // live map, still winning dispatch offers, still showing a frozen car to any
-  // customer watching. Presence now follows the connection, which is what
-  // presence means.
+  // Native background tracking can outlive the socket, so a recent fix means
+  // the driver is still there — leave Firebase alone. When nothing has been
+  // heard either way, clear the live map node only. Do NOT flip Mongo
+  // `isOnline`: that is the driver's explicit toggle. Dispatch already ignores
+  // stale `lastLocationAt`, and flipping the flag on minimize caused the
+  // native uploader to receive `stopTracking` and shut down for the shift.
   socket.on('disconnect', () => {
     clearOfflineTimer(driverId);
     const handle = setTimeout(async () => {
       offlineTimers.delete(driverId);
       try {
-        // Native background tracking can outlive the socket, so a recent fix
-        // is proof the driver is still there even with no websocket. Only tear
-        // down presence when nothing has been heard either way.
         const driver = await Driver.findById(driverId)
           .select('isOnline lastFixAt')
           .lean();
@@ -179,11 +176,6 @@ export function attachDriverSocketHandlers(socket) {
           return;
         }
 
-        // Clear the Mongo flag too, otherwise the driver keeps matching
-        // `$geoNear` on `isOnline: true` from a position nobody is updating.
-        if (driver.isOnline) {
-          await Driver.updateOne({ _id: driverId }, { $set: { isOnline: false } });
-        }
         await markDriverOfflineLive(driverId);
       } catch (err) {
         console.warn('[driverSocket] post-disconnect teardown failed:', err.message);
