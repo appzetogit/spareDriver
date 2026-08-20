@@ -10,6 +10,7 @@ import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { useFormDraft } from '../../../../hooks/useFormDraft';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
+import DriverRegistrationLogoutButton from '../components/DriverRegistrationLogoutButton';
 
 const BANK_DRAFT_KEY = 'driver-onboarding:step3';
 const defaultBankForm = { holder: '', account: '', ifsc: '', bank: '', upi: '' };
@@ -176,10 +177,11 @@ const BankDetailsPage = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100">
           <ArrowLeft className="w-5 h-5" />
         </button>
+        <DriverRegistrationLogoutButton />
       </div>
       <div className="px-6 pt-2 pb-4">
         <div className="flex items-center justify-between mb-4">

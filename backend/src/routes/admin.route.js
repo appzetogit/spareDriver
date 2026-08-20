@@ -261,6 +261,13 @@ import {
   patchDevBooking,
   runDevBookingAction,
 } from '../controllers/adminDevBookingTest.controller.js';
+import {
+  getAdminReferralSettings,
+  updateAdminReferralSettings,
+  listAdminReferrals,
+  getAdminReferralById,
+  rejectAdminReferral,
+} from '../controllers/adminReferral.controller.js';
 import { uploadAdMedia, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
@@ -634,6 +641,12 @@ router.put(
   restrictTo(...SUPER_ADMIN),
   updateAdminSubscriptionDispatch,
 );
+
+router.get('/settings/referrals', protectStaff, restrictTo(...OPERATIONS), getAdminReferralSettings);
+router.put('/settings/referrals', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminReferralSettings);
+router.get('/referrals', protectStaff, restrictTo(...OPERATIONS), listAdminReferrals);
+router.get('/referrals/:id', protectStaff, restrictTo(...OPERATIONS), getAdminReferralById);
+router.patch('/referrals/:id/reject', protectStaff, restrictTo(...OPERATIONS), rejectAdminReferral);
 
 router.post('/kits', protectStaff, restrictTo(...SUPER_ADMIN), createKit);
 router.get('/kits', protectStaff, restrictTo(...ALL_STAFF), getKits);

@@ -14,6 +14,7 @@ import {
   FileText,
   Headphones,
   Star,
+  Gift,
 } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
@@ -53,6 +54,7 @@ const MENU_GROUPS = [
   {
     title: 'Account',
     items: [
+      { icon: Gift, label: 'Refer & Earn', path: '/driver/refer' },
       { icon: Building2, label: 'Bank Details', path: '/driver/account/bank' },
       { icon: GraduationCap, label: 'Training & Certification', path: '/driver/register/training' },
       { icon: History, label: 'Payment History', path: '/driver/payments' },

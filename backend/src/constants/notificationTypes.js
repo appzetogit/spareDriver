@@ -53,6 +53,7 @@ export const USER_NOTIFICATION = Object.freeze({
   BOOKING_REMINDER: 'booking_reminder',
   BOOKING_CANCELLED: 'booking_cancelled',
   TRIP_CHAT_MESSAGE: 'trip_chat_message',
+  REFERRAL_REWARD: 'referral_reward',
 });
 
 /** Driver-facing notification kinds */
@@ -91,6 +92,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   ACCOUNT_SUSPENDED: 'account_suspended',
   ACCOUNT_UNSUSPENDED: 'account_unsuspended',
   TRIP_CHAT_MESSAGE: 'trip_chat_message',
+  REFERRAL_REWARD: 'referral_reward',
 });
 
 /** Admin inbox kinds (socket + DB; FCM only for ADMIN_FCM_NOTIFICATION_TYPES) */

@@ -924,6 +924,16 @@ export async function finalizeTripCompletionService(booking, { reason = 'complet
     ),
   );
 
+  const { handleUserBookingCompleted, handleDriverTripCompleted } = await import(
+    './referral.service.js'
+  );
+  handleUserBookingCompleted(claimed).catch((err) =>
+    console.warn('[bookingTrip] user referral check failed:', err?.message),
+  );
+  handleDriverTripCompleted(claimed).catch((err) =>
+    console.warn('[bookingTrip] driver referral check failed:', err?.message),
+  );
+
   broadcastUpdate(claimed);
   notifyUserTripCompleted(claimed.userId, claimed).catch(() => null);
   queueBookingInvoiceEmail(claimed);

@@ -46,6 +46,25 @@ const appSettingsSchema = new mongoose.Schema(
       INBOX_BROADCAST_LIMIT: { type: Number, default: 50, min: 1, max: 100 },
       SEARCH_RADIUS_METERS: { type: Number, default: 25000, min: 1000 },
     },
+    /** Refer & Earn program knobs (user + driver configured independently). */
+    referralSettings: {
+      user: {
+        enabled: { type: Boolean, default: true },
+        referrerRewardRupees: { type: Number, default: 100, min: 0 },
+        referredRewardRupees: { type: Number, default: 0, min: 0 },
+        qualificationType: {
+          type: String,
+          default: 'first_completed_booking',
+        },
+        minBookingAmountRupees: { type: Number, default: 0, min: 0 },
+      },
+      driver: {
+        enabled: { type: Boolean, default: true },
+        referrerRewardRupees: { type: Number, default: 500, min: 0 },
+        referredRewardRupees: { type: Number, default: 0, min: 0 },
+        requiredCompletedTrips: { type: Number, default: 5, min: 0 },
+      },
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

@@ -72,11 +72,12 @@ async function assertPhoneAvailable(phone) {
 }
 
 async function assertEmailAvailable(email, { excludeUserId } = {}) {
-  const filter = { email, isDeleted: false, isEmailVerified: true };
+  if (isPlaceholderUserEmail(email)) return;
+  const filter = { email, isDeleted: false };
   if (excludeUserId) filter._id = { $ne: excludeUserId };
   const taken = await User.findOne(filter);
   if (taken) {
-    throw new ApiError(400, 'This email is already registered to another account');
+    throw new ApiError(400, 'This email is already registered. Please login or use a different email.');
   }
 }
 
@@ -196,6 +197,8 @@ export const verifyRegistrationEmailOtpService = async (phone, email, otp) => {
     throw new ApiError(400, 'Verify your mobile number first');
   }
 
+  await assertEmailAvailable(normalizedEmail);
+
   if (!isTestOtp(otp)) {
     const record = await EmailVerification.findOne({
       phone,
@@ -222,6 +225,7 @@ export const completeRegistrationService = async ({
   email,
   password,
   alternatePhone,
+  referralCode,
   fcmToken,
   token,
   platform,
@@ -263,6 +267,14 @@ export const completeRegistrationService = async ({
     isPhoneVerified: true,
     isEmailVerified: true,
   });
+
+  const { ensureUserReferralCode, applyUserReferralOnRegistration } = await import(
+    './referral.service.js'
+  );
+  await ensureUserReferralCode(user._id);
+  if (referralCode) {
+    await applyUserReferralOnRegistration(user, referralCode);
+  }
 
   await RegistrationDraft.deleteOne({ _id: draft._id });
   await seedSignupEmergencyContact(user._id, normalizedAlternatePhone);

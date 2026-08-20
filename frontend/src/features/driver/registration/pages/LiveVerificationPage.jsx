@@ -14,6 +14,7 @@ import api from '../../../../utils/api';
 const LiveVerificationPage = () => {
   const navigate = useNavigate();
   const updateDriver = useDriverAuthStore((s) => s.updateDriver);
+  const logout = useDriverAuthStore((s) => s.logout);
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -67,6 +68,11 @@ const LiveVerificationPage = () => {
     if (ok) await fetchSavedVideo();
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/driver/login', { replace: true });
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-dvh bg-slate-50">
@@ -82,6 +88,7 @@ const LiveVerificationPage = () => {
       title="Live identity verification"
       subtitle="Record a live video showing your Aadhaar and driving licence. No gallery uploads."
       onBack={() => navigate(-1)}
+      onLogout={handleLogout}
       footer={
         showRecorder ? (
           <Button

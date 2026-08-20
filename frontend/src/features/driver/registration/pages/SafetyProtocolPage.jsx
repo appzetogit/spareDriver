@@ -10,6 +10,7 @@ import { useDocumentsManager } from '../../../../hooks/useDocumentsManager';
 import { useFormDraft } from '../../../../hooks/useFormDraft';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
+import DriverRegistrationLogoutButton from '../components/DriverRegistrationLogoutButton';
 const SAFETY_DOC_TYPES = ['aadhaar_front', 'aadhaar_back', 'police_verification'];
 const SAFETY_DRAFT_KEY = 'driver-onboarding:step4';
 
@@ -87,10 +88,11 @@ const SafetyProtocolPage = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 flex items-center justify-between">
         <button type="button" onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100">
           <ArrowLeft className="w-5 h-5" />
         </button>
+        <DriverRegistrationLogoutButton />
       </div>
       <div className="px-6 pt-2 pb-4">
         <PageHeader steps={DRIVER_ONBOARDING_STEPS} currentStep={4} title="Safety & Documents" />

@@ -100,6 +100,7 @@ const SubscribeCheckoutPage = lazy(
   () => import('./features/user/subscriptions/pages/SubscribeCheckoutPage'),
 );
 const MySubscriptionPage = lazy(() => import('./features/user/account/pages/MySubscriptionPage'));
+const UserReferEarnPage = lazy(() => import('./features/user/account/pages/UserReferEarnPage'));
 
 // Driver Registration
 const DriverLoginPage = lazy(() => import('./features/driver/auth/pages/DriverLoginPage'));
@@ -131,6 +132,7 @@ const DriverActiveTripPage = lazy(() => import('./features/driver/trips/pages/Dr
 
 // Driver Dashboard
 const EarningsPage = lazy(() => import('./features/driver/earnings/pages/EarningsPage'));
+const DriverReferEarnPage = lazy(() => import('./features/driver/account/pages/DriverReferEarnPage'));
 const DriverAccountPage = lazy(() => import('./features/driver/account/pages/DriverAccountPage'));
 const DriverOrdersPage = lazy(() => import('./features/driver/account/pages/DriverOrdersPage'));
 const DriverOrderDetailPage = lazy(() => import('./features/driver/account/pages/DriverOrderDetailPage'));
@@ -177,6 +179,7 @@ const ManageWithdrawals = lazy(() => import('./features/admin/pages/ManageWithdr
 const ManageRevenue = lazy(() => import('./features/admin/pages/ManageRevenue'));
 const ManageSubscriptions = lazy(() => import('./features/admin/pages/ManageSubscriptions'));
 const ManageCoupons = lazy(() => import('./features/admin/pages/ManageCoupons'));
+const ManageReferrals = lazy(() => import('./features/admin/pages/ManageReferrals'));
 const ManageSubscriptionRevenue = lazy(() => import('./features/admin/pages/ManageSubscriptionRevenue'));
 const ManageKitRevenue = lazy(() => import('./features/admin/pages/ManageKitRevenue'));
 const LiveDriverMap = lazy(() => import('./features/admin/pages/LiveDriverMap'));
@@ -245,6 +248,7 @@ function App() {
               <Route path="/user/profile" element={<MyProfilePage />} />
               <Route path="/user/account/subscription" element={<MySubscriptionPage />} />
               <Route path="/user/subscriptions" element={<SubscriptionsPage />} />
+              <Route path="/user/refer" element={<UserReferEarnPage />} />
               <Route path="/user/wallet" element={<WalletPage />} />
               <Route path="/user/help-support" element={<HelpSupportPage audience="user" />} />
               {/* Scheduled-ride parking lot: PENDING_ASSIGNMENT (worker hasn't
@@ -322,6 +326,7 @@ function App() {
               <Route path="/driver/trips" element={<MyTripsPage />} />
               <Route path="/driver/earnings" element={<EarningsPage />} />
               <Route path="/driver/account" element={<DriverAccountPage />} />
+              <Route path="/driver/refer" element={<DriverReferEarnPage />} />
             </Route>
 
             <Route path="/driver/kit" element={<DriverKitPage />} />
@@ -437,6 +442,8 @@ function App() {
             <Route path="/admin/settings/pricing" element={<ManagePricing />} />
             <Route path="/admin/settings/subscriptions" element={<ManageSubscriptions />} />
             <Route path="/admin/settings/coupons" element={<ManageCoupons />} />
+            <Route path="/admin/referrals" element={<ManageReferrals />} />
+            <Route path="/admin/settings/referrals" element={<Navigate to="/admin/referrals" replace />} />
             {/* Top-level /admin/revenue now forwards into the Account section
                 so all revenue management lives under one roof. */}
             <Route path="/admin/revenue" element={<Navigate to="/admin/account/revenue" replace />} />

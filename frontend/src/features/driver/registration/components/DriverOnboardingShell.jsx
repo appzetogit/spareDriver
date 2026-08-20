@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 import StepIndicator from '../../../../components/StepIndicator';
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 
@@ -11,20 +11,37 @@ const DriverOnboardingShell = ({
   title,
   subtitle,
   onBack,
+  onLogout,
   children,
   footer,
 }) => (
   <div className="flex-1 flex flex-col bg-slate-50 min-h-dvh">
     <div className="bg-white border-b border-slate-200 px-4 pt-4 pb-3">
-      {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="p-2 -ml-2 mb-2 rounded-xl hover:bg-slate-100"
-          aria-label="Go back"
-        >
-          <ArrowLeft className="w-5 h-5 text-slate-800" />
-        </button>
+      {(onBack || onLogout) && (
+        <div className="flex items-center justify-between mb-2">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="p-2 -ml-2 rounded-xl hover:bg-slate-100"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-800" />
+            </button>
+          ) : (
+            <span />
+          )}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg hover:bg-slate-100"
+            >
+              <LogOut className="w-4 h-4" />
+              Log out
+            </button>
+          )}
+        </div>
       )}
       <div className="flex items-center justify-between gap-3 mb-3">
         <h1 className="text-lg font-bold text-slate-900">{title}</h1>

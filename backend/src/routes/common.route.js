@@ -10,6 +10,7 @@ import {
 import { listActiveZones, checkZoneForPoint } from '../controllers/zone.controller.js';
 import { listActiveAds } from '../controllers/ad.controller.js';
 import { getSupportConfig } from '../controllers/support.controller.js';
+import { getPublicReferralConfig } from '../controllers/referral.controller.js';
 import { getPublicLegalDocument } from '../controllers/legalDocument.controller.js';
 import { upload, uploadVideo as uploadVideoMiddleware } from '../middlewares/multer.js';
 
@@ -33,6 +34,7 @@ router.get('/zones/check', checkZoneForPoint);
 // Promotional ads shown on the user home (active only, sort-ordered).
 router.get('/ads', listActiveAds);
 router.get('/support-config', getSupportConfig);
+router.get('/referral-config', getPublicReferralConfig);
 router.get('/legal/:type', getPublicLegalDocument);
 
 export default router;

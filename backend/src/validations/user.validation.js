@@ -47,6 +47,10 @@ export const completeRegistrationSchema = z.object({
       .regex(/^[0-9]{10}$/, 'Emergency / alternate mobile must be a valid 10-digit number')
       .optional(),
   ),
+  referralCode: z.preprocess(
+    (val) => (val == null || String(val).trim() === '' ? undefined : String(val).trim()),
+    z.string().min(4, 'Invalid referral code').max(12, 'Invalid referral code').optional(),
+  ),
 });
 
 export const sendOnboardingEmailOtpSchema = z.object({

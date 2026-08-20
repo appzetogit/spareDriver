@@ -442,6 +442,8 @@ function sourceLabel(source) {
       return 'Extension payment';
     case 'cancellation_fee_waived':
       return 'Cancellation fee waived';
+    case 'referral_reward':
+      return 'Referral reward';
     default:
       return source ? String(source).replace(/_/g, ' ') : 'Transaction';
   }

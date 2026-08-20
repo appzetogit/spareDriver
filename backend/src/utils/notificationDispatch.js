@@ -410,6 +410,36 @@ export function notifyUserWalletDebited(userId, { amountRupees, source, descript
   );
 }
 
+export function notifyReferralReward({ referrerId, referrerRole, amountRupees, referredName }) {
+  const body = referredName
+    ? `You earned ₹${amountRupees} from your referral (${referredName}).`
+    : `You earned ₹${amountRupees} from your referral.`;
+
+  if (referrerRole === 'driver') {
+    return sendPushNotification(
+      { driverId: referrerId },
+      {
+        title: 'Referral reward added',
+        body,
+        severity: 'success',
+        type: DRIVER_NOTIFICATION.REFERRAL_REWARD,
+        data: { amountRupees, referredName },
+      },
+    );
+  }
+
+  return sendPushNotification(
+    { userId: referrerId },
+    {
+      title: 'Referral reward added',
+      body,
+      severity: 'success',
+      type: USER_NOTIFICATION.REFERRAL_REWARD,
+      data: { amountRupees, referredName },
+    },
+  );
+}
+
 export function notifyUserBookingReminder(userId, booking, minutesAhead) {
   return sendPushNotification(
     { userId },

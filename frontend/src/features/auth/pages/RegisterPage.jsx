@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import Button from '../../../components/Button';
@@ -31,6 +31,7 @@ const RegisterPage = () => {
     email: '',
     password: '',
     alternatePhone: '',
+    referralCode: '',
   });
   const [phoneOtp, setPhoneOtp] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
@@ -43,8 +44,23 @@ const RegisterPage = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
   const [phoneAlreadyRegistered, setPhoneAlreadyRegistered] = useState(false);
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
+  const [referralProgramEnabled, setReferralProgramEnabled] = useState(true);
   const phoneCooldown = useOtpResendCooldown();
   const emailCooldown = useOtpResendCooldown();
+
+  useEffect(() => {
+    const loadReferralConfig = async () => {
+      try {
+        const res = await api.get('/common/referral-config');
+        const enabled = res.data?.data?.user?.enabled;
+        setReferralProgramEnabled(enabled !== false);
+      } catch {
+        setReferralProgramEnabled(true);
+      }
+    };
+    loadReferralConfig();
+  }, []);
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
@@ -52,6 +68,7 @@ const RegisterPage = () => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (error) setError('');
     if (phoneAlreadyRegistered) setPhoneAlreadyRegistered(false);
+    if (emailAlreadyRegistered) setEmailAlreadyRegistered(false);
 
     if (field === 'phone') {
       setPhoneVerified(false);
@@ -68,6 +85,7 @@ const RegisterPage = () => {
       setEmailOtpSent(false);
       setEmailOtp('');
       emailCooldown.reset();
+      setEmailAlreadyRegistered(false);
     }
   };
 
@@ -127,6 +145,7 @@ const RegisterPage = () => {
     }
     setEmailLoading(true);
     setError('');
+    setEmailAlreadyRegistered(false);
     try {
       await api.post('/auth/register/email/send-otp', {
         phone: formData.phone,
@@ -136,7 +155,11 @@ const RegisterPage = () => {
       setEmailOtp('');
       emailCooldown.start();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send email code');
+      const message = err.response?.data?.message || 'Failed to send email code';
+      setError(message);
+      if (message.toLowerCase().includes('already registered')) {
+        setEmailAlreadyRegistered(true);
+      }
     } finally {
       setEmailLoading(false);
     }
@@ -157,7 +180,14 @@ const RegisterPage = () => {
       setEmailOtp('');
       emailCooldown.reset();
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email OTP');
+      const message = err.response?.data?.message || 'Invalid email OTP';
+      setError(message);
+      if (message.toLowerCase().includes('already registered')) {
+        setEmailAlreadyRegistered(true);
+        setEmailOtpSent(false);
+        setEmailOtp('');
+        emailCooldown.reset();
+      }
     } finally {
       setEmailLoading(false);
     }
@@ -198,6 +228,9 @@ const RegisterPage = () => {
         email: normalizeUserEmail(formData.email),
         password: formData.password,
         ...(alternatePhone ? { alternatePhone } : {}),
+        ...(referralProgramEnabled && formData.referralCode.trim()
+          ? { referralCode: formData.referralCode.trim() }
+          : {}),
       }));
       const { user } = res.data.data;
       setAuth(user);
@@ -361,13 +394,23 @@ const RegisterPage = () => {
             )}
           </div>
 
+          <Input
+            label="Referral Code (optional)"
+            placeholder={referralProgramEnabled ? 'Enter referral code' : 'Referral program is off now'}
+            value={formData.referralCode}
+            onChange={handleChange('referralCode')}
+            maxLength={12}
+            disabled={!referralProgramEnabled}
+            helper={!referralProgramEnabled ? 'Referral program is off now' : undefined}
+          />
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-text">
               Emergency Contact / Alternative Mobile{' '}
               <span className="font-normal text-text-muted">(optional)</span>
             </label>
             <div className="relative">
-              <div className="absolute left-3 top-0 h-12 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-secondary font-semibold border-r pr-2 border-border flex items-center gap-1.5 z-10 pointer-events-none">
                 <Phone className="w-4 h-4 text-text-muted" />
                 <span>+91</span>
               </div>
@@ -391,6 +434,15 @@ const RegisterPage = () => {
           {phoneAlreadyRegistered && (
             <p className="text-sm text-text-secondary">
               Already have an account?{' '}
+              <Link to="/login" className="text-primary font-semibold hover:underline">
+                Login here
+              </Link>
+            </p>
+          )}
+
+          {emailAlreadyRegistered && (
+            <p className="text-sm text-text-secondary">
+              This email is already registered.{' '}
               <Link to="/login" className="text-primary font-semibold hover:underline">
                 Login here
               </Link>

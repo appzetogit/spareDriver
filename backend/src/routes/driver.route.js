@@ -97,6 +97,11 @@ import {
   markBookingChatRead,
   getBookingChatUnread,
 } from '../controllers/chat.controller.js';
+import {
+  getMyDriverReferralSummary,
+  listMyDriverReferrals,
+  validateDriverReferralCode,
+} from '../controllers/referral.controller.js';
 import { uploadVideo as uploadVideoMiddleware, upload } from '../middlewares/multer.js';
 
 const router = express.Router();
@@ -108,6 +113,7 @@ router.post('/auth/forgot-password/send-otp', sendDriverForgotPasswordOtp);
 router.post('/auth/forgot-password/verify-otp', verifyDriverForgotPasswordOtp);
 router.post('/auth/forgot-password/reset', resetDriverPasswordWithOtp);
 router.post('/auth/google', googleSignInDriver);
+router.post('/referrals/validate', validateDriverReferralCode);
 
 router.put('/onboarding/step', protectDriver, updateOnboardingStep);
 router.post(
@@ -180,6 +186,8 @@ router.get('/home/summary', protectDriver, getDriverHomeSummary);
 router.get('/trips', protectDriver, getDriverTripsList);
 router.get('/earnings', protectDriver, getDriverEarnings);
 router.get('/earnings/ledger', protectDriver, getDriverEarningsLedger);
+router.get('/referrals/summary', protectDriver, getMyDriverReferralSummary);
+router.get('/referrals', protectDriver, listMyDriverReferrals);
 
 // Booking lifecycle for the driver (Phase 4)
 router.get('/bookings/active', protectDriver, getDriverActiveBooking);

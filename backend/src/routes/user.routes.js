@@ -98,6 +98,11 @@ import {
   markBookingChatRead,
   getBookingChatUnread,
 } from '../controllers/chat.controller.js';
+import {
+  getMyUserReferralSummary,
+  listMyUserReferrals,
+  validateUserReferralCode,
+} from '../controllers/referral.controller.js';
 import { protectUser, protectProfileViewer } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -119,6 +124,8 @@ router.post('/logout', logout);
 router.post('/forgot-password/send-otp', sendForgotPasswordOtp);
 router.post('/forgot-password/verify-otp', verifyForgotPasswordOtp);
 router.post('/forgot-password/reset', resetPasswordWithOtp);
+
+router.post('/referrals/validate', validateUserReferralCode);
 
 // Public pricing reads (used by the booking flow before checkout)
 router.get('/pricing/services', getActiveServicePricings);
@@ -191,6 +198,9 @@ router.get('/wallet', getMyWallet);
 router.get('/wallet/transactions', getMyWalletTransactions);
 router.post('/wallet/topup', createWalletTopupOrder);
 router.post('/wallet/topup/verify', verifyWalletTopupPayment);
+
+router.get('/referrals/summary', getMyUserReferralSummary);
+router.get('/referrals', listMyUserReferrals);
 
 router.post('/google/link-phone', linkGoogleUserPhone);
 router.get('/onboarding/status', getRegistrationStatus);

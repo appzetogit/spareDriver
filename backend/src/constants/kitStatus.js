@@ -59,4 +59,6 @@ export const PAYMENT_PURPOSE = Object.freeze({
   WITHDRAWAL: 'withdrawal',
   /** Admin manual refund credited to a driver's wallet. */
   ADMIN_REFUND: 'admin_refund',
+  /** Referral program reward credited to a driver's wallet. */
+  REFERRAL_REWARD: 'referral_reward',
 });

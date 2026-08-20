@@ -54,6 +54,8 @@ export const WALLET_TXN_SOURCE = Object.freeze({
   BOOKING_OVERTIME_CHARGE: 'booking_overtime_charge',
   /** Credit for a cancellation fee being waived (rare; admin-driven). */
   CANCELLATION_FEE_WAIVED: 'cancellation_fee_waived',
+  /** Credit for referring a new user who completed qualification. */
+  REFERRAL_REWARD: 'referral_reward',
 });
 
 export const WALLET_TXN_STATUS = Object.freeze({
@@ -89,7 +91,7 @@ const walletTransactionSchema = new mongoose.Schema(
     /** Optional cross-link to the entity that caused this txn. */
     refType: {
       type: String,
-      enum: ['Booking', 'RazorpayOrder', 'Admin', ''],
+      enum: ['Booking', 'RazorpayOrder', 'Admin', 'Referral', ''],
       default: '',
     },
     refId: { type: String, default: '', trim: true, index: true },

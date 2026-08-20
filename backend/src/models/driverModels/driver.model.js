@@ -415,8 +415,16 @@ const driverSchema = new mongoose.Schema(
     referralCode: {
       type: String,
       trim: true,
+      uppercase: true,
       unique: true,
-      sparse: true, // allows empty strings without unique conflict
+      sparse: true,
+    },
+    /** Validated code entered at signup; Referral row created on admin approval. */
+    appliedReferralCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: '',
     },
     referredBy: {
       type: mongoose.Schema.Types.ObjectId,

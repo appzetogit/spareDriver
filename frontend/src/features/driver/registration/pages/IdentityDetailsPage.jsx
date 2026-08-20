@@ -11,6 +11,7 @@ import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { driverNeedsPhone, navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
 import { useOtpResendCooldown } from '../../../../hooks/useOtpResendCooldown';
+import DriverRegistrationLogoutButton from '../components/DriverRegistrationLogoutButton';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 
@@ -35,12 +36,26 @@ const IdentityDetailsPage = () => {
     }
   }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.revisionInProgress, navigate]);
 
-  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '' });
+  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '', referralCode: '' });
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [referralProgramEnabled, setReferralProgramEnabled] = useState(true);
+
+  useEffect(() => {
+    const loadReferralConfig = async () => {
+      try {
+        const res = await api.get('/common/referral-config');
+        const enabled = res.data?.data?.driver?.enabled;
+        setReferralProgramEnabled(enabled !== false);
+      } catch {
+        setReferralProgramEnabled(true);
+      }
+    };
+    loadReferralConfig();
+  }, []);
 
   const handleChange = (f) => (e) => {
     const value = e.target.value;
@@ -85,6 +100,9 @@ const IdentityDetailsPage = () => {
         name: form.name,
         password: form.password,
         ...(alternatePhone ? { alternatePhone } : {}),
+        ...(referralProgramEnabled && form.referralCode.trim()
+          ? { referralCode: form.referralCode.trim() }
+          : {}),
       }));
 
       setAuth(res.data.data.driver);
@@ -92,7 +110,6 @@ const IdentityDetailsPage = () => {
       setIsPhoneVerified(true);
       setShowOtpModal(false);
       otpCooldown.reset();
-      navigate('/driver/register/credentials');
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid OTP');
     } finally {
@@ -108,10 +125,11 @@ const IdentityDetailsPage = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100">
           <ArrowLeft className="w-5 h-5" />
         </button>
+        <DriverRegistrationLogoutButton />
       </div>
       <div className="px-4 sm:px-6 pt-2 pb-4">
         <div className="flex items-center justify-between mb-4">
@@ -135,7 +153,15 @@ const IdentityDetailsPage = () => {
           */}
           <Input label="Full name" placeholder="As per Govt. ID" value={form.name} onChange={handleChange('name')} icon={User} />
           <Input label="Password" type="password" placeholder="Min 6 characters" value={form.password} onChange={handleChange('password')} icon={Lock} />
-          
+          <Input
+            label="Referral Code (optional)"
+            placeholder={referralProgramEnabled ? 'Enter referral code' : 'Referral program is off now'}
+            value={form.referralCode}
+            onChange={handleChange('referralCode')}
+            maxLength={12}
+            disabled={!referralProgramEnabled}
+            helper={!referralProgramEnabled ? 'Referral program is off now' : undefined}
+          />
           <div>
             <label className="text-sm font-medium text-text mb-1.5 block">Mobile number</label>
             <div className="relative">
@@ -172,6 +198,8 @@ const IdentityDetailsPage = () => {
             {error && <p className="text-danger text-xs mt-1">{error}</p>}
           </div>
 
+       
+
           <div>
             <label className="text-sm font-medium text-text mb-1.5 block">
               Emergency Contact / Alternative Mobile{' '}
@@ -191,9 +219,11 @@ const IdentityDetailsPage = () => {
                 disabled={isPhoneVerified}
                 className="pl-[4.5rem]"
                 containerClassName="w-full"
-                helper="Used if we cannot reach you on your primary number"
               />
             </div>
+            <p className="text-xs text-text-muted mt-1.5">
+              Used if we cannot reach you on your primary number
+            </p>
           </div>
 
         </div>

@@ -120,7 +120,7 @@ export const sendOtpService = async (phone) => {
 };
 
 export const verifyOtpAndRegisterService = async (data) => {
-  const { phone, otp, name, password, alternatePhone, fcmToken, token, platform } = data;
+  const { phone, otp, name, password, alternatePhone, referralCode, fcmToken, token, platform } = data;
 
   if (!phone || !otp || !name || !password) {
     throw new ApiError(400, 'Missing required fields');
@@ -158,6 +158,14 @@ export const verifyOtpAndRegisterService = async (data) => {
       approvalStatus: 'pending',
     });
     await driver.save();
+  }
+
+  const { ensureDriverReferralCode, storeDriverAppliedReferralCode } = await import(
+    './referral.service.js'
+  );
+  await ensureDriverReferralCode(driver._id);
+  if (referralCode) {
+    await storeDriverAppliedReferralCode(driver, referralCode);
   }
 
   const payload = tokenPayloadFromDriver(driver);

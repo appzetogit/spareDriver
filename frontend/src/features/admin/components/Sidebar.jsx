@@ -5,7 +5,7 @@ import {
   LogOut, X, ChevronRight, ChevronDown, ShieldCheck, Monitor, Package,
   CheckSquare, MapPin, Receipt, Sparkles, Navigation, Wallet, Banknote,
   LifeBuoy, ClipboardList, Timer, Megaphone, Compass, ShieldAlert, Tag, Headphones,
-  BarChart3, BellRing, Layers, CreditCard, FlaskConical,
+  BarChart3, BellRing, Layers, CreditCard, FlaskConical, Gift,
 } from 'lucide-react';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import useAdminSidebarCountsStore from '../../../store/admin/useAdminSidebarCountsStore';
@@ -208,6 +208,12 @@ const navItems = [
         label: 'Withdrawals',
         icon: Banknote,
         roles: ['admin'],
+      },
+      {
+        path: '/admin/referrals',
+        label: 'Referrals',
+        icon: Gift,
+        roles: ['admin', 'sub_admin'],
       },
       // Account deletions — disabled for now; uncomment to re-enable admin review flow
       // {

@@ -442,6 +442,15 @@ export const updateDriverStatusService = async (staff, driverId, data) => {
   if (approvalStatus === 'approved') {
     const { syncDriverKitEligibility } = await import('../utils/kitEligibility.util.js');
     await syncDriverKitEligibility(driverId);
+    const { createDriverReferralOnApproval } = await import('./referral.service.js');
+    await createDriverReferralOnApproval(driver).catch((err) =>
+      console.warn('[admin] driver referral on approval failed:', err?.message),
+    );
+  } else if (approvalStatus === 'rejected') {
+    const { clearDriverAppliedReferralOnRejection } = await import('./referral.service.js');
+    await clearDriverAppliedReferralOnRejection(driver).catch((err) =>
+      console.warn('[admin] clear driver referral on rejection failed:', err?.message),
+    );
   }
 
   const driverIdStr = String(driver._id);
