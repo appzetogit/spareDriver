@@ -40,28 +40,69 @@ function assertDiscountPayload({ discountType, discountValue }) {
   }
 }
 
+/** Plain pricing fields — Mongoose docs + lean rows both work. */
+export function serializeCoupon(coupon) {
+  if (!coupon) return null;
+  const obj = typeof coupon.toObject === 'function' ? coupon.toObject() : coupon;
+  const type = String(obj.discountType || '').trim().toLowerCase();
+  const discountType =
+    type === 'percent' || type === '%'
+      ? COUPON_DISCOUNT_TYPES.PERCENTAGE
+      : type;
+  return {
+    _id: obj._id,
+    code: obj.code,
+    discountType,
+    discountValue: Number(obj.discountValue ?? obj.value ?? obj.amount) || 0,
+    minOrderAmount: Number(obj.minOrderAmount) || 0,
+    maxDiscountAmount: Number(obj.maxDiscountAmount) || 0,
+    applicableTo: Array.isArray(obj.applicableTo) ? obj.applicableTo : [],
+    isActive: obj.isActive !== false,
+    description: obj.description || '',
+    maxUses: obj.maxUses ?? null,
+    usedCount: Number(obj.usedCount) || 0,
+    expiresAt: obj.expiresAt || null,
+  };
+}
+
 export function computeCouponDiscount(rideSubtotal, coupon) {
   if (!coupon) return 0;
+  const c = serializeCoupon(coupon);
   const subtotal = round2(Number(rideSubtotal) || 0);
   if (subtotal <= 0) return 0;
 
-  const minAmount = Number(coupon.minOrderAmount) || 0;
+  const minAmount = Number(c.minOrderAmount) || 0;
   if (subtotal < minAmount) return 0;
 
-  const value = Number(coupon.discountValue) || 0;
+  const value = Number(c.discountValue) || 0;
   if (value <= 0) return 0;
 
-  let discount =
-    coupon.discountType === COUPON_DISCOUNT_TYPES.PERCENTAGE
-      ? (subtotal * value) / 100
-      : value;
+  const isPercent = c.discountType === COUPON_DISCOUNT_TYPES.PERCENTAGE;
+  let discount = isPercent ? (subtotal * value) / 100 : value;
 
-  const maxCap = Number(coupon.maxDiscountAmount) || 0;
-  if (maxCap > 0 && coupon.discountType === COUPON_DISCOUNT_TYPES.PERCENTAGE) {
+  const maxCap = Number(c.maxDiscountAmount) || 0;
+  if (maxCap > 0 && isPercent) {
     discount = Math.min(discount, maxCap);
   }
 
   return Math.min(round2(discount), subtotal);
+}
+
+/** Reject codes that would stamp as "applied" with a ₹0 discount. */
+export function assertCouponDiscountApplies(rideSubtotal, coupon) {
+  if (!coupon) return;
+  const discount = computeCouponDiscount(rideSubtotal, coupon);
+  if (discount > 0) return;
+  const c = serializeCoupon(coupon);
+  const minAmount = Number(c.minOrderAmount) || 0;
+  const subtotal = round2(Number(rideSubtotal) || 0);
+  if (minAmount > 0 && subtotal < minAmount) {
+    throw new ApiError(
+      400,
+      `Minimum order amount of ₹${minAmount} required for this coupon`,
+    );
+  }
+  throw new ApiError(400, 'This coupon does not reduce the fare for this booking');
 }
 
 function assertCouponUsable(coupon, { serviceType } = {}) {
@@ -73,7 +114,8 @@ function assertCouponUsable(coupon, { serviceType } = {}) {
   if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) {
     throw new ApiError(400, 'This coupon has reached its usage limit');
   }
-  if (serviceType && !coupon.applicableTo.includes(serviceType)) {
+  const applicable = Array.isArray(coupon.applicableTo) ? coupon.applicableTo : [];
+  if (serviceType && !applicable.includes(serviceType)) {
     throw new ApiError(400, 'This coupon is not valid for this service');
   }
 }
@@ -161,22 +203,19 @@ export const resolveCouponByCodeService = async (code, { serviceType } = {}) => 
   const normalized = normalizeCode(code);
   if (!normalized) return null;
 
-  const coupon = await Coupon.findOne({ code: normalized });
+  const coupon = await Coupon.findOne({ code: normalized }).lean();
   if (!coupon) throw new ApiError(404, 'Invalid coupon code');
 
-  assertCouponUsable(coupon, { serviceType });
-  return coupon;
+  const plain = serializeCoupon(coupon);
+  assertCouponUsable(plain, { serviceType });
+  return plain;
 };
 
 export const validateCouponService = async ({ code, serviceType, subtotal = 0 }) => {
   const coupon = await resolveCouponByCodeService(code, { serviceType });
   const rideSubtotal = round2(Number(subtotal) || 0);
-  const minAmount = Number(coupon.minOrderAmount) || 0;
-  if (minAmount > 0 && rideSubtotal > 0 && rideSubtotal < minAmount) {
-    throw new ApiError(
-      400,
-      `Minimum order amount of ₹${minAmount} required for this coupon`,
-    );
+  if (rideSubtotal > 0) {
+    assertCouponDiscountApplies(rideSubtotal, coupon);
   }
   const discountAmount = computeCouponDiscount(rideSubtotal, coupon);
   return {
@@ -185,6 +224,8 @@ export const validateCouponService = async ({ code, serviceType, subtotal = 0 })
       code: coupon.code,
       discountType: coupon.discountType,
       discountValue: coupon.discountValue,
+      minOrderAmount: coupon.minOrderAmount,
+      maxDiscountAmount: coupon.maxDiscountAmount,
       applicableTo: coupon.applicableTo,
       description: coupon.description,
     },

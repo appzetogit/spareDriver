@@ -47,7 +47,7 @@ import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import { isOutstationOvertimePastGrace } from '../../../user/booking/hooks/useRideTimer';
 import { formatDistance, haversineMeters } from '../../../../utils/geo';
-import { formatExtensionHours, maskPersonName } from '../../../../utils/formatters';
+import { formatBookedTimeRemaining, formatExtensionHours, maskPersonName } from '../../../../utils/formatters';
 import { formatLocationLabel } from '../../../../utils/locationLabel';
 import { previewDriverCancellation } from '../../../user/booking/utils/cancellationPreview';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
@@ -489,9 +489,8 @@ const DriverActiveTripPage = () => {
   // Complete unlocks only after the booked window ends:
   //   hourly     → startedAt + hours (+ paid extensions)
   //   outstation → expectedReturnAt (+ paid extension days)
-  // Returns remaining minutes (hourly) or a days-aware label via
-  // `completeTooEarlyLabel` for the banner / CTA.
-  const completeTooEarlyMinutes = useMemo(() => {
+  // Returns remaining seconds; label uses hours/minutes (no seconds tick).
+  const completeTooEarlySeconds = useMemo(() => {
     if (status !== BOOKING_STATUS.STARTED) return null;
 
     const isOutstation =
@@ -505,7 +504,7 @@ const DriverActiveTripPage = () => {
       if (!Number.isFinite(endMs)) return null;
       const remainingMs = endMs - Date.now();
       if (remainingMs <= 0) return null;
-      return Math.max(1, Math.ceil(remainingMs / 60_000));
+      return Math.max(1, Math.ceil(remainingMs / 1000));
     }
 
     const startedAtMs = booking?.timeline?.startedAt
@@ -522,7 +521,7 @@ const DriverActiveTripPage = () => {
     const remainingMs =
       startedAtMs + (base + extra + pad) * 3_600_000 - Date.now();
     if (remainingMs <= 0) return null;
-    return Math.max(1, Math.ceil(remainingMs / 60_000));
+    return Math.max(1, Math.ceil(remainingMs / 1000));
   }, [
     status,
     booking?.serviceType,
@@ -548,18 +547,9 @@ const DriverActiveTripPage = () => {
     booking?.bookingType === 'outstation';
 
   const completeTooEarlyLabel = useMemo(() => {
-    if (completeTooEarlyMinutes == null) return null;
-    if (!isOutstationTrip) {
-      return `about ${completeTooEarlyMinutes} min`;
-    }
-    const days = Math.floor(completeTooEarlyMinutes / (24 * 60));
-    const hours = Math.floor((completeTooEarlyMinutes % (24 * 60)) / 60);
-    if (days >= 1) {
-      return hours > 0 ? `${days}d ${hours}h` : `${days} day${days === 1 ? '' : 's'}`;
-    }
-    if (hours >= 1) return `${hours}h`;
-    return `about ${completeTooEarlyMinutes} min`;
-  }, [completeTooEarlyMinutes, isOutstationTrip]);
+    if (completeTooEarlySeconds == null) return null;
+    return formatBookedTimeRemaining(completeTooEarlySeconds);
+  }, [completeTooEarlySeconds]);
 
   const handleAdvance = useCallback(async () => {
     if (!config?.cta) return;
@@ -588,7 +578,7 @@ const DriverActiveTripPage = () => {
       );
       return;
     }
-    if (action === 'completeTrip' && completeTooEarlyMinutes != null) {
+    if (action === 'completeTrip' && completeTooEarlySeconds != null) {
       toast.error(
         `Booked time remaining — you can complete in ${completeTooEarlyLabel}.`,
       );
@@ -634,7 +624,7 @@ const DriverActiveTripPage = () => {
     minutesUntilPickup,
     enRouteUnlockMinutes,
     overtimePaymentRequired,
-    completeTooEarlyMinutes,
+    completeTooEarlySeconds,
     completeTooEarlyLabel,
   ]);
 
@@ -802,7 +792,7 @@ const DriverActiveTripPage = () => {
     (config.cta?.action === 'markEnRoute' && enRouteTooEarly) ||
     (config.cta?.action === 'markArrived' && arrivedTooEarly) ||
     (config.cta?.action === 'startTrip' && startTooEarly) ||
-    (config.cta?.action === 'completeTrip' && completeTooEarlyMinutes != null) ||
+    (config.cta?.action === 'completeTrip' && completeTooEarlySeconds != null) ||
     (config.cta?.action === 'completeTrip' && overtimePaymentRequired);
 
   const ctaLabel = !config.cta
@@ -815,7 +805,7 @@ const DriverActiveTripPage = () => {
           ? `Unlocks in ${formatScheduledLead(minutesUntilPickup)}`
               : config.cta.action === 'completeTrip' && overtimePaymentRequired
             ? 'Ask customer to pay overdue'
-            : config.cta.action === 'completeTrip' && completeTooEarlyMinutes != null
+            : config.cta.action === 'completeTrip' && completeTooEarlySeconds != null
             ? `Complete in ${completeTooEarlyLabel}`
             : config.cta.label;
 
@@ -1147,7 +1137,7 @@ const DriverActiveTripPage = () => {
           </div>
         )}
 
-        {completeTooEarlyMinutes != null && (
+        {completeTooEarlySeconds != null && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-amber-100 text-amber-700">
               <Clock className="w-4 h-4" />

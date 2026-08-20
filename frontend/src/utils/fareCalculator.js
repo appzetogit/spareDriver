@@ -36,14 +36,13 @@ function applyCouponDiscount(subtotal, coupon) {
   if (!coupon) return 0;
   const minAmount = Number(coupon.minOrderAmount) || 0;
   if (subtotal < minAmount) return 0;
-  const value = Number(coupon.discountValue) || 0;
+  const value = Number(coupon.discountValue ?? coupon.value ?? coupon.amount) || 0;
   if (value <= 0) return 0;
-  let discount =
-    coupon.discountType === 'percentage'
-      ? (subtotal * value) / 100
-      : value;
+  const type = String(coupon.discountType || '').trim().toLowerCase();
+  const isPercent = type === 'percentage' || type === 'percent' || type === '%';
+  let discount = isPercent ? (subtotal * value) / 100 : value;
   const maxCap = Number(coupon.maxDiscountAmount) || 0;
-  if (maxCap > 0 && coupon.discountType === 'percentage') {
+  if (maxCap > 0 && isPercent) {
     discount = Math.min(discount, maxCap);
   }
   return Math.min(round2(discount), round2(subtotal));

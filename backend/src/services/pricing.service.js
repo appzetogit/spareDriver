@@ -53,6 +53,7 @@ import { resolveCarTypeObjectId } from '../utils/carTypeResolve.js';
 import {
   computeCouponDiscount,
   resolveCouponByCodeService,
+  assertCouponDiscountApplies,
   incrementCouponUsageService,
 } from './coupon.service.js';
 import { COUPON_APPLICABLE_SERVICES } from '../constants/couponTypes.js';
@@ -741,6 +742,7 @@ export const createSubscriptionPurchaseOrderService = async (
       })
     : null;
   const snapshot = buildSubscriptionSnapshot(plan, coupon);
+  assertCouponDiscountApplies(snapshot.basePrice, coupon);
   const totalPayable = round2(
     (snapshot.netBasePrice ?? snapshot.basePrice) + snapshot.serviceCharge + snapshot.gstAmount,
   );
@@ -1600,7 +1602,14 @@ export const estimateFareService = async ({
     ? await resolveCouponByCodeService(couponCode, { serviceType })
     : null;
   const couponMeta = coupon
-    ? { _id: coupon._id, code: coupon.code, discountType: coupon.discountType, discountValue: coupon.discountValue }
+    ? {
+        _id: coupon._id,
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minOrderAmount: coupon.minOrderAmount,
+        maxDiscountAmount: coupon.maxDiscountAmount,
+      }
     : null;
   // Outstation only checks the start; hourly checks the whole booked
   // window so a 6-hour ride that starts at 18:00 still triggers night.
@@ -1660,6 +1669,7 @@ export const estimateFareService = async ({
       subscription,
       coupon,
     });
+    assertCouponDiscountApplies(breakdown.subtotal, coupon);
 
     const waitingBuffer = buildWaitingBufferPreview(pricing);
 
@@ -1762,6 +1772,7 @@ export const estimateFareService = async ({
       subscription,
       coupon,
     });
+    assertCouponDiscountApplies(breakdown.subtotal, coupon);
 
     return {
       pricingId: pricing._id,

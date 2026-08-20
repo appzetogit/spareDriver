@@ -24,12 +24,56 @@ export const formatDuration = (minutes) => {
 };
 
 /**
+ * Live ride countdown for customers — always includes a ticking seconds
+ * component so long bookings (e.g. 3h 59m) still count down by the second.
+ *
+ *   ≥ 1 day  → `2d 5h 03m 09s`
+ *   ≥ 1 hour → `3h 59m 45s`
+ *   < 1 hour → `59:45`
+ */
+export const formatRideCountdown = (seconds) => {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (days >= 1) {
+    const parts = [`${days}d`];
+    if (hours > 0) parts.push(`${hours}h`);
+    parts.push(`${String(minutes).padStart(2, '0')}m`);
+    parts.push(`${String(secs).padStart(2, '0')}s`);
+    return parts.join(' ');
+  }
+  if (hours >= 1) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+};
+
+/**
+ * Booked-time remaining for drivers — hours/minutes only (no seconds).
+ * Matches the customer-facing `Xh MMm` shape without the live seconds tick.
+ */
+export const formatBookedTimeRemaining = (seconds) => {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days >= 1) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days} day${days === 1 ? '' : 's'}`;
+  }
+  if (hours >= 1) {
+    return minutes > 0
+      ? `${hours}h ${String(minutes).padStart(2, '0')}m`
+      : `${hours}h`;
+  }
+  if (minutes >= 1) return `${minutes} min`;
+  return 'less than a minute';
+};
+
+/**
  * Format a ride-extension length stored as fractional hours
  * (0.25 = 15 min, 0.5 = 30 min, 1 = 1 hour).
- *
- *   formatExtensionHours(0.25) → "15 min"
- *   formatExtensionHours(1)    → "1h"
- *   formatExtensionHours(1.5)  → "1h 30m"
  */
 export const formatExtensionHours = (hours, { compact = true } = {}) => {
   const h = Number(hours);
