@@ -9,6 +9,8 @@ export const APP_DESCRIPTION = 'Safe · Verified · On-Time';
 
 /** Maximum vehicles a customer can register */
 export const MAX_USER_CARS = 5;
+/** Maximum vehicles a driver can register as experience */
+export const MAX_DRIVER_CARS = 10;
 
 // Service Types
 export const SERVICE_TYPES = [

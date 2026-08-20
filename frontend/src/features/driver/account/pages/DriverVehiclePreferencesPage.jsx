@@ -89,7 +89,7 @@ const DriverVehiclePreferencesPage = () => {
       onBack={() => navigate('/driver/account')}
     >
       <p className="text-xs text-text-muted px-1">
-        Cars you are experienced driving. You can register up to 5 vehicles.
+        Cars you are experienced driving. You can register up to 10 vehicles.
       </p>
       <Card padding="p-4" className="space-y-4">
         <DriverVehicleExperienceEditor

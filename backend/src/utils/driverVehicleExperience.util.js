@@ -1,7 +1,7 @@
 import { ApiError } from './apiError.js';
 import { validateCarCatalogRefs } from '../services/vehicleCatalog.service.js';
 
-export const MAX_DRIVER_VEHICLE_EXPERIENCE = 5;
+export const MAX_DRIVER_VEHICLE_EXPERIENCE = 10;
 
 /**
  * Validate and normalize vehicle experience entries from onboarding.

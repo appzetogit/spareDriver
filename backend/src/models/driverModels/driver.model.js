@@ -93,12 +93,12 @@ const driverSchema = new mongoose.Schema(
       default: '',
     },
 
-    /** Detailed vehicles (category, brand, model, fuel) — max 5 */
+    /** Detailed vehicles (category, brand, model, fuel) — max 10 */
     vehicleExperience: {
       type: [vehicleExperienceSchema],
       validate: {
-        validator: (arr) => arr.length <= 5,
-        message: 'You can add a maximum of 5 vehicles',
+        validator: (arr) => arr.length <= 10,
+        message: 'You can add a maximum of 10 vehicles',
       },
       default: [],
     },
@@ -112,8 +112,8 @@ const driverSchema = new mongoose.Schema(
         },
       ],
       validate: {
-        validator: (arr) => arr.length <= 5,
-        message: 'You can select a maximum of 5 car types',
+        validator: (arr) => arr.length <= 10,
+        message: 'You can select a maximum of 10 car types',
       },
       default: [],
     },

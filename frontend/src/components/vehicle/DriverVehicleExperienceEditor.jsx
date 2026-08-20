@@ -1,11 +1,11 @@
 import { Plus, Trash2, Car } from 'lucide-react';
 import VehicleDetailsForm, { emptyVehicleFormValues } from './VehicleDetailsForm';
-import { MAX_USER_CARS } from '../../utils/constants';
+import { MAX_DRIVER_CARS } from '../../utils/constants';
 
-const MAX_VEHICLES = MAX_USER_CARS;
+const MAX_VEHICLES = MAX_DRIVER_CARS;
 
 /**
- * Up to 5 full vehicle experience entries for driver onboarding.
+ * Up to 10 full vehicle experience entries for driver onboarding.
  */
 const DriverVehicleExperienceEditor = ({
   vehicles = [],

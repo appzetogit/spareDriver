@@ -703,7 +703,7 @@ export const updateBankDetailsService = async (driverId, bankDetailsInput) => {
   return doc;
 };
 
-/** Post-onboarding update: vehicle experience only (max 5). */
+/** Post-onboarding update: vehicle experience only (max 10). */
 export const updateVehicleExperienceService = async (driverId, vehicleExperience) => {
   const {
     normalizeDriverVehicleExperience,
