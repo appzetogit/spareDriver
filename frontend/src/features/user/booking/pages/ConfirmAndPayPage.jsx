@@ -32,6 +32,7 @@ import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/servic
 import {
   BOOKING_STATUS,
   BOOKING_TYPE,
+  BOOKING_TYPE_LABELS,
   SCHEDULED_BOOKING,
   mergeScheduledDispatchConfig,
   readDispatchNumber,
@@ -109,9 +110,34 @@ const ConfirmAndPayPage = () => {
   const [outstationPickupEditOpen, setOutstationPickupEditOpen] = useState(false);
   const [conflictError, setConflictError] = useState(null); // { title, message, type: 'car'|'time' }
   const [tollAckOpen, setTollAckOpen] = useState(false);
+  // Extra-duration acknowledgement — required for every booking type
+  // (instant / scheduled / outstation) before create. Shown as a dialog
+  // with trip details so the customer sees what they booked and that
+  // going past that window incurs extra charges.
+  const [overtimeAckOpen, setOvertimeAckOpen] = useState(false);
+  const [overtimeAcknowledged, setOvertimeAcknowledged] = useState(false);
   // Sticky until the user removes the code — otherwise a failed coupon
   // would blank the fare (and re-including it on every retry loops).
   const [couponInvalidMessage, setCouponInvalidMessage] = useState(null);
+
+  // If the customer edits duration / schedule / service, force them to
+  // re-confirm overtime rules against the new trip details.
+  useEffect(() => {
+    setOvertimeAcknowledged(false);
+  }, [
+    draft.serviceType,
+    draft.bookingType,
+    draft.hourly?.durationHours,
+    draft.hourly?.slabId,
+    draft.hourly?.scheduledStartAt,
+    draft.hourly?.isCustomDuration,
+    draft.outstation?.days,
+    draft.outstation?.nights,
+    draft.outstation?.pickupAt,
+    draft.outstation?.expectedReturnAt,
+    draft.outstation?.startDate,
+    draft.outstation?.endDate,
+  ]);
 
   // Guard: bounce back to the start of the flow if state is incomplete.
   useEffect(() => {
@@ -417,13 +443,17 @@ const ConfirmAndPayPage = () => {
     }
   }, [submitting, total, createBooking, fetchWallet, navigate]);
 
-  // Pay CTA entry point. Hourly is straight-through; outstation must
-  // first acknowledge the toll & parking disclosure (since those are
-  // paid directly to the driver and aren't part of this fare).
+  // Pay CTA entry point. Every booking first confirms overtime / extra
+  // duration charges (with trip details). Outstation then also needs
+  // the toll & parking disclosure before create.
   const handlePay = useCallback(() => {
     if (submitting || !total) return;
     if (foodGateUnmet) {
       toast.error('Please confirm you\u2019ll arrange the driver\u2019s meal');
+      return;
+    }
+    if (!overtimeAcknowledged) {
+      setOvertimeAckOpen(true);
       return;
     }
     if (isOutstation) {
@@ -431,7 +461,17 @@ const ConfirmAndPayPage = () => {
       return;
     }
     submitBooking();
-  }, [submitting, total, foodGateUnmet, isOutstation, submitBooking]);
+  }, [submitting, total, foodGateUnmet, overtimeAcknowledged, isOutstation, submitBooking]);
+
+  const handleOvertimeAcknowledged = useCallback(() => {
+    setOvertimeAcknowledged(true);
+    setOvertimeAckOpen(false);
+    if (isOutstation) {
+      setTollAckOpen(true);
+      return;
+    }
+    submitBooking();
+  }, [isOutstation, submitBooking]);
 
   // Outstation toll/parking ack flow → user accepted, run the create.
   const handleTollAcknowledged = useCallback(() => {
@@ -444,9 +484,9 @@ const ConfirmAndPayPage = () => {
   const handleTopupSuccess = useCallback(async () => {
     setTopupOpen(false);
     // Give Zustand a tick to apply the wallet patch before checking
-    // again. We bypass `handlePay` (which would re-open the toll
-    // dialog) and call submitBooking directly — the user already
-    // acknowledged the disclosure that triggered the top-up.
+    // again. We bypass `handlePay` (which would re-open disclosure
+    // dialogs) and call submitBooking directly — the user already
+    // acknowledged disclosures that triggered the top-up.
     setTimeout(() => {
       submitBooking();
     }, 50);
@@ -478,6 +518,13 @@ const ConfirmAndPayPage = () => {
           car={selectedCar}
           onEditCar={() => setCarEditOpen(true)}
           onEditPickup={handleEditPickup}
+        />
+
+        <OvertimeExtraChargeAck
+          draft={draft}
+          estimate={estimate}
+          checked={overtimeAcknowledged}
+          onChange={setOvertimeAcknowledged}
         />
 
         {isOutstation && (
@@ -589,6 +636,8 @@ const ConfirmAndPayPage = () => {
               ? 'Calculating fare\u2026'
               : foodGateUnmet
                 ? 'Confirm driver\u2019s meal to continue'
+                : !overtimeAcknowledged
+                  ? 'Confirm & pay'
                 : canPay
                   ? `Pay \u20B9${total}`
                   : `Add \u20B9${Math.max(0, total - available).toFixed(0)} & pay`}
@@ -680,6 +729,20 @@ const ConfirmAndPayPage = () => {
         }}
       />
 
+      {/* Extra-duration acknowledgement — every booking type. If the
+          customer skipped the inline checkbox, Pay opens this dialog
+          with trip details before create (or before the outstation
+          toll disclosure). */}
+      <OvertimeExtraChargeAckDialog
+        open={overtimeAckOpen}
+        draft={draft}
+        estimate={estimate}
+        car={selectedCar}
+        submitting={submitting}
+        onAccept={handleOvertimeAcknowledged}
+        onCancel={() => setOvertimeAckOpen(false)}
+      />
+
       {/* Outstation: toll & parking are paid by the customer directly
           to the driver during the trip — surfaced as an explicit
           acknowledgement before we kick off the booking creation. */}
@@ -692,6 +755,244 @@ const ConfirmAndPayPage = () => {
     </div>
   );
 };
+
+/* ------------------------------------------------------------------ */
+/* Overtime / extra-duration acknowledgement                            */
+/* ------------------------------------------------------------------ */
+
+function describeBookedDuration(draft) {
+  if (draft.serviceType === SERVICE_TYPES.HOURLY) {
+    const hours = Number(draft.hourly?.durationHours) || 0;
+    return hours > 0 ? `${hours} hour${hours === 1 ? '' : 's'}` : 'Booked hours';
+  }
+  const days = Number(draft.outstation?.days) || 0;
+  const nights = Number(draft.outstation?.nights) || 0;
+  if (days > 0) {
+    return `${days} day${days === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'}`;
+  }
+  return 'Booked trip window';
+}
+
+function describeBookingKind(draft) {
+  if (draft.serviceType === SERVICE_TYPES.OUTSTATION) {
+    return BOOKING_TYPE_LABELS[BOOKING_TYPE.OUTSTATION] || 'Round trip';
+  }
+  return (
+    BOOKING_TYPE_LABELS[draft.bookingType]
+    || (draft.bookingType === BOOKING_TYPE.SCHEDULED ? 'Scheduled' : 'Instant')
+  );
+}
+
+function extraChargeRateLabel(draft, estimate) {
+  const bd = estimate?.fareBreakdown || {};
+  const rate = Number(bd.extraHourChargeRate || bd.extraHourCharge || 0);
+  if (draft.serviceType === SERVICE_TYPES.OUTSTATION) {
+    if (rate > 0) return `₹${rate}/hour beyond the booked return time`;
+    return 'extra time billed as per platform rates beyond your return time';
+  }
+  if (rate > 0) return `₹${rate}/hour beyond the booked duration`;
+  return 'extra time billed as per platform rates beyond your booked hours';
+}
+
+/**
+ * Inline checkbox under trip details — customer must acknowledge that
+ * going past the booked window costs extra before Pay unlocks.
+ */
+function OvertimeExtraChargeAck({ draft, estimate, checked, onChange }) {
+  const duration = describeBookedDuration(draft);
+  const rateLabel = extraChargeRateLabel(draft, estimate);
+
+  return (
+    <label
+      className={`rounded-2xl border p-3 flex items-start gap-3 cursor-pointer transition ${
+        checked
+          ? 'border-emerald-200 bg-emerald-50'
+          : 'border-amber-300 bg-amber-50'
+      }`}
+    >
+      <div
+        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+          checked
+            ? 'bg-emerald-100 text-emerald-700'
+            : 'bg-amber-100 text-amber-700'
+        }`}
+      >
+        <Clock className="w-4 h-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p
+            className={`text-sm font-bold ${
+              checked ? 'text-emerald-900' : 'text-amber-900'
+            }`}
+          >
+            Extra charges beyond booked duration
+          </p>
+          {!checked && (
+            <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
+              Required
+            </span>
+          )}
+        </div>
+        <p
+          className={`text-[12px] leading-snug mt-0.5 ${
+            checked ? 'text-emerald-800' : 'text-amber-800'
+          }`}
+        >
+          Your trip is booked for <strong>{duration}</strong>. If the ride
+          goes beyond that, I agree to pay extra ({rateLabel}).
+        </p>
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(!!e.target.checked)}
+        className="mt-1 w-4 h-4 accent-emerald-600 shrink-0"
+        aria-label="Confirm extra charges beyond booked duration"
+      />
+    </label>
+  );
+}
+
+/**
+ * Pay-time dialog with full trip details + overtime acknowledgement.
+ * Used when the customer taps Pay without ticking the inline checkbox.
+ */
+function OvertimeExtraChargeAckDialog({
+  open,
+  draft,
+  estimate,
+  car,
+  submitting,
+  onAccept,
+  onCancel,
+}) {
+  if (!open) return null;
+
+  const isHourly = draft.serviceType === SERVICE_TYPES.HOURLY;
+  const schedule = isHourly
+    ? draft.hourly?.scheduledStartAt
+    : draft.outstation?.pickupAt || draft.outstation?.startDate;
+  const expectedReturn =
+    draft.outstation?.expectedReturnAt || draft.outstation?.endDate;
+  const duration = describeBookedDuration(draft);
+  const kind = describeBookingKind(draft);
+  const rateLabel = extraChargeRateLabel(draft, estimate);
+  const dropAddress =
+    draft.dropoff?.address || draft.outstation?.destinationAddress || '';
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl animate-fade-in-up max-h-[90dvh] overflow-y-auto">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-amber-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-bold text-text">
+              Confirm trip &amp; extra charges
+            </p>
+            <p className="text-sm text-text-secondary mt-1 leading-snug">
+              Please review your trip details. Going beyond the booked
+              duration will cost extra.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="p-1.5 rounded-xl hover:bg-gray-100 text-text-muted shrink-0"
+            aria-label="Cancel"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-bg px-3 py-3 space-y-2 text-sm mb-4">
+          <div className="flex justify-between gap-3">
+            <span className="text-text-muted">Booking</span>
+            <span className="font-semibold text-text text-right">{kind}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-text-muted">Service</span>
+            <span className="font-semibold text-text text-right">
+              {SERVICE_TYPE_LABELS[draft.serviceType] || draft.serviceType}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-text-muted">Pickup</span>
+            <span className="font-semibold text-text text-right break-words max-w-[60%]">
+              {draft.pickup?.address || '—'}
+            </span>
+          </div>
+          {!isHourly && dropAddress ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-text-muted">Destination</span>
+              <span className="font-semibold text-text text-right break-words max-w-[60%]">
+                {dropAddress}
+              </span>
+            </div>
+          ) : null}
+          {car ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-text-muted">Car</span>
+              <span className="font-semibold text-text text-right">
+                {getCarBrandName(car)} · {car.vehicleNumber || getCarModelName(car)}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-3">
+            <span className="text-text-muted">{isHourly ? 'Pickup time' : 'Pickup'}</span>
+            <span className="font-semibold text-text text-right">
+              {formatPickupDateTime(schedule)}
+            </span>
+          </div>
+          {!isHourly ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-text-muted">Expected return</span>
+              <span className="font-semibold text-text text-right">
+                {formatPickupDateTime(expectedReturn)}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-3">
+            <span className="text-text-muted">Booked duration</span>
+            <span className="font-semibold text-text text-right">{duration}</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 mb-4">
+          <p className="text-sm font-semibold text-amber-950">
+            Extra charge if you go beyond
+          </p>
+          <p className="text-[12px] text-amber-900 leading-snug mt-1">
+            If your ride continues past the booked duration (
+            <strong>{duration}</strong>), you will be charged extra (
+            {rateLabel}). Tolls and parking, if any, are separate.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={submitting}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-white font-semibold py-3 text-sm hover:bg-primary-dark transition disabled:opacity-60"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            I agree — continue to pay
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-full inline-flex items-center justify-center rounded-2xl border border-border bg-white text-text font-semibold py-3 text-sm hover:bg-gray-50 transition"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 
