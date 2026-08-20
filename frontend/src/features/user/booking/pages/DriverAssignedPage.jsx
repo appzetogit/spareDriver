@@ -27,6 +27,7 @@ import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
 import { useTripDriverLocation } from '../../../../hooks/useTripDriverLocation';
 import { useRideTimer } from '../hooks/useRideTimer';
+import { formatRideCountdown } from '../../../../utils/formatters';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import {
   BOOKING_STATUS,
@@ -980,8 +981,8 @@ const DriverAssignedPage = () => {
                         <p className="text-xs text-text-muted">
                           {rideTimer.remainingSeconds >= 0 ? 'Time remaining' : 'Over booked duration'}
                         </p>
-                        <p className={`text-base font-bold ${rideTimer.remainingSeconds < 0 ? 'text-danger' : 'text-text'}`}>
-                          {formatRideClock(Math.abs(rideTimer.remainingSeconds))}
+                        <p className={`text-base font-bold tabular-nums ${rideTimer.remainingSeconds < 0 ? 'text-danger' : 'text-text'}`}>
+                          {formatRideCountdown(Math.abs(rideTimer.remainingSeconds))}
                         </p>
                         {overdueDue && overdueAmount > 0 && (
                           <p className="text-xs font-semibold text-amber-800 mt-0.5">
@@ -1015,15 +1016,13 @@ const DriverAssignedPage = () => {
                                 : 'Past booked return'}
                             </p>
                             <p
-                              className={`text-base font-bold ${
+                              className={`text-base font-bold tabular-nums ${
                                 rideTimer.remainingSeconds < 0
                                   ? 'text-danger'
                                   : 'text-text'
                               }`}
                             >
-                              {formatOutstationRemaining(
-                                Math.abs(rideTimer.remainingSeconds),
-                              )}
+                              {formatRideCountdown(Math.abs(rideTimer.remainingSeconds))}
                             </p>
                             {overdueDue && overdueAmount > 0 && (
                               <p className="text-xs font-semibold text-amber-800 mt-0.5">
@@ -1264,46 +1263,6 @@ function paymentSummary({ isPaid, isAwaitingPayment, total, payNowAmount }) {
   if (isPaid && due > 0) return `Extra due · ₹${due.toFixed(2)}`;
   if (isAwaitingPayment) return `Awaiting payment · ₹${due.toFixed(2)}`;
   return `Total · ₹${t.toFixed(2)}`;
-}
-
-/**
- * `MM:SS` formatter used by the in-ride duration card. Anything past one
- * hour switches to `Hh MMm` so the digits don't get unwieldy.
- */
-function formatRideClock(seconds) {
-  const total = Math.max(0, Math.floor(seconds || 0));
-  if (total >= 3600) {
-    const hours = Math.floor(total / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    return `${hours}h ${String(minutes).padStart(2, '0')}m`;
-  }
-  const minutes = Math.floor(total / 60);
-  const secs = total % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
-
-/**
- * Outstation remaining time until expected return.
- *   ≥ 1 day  → `Nd Nh`
- *   ≥ 1 hour → `Nh MMm`
- *   < 1 hour → `MM:SS` (same as hourly) so we don't drop a minute via
- *              floor(seconds/60) — a 24m59s remaining window used to
- *              render as "24m" while admin booked duration still said
- *              "25 min".
- */
-function formatOutstationRemaining(seconds) {
-  const total = Math.max(0, Math.floor(seconds || 0));
-  const days = Math.floor(total / 86_400);
-  const hours = Math.floor((total % 86_400) / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  if (days >= 1) {
-    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  }
-  if (hours >= 1) {
-    return `${hours}h ${String(minutes).padStart(2, '0')}m`;
-  }
-  const secs = total % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 /**

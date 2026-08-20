@@ -499,7 +499,9 @@ const ConfirmAndPayPage = () => {
             <CouponCodeInput
               code={couponCode}
               appliedCode={
-                !couponError && estimate?.coupon?.code
+                !couponError
+                && Number(estimate?.fareBreakdown?.couponDiscount) > 0
+                && estimate?.coupon?.code
                   ? estimate.coupon.code
                   : null
               }
