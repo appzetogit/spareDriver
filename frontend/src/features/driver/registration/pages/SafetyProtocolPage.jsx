@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../../../components/Button';
 import StepIndicator from '../../../../components/StepIndicator';
@@ -11,7 +11,9 @@ import { useFormDraft } from '../../../../hooks/useFormDraft';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
 import DriverRegistrationLogoutButton from '../components/DriverRegistrationLogoutButton';
+
 const SAFETY_DOC_TYPES = ['aadhaar_front', 'aadhaar_back', 'police_verification'];
+const ALWAYS_REQUIRED_DOCS = ['aadhaar_front', 'aadhaar_back'];
 const SAFETY_DRAFT_KEY = 'driver-onboarding:step4';
 
 const SafetyProtocolPage = () => {
@@ -21,6 +23,7 @@ const SafetyProtocolPage = () => {
   const agreed = draft.agreed;
   const setAgreed = (value) => setDraft((prev) => ({ ...prev, agreed: value }));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [policeVerificationRequired, setPoliceVerificationRequired] = useState(false);
 
   const {
     documents,
@@ -32,15 +35,29 @@ const SafetyProtocolPage = () => {
     toPayloadArray,
   } = useDocumentsManager(SAFETY_DOC_TYPES);
 
+  const requiredDocTypes = useMemo(
+    () =>
+      policeVerificationRequired
+        ? [...ALWAYS_REQUIRED_DOCS, 'police_verification']
+        : ALWAYS_REQUIRED_DOCS,
+    [policeVerificationRequired],
+  );
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await api.get('/driver/profile');
-        const data = res.data.data;
+        const [profileRes, reqRes] = await Promise.all([
+          api.get('/driver/profile'),
+          api.get('/common/driver-document-requirements'),
+        ]);
+        const data = profileRes.data.data;
         if (data?.safetyDeclaration?.agreed) {
           replaceDraft({ agreed: true });
         }
         if (data?.documents) loadFromApiDocuments(data.documents);
+        setPoliceVerificationRequired(
+          Boolean(reqRes.data?.data?.policeVerificationRequired),
+        );
       } catch (error) {
         console.error('Failed to fetch profile', error);
       }
@@ -49,7 +66,7 @@ const SafetyProtocolPage = () => {
   }, [loadFromApiDocuments, replaceDraft]);
 
   const handleSubmit = async () => {
-    if (!allRequiredUploaded(SAFETY_DOC_TYPES)) {
+    if (!allRequiredUploaded(requiredDocTypes)) {
       alert('Please upload all required documents');
       return;
     }
@@ -59,7 +76,9 @@ const SafetyProtocolPage = () => {
       const uploadedDocs = await uploadAllPending();
 
       const documentsPayload = toPayloadArray(uploadedDocs);
-      if (documentsPayload.length < SAFETY_DOC_TYPES.length) {
+      const uploadedTypes = new Set(documentsPayload.map((d) => d.type));
+      const missingRequired = requiredDocTypes.some((type) => !uploadedTypes.has(type));
+      if (missingRequired) {
         alert('Please select all required documents');
         return;
       }
@@ -84,7 +103,11 @@ const SafetyProtocolPage = () => {
   };
 
   const submitDisabled =
-    !agreed || isAnyUploading || isSubmitting || !allRequiredUploaded(SAFETY_DOC_TYPES);
+    !agreed || isAnyUploading || isSubmitting || !allRequiredUploaded(requiredDocTypes);
+
+  const policeLabel = policeVerificationRequired
+    ? 'Police Verification Certificate / Yellow Board Certificate'
+    : 'Police Verification Certificate / Yellow Board Certificate (Optional)';
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-dvh">
@@ -114,7 +137,7 @@ const SafetyProtocolPage = () => {
             disabled={isAnyUploading}
           />
           <DocumentUploadField
-            label="Police Verification Certificate"
+            label={policeLabel}
             doc={documents.police_verification}
             onUpload={(file) => uploadDocument('police_verification', file)}
             accept="image/*"

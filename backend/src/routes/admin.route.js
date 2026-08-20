@@ -180,6 +180,8 @@ import {
   updateAdminGstDetails,
   getAdminSubscriptionDispatch,
   updateAdminSubscriptionDispatch,
+  getAdminDriverDocumentRequirements,
+  updateAdminDriverDocumentRequirements,
 } from '../controllers/appSettings.controller.js';
 import { listPlatformRevenue, listKitRevenue } from '../controllers/revenue.controller.js';
 import {
@@ -629,6 +631,18 @@ router.get('/settings/support', protectStaff, restrictTo(...OPERATIONS), getAdmi
 router.put('/settings/support', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminSupportConfig);
 router.get('/settings/gst', protectStaff, restrictTo(...OPERATIONS), getAdminGstDetails);
 router.put('/settings/gst', protectStaff, restrictTo(...SUPER_ADMIN), updateAdminGstDetails);
+router.get(
+  '/settings/driver-documents',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  getAdminDriverDocumentRequirements,
+);
+router.put(
+  '/settings/driver-documents',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  updateAdminDriverDocumentRequirements,
+);
 router.get(
   '/settings/subscription-dispatch',
   protectStaff,

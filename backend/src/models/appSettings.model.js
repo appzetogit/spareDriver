@@ -65,6 +65,13 @@ const appSettingsSchema = new mongoose.Schema(
         requiredCompletedTrips: { type: Number, default: 5, min: 0 },
       },
     },
+    /**
+     * Driver onboarding document requirements.
+     * policeVerificationRequired defaults to false (optional) — Yellow Board / PVC.
+     */
+    driverDocumentRequirements: {
+      policeVerificationRequired: { type: Boolean, default: false },
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

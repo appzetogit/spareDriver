@@ -11,6 +11,7 @@ import {
   FileText,
   Building2,
   Receipt,
+  ShieldCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TrainingVideosTab from '../components/PlatformSettings/TrainingVideosTab';
@@ -113,15 +114,19 @@ const PlatformSettings = () => {
   const [gstForm, setGstForm] = useState(EMPTY_GST_FORM);
   const [gstBaseline, setGstBaseline] = useState(EMPTY_GST_FORM);
   const [gstSaving, setGstSaving] = useState(false);
+  const [policeVerificationRequired, setPoliceVerificationRequired] = useState(false);
+  const [policeVerificationBaseline, setPoliceVerificationBaseline] = useState(false);
+  const [driverDocsSaving, setDriverDocsSaving] = useState(false);
 
   const supportDirty =
     JSON.stringify(supportForm) !== JSON.stringify(supportBaseline);
   const gstDirty = JSON.stringify(gstForm) !== JSON.stringify(gstBaseline);
+  const driverDocsDirty = policeVerificationRequired !== policeVerificationBaseline;
 
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const [carsRes, condRes, trainingRes, supportRes, banksRes, gstRes] =
+      const [carsRes, condRes, trainingRes, supportRes, banksRes, gstRes, driverDocsRes] =
         await Promise.all([
           api.get('/admin/settings/car-types'),
           api.get('/admin/settings/conditions'),
@@ -129,6 +134,7 @@ const PlatformSettings = () => {
           api.get('/admin/settings/support'),
           api.get('/admin/settings/banks'),
           api.get('/admin/settings/gst'),
+          api.get('/admin/settings/driver-documents'),
         ]);
       setCarTypes(carsRes.data.data);
       setConditions(condRes.data.data);
@@ -140,6 +146,9 @@ const PlatformSettings = () => {
       const gst = normalizeGstForm(gstRes.data.data || {});
       setGstForm(gst);
       setGstBaseline(gst);
+      const pvcRequired = Boolean(driverDocsRes.data?.data?.policeVerificationRequired);
+      setPoliceVerificationRequired(pvcRequired);
+      setPoliceVerificationBaseline(pvcRequired);
     } catch (err) {
       console.error('Failed to fetch platform data', err);
       if (!silent) {
@@ -257,6 +266,25 @@ const PlatformSettings = () => {
     }
   };
 
+  const handleDriverDocsSave = async (e) => {
+    e.preventDefault();
+    if (!driverDocsDirty || driverDocsSaving || loading) return;
+    setDriverDocsSaving(true);
+    try {
+      const res = await api.put('/admin/settings/driver-documents', {
+        policeVerificationRequired,
+      });
+      const saved = Boolean(res.data?.data?.policeVerificationRequired);
+      setPoliceVerificationRequired(saved);
+      setPoliceVerificationBaseline(saved);
+      toast.success('Driver document requirements saved');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save document requirements');
+    } finally {
+      setDriverDocsSaving(false);
+    }
+  };
+
   if (!canViewPlatformSettings(admin?.role)) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -291,6 +319,7 @@ const PlatformSettings = () => {
             { id: 'conditions', label: 'Checklist', icon: CheckSquare },
             { id: 'banks', label: 'Banks', icon: Building2 },
             { id: 'training', label: 'Driver Training', icon: Video },
+            { id: 'driver-docs', label: 'Driver Docs', icon: ShieldCheck },
             { id: 'support', label: 'Website & Contact', icon: Headphones },
             { id: 'gst', label: 'GST Details', icon: Receipt },
             { id: 'legal', label: 'Legal Pages', icon: FileText },
@@ -365,6 +394,46 @@ const PlatformSettings = () => {
               onRefresh={() => fetchData({ silent: true })}
               readOnly={!canEdit}
             />
+          )}
+
+          {activeTab === 'driver-docs' && (
+            <Card className="max-w-2xl space-y-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Driver onboarding documents</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Control whether Police Verification / Yellow Board Certificate is required during
+                  driver registration.
+                </p>
+              </div>
+              <form onSubmit={handleDriverDocsSave} className="space-y-4">
+                <div className="flex items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Police Verification Certificate / Yellow Board Certificate
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {policeVerificationRequired
+                        ? 'Mandatory — drivers must upload this to continue'
+                        : 'Optional — drivers can skip this upload'}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={policeVerificationRequired}
+                    onChange={setPoliceVerificationRequired}
+                    disabled={!canEdit}
+                  />
+                </div>
+                {canEdit && (
+                  <Button
+                    type="submit"
+                    loading={driverDocsSaving}
+                    disabled={!driverDocsDirty || driverDocsSaving}
+                  >
+                    Save document requirements
+                  </Button>
+                )}
+              </form>
+            </Card>
           )}
 
           {activeTab === 'support' && (

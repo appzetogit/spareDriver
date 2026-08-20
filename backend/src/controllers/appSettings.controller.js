@@ -5,6 +5,8 @@ import {
   updateSupportConfigService,
   getGstDetailsService,
   updateGstDetailsService,
+  getDriverDocumentRequirementsService,
+  updateDriverDocumentRequirementsService,
 } from '../services/appSettings.service.js';
 
 export const getAdminSupportConfig = asyncHandler(async (_req, res) => {
@@ -48,4 +50,26 @@ export const updateAdminSubscriptionDispatch = asyncHandler(async (req, res) => 
   return res
     .status(200)
     .json(new ApiResponse(200, config, 'Subscription dispatch config updated'));
+});
+
+export const getAdminDriverDocumentRequirements = asyncHandler(async (_req, res) => {
+  const config = await getDriverDocumentRequirementsService();
+  return res
+    .status(200)
+    .json(new ApiResponse(200, config, 'Driver document requirements fetched'));
+});
+
+export const updateAdminDriverDocumentRequirements = asyncHandler(async (req, res) => {
+  const staffId = req.staff?._id || null;
+  const config = await updateDriverDocumentRequirementsService(req.body, staffId);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, config, 'Driver document requirements updated'));
+});
+
+export const getPublicDriverDocumentRequirements = asyncHandler(async (_req, res) => {
+  const config = await getDriverDocumentRequirementsService();
+  return res
+    .status(200)
+    .json(new ApiResponse(200, config, 'Driver document requirements fetched'));
 });

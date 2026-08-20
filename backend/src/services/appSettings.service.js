@@ -140,3 +140,31 @@ export async function updateGstDetailsService(data, staffId) {
 
   return toGstDetails(doc);
 }
+
+function toDriverDocumentRequirements(doc) {
+  return {
+    policeVerificationRequired: Boolean(doc?.driverDocumentRequirements?.policeVerificationRequired),
+  };
+}
+
+export async function getDriverDocumentRequirementsService() {
+  const doc = await getOrCreateSettingsDoc();
+  return toDriverDocumentRequirements(doc);
+}
+
+export async function updateDriverDocumentRequirementsService(data, staffId) {
+  const policeVerificationRequired = Boolean(data?.policeVerificationRequired);
+
+  const doc = await AppSettings.findOneAndUpdate(
+    { key: SETTINGS_KEY },
+    {
+      $set: {
+        'driverDocumentRequirements.policeVerificationRequired': policeVerificationRequired,
+        updatedBy: staffId || null,
+      },
+    },
+    { upsert: true, new: true },
+  );
+
+  return toDriverDocumentRequirements(doc);
+}

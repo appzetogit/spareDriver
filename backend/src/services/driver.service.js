@@ -282,6 +282,23 @@ export const updateOnboardingStepService = async (driverId, data) => {
       driver.safetyDeclaration = { agreed: stepData.safetyDeclaration.agreed, agreedAt: new Date() };
     }
     if (stepData.documents) mergeDocumentsByType(driver.documents, stepData.documents);
+
+    const hasDoc = (type) =>
+      (driver.documents || []).some((d) => d?.type === type && d?.fileUrl);
+
+    if (!hasDoc('aadhaar_front') || !hasDoc('aadhaar_back')) {
+      throw new ApiError(400, 'Aadhaar front and back are required');
+    }
+
+    const { getDriverDocumentRequirementsService } = await import('./appSettings.service.js');
+    const { policeVerificationRequired } = await getDriverDocumentRequirementsService();
+    if (policeVerificationRequired && !hasDoc('police_verification')) {
+      throw new ApiError(
+        400,
+        'Police Verification Certificate / Yellow Board Certificate is required',
+      );
+    }
+
     if (driver.onboardingStep < 4) driver.onboardingStep = 4;
   } else {
     throw new ApiError(400, 'Invalid step number');

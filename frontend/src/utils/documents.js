@@ -4,7 +4,7 @@ export const DOCUMENT_LABELS = {
   selfie: 'Selfie / Photo',
   aadhaar_front: 'Aadhaar (Front)',
   aadhaar_back: 'Aadhaar (Back)',
-  police_verification: 'Police Verification',
+  police_verification: 'Police Verification / Yellow Board Certificate',
 };
 
 export const EMPTY_DOCUMENT = Object.freeze({
