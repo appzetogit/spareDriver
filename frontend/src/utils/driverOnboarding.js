@@ -59,6 +59,62 @@ export function hasCompletedLiveVerification(driver) {
   return driver.onboardingStep >= 5;
 }
 
+function hasDocument(driver, type) {
+  return (driver?.documents || []).some((doc) => doc?.type === type && doc?.fileUrl);
+}
+
+const REVIEW_STEP_INCOMPLETE_HINT = {
+  identity: 'Name and phone are required before this section can be approved.',
+  credentials: 'Licence, vehicles, licence photo, and selfie are required before approve.',
+  bank: 'Bank details are not submitted.',
+  safety: 'Safety declaration and Aadhaar photos are required before approve.',
+  liveVerification: 'Live verification video is not uploaded.',
+};
+
+/** Whether the driver actually filled a review section (not just the admin badge). */
+export function isReviewStepComplete(driver, stepKey) {
+  if (!driver) return false;
+
+  switch (stepKey) {
+    case 'identity':
+      return Boolean(String(driver.name || '').trim()) && /^[0-9]{10}$/.test(String(driver.phone || ''));
+    case 'credentials': {
+      const hasVehicles =
+        (driver.vehicleExperience || []).length > 0 || (driver.carTypeExperience || []).length > 0;
+      return Boolean(
+        String(driver.drivingLicense?.number || '').trim() &&
+          driver.drivingLicense?.expiryDate &&
+          hasVehicles &&
+          hasDocument(driver, 'driving_license') &&
+          hasDocument(driver, 'selfie'),
+      );
+    }
+    case 'bank': {
+      const bank = driver.bankDetails;
+      return Boolean(
+        String(bank?.accountHolderName || '').trim() &&
+          String(bank?.accountNumber || '').trim() &&
+          String(bank?.ifscCode || '').trim() &&
+          String(bank?.bankName || '').trim(),
+      );
+    }
+    case 'safety':
+      return Boolean(
+        driver.safetyDeclaration?.agreed &&
+          hasDocument(driver, 'aadhaar_front') &&
+          hasDocument(driver, 'aadhaar_back'),
+      );
+    case 'liveVerification':
+      return Boolean(driver.liveVerificationVideo?.videoUrl) || isLegacySubmittedDriver(driver);
+    default:
+      return false;
+  }
+}
+
+export function getReviewStepIncompleteHint(stepKey) {
+  return REVIEW_STEP_INCOMPLETE_HINT[stepKey] || 'This section is not complete.';
+}
+
 export function areAllReviewStepsApproved(reviews = {}) {
   return DRIVER_REVIEW_STEPS.every(
     ({ key }) => reviews?.[key]?.status === 'approved',

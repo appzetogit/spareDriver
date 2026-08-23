@@ -34,7 +34,13 @@ import {
   getCarTypeLabel,
   ONBOARDING_STEP_LABELS,
 } from '../components/ManageDrivers/driverProfileUtils';
-import { DRIVER_REVIEW_STEPS, areAllReviewStepsApproved, formatSubmissionAttempt } from '../../../utils/driverOnboarding';
+import {
+  DRIVER_REVIEW_STEPS,
+  areAllReviewStepsApproved,
+  formatSubmissionAttempt,
+  getReviewStepIncompleteHint,
+  isReviewStepComplete,
+} from '../../../utils/driverOnboarding';
 import { formatVehicleExperienceLabel } from '../../../utils/vehicleCatalog';
 
 const REVIEWABLE = ['pending', 'under_review'];
@@ -135,6 +141,8 @@ const DriverProfilePage = () => {
         review={review}
         canReview={canReview}
         submitting={submitting}
+        stepComplete={isReviewStepComplete(profile.driver, stepKey)}
+        incompleteHint={getReviewStepIncompleteHint(stepKey)}
         onApprove={(key) => runStepReview(key, 'approved')}
         onReject={(key, note) => runStepReview(key, 'rejected', note)}
       />

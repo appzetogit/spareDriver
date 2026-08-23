@@ -45,6 +45,8 @@ const DriverStepReviewControls = ({
   review,
   canReview,
   submitting,
+  stepComplete = true,
+  incompleteHint = '',
   onApprove,
   onReject,
 }) => {
@@ -68,6 +70,7 @@ const DriverStepReviewControls = ({
 
   const busy = Boolean(submitting);
   const status = review?.status || 'pending';
+  const approveDisabled = busy || status === 'approved' || !stepComplete;
 
   const handleConfirmReject = () => {
     if (!isApprovalNoteValid(note)) {
@@ -122,29 +125,35 @@ const DriverStepReviewControls = ({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 justify-end">
-      {review?.reviewedByName ? (
-        <span className="text-[11px] text-slate-400 mr-1 hidden sm:inline">
-          {review.reviewedByName}
-        </span>
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2 justify-end">
+        {review?.reviewedByName ? (
+          <span className="text-[11px] text-slate-400 mr-1 hidden sm:inline">
+            {review.reviewedByName}
+          </span>
+        ) : null}
+        <Button
+          variant="admin"
+          size="sm"
+          loading={submitting === `step:${stepKey}:approved`}
+          disabled={approveDisabled}
+          title={!stepComplete ? incompleteHint : undefined}
+          onClick={() => onApprove?.(stepKey)}
+        >
+          Approve
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          disabled={busy || status === 'rejected'}
+          onClick={() => setRejecting(true)}
+        >
+          Reject
+        </Button>
+      </div>
+      {!stepComplete && status !== 'approved' ? (
+        <p className="text-[11px] text-amber-700 text-right">{incompleteHint}</p>
       ) : null}
-      <Button
-        variant="admin"
-        size="sm"
-        loading={submitting === `step:${stepKey}:approved`}
-        disabled={busy || status === 'approved'}
-        onClick={() => onApprove?.(stepKey)}
-      >
-        Approve
-      </Button>
-      <Button
-        variant="danger"
-        size="sm"
-        disabled={busy || status === 'rejected'}
-        onClick={() => setRejecting(true)}
-      >
-        Reject
-      </Button>
     </div>
   );
 };

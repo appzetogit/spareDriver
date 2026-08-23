@@ -41,6 +41,7 @@ import {
   areAllReviewStepsApproved,
   createEmptyStepReviews,
 } from '../constants/driverOnboarding.js';
+import { isReviewStepComplete } from '../utils/driverOnboarding.util.js';
 import {
   notifyDriverAccountApproved,
   notifyDriverAccountRejected,
@@ -328,6 +329,13 @@ export const updateDriverStepReviewService = async (staff, driverId, data) => {
   }
 
   ensureStepReviews(driver);
+
+  if (status === DRIVER_REVIEW_STEP_STATUS.APPROVED && !isReviewStepComplete(driver, step)) {
+    throw new ApiError(
+      400,
+      `${DRIVER_REVIEW_STEP_LABELS[step]} is not complete and cannot be approved`,
+    );
+  }
 
   const actorName = staffDisplayName(staff);
   driver.onboardingStepReviews[step] = {
