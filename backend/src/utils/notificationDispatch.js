@@ -563,9 +563,9 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
       body,
       severity: 'warn',
       type: kind,
-      // Foreground already shows BookingOfferModal / inbox via BOOKING_OFFERED —
-      // skip duplicate socket toast; still persist + FCM for history/background.
-      emitSocket: false,
+      // Instant: BookingOfferModal already covers foreground — skip toast.
+      // Inbox: Incoming list is easy to miss, so emit the in-app toast too.
+      emitSocket: isInbox,
       data: {
         kind,
         ...bookingRef(booking),
@@ -578,7 +578,11 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
         priority: 'high',
         offerExpiresAt: expiresAt,
         fcmTag: `booking_offer_${tagId}`,
-        fcmChannelId: isInbox ? 'inbox_offers' : 'booking_offers',
+        // Flutter APK creates `booking_offers` only. Android 8+ drops FCM
+        // display notifications whose channelId does not exist — that is
+        // why inbox/outstation/scheduled rows appeared in Incoming (socket)
+        // with no push.
+        fcmChannelId: 'booking_offers',
         path: isInbox ? '/driver/trips?tab=incoming' : '/driver/home',
         ...(compactOffer ? { offer: compactOffer } : {}),
       },
