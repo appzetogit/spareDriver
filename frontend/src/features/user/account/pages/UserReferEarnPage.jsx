@@ -7,6 +7,7 @@ import Card from '../../../../components/Card';
 import Loader from '../../../../components/Loader';
 import api from '../../../../utils/api';
 import { formatCurrency } from '../../../../utils/formatters';
+import { shareText } from '../../../../utils/nativeShare';
 
 const STATUS_LABEL = {
   pending: 'Pending',
@@ -77,21 +78,12 @@ const UserReferEarnPage = () => {
   };
 
   const handleShare = async () => {
-    const text = `Join SpareDriver using my referral code ${code}.`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-        return;
-      } catch {
-        /* user cancelled */
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success('Share message copied');
-    } catch {
-      toast.error('Could not share');
-    }
+    const result = await shareText({
+      title: 'Sparedriver',
+      text: `Join Sparedriver using my referral code ${code}.`,
+    });
+    if (result.via === 'clipboard') toast.success('Share message copied');
+    else if (!result.ok && result.reason === 'failed') toast.error('Could not share');
   };
 
   if (loading) {
