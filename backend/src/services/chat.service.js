@@ -470,43 +470,36 @@ async function dispatchChatNotifications({
   const tasks = [];
 
   if (recipientRole === CHAT_SENDER_ROLE.USER && senderRole !== CHAT_SENDER_ROLE.USER) {
-    const inChat = isPrincipalInBookingChat(
-      bookingId,
-      'user',
-      toId(booking.userId),
+    const userId = toId(booking.userId);
+    const inChat = isPrincipalInBookingChat(bookingId, 'user', userId);
+    tasks.push(
+      notifyUserTripChatMessage(userId, {
+        title,
+        body,
+        // Still push when the WebView keeps the chat socket joined in background.
+        emitSocket: !inChat,
+        data: {
+          ...data,
+          path: userChatPath,
+        },
+      }),
     );
-    if (!inChat) {
-      tasks.push(
-        notifyUserTripChatMessage(toId(booking.userId), {
-          title,
-          body,
-          data: {
-            ...data,
-            path: userChatPath,
-          },
-        }),
-      );
-    }
   }
 
   if (recipientRole === CHAT_SENDER_ROLE.DRIVER && senderRole !== CHAT_SENDER_ROLE.DRIVER) {
-    const inChat = isPrincipalInBookingChat(
-      bookingId,
-      'driver',
-      toId(booking.driverId),
+    const driverId = toId(booking.driverId);
+    const inChat = isPrincipalInBookingChat(bookingId, 'driver', driverId);
+    tasks.push(
+      notifyDriverTripChatMessage(driverId, {
+        title,
+        body,
+        emitSocket: !inChat,
+        data: {
+          ...data,
+          path: `/driver/trip/${bookingId}?${chatQuery}`,
+        },
+      }),
     );
-    if (!inChat) {
-      tasks.push(
-        notifyDriverTripChatMessage(toId(booking.driverId), {
-          title,
-          body,
-          data: {
-            ...data,
-            path: `/driver/trip/${bookingId}?${chatQuery}`,
-          },
-        }),
-      );
-    }
   }
 
   if (recipientRole === CHAT_SENDER_ROLE.ADMIN) {

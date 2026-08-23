@@ -21,7 +21,7 @@ async function closeTaggedNotifications(tag) {
 
 messaging.onBackgroundMessage(async (payload) => {
   const data = payload?.data || {};
-  const kind = data.kind || '';
+  const kind = data.kind || data.type || '';
   const tag = data.fcmTag || (data.bookingId ? 'booking_offer_' + data.bookingId : undefined);
 
   if (kind === 'booking_offer_withdrawn') {
@@ -70,7 +70,7 @@ function normalizeNotificationData(raw) {
 
 function resolveNotificationOpenUrl(data) {
   const path = typeof data.path === 'string' ? data.path.trim() : '';
-  const kind = data.kind || '';
+  const kind = data.kind || data.type || '';
   const bookingId = data.bookingId ? String(data.bookingId) : '';
   if (path.startsWith('/')) {
     if (kind === 'trip_chat_message' && path.indexOf('chat=') === -1) {
@@ -83,6 +83,12 @@ function resolveNotificationOpenUrl(data) {
   }
   if (kind === 'inbox_offer') {
     return '/driver/trips?tab=incoming';
+  }
+  if (kind === 'sos_triggered') {
+    return '/admin/sos';
+  }
+  if (kind === 'emergency_pool_entered') {
+    return '/admin/bookings/emergency-pool';
   }
   if (kind === 'trip_chat_message' && bookingId) {
     const chatQuery = (data.channel ? '&channel=' + encodeURIComponent(data.channel) : '');

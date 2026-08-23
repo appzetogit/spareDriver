@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, Trash2, X } from 'lucide-react';
-import { notificationNavigatePath } from '../../constants/notificationTypes';
+import { notificationNavigatePath, notificationTypeLabel, notificationTypeBadgeVariant } from '../../constants/notificationTypes';
 import { useAfterPaint } from '../../hooks/useAfterPaint';
 import { Skeleton } from '../skeleton/Skeleton';
+import Badge from '../Badge';
 
 function formatWhen(iso) {
   if (!iso) return '';
@@ -202,6 +203,8 @@ export function NotificationCenterPanel({
               {notifications.map((item) => {
                 const id = String(item._id);
                 const checked = selectedIds.has(id);
+                const typeKey = item.type || item.data?.kind || item.data?.type || '';
+                const typeLabel = item.data?.typeLabel || notificationTypeLabel(typeKey);
                 return (
                   <li key={item._id}>
                     <div
@@ -223,6 +226,14 @@ export function NotificationCenterPanel({
                         onClick={() => handleClick(item)}
                         className="flex-1 min-w-0 text-left px-3 py-3"
                       >
+                        {typeLabel ? (
+                          <Badge
+                            variant={notificationTypeBadgeVariant(typeKey)}
+                            className="mb-1 !text-[10px] !px-1.5 !py-0"
+                          >
+                            {typeLabel}
+                          </Badge>
+                        ) : null}
                         <div className="flex items-start justify-between gap-2">
                           <p className="font-medium text-sm text-text">{item.title}</p>
                           {!item.isRead ? (

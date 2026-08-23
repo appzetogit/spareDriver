@@ -10,6 +10,7 @@ import {
   NOTIFICATION_SEVERITY,
   ADMIN_PERSISTED_NOTIFICATION_TYPES,
   ADMIN_FCM_NOTIFICATION_TYPES,
+  notificationTypeLabel,
 } from '../constants/notificationTypes.js';
 import { USER_ROLES } from '../constants/roles.js';
 
@@ -114,7 +115,15 @@ async function sendFcmToTarget(target, { title, body, data }, opts = {}) {
   const channelId = data?.fcmChannelId ? String(data.fcmChannelId) : undefined;
   const silent = Boolean(opts.silent || data?.fcmSilent);
 
-  const dataPayload = stringifyData(data);
+  const kind = String(data?.kind || data?.type || '').trim();
+  const dataPayload = stringifyData({
+    ...data,
+    kind,
+    type: kind,
+    title: title || data?.title || '',
+    body: body || data?.body || '',
+    typeLabel: data?.typeLabel || notificationTypeLabel(kind),
+  });
   // Keep tag in data so web SW / Flutter can cancel matching notifs.
   if (tag) dataPayload.fcmTag = tag;
   if (channelId) dataPayload.fcmChannelId = channelId;
@@ -156,7 +165,13 @@ async function sendFcmToTarget(target, { title, body, data }, opts = {}) {
   };
 
   if (!silent && title) {
-    messageBase.notification = { title, body: body || '' };
+    const label = dataPayload.typeLabel || '';
+    const titleHasType = label
+      && title.toLowerCase().includes(label.toLowerCase());
+    messageBase.notification = {
+      title: label && !titleHasType ? `${label} · ${title}` : title,
+      body: body || '',
+    };
   }
 
   await Promise.all(
@@ -196,12 +211,19 @@ export async function sendPushNotification(
     fcmSilent = false,
   } = {},
 ) {
+  const kind = data?.kind || type || 'general';
+  const typeLabel = notificationTypeLabel(kind);
   const payload = {
     title,
     body,
     severity,
-    data: { ...data, kind: data?.kind || type || 'general' },
-    type: data?.kind || type || 'general',
+    type: kind,
+    data: {
+      ...data,
+      kind,
+      type: kind,
+      typeLabel,
+    },
   };
 
   if (emitSocket) {
@@ -343,13 +365,18 @@ export async function sendAdminNotification({
   sendFcm,
 }) {
   const zones = (zoneIds || []).map((id) => String(id || '').trim()).filter(Boolean);
+  const kind = type || data?.kind || 'admin_alert';
+  const typeLabel = notificationTypeLabel(kind);
   const payload = {
     title,
     body,
     severity,
+    type: kind,
     data: {
       ...data,
-      kind: type,
+      kind,
+      type: kind,
+      typeLabel,
       ...(zones.length ? { zoneIds: zones } : {}),
     },
   };
@@ -357,7 +384,7 @@ export async function sendAdminNotification({
   const shouldPersist =
     typeof persist === 'boolean'
       ? persist
-      : ADMIN_PERSISTED_NOTIFICATION_TYPES.has(type);
+      : ADMIN_PERSISTED_NOTIFICATION_TYPES.has(kind);
 
   // Persist before socket emit so clients refetching unread see the row.
   if (shouldPersist) {
@@ -366,7 +393,7 @@ export async function sendAdminNotification({
         audience: NOTIFICATION_AUDIENCE.ADMIN,
         title,
         body,
-        type: type || 'admin_alert',
+        type: kind,
         severity,
         data: payload.data,
         zoneIds: zones,
@@ -377,7 +404,7 @@ export async function sendAdminNotification({
   }
 
   emitAdminAlert({
-    kind: type,
+    kind,
     severity: severity === 'error' ? 'critical' : severity,
     message: body || title,
     data: payload.data,
@@ -387,7 +414,7 @@ export async function sendAdminNotification({
   const shouldSendFcm =
     typeof sendFcm === 'boolean'
       ? sendFcm
-      : ADMIN_FCM_NOTIFICATION_TYPES.has(type);
+      : ADMIN_FCM_NOTIFICATION_TYPES.has(kind);
 
   if (shouldSendFcm) {
     try {

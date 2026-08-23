@@ -121,6 +121,9 @@ export function notifyUserRideEndingSoon(userId, booking) {
       data: {
         ...bookingRef(booking),
         status: booking.status || 'started',
+        priority: 'high',
+        fcmTag: bookingId ? `ride_extend_${bookingId}` : 'ride_extend',
+        fcmChannelId: 'ride_alerts',
         path: bookingId
           ? `/user/book/assigned/${bookingId}?extend=1`
           : '/user/book/assigned?extend=1',
@@ -1107,26 +1110,40 @@ export function notifyDriverSupportReply(driverId, ticket) {
 /* Trip chat                                                           */
 /* ------------------------------------------------------------------ */
 
-export function notifyUserTripChatMessage(userId, { title, body, data = {} }) {
+function chatPushData(data = {}) {
+  const bookingId = data.bookingId ? String(data.bookingId) : '';
+  return {
+    ...data,
+    priority: 'high',
+    fcmTag: bookingId ? `trip_chat_${bookingId}` : 'trip_chat',
+    fcmChannelId: 'chat_messages',
+  };
+}
+
+export function notifyUserTripChatMessage(userId, { title, body, data = {}, emitSocket = true } = {}) {
+  if (!userId) return Promise.resolve();
   return sendPushNotification(
     { userId },
     {
       title: title || 'New message',
       body: body || '',
       type: USER_NOTIFICATION.TRIP_CHAT_MESSAGE,
-      data,
+      emitSocket,
+      data: chatPushData(data),
     },
   );
 }
 
-export function notifyDriverTripChatMessage(driverId, { title, body, data = {} }) {
+export function notifyDriverTripChatMessage(driverId, { title, body, data = {}, emitSocket = true } = {}) {
+  if (!driverId) return Promise.resolve();
   return sendPushNotification(
     { driverId },
     {
       title: title || 'New message',
       body: body || '',
       type: DRIVER_NOTIFICATION.TRIP_CHAT_MESSAGE,
-      data,
+      emitSocket,
+      data: chatPushData(data),
     },
   );
 }

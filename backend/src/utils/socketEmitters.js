@@ -125,6 +125,7 @@ export function emitNotification(target, notification) {
     title: notification.title,
     body: notification.body || '',
     severity: notification.severity || 'info',
+    type: notification.type || notification.data?.kind || notification.data?.type || '',
     data: notification.data || {},
     sentAt: Date.now(),
   };

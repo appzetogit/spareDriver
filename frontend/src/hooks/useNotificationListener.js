@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { S2C_EVENTS } from '../constants/socketEvents';
+import { notificationTypeLabel } from '../constants/notificationTypes';
 import useSocketStore from '../store/useSocketStore';
 
 /**
@@ -13,14 +14,16 @@ export function useNotificationListener({ enabled = false, onNotification } = {}
     if (!enabled || !socket) return undefined;
 
     const handler = (payload) => {
-      const { title, body, severity = 'info', data = {} } = payload || {};
-      const kind = data?.kind || data?.type || 'general';
+      const { title, body, severity = 'info', data = {}, type } = payload || {};
+      const kind = type || data?.kind || data?.type || 'general';
+      const typeLabel = data?.typeLabel || notificationTypeLabel(kind);
       const toastFn =
         severity === 'error' ? toast.error
           : severity === 'success' ? toast.success
             : toast;
 
-      toastFn(body || title || 'New notification', {
+      const text = body || title || 'New notification';
+      toastFn(typeLabel ? `${typeLabel}: ${text}` : text, {
         id: `notif-${kind}-${data?.bookingId || Date.now()}`,
         duration: 5000,
       });

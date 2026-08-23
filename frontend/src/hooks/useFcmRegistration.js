@@ -64,9 +64,22 @@ export function useFcmRegistration({ enabled = false, audience = 'user' }) {
         // Foreground: hydrate offers from FCM data. Do not call `new Notification` —
         // socket toasts already cover in-app alerts; a second system push looks like a duplicate.
         unsubscribeOnMessage = onMessage(messaging, (payload) => {
+          const data = payload?.data || {};
+          const kind = data.kind || data.type || '';
           if (audience === 'driver') {
             handleDriverFcmPayload(payload);
           }
+          window.dispatchEvent(
+            new CustomEvent('sd:fcm-foreground', {
+              detail: {
+                audience,
+                kind,
+                title: payload?.notification?.title || data.title || '',
+                body: payload?.notification?.body || data.body || '',
+                data,
+              },
+            }),
+          );
         });
 
         refreshTimer = setInterval(async () => {

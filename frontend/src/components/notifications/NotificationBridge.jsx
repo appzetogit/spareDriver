@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import useUserAuthStore from '../../store/useUserAuthStore';
 import useDriverAuthStore from '../../store/useDriverAuthStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
@@ -8,6 +9,13 @@ import { useSocketEvent } from '../../hooks/useSocket';
 import { S2C_EVENTS } from '../../constants/socketEvents';
 import { useInAppAlertRing } from '../../hooks/useInAppAlertRing';
 import { ADMIN_NOTIFICATION } from '../../constants/notificationTypes';
+
+function isAdminAlertKind(kind) {
+  return (
+    kind === ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED
+    || kind === ADMIN_NOTIFICATION.SOS_TRIGGERED
+  );
+}
 
 export function UserNotificationBridge() {
   const isAuthenticated = useUserAuthStore((s) => s.isAuthenticated);
@@ -48,10 +56,22 @@ export function AdminNotificationBridge() {
 
   useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
     if (!isAuthenticated) return;
-    if (payload?.kind === ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED) {
+    if (isAdminAlertKind(payload?.kind)) {
       playEmergencyAlert();
     }
   });
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    const onFcm = (event) => {
+      if (event.detail?.audience !== 'admin') return;
+      if (isAdminAlertKind(event.detail?.kind)) {
+        playEmergencyAlert();
+      }
+    };
+    window.addEventListener('sd:fcm-foreground', onFcm);
+    return () => window.removeEventListener('sd:fcm-foreground', onFcm);
+  }, [isAuthenticated, playEmergencyAlert]);
 
   return null;
 }

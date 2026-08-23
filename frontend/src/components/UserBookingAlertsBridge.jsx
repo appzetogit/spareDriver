@@ -114,6 +114,20 @@ export function UserBookingAlertsBridge() {
     };
   }, [isAuthenticated, navigate, openExtensionPrompt, playRideEndingAlert]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    const onFcm = (event) => {
+      if (event.detail?.audience !== 'user') return;
+      const kind = event.detail?.kind || '';
+      const path = String(event.detail?.data?.path || '');
+      if (kind === 'ride_ending_soon' || path.includes('extend=1')) {
+        openExtendWithRing();
+      }
+    };
+    window.addEventListener('sd:fcm-foreground', onFcm);
+    return () => window.removeEventListener('sd:fcm-foreground', onFcm);
+  }, [isAuthenticated, openExtensionPrompt, playRideEndingAlert]);
+
   useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_OFFERED, (payload) => {
     if (!isAuthenticated || !payload?.bookingId) return;
     if (booking?._id && String(payload.bookingId) !== String(booking._id)) {

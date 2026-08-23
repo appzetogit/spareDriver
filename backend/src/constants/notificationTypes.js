@@ -152,3 +152,26 @@ export const ADMIN_FCM_NOTIFICATION_TYPES = Object.freeze(
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
   ]),
 );
+
+const NOTIFICATION_TYPE_LABELS = Object.freeze({
+  [USER_NOTIFICATION.TRIP_CHAT_MESSAGE]: 'Chat',
+  [USER_NOTIFICATION.RIDE_ENDING_SOON]: 'Ride extend',
+  [ADMIN_NOTIFICATION.SOS_TRIGGERED]: 'SOS',
+  [ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED]: 'Emergency pool',
+  [ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED]: 'Support',
+  [ADMIN_NOTIFICATION.NO_DRIVERS_FOUND]: 'No drivers',
+  [DRIVER_NOTIFICATION.BOOKING_OFFER]: 'New request',
+  [DRIVER_NOTIFICATION.INBOX_OFFER]: 'Inbox request',
+});
+
+/** Human label for FCM / inbox. Unknown kinds become Title Case. */
+export function notificationTypeLabel(type) {
+  const key = String(type || '').trim();
+  if (!key) return '';
+  if (NOTIFICATION_TYPE_LABELS[key]) return NOTIFICATION_TYPE_LABELS[key];
+  return key
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}

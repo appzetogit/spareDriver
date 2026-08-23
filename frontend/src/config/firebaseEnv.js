@@ -53,7 +53,7 @@ async function closeTaggedNotifications(tag) {
 
 messaging.onBackgroundMessage(async (payload) => {
   const data = payload?.data || {};
-  const kind = data.kind || '';
+  const kind = data.kind || data.type || '';
   const tag = data.fcmTag || (data.bookingId ? 'booking_offer_' + data.bookingId : undefined);
 
   if (kind === 'booking_offer_withdrawn') {
@@ -89,19 +89,26 @@ messaging.onBackgroundMessage(async (payload) => {
 
 function resolveNotificationOpenUrl(data) {
   const path = typeof data.path === 'string' ? data.path.trim() : '';
+  const kind = data.kind || data.type || '';
   if (path.startsWith('/')) {
-    if (data.kind === 'trip_chat_message' && !path.includes('chat=')) {
+    if (kind === 'trip_chat_message' && !path.includes('chat=')) {
       return path + (path.includes('?') ? '&' : '?') + 'chat=1';
     }
     return path;
   }
-  if (data.kind === 'booking_offer' || data.kind === 'new_booking_request') {
+  if (kind === 'booking_offer' || kind === 'new_booking_request') {
     return '/driver/home';
   }
-  if (data.kind === 'inbox_offer') {
+  if (kind === 'inbox_offer') {
     return '/driver/trips?tab=incoming';
   }
-  if (data.kind === 'trip_chat_message' && data.bookingId) {
+  if (kind === 'sos_triggered') {
+    return '/admin/sos';
+  }
+  if (kind === 'emergency_pool_entered') {
+    return '/admin/bookings/emergency-pool';
+  }
+  if (kind === 'trip_chat_message' && data.bookingId) {
     const chatQuery = data.channel ? '&channel=' + encodeURIComponent(data.channel) : '';
     if (data.recipientRole === 'driver') {
       return '/driver/trip/' + data.bookingId + '?chat=1' + chatQuery;
@@ -112,13 +119,13 @@ function resolveNotificationOpenUrl(data) {
     return '/user/book/assigned/' + data.bookingId + '?chat=1' + chatQuery;
   }
   if (data.bookingId && (
-    data.kind === 'noshow_prompt'
-    || data.kind === 'driver_arrived'
-    || data.kind === 'driver_assigned'
-    || data.kind === 'trip_started'
-    || data.kind === 'ride_ending_soon'
-    || data.kind === 'trip_overtime_started'
-    || data.kind === 'overtime_payment_failed'
+    kind === 'noshow_prompt'
+    || kind === 'driver_arrived'
+    || kind === 'driver_assigned'
+    || kind === 'trip_started'
+    || kind === 'ride_ending_soon'
+    || kind === 'trip_overtime_started'
+    || kind === 'overtime_payment_failed'
   )) {
     return '/user/book/assigned/' + data.bookingId;
   }
