@@ -578,11 +578,6 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
         priority: 'high',
         offerExpiresAt: expiresAt,
         fcmTag: `booking_offer_${tagId}`,
-        // Flutter APK creates `booking_offers` only. Android 8+ drops FCM
-        // display notifications whose channelId does not exist — that is
-        // why inbox/outstation/scheduled rows appeared in Incoming (socket)
-        // with no push.
-        fcmChannelId: 'booking_offers',
         path: isInbox ? '/driver/trips?tab=incoming' : '/driver/home',
         ...(compactOffer ? { offer: compactOffer } : {}),
       },
@@ -611,7 +606,6 @@ export function notifyDriverBookingOfferWithdrawn(driverId, { bookingId, reason 
         reason: reason || '',
         priority: 'high',
         fcmTag: `booking_offer_${id}`,
-        fcmChannelId: 'booking_offers',
         fcmSilent: true,
       },
     },
