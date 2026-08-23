@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Driver } from '../models/driverModels/driver.model.js';
 import Booking from '../models/booking.model.js';
 import { getRtdb, isFirebaseReady } from '../config/firebase.js';
@@ -145,7 +146,7 @@ async function loadActiveTripForDriver(driverId) {
 export async function syncFirebaseDriverStatus(driverId) {
   if (!driverId) return false;
 
-  const driver = await Driver.findById(driverId).select('isOnline isOnTrip').lean();
+  const driver = await Driver.findById(driverId).select('isOnline isOnTrip name driverNumber').lean();
   if (!driver?.isOnline) return false;
 
   let activeTrip = null;
@@ -158,6 +159,8 @@ export async function syncFirebaseDriverStatus(driverId) {
     isOnline: true,
     isOnTrip: Boolean(driver.isOnTrip),
     since,
+    name: driver.name || null,
+    driverNumber: driver.driverNumber || '',
     activeTrip,
   };
 
@@ -397,15 +400,49 @@ export async function invalidateDriverTripCache(driverId) {
   await deleteKeys(KEY.activeTrip(String(driverId)), KEY.statusPrint(String(driverId)));
 }
 
+function validDriverIds(ids) {
+  const out = [];
+  for (const raw of ids || []) {
+    const id = String(raw || '').trim();
+    if (mongoose.isValidObjectId(id)) out.push(id);
+  }
+  return out;
+}
+
+async function listFirebaseDriverIds() {
+  const rtdb = getRtdb();
+  if (!rtdb) return [];
+  try {
+    const snap = await rtdb.ref('drivers').once('value');
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return [];
+    return Object.keys(val);
+  } catch (err) {
+    console.warn('[driverLocation] Failed to list Firebase drivers:', err.message);
+    return [];
+  }
+}
+
 /**
  * Driver profile metadata for the admin live map (no coordinates — Firebase
  * is the sole source for positions).
+ *
+ * Includes currently-online drivers plus anyone still present under `/drivers`
+ * in RTDB, so a pin is never labelled with a truncated id just because Mongo
+ * `isOnline` has already flipped off.
+ *
+ * @param {string[]} [extraIds]
  */
-export async function listLiveDriverMapMetadata() {
+export async function listLiveDriverMapMetadata(extraIds = []) {
+  const firebaseIds = await listFirebaseDriverIds();
+  const requestedIds = validDriverIds([...firebaseIds, ...extraIds]);
+
+  const or = [{ isOnline: true, approvalStatus: 'approved' }];
+  if (requestedIds.length) or.push({ _id: { $in: requestedIds } });
+
   const drivers = await Driver.find({
-    isOnline: true,
-    approvalStatus: 'approved',
     isDeleted: false,
+    $or: or,
   })
     .select('_id name phone rating isOnTrip driverNumber')
     .lean();

@@ -11,11 +11,18 @@ import { NEARBY_DRIVERS } from '../constants/bookingStatus.js';
 /**
  * GET /admin/drivers/live
  *
- * Returns online-driver profile metadata (name, phone, active trip). Positions
- * are NOT included — the admin live map reads coordinates from Firebase RTDB.
+ * Returns driver profile metadata (name, phone, active trip) for the admin
+ * live map. Positions are NOT included — those come from Firebase RTDB.
+ * Covers currently-online drivers plus optional `?ids=` (Firebase pin ids).
  */
-export const getLiveDriversSnapshot = asyncHandler(async (_req, res) => {
-  const items = await listLiveDriverMapMetadata();
+export const getLiveDriversSnapshot = asyncHandler(async (req, res) => {
+  const rawIds = typeof req.query.ids === 'string' ? req.query.ids : '';
+  const extraIds = rawIds
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .slice(0, 500);
+  const items = await listLiveDriverMapMetadata(extraIds);
 
   return res.status(200).json(
     new ApiResponse(

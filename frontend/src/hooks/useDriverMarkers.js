@@ -80,6 +80,7 @@ export function useDriverMarkers(
       } else {
         marker.position = { lat: d.lat, lng: d.lng };
         marker.content = content;
+        marker.title = d.name || `Driver ${id.slice(-4)}`;
         marker.zIndex = isSelected ? zIndexBase + 2 : zIndexBase;
       }
     }

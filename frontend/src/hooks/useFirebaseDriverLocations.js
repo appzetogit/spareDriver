@@ -46,6 +46,8 @@ export function useFirebaseDriverLocations({ enabled = true } = {}) {
           updatedAt: loc.updatedAt || null,
           isOnline: status?.isOnline ?? true,
           isOnTrip: status?.isOnTrip ?? false,
+          name: status?.name || null,
+          driverNumber: status?.driverNumber || '',
           activeTrip: status?.activeTrip ?? null,
         };
       }

@@ -49,8 +49,10 @@ const TRIP_STATUS_LABELS = {
   [BOOKING_STATUS.IN_EMERGENCY_POOL]: 'Emergency pool',
 };
 
-const useLiveDriverMetadataStore = createQueryStore(async () => {
-  const res = await api.get('/admin/drivers/live');
+const useLiveDriverMetadataStore = createQueryStore(async (params = {}) => {
+  const res = await api.get('/admin/drivers/live', {
+    params: params.ids ? { ids: params.ids } : {},
+  });
   return res.data?.data || { items: [], liveLocationReady: false };
 });
 
@@ -76,13 +78,18 @@ function mergeLiveDrivers(firebaseMap, metadataItems, zones) {
   const drivers = [];
 
   for (const live of Object.values(firebaseMap || {})) {
-    const meta = metaById.get(live.driverId) || {};
+    const meta = metaById.get(String(live.driverId)) || {};
     const zone = findZoneForPoint(live.lat, live.lng, zones);
     drivers.push({
       ...live,
-      name: meta.name || `Driver ${live.driverId.slice(-6)}`,
+      name:
+        meta.name ||
+        live.name ||
+        meta.driverNumber ||
+        live.driverNumber ||
+        `Driver ${String(live.driverId).slice(-6)}`,
       phone: meta.phone || null,
-      driverNumber: meta.driverNumber || '',
+      driverNumber: meta.driverNumber || live.driverNumber || '',
       rating: meta.rating ?? null,
       isOnTrip: live.isOnTrip ?? meta.isOnTrip ?? false,
       activeTrip: mergeActiveTrip(live.activeTrip, meta.activeTrip),
@@ -133,11 +140,16 @@ const LiveDriverMap = () => {
   const { map: firebaseMap, disabled: firebaseDisabled, error: firebaseError } =
     useFirebaseDriverLocations();
 
-  const metadataKey = buildCacheKey('admin-live-drivers-metadata', {});
+  const firebaseIds = useMemo(
+    () => Object.keys(firebaseMap || {}).sort().join(','),
+    [firebaseMap],
+  );
+  const metadataParams = useMemo(() => (firebaseIds ? { ids: firebaseIds } : {}), [firebaseIds]);
+  const metadataKey = buildCacheKey('admin-live-drivers-metadata', metadataParams);
   const { data: metadata, refetch: refetchMetadata } = useCachedQuery(
     useLiveDriverMetadataStore,
     metadataKey,
-    {},
+    metadataParams,
   );
 
   const zonesKey = buildCacheKey('admin-zones', {});
