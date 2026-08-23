@@ -107,7 +107,13 @@ async function sendFcmToTarget(target, { title, body, data }, opts = {}) {
 
   const doc = await loadFcmDoc(target);
   const tokens = collectFcmTokens(doc);
-  if (!tokens.length) return;
+  if (!tokens.length) {
+    console.warn(
+      '[push] no FCM token for',
+      target.driverId ? `driver ${target.driverId}` : `user ${target.userId}`,
+    );
+    return;
+  }
 
   const admin = getFirebaseAdmin();
   const high = data?.priority === 'high';
@@ -226,12 +232,16 @@ export async function sendPushNotification(
     },
   };
 
-  if (emitSocket) {
-    if (target.userId) {
-      emitNotification({ userId: target.userId }, payload);
-    } else if (target.driverId) {
-      emitNotification({ driverId: target.driverId }, payload);
+  try {
+    if (emitSocket) {
+      if (target.userId) {
+        emitNotification({ userId: target.userId }, payload);
+      } else if (target.driverId) {
+        emitNotification({ driverId: target.driverId }, payload);
+      }
     }
+  } catch (err) {
+    console.warn('[push] socket emit failed:', err?.message || err);
   }
 
   if (persist) {

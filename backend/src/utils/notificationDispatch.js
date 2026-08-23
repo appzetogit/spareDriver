@@ -512,7 +512,6 @@ export function notifyUserSosUpdate(userId, data) {
 /* ------------------------------------------------------------------ */
 
 export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = null) {
-  const bookingId = String(booking._id || booking.id || offerPayload?.bookingId || '');
   const bookingType = String(
     offerPayload?.bookingType || booking.bookingType || booking.serviceType || '',
   );
@@ -524,24 +523,10 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
     || offerPayload?.kind === 'subscription',
   );
 
-  const expiresAt = offerPayload?.offerExpiresAt
-    ? new Date(offerPayload.offerExpiresAt).toISOString()
-    : booking.dispatch?.currentExpiresAt
-      ? new Date(booking.dispatch.currentExpiresAt).toISOString()
-      : '';
-
-  const compactOffer = offerPayload
-    ? compactBookingOfferForPush({ ...offerPayload, inbox: isInbox, bookingType })
-    : null;
-
   const pickupHint =
-    compactOffer?.pickup?.address ||
+    offerPayload?.pickup?.address ||
     booking.pickup?.address ||
     'nearby';
-
-  const kind = isInbox
-    ? DRIVER_NOTIFICATION.INBOX_OFFER
-    : DRIVER_NOTIFICATION.BOOKING_OFFER;
 
   const title = isInbox ? 'New inbox request' : 'New booking request';
   const body = isInbox
@@ -552,34 +537,17 @@ export function notifyDriverNewBookingRequest(driverId, booking, offerPayload = 
         : 'A scheduled ride is waiting in your Incoming list.'
     : `Ride request near ${String(pickupHint).slice(0, 80)}`;
 
-  const tagId = String(
-    offerPayload?.subscriptionId || bookingId || '',
-  );
-
   return sendPushNotification(
     { driverId },
     {
       title,
       body,
-      severity: 'warn',
-      type: kind,
-      // Instant: BookingOfferModal already covers foreground — skip toast.
-      // Inbox: Incoming list is easy to miss, so emit the in-app toast too.
-      emitSocket: isInbox,
+      type: isInbox
+        ? DRIVER_NOTIFICATION.INBOX_OFFER
+        : DRIVER_NOTIFICATION.BOOKING_OFFER,
       data: {
-        kind,
         ...bookingRef(booking),
-        bookingId: bookingId || String(offerPayload?.subscriptionId || ''),
-        bookingType,
-        inbox: isInbox ? '1' : '0',
-        subscriptionId: offerPayload?.subscriptionId
-          ? String(offerPayload.subscriptionId)
-          : '',
-        priority: 'high',
-        offerExpiresAt: expiresAt,
-        fcmTag: `booking_offer_${tagId}`,
         path: isInbox ? '/driver/trips?tab=incoming' : '/driver/home',
-        ...(compactOffer ? { offer: compactOffer } : {}),
       },
     },
   );
@@ -610,67 +578,6 @@ export function notifyDriverBookingOfferWithdrawn(driverId, { bookingId, reason 
       },
     },
   );
-}
-
-/** Slim offer for FCM data (keep under ~4KB). */
-function compactBookingOfferForPush(offer) {
-  return {
-    bookingId: String(offer.bookingId || offer.subscriptionId || ''),
-    bookingNumber: offer.bookingNumber || offer.subscriptionNumber || '',
-    serviceType: offer.serviceType || '',
-    bookingType: offer.bookingType || '',
-    inbox: Boolean(offer.inbox),
-    subscriptionId: offer.subscriptionId ? String(offer.subscriptionId) : '',
-    paymentMode: offer.paymentMode || '',
-    pickup: offer.pickup
-      ? { address: offer.pickup.address || '' }
-      : null,
-    dropoff: offer.dropoff
-      ? { address: offer.dropoff.address || '' }
-      : null,
-    hourly: offer.hourly
-      ? {
-          durationHours: offer.hourly.durationHours ?? null,
-          scheduledStartAt: offer.hourly.scheduledStartAt || null,
-        }
-      : null,
-    outstation: offer.outstation
-      ? {
-          days: offer.outstation.days ?? null,
-          destinationAddress: offer.outstation.destinationAddress || '',
-        }
-      : null,
-    fare: offer.fare
-      ? {
-          driverEarning: offer.fare.driverEarning ?? 0,
-          currency: offer.fare.currency || 'INR',
-        }
-      : { driverEarning: 0, currency: 'INR' },
-    customer: offer.customer
-      ? {
-          name: offer.customer.name || '',
-          phone: offer.customer.phone || '',
-          profilePicture: offer.customer.profilePicture || '',
-        }
-      : null,
-    car: offer.car
-      ? {
-          _id: offer.car._id || '',
-          vehicleNumber: offer.car.vehicleNumber || '',
-          transmission: offer.car.transmission || '',
-          carTypeName: offer.car.carTypeName || '',
-          brandName: offer.car.brandName || '',
-          modelName: offer.car.modelName || '',
-          fuelTypeName: offer.car.fuelTypeName || '',
-        }
-      : null,
-    offerExpiresAt: offer.offerExpiresAt
-      ? new Date(offer.offerExpiresAt).toISOString()
-      : null,
-    distanceMeters:
-      typeof offer.distanceMeters === 'number' ? offer.distanceMeters : null,
-    waveSize: offer.waveSize ?? null,
-  };
 }
 
 export function notifyDriverOrderAssigned(driverId, booking) {

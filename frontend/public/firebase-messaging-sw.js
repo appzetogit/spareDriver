@@ -33,15 +33,9 @@ messaging.onBackgroundMessage(async (payload) => {
     return;
   }
 
-  // Messages with a `notification` payload are already shown by the browser.
-  // Calling showNotification again duplicates the push — only re-show when we
-  // need web-specific options (sticky booking offers).
-  const needsCustomUi = kind === 'booking_offer' || kind === 'inbox_offer';
-  if (payload?.notification && !needsCustomUi) {
+  // Same as user: FCM `notification` payload is already shown by the browser.
+  if (payload?.notification) {
     return;
-  }
-  if (payload?.notification && needsCustomUi && tag) {
-    await closeTaggedNotifications(tag);
   }
 
   const title = payload?.notification?.title || data.title || 'SpareDriver';
