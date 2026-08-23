@@ -223,6 +223,7 @@ export const getDriversService = async (staff, query) => {
     filter.$or = [
       { name: { $regex: search, $options: 'i' } },
       { phone: { $regex: search, $options: 'i' } },
+      { driverNumber: { $regex: search, $options: 'i' } },
     ];
   }
   if (scope?.resourceIds) {
@@ -271,6 +272,8 @@ export const getDriverByIdService = async (staff, driverId) => {
   if (!driver) {
     throw new ApiError(404, 'Driver not found');
   }
+
+  await Driver.ensureNumber(driver);
 
   const doc = ensureLegacyApprovalHistory(driver.toObject());
   doc.documents = dedupeDocumentsByType(doc.documents);
@@ -762,6 +765,7 @@ export const adminGlobalSearchService = async (staff, query = {}) => {
     $or: [
       { name: { $regex: escaped, $options: 'i' } },
       { phone: { $regex: escaped, $options: 'i' } },
+      { driverNumber: { $regex: escaped, $options: 'i' } },
       ...(isObjectId ? [{ _id: q }] : []),
     ],
   };
@@ -797,6 +801,7 @@ export const adminGlobalSearchService = async (staff, query = {}) => {
         $or: [
           { name: { $regex: escaped, $options: 'i' } },
           { phone: { $regex: escaped, $options: 'i' } },
+          { driverNumber: { $regex: escaped, $options: 'i' } },
         ],
       })
         .select('_id')
@@ -828,7 +833,7 @@ export const adminGlobalSearchService = async (staff, query = {}) => {
       .limit(limit)
       .lean(),
     Driver.find(driverFilter)
-      .select('name phone approvalStatus profilePicture')
+      .select('name phone approvalStatus profilePicture driverNumber')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean(),
@@ -845,6 +850,7 @@ export const adminGlobalSearchService = async (staff, query = {}) => {
     })),
     drivers: drivers.map((d) => ({
       _id: d._id,
+      driverNumber: d.driverNumber || '',
       name: d.name || '',
       phone: d.phone || '',
       approvalStatus: d.approvalStatus || '',

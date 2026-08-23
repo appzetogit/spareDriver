@@ -82,6 +82,7 @@ function mergeLiveDrivers(firebaseMap, metadataItems, zones) {
       ...live,
       name: meta.name || `Driver ${live.driverId.slice(-6)}`,
       phone: meta.phone || null,
+      driverNumber: meta.driverNumber || '',
       rating: meta.rating ?? null,
       isOnTrip: live.isOnTrip ?? meta.isOnTrip ?? false,
       activeTrip: mergeActiveTrip(live.activeTrip, meta.activeTrip),
@@ -109,6 +110,7 @@ function matchesSearch(driver, query) {
   return (
     driver.name?.toLowerCase().includes(q) ||
     driver.phone?.includes(q) ||
+    driver.driverNumber?.toLowerCase().includes(q) ||
     driver.driverId.toLowerCase().includes(q) ||
     driver.activeTrip?.bookingNumber?.toLowerCase().includes(q) ||
     driver.activeTrip?.customerName?.toLowerCase().includes(q)
@@ -304,7 +306,7 @@ const LiveDriverMap = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, phone, booking #, customer…"
+            placeholder="Search name, phone, driver ID, booking #, customer…"
             className="w-full rounded-xl border border-slate-200 bg-white py-2 sm:py-2.5 pl-9 pr-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </label>
@@ -416,6 +418,9 @@ const SelectedDriverCard = ({ driver, nowMs, onFocus, onClear }) => {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">{driver.name}</p>
+          {driver.driverNumber ? (
+            <p className="text-xs font-mono text-slate-500 mt-0.5">{driver.driverNumber}</p>
+          ) : null}
           {driver.phone && (
             <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
               <Phone className="w-3 h-3" />
@@ -538,6 +543,9 @@ const DriverSidePanel = ({ drivers, selectedId, nowMs, onSelect }) => (
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate-900 truncate">{d.name}</p>
+                  {d.driverNumber ? (
+                    <p className="text-[11px] font-mono text-slate-400 truncate">{d.driverNumber}</p>
+                  ) : null}
                   <p className="text-xs text-slate-500 mt-0.5 truncate">
                     {d.zoneName || 'Outside zones'}
                     {d.activeTrip?.bookingNumber ? ` · #${d.activeTrip.bookingNumber}` : ''}

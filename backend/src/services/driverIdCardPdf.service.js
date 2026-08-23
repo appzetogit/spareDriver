@@ -65,8 +65,10 @@ async function fetchAsBuffer(url, { timeoutMs = 12_000 } = {}) {
  * Layout mirrors the in-app ID card screen.
  */
 export async function buildDriverIdCardPdf(driverId, { res } = {}) {
-  const driver = await Driver.findById(driverId).lean();
-  if (!driver) throw new ApiError(404, 'Driver not found');
+  const driverDoc = await Driver.findById(driverId);
+  if (!driverDoc) throw new ApiError(404, 'Driver not found');
+  await Driver.ensureNumber(driverDoc);
+  const driver = driverDoc.toObject();
 
   const documents = dedupeDocumentsByType(driver.documents || []);
   const selfieUrl =
@@ -76,6 +78,7 @@ export async function buildDriverIdCardPdf(driverId, { res } = {}) {
   const photoBuffer = await fetchAsBuffer(selfieUrl);
 
   const name = driver.name || 'Driver';
+  const driverNumber = driver.driverNumber || '';
   const phone = fmtPhone(driver.phone);
   const licenseNumber = driver.drivingLicense?.number || '—';
   const licenseValidity = fmtDate(driver.drivingLicense?.expiryDate);
@@ -231,6 +234,11 @@ export async function buildDriverIdCardPdf(driverId, { res } = {}) {
       lineBreak: false,
     });
   y += 36;
+
+  if (driverNumber) {
+    y = drawField(doc, cardX + bodyPad, y, cardW - bodyPad * 2, 'DRIVER ID', driverNumber);
+    y += 18;
+  }
 
   // Mobile
   y = drawField(doc, cardX + bodyPad, y, cardW - bodyPad * 2, 'MOBILE NUMBER', phone);

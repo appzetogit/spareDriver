@@ -9,6 +9,7 @@
     "dev": "nodemon src/server.js",
     "fix:payment-index": "node scripts/fixPaymentIndex.js",
     "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
+    "backfill:driver-numbers": "node scripts/backfillDriverNumbers.js",
     "seed": "node scripts/seed.js",
     "seed:fresh": "node scripts/seed.js --fresh",
     "seed:developer": "node scripts/seedDeveloper.js",

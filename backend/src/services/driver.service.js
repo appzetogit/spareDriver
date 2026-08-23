@@ -176,6 +176,7 @@ export const verifyOtpAndRegisterService = async (data) => {
     refreshToken: generateRefreshToken(payload),
     driver: {
       id: driver._id,
+      driverNumber: driver.driverNumber || '',
       name: driver.name,
       phone: driver.phone,
       alternatePhone: driver.alternatePhone || '',
@@ -207,6 +208,7 @@ export const loginDriverService = async ({ phone, password, fcmToken, token, pla
   }
 
   driver.password = undefined;
+  await Driver.ensureNumber(driver);
   const payload = tokenPayloadFromDriver(driver);
   const fcm = await resolveAuthFcm('driver', driver._id, driver, { fcmToken, token, platform });
 
@@ -215,6 +217,7 @@ export const loginDriverService = async ({ phone, password, fcmToken, token, pla
     refreshToken: generateRefreshToken(payload),
     driver: {
       id: driver._id,
+      driverNumber: driver.driverNumber || '',
       name: driver.name,
       phone: driver.phone,
       email: driver.email,
@@ -547,6 +550,7 @@ export const getProfileService = async (driverId) => {
   if (!driver) {
     throw new ApiError(404, 'Driver not found');
   }
+  await Driver.ensureNumber(driver);
   driver.documents = dedupeDocumentsByType(driver.documents);
 
   const eligibility = await syncDriverKitEligibility(driverId);

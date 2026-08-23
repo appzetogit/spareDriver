@@ -127,6 +127,9 @@ const DriverIdCardPage = () => {
             </div>
 
             <h2 className="mt-4 text-2xl font-bold text-text">{displayName}</h2>
+            {driver?.driverNumber ? (
+              <p className="mt-1 text-sm font-mono text-text-muted">{driver.driverNumber}</p>
+            ) : null}
 
             <div className="mt-4">
               <p className="text-[11px] font-semibold tracking-wide text-text-muted uppercase">

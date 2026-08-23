@@ -344,7 +344,7 @@ function drawHeaderBanner(doc, driver, profilePicBuffer) {
     .font('Helvetica')
     .fontSize(8)
     .fillColor('#64748B')
-    .text(`ID  ${driver._id}`, titleX, y + 76, {
+    .text(`ID  ${driver.driverNumber || driver._id}`, titleX, y + 76, {
       width: titleMaxW,
       ellipsis: true,
       lineBreak: false,
@@ -548,7 +548,7 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
     info: {
       Title: `${driver.name || 'Driver'} – Profile`,
       Author: 'SpareDriver Admin',
-      Subject: `Driver dossier for ${driver._id}`,
+      Subject: `Driver dossier for ${driver.driverNumber || driver._id}`,
       CreationDate: new Date(),
     },
   });
@@ -557,7 +557,7 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="driver-${driver._id}.pdf"`,
+      `attachment; filename="driver-${driver.driverNumber || driver._id}.pdf"`,
     );
     doc.pipe(res);
   }
@@ -566,6 +566,7 @@ export async function buildDriverProfilePdf(driverId, { res } = {}) {
 
   sectionHeading(doc, 'Identity');
   const identityRows = [
+    { label: 'Driver ID', value: driver.driverNumber || String(driver._id) },
     { label: 'Full name', value: driver.name },
     { label: 'Phone', value: driver.phone ? `+91 ${driver.phone}` : null },
   ];

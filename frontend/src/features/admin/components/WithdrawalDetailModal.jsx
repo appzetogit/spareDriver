@@ -295,7 +295,7 @@ export default function WithdrawalDetailModal({ withdrawal, open, onClose }) {
                       : 'Offline',
                   },
                   { label: 'Joined', value: formatDateTime(driver.createdAt) },
-                  { label: 'Driver ID', value: String(driver._id) },
+                  { label: 'Driver ID', value: driver.driverNumber || String(driver._id) },
                 ]}
               />
             </>

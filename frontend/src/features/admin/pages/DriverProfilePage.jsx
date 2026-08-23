@@ -280,7 +280,7 @@ const DriverProfilePage = () => {
         >
           <InfoGrid
             items={[
-              { label: 'Driver ID', value: driver._id },
+              { label: 'Driver ID', value: driver.driverNumber || driver._id },
               { label: 'Name', value: driver.name },
               { label: 'Phone', value: driver.phone },
               { label: 'Email', value: driver.email || '—' },

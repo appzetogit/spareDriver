@@ -407,7 +407,7 @@ export async function listLiveDriverMapMetadata() {
     approvalStatus: 'approved',
     isDeleted: false,
   })
-    .select('_id name phone rating isOnTrip')
+    .select('_id name phone rating isOnTrip driverNumber')
     .lean();
 
   const onTripIds = drivers.filter((d) => d.isOnTrip).map((d) => d._id);
@@ -428,6 +428,7 @@ export async function listLiveDriverMapMetadata() {
 
   return drivers.map((d) => ({
     driverId: String(d._id),
+    driverNumber: d.driverNumber || '',
     name: d.name,
     phone: d.phone,
     rating: d.rating,

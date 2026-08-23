@@ -28,6 +28,7 @@ function sanitizeUser(doc) {
 function sanitizeDriver(driver) {
   return {
     id: driver._id,
+    driverNumber: driver.driverNumber || '',
     name: driver.name,
     phone: driver.phone || '',
     email: driver.email || '',
@@ -134,6 +135,8 @@ async function googleSignInDriver(profile, fcmInput) {
     });
     await driver.save();
   }
+
+  await Driver.ensureNumber(driver);
 
   const payload = tokenPayloadFromDriver(driver);
   const fcm = await resolveAuthFcm('driver', driver._id, driver, fcmInput);

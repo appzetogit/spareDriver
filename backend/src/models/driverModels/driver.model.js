@@ -4,6 +4,7 @@ import bankDetailsSchema from './bankDetails.schema.js';
 import trainingProgressSchema from './trainingProgress.schema.js';
 import vehicleExperienceSchema from './vehicleExperience.schema.js';
 import stepReviewSchema from './stepReview.schema.js';
+import { generateDriverNumber } from '../../utils/orderNumber.util.js';
 
 // ─── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,16 @@ import stepReviewSchema from './stepReview.schema.js';
 const driverSchema = new mongoose.Schema(
   {
     // ── Step 1: Identity ──────────────────────────────────────────────────────
+    /**
+     * Public unique id (DR-YYYYMMDD-XXXXXX), shown in admin / driver apps.
+     * Mongo `_id` stays the internal key for relations and routes.
+     */
+    driverNumber: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
     name: {
       type: String,
       required: true,
@@ -514,6 +525,47 @@ const driverSchema = new mongoose.Schema(
     timestamps: true, // createdAt, updatedAt
   },
 );
+
+driverSchema.pre('validate', function assignDriverNumber(next) {
+  if (!this.driverNumber) {
+    this.driverNumber = generateDriverNumber(this.createdAt || new Date());
+  }
+  next();
+});
+
+driverSchema.statics.ensureNumber = async function ensureDriverNumber(driver) {
+  if (!driver) return '';
+  if (driver.driverNumber) return driver.driverNumber;
+  const createdAt = driver.createdAt || new Date();
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const driverNumber = generateDriverNumber(createdAt);
+    try {
+      const result = await this.updateOne(
+        {
+          _id: driver._id,
+          $or: [
+            { driverNumber: { $exists: false } },
+            { driverNumber: null },
+            { driverNumber: '' },
+          ],
+        },
+        { $set: { driverNumber } },
+      );
+      if (result.matchedCount) {
+        driver.driverNumber = driverNumber;
+        return driverNumber;
+      }
+      const fresh = await this.findById(driver._id).select('driverNumber').lean();
+      if (fresh?.driverNumber) {
+        driver.driverNumber = fresh.driverNumber;
+        return fresh.driverNumber;
+      }
+    } catch (err) {
+      if (err?.code !== 11000) throw err;
+    }
+  }
+  return driver.driverNumber || '';
+};
 
 // ─── Indexes ───────────────────────────────────────────────────────────────────
 

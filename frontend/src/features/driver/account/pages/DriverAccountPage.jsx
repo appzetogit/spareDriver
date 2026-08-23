@@ -118,6 +118,7 @@ const DriverAccountPage = () => {
       approvalStatus: profile.approvalStatus,
       isOnline: profile.isOnline,
       canGoOnline: profile.canGoOnline,
+      driverNumber: profile.driverNumber,
     });
   }, [profile, updateDriver]);
 
@@ -286,7 +287,7 @@ const DriverAccountPage = () => {
         </button>
 
         <p className="text-center text-[11px] text-text-muted">
-          Driver ID {driver?._id ? short(driver._id) : '—'}
+          Driver ID {driver?.driverNumber || (driver?._id ? short(driver._id) : '—')}
         </p>
       </div>
 

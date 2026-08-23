@@ -1,6 +1,7 @@
-function dateStamp() {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+function dateStamp(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  const src = Number.isNaN(d.getTime()) ? new Date() : d;
+  return `${src.getFullYear()}${String(src.getMonth() + 1).padStart(2, '0')}${String(src.getDate()).padStart(2, '0')}`;
 }
 
 function randSuffix(n = 5) {
@@ -18,4 +19,9 @@ export function generateBookingNumber() {
 
 export function generateSubscriptionNumber() {
   return `SUB-${dateStamp()}-${randSuffix(5)}`;
+}
+
+/** Public driver id, same shape as booking numbers: DR-YYYYMMDD-XXXXXX */
+export function generateDriverNumber(date) {
+  return `DR-${dateStamp(date)}-${randSuffix(6)}`;
 }

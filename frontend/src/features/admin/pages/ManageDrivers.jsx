@@ -131,6 +131,11 @@ const ManageDrivers = () => {
               <Avatar name={val} size="sm" src={selfie} className="ring-1 sm:ring-2 ring-white shadow-sm shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate max-w-[120px] xs:max-w-[170px] sm:max-w-none">{val}</p>
+                {row.driverNumber ? (
+                  <p className="text-[10px] sm:text-xs font-mono text-slate-500 mt-0.5 truncate">
+                    {row.driverNumber}
+                  </p>
+                ) : null}
                 <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate max-w-[120px] xs:max-w-[170px] sm:max-w-none">{row.phone}</p>
               </div>
             </div>

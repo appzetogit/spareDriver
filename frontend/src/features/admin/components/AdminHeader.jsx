@@ -200,7 +200,7 @@ const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
                             key={`driver-${driver._id}`}
                             icon={Car}
                             primary={driver.name || 'Unnamed driver'}
-                            secondary={[driver.phone, driver.approvalStatus]
+                            secondary={[driver.driverNumber, driver.phone, driver.approvalStatus]
                               .filter(Boolean)
                               .join(' · ')}
                             onClick={() => goTo(`/admin/drivers/${driver._id}/profile`)}
@@ -303,7 +303,7 @@ const AdminHeader = ({ onMenuToggle, title = 'Dashboard' }) => {
                           key={`m-driver-${driver._id}`}
                           icon={Car}
                           primary={driver.name || 'Unnamed driver'}
-                          secondary={[driver.phone, driver.approvalStatus].filter(Boolean).join(' · ')}
+                          secondary={[driver.driverNumber, driver.phone, driver.approvalStatus].filter(Boolean).join(' · ')}
                           onClick={() => goTo(`/admin/drivers/${driver._id}/profile`)}
                         />
                       ))}

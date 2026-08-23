@@ -598,7 +598,7 @@ const DriverAnalyticsPage = () => {
         <SectionCard title="Driver details">
           <InfoGrid
             items={[
-              { label: 'Driver ID', value: driver._id, mono: true },
+              { label: 'Driver ID', value: driver.driverNumber || driver._id, mono: true },
               { label: 'Joined', value: formatDate(profile.joinedAt) },
               { label: 'Approved', value: profile.approvedAt ? formatDate(profile.approvedAt) : '—' },
               { label: 'Experience', value: `${profile.experienceYears} years` },
