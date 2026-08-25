@@ -281,6 +281,16 @@ const driverSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    /** Last reported course in degrees (0–360), when the OS provided one. */
+    heading: {
+      type: Number,
+      default: null,
+    },
+    /** Last reported speed in m/s, when the OS provided one. */
+    speed: {
+      type: Number,
+      default: null,
+    },
     city: {
       type: String,
       default: '',

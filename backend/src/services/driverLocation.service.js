@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { Driver } from '../models/driverModels/driver.model.js';
 import Booking from '../models/booking.model.js';
 import { getRtdb, isFirebaseReady } from '../config/firebase.js';
-import { emitToAdmins, emitToBooking } from '../utils/socketEmitters.js';
+import { emitToAdmins, emitToBooking, emitToTrip } from '../utils/socketEmitters.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import { ACTIVE_BOOKING_STATUSES, BOOKING_STATUS, isBookingContactRevealed } from '../constants/bookingStatus.js';
 import { LOCATION_STALE_AFTER_MS } from '../constants/driverTracking.js';
@@ -85,6 +85,10 @@ function tripPath(bookingId) {
 
 function nowMs() {
   return Date.now();
+}
+
+function inspectLiveLocation(event, payload) {
+  console.log(`[liveLocation] ${event}`, payload);
 }
 
 function placeLabel(place) {
@@ -256,19 +260,17 @@ export async function clearTripLocation(bookingId) {
 /* Mongo writes                                                        */
 /* ------------------------------------------------------------------ */
 
-async function snapshotMongoLocation(driverId, { lat, lng, at }) {
-  await Driver.updateOne(
-    { _id: driverId },
-    {
-      $set: {
-        location: { type: 'Point', coordinates: [lng, lat] },
-        lastLocationAt: new Date(at),
-        // Keep the presence watermark in lockstep with the snapshot path so a
-        // throttled write never leaves lastFixAt behind lastLocationAt.
-        lastFixAt: new Date(at),
-      },
-    },
-  );
+async function snapshotMongoLocation(driverId, { lat, lng, heading, speed, at }) {
+  const set = {
+    location: { type: 'Point', coordinates: [lng, lat] },
+    lastLocationAt: new Date(at),
+    // Keep the presence watermark in lockstep with the snapshot path so a
+    // throttled write never leaves lastFixAt behind lastLocationAt.
+    lastFixAt: new Date(at),
+  };
+  if (isFiniteNum(heading)) set.heading = heading;
+  if (isFiniteNum(speed)) set.speed = speed;
+  await Driver.updateOne({ _id: driverId }, { $set: set });
 }
 
 /** Presence watermark — every accepted fix, not only the throttled snapshot. */
@@ -284,17 +286,20 @@ async function touchLastFixAt(driverId, at) {
  * Persist a driver's current GPS position.
  *
  * @param {string} driverId
- * @param {{ lat:number; lng:number; accuracy?:number; heading?:number; speed?:number }} coords
+ * @param {{ lat:number; lng:number; accuracy?:number; heading?:number; speed?:number; capturedAt?:number }} coords
+ * @param {{ forceMongoSnapshot?: boolean }} [opts]
  * @returns {{ accepted: boolean; firebase: boolean; mongoSnapshot: boolean; trip: boolean; reason?: string }}
  */
-export async function recordDriverLocation(driverId, coords) {
+export async function recordDriverLocation(driverId, coords, { forceMongoSnapshot = false } = {}) {
   if (!driverId) return { accepted: false, firebase: false, mongoSnapshot: false, trip: false, reason: 'no driverId' };
   if (!validateCoords(coords)) {
+    inspectLiveLocation('server rejected invalid coords', { driverId: String(driverId), coords });
     return { accepted: false, firebase: false, mongoSnapshot: false, trip: false, reason: 'invalid coordinates' };
   }
 
   const { lat, lng, accuracy, heading, speed } = coords;
   const now = nowMs();
+  const at = isFiniteNum(coords.capturedAt) ? coords.capturedAt : now;
 
   const fbPayload = {
     lat,
@@ -302,10 +307,10 @@ export async function recordDriverLocation(driverId, coords) {
     accuracy: isFiniteNum(accuracy) ? accuracy : null,
     heading: isFiniteNum(heading) ? heading : null,
     speed: isFiniteNum(speed) ? speed : null,
-    updatedAt: now,
+    updatedAt: at,
     // Readers treat a fix past this instant as stale rather than live. It is
     // written alongside the position so no reader has to guess the policy.
-    staleAfter: now + LOCATION_STALE_AFTER_MS,
+    staleAfter: at + LOCATION_STALE_AFTER_MS,
   };
 
   const firebaseOk = await writeFirebaseLocation(driverId, fbPayload);
@@ -314,29 +319,87 @@ export async function recordDriverLocation(driverId, coords) {
     console.warn('[driverLocation] Firebase status sync failed:', err.message);
   });
 
+  const activeTrip = await loadActiveTripForDriver(driverId);
+  const tripId =
+    activeTrip && CUSTOMER_VISIBLE_STATUSES.has(activeTrip.status)
+      ? activeTrip.bookingId
+      : null;
+
+  const livePayload = {
+    driverId: String(driverId),
+    tripId,
+    bookingId: tripId,
+    latitude: lat,
+    longitude: lng,
+    heading: fbPayload.heading,
+    speed: fbPayload.speed,
+    lat,
+    lng,
+    accuracy: fbPayload.accuracy,
+    updatedAt: at,
+    staleAfter: fbPayload.staleAfter,
+  };
+
+  // Dashboard: every accepted fix, including idle-online (no trip).
+  emitToAdmins(S2C_EVENTS.DRIVER_LOCATION_UPDATE, livePayload);
+
+  inspectLiveLocation('server stored driver fix', {
+    driverId: String(driverId),
+    tripId,
+    tripStatus: activeTrip?.status || null,
+    lat,
+    lng,
+    heading: fbPayload.heading,
+    speed: fbPayload.speed,
+    firebase: firebaseOk,
+    willBroadcastToCustomer: Boolean(tripId),
+  });
+
   // Fan out to the customer, but only for a ride actually in flight.
   let tripOk = false;
-  const activeTrip = await loadActiveTripForDriver(driverId);
-  if (activeTrip && CUSTOMER_VISIBLE_STATUSES.has(activeTrip.status)) {
-    tripOk = await writeFirebaseTripLocation(activeTrip.bookingId, {
+  if (tripId) {
+    tripOk = await writeFirebaseTripLocation(tripId, {
       ...fbPayload,
-      bookingId: activeTrip.bookingId,
+      bookingId: tripId,
       status: activeTrip.status,
     });
 
     // Socket mirror of the same point. Firebase is the primary channel; this
     // is the fallback that keeps the map alive when RTDB is unreachable or the
     // client has no Firebase config.
-    emitToBooking(activeTrip.bookingId, S2C_EVENTS.TRIP_LOCATION_UPDATED, {
-      bookingId: activeTrip.bookingId,
+    emitToBooking(tripId, S2C_EVENTS.TRIP_LOCATION_UPDATED, {
       ...fbPayload,
+      ...livePayload,
+    });
+    emitToBooking(tripId, S2C_EVENTS.DRIVER_LOCATION_UPDATE, livePayload);
+    emitToTrip(tripId, S2C_EVENTS.DRIVER_LOCATION_UPDATE, livePayload);
+    inspectLiveLocation('server broadcast to customer', {
+      driverId: String(driverId),
+      tripId,
+      tripStatus: activeTrip.status,
+      room: `trip_${tripId}`,
+      lat,
+      lng,
+      heading: fbPayload.heading,
+      speed: fbPayload.speed,
+      firebaseTrip: tripOk,
+    });
+  } else {
+    inspectLiveLocation('server did not broadcast to customer', {
+      driverId: String(driverId),
+      tripStatus: activeTrip?.status || null,
+      reason: activeTrip
+        ? 'status is not EN_ROUTE / ARRIVED / STARTED'
+        : 'driver has no active trip',
+      lat,
+      lng,
     });
   }
 
   let mongoSnapshot = false;
-  if (await acquireThrottle(KEY.mongoThrottle(driverId), MONGO_SNAPSHOT_MIN_INTERVAL_MS)) {
+  if (forceMongoSnapshot || (await acquireThrottle(KEY.mongoThrottle(driverId), MONGO_SNAPSHOT_MIN_INTERVAL_MS))) {
     try {
-      await snapshotMongoLocation(driverId, { lat, lng, at: now });
+      await snapshotMongoLocation(driverId, { lat, lng, heading, speed, at });
       mongoSnapshot = true;
     } catch (err) {
       console.warn('[driverLocation] Mongo snapshot failed:', err.message);
@@ -346,7 +409,7 @@ export async function recordDriverLocation(driverId, coords) {
     // path advanced lastFixAt and the presence sweeper treated foreground
     // socket traffic as "gone" after a few quiet minutes in the background.
     try {
-      await touchLastFixAt(driverId, now);
+      await touchLastFixAt(driverId, at);
     } catch (err) {
       console.warn('[driverLocation] lastFixAt touch failed:', err.message);
     }

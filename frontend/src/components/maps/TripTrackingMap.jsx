@@ -132,6 +132,28 @@ function TripTrackingMap({
 
   const speedKmh = useDriverSpeed(driver);
 
+  const lastShownRef = useRef(null);
+  useEffect(() => {
+    if (!driver || !Number.isFinite(driver.lat) || !Number.isFinite(driver.lng)) return;
+    const prev = lastShownRef.current;
+    const moved =
+      !prev
+      || prev.lat !== driver.lat
+      || prev.lng !== driver.lng
+      || prev.heading !== driver.heading;
+    if (!moved) return;
+    lastShownRef.current = { lat: driver.lat, lng: driver.lng, heading: driver.heading };
+    console.log('[liveLocation] map marker moved', {
+      audience,
+      bookingStatus,
+      lat: driver.lat,
+      lng: driver.lng,
+      heading: driver.heading ?? null,
+      isStale,
+      from: prev,
+    });
+  }, [driver, audience, bookingStatus, isStale]);
+
   const {
     path: routePath,
     distanceMeters: routeDistanceMeters,

@@ -25,6 +25,7 @@ export function getRefreshToken() {
 
 export function setAuthTokens({ accessToken, refreshToken } = {}) {
   if (typeof window === 'undefined') return;
+  // Flutter's background uploader reads this key to attach Bearer auth.
   if (accessToken) localStorage.setItem(ACCESS_KEY, accessToken);
   if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
   emitAuthTokensChanged();

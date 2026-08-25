@@ -67,11 +67,24 @@ export function attachDriverSocketHandlers(socket) {
   socket.on(C2S_EVENTS.DRIVER_LOCATION_UPDATE, async (payload, ack) => {
     try {
       if (isThrottled(driverId)) {
+        console.log('[liveLocation] server socket throttled', {
+          driverId,
+          lat: payload?.lat,
+          lng: payload?.lng,
+        });
         if (typeof ack === 'function') ack({ ok: false, reason: 'throttled' });
         return;
       }
 
       const { lat, lng, accuracy, heading, speed } = payload || {};
+      console.log('[liveLocation] server socket fix from driver', {
+        driverId,
+        lat,
+        lng,
+        heading: heading ?? null,
+        speed: speed ?? null,
+        accuracy: accuracy ?? null,
+      });
       const result = await recordDriverLocation(driverId, { lat, lng, accuracy, heading, speed });
 
       if (!result.accepted) {

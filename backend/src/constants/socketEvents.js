@@ -80,6 +80,12 @@ export const S2C_EVENTS = Object.freeze({
   /** Driver's live location update mirrored to a booking room. */
   TRIP_LOCATION_UPDATED: 'trip:location:updated',
 
+  /**
+   * Alias of the live GPS stream for native customer apps and the dashboard.
+   * Emitted to `booking:{id}`, `trip_{id}`, and the admin room.
+   */
+  DRIVER_LOCATION_UPDATE: 'driverLocationUpdate',
+
   /** A new booking offer arrived for a driver. */
   BOOKING_OFFERED: 'booking:offered',
 

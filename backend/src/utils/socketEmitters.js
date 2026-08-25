@@ -4,6 +4,7 @@ import {
   roomForDriver,
   roomForBooking,
   roomForBookingChat,
+  roomForTrip,
   ADMIN_ROOM,
   ADMIN_SOS_ROOM,
   OPERATIONS_SOS_ROOM,
@@ -60,6 +61,13 @@ export function emitToBooking(bookingId, event, payload) {
   const id = toRoomId(bookingId);
   if (!id) return false;
   return safeEmit(roomForBooking(id), event, payload);
+}
+
+/** Native customer-app room (`trip_{tripId}`). */
+export function emitToTrip(tripId, event, payload) {
+  const id = toRoomId(tripId);
+  if (!id) return false;
+  return safeEmit(roomForTrip(id), event, payload);
 }
 
 /** Send to everyone who joined the authorized booking chat room. */

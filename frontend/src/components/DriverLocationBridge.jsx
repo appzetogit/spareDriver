@@ -43,11 +43,10 @@ const ON_TRIP_STATUSES = new Set(
  * in a plain browser, the watch stays on so the driver is not silently
  * untracked.
  *
- * Merge note: this replaced `syncNativeBackgroundLocation`, which pushed the
- * access and refresh tokens into native and let it drive its own polling loop.
- * The contract here is deliberately narrower — the web app says only *when* to
- * track and at what cadence, and native authenticates with its own long-lived,
- * per-device, revocable credential instead of borrowing the session's.
+ * Native is reached through `window.LocationBridge` (Flutter injects it) via
+ * `startNativeTracking` / `stopNativeTracking`. JWT stays in
+ * `localStorage.accessToken` so the wrapper can authenticate background
+ * uploads even after this page is frozen.
  */
 export function DriverLocationBridge() {
   const authOnline = useDriverAuthStore((s) => s.driver?.isOnline === true);

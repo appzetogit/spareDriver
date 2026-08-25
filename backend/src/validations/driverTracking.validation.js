@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { LOCATION_BATCH } from '../constants/driverTracking.js';
 
-const isoDate = z.union([z.string().datetime({ offset: true }), z.number().int().positive()]);
+const capturedAtSchema = z.union([
+  z.string().min(1),
+  z.number().finite(),
+]);
 
 export const issueTrackingTokenSchema = z.object({
   /**
@@ -27,7 +30,7 @@ const fixSchema = z.object({
   heading: z.number().optional().nullable(),
   speed: z.number().optional().nullable(),
   /** When the OS produced the fix — not when it was uploaded. */
-  capturedAt: isoDate,
+  capturedAt: capturedAtSchema,
 });
 
 const batchBodySchema = z.object({
@@ -53,7 +56,7 @@ const singleFixBodySchema = z.object({
   accuracy: z.coerce.number().nonnegative().optional().nullable(),
   heading: z.coerce.number().optional().nullable(),
   speed: z.coerce.number().optional().nullable(),
-  capturedAt: isoDate.optional(),
+  capturedAt: capturedAtSchema.optional(),
 });
 
 /**
