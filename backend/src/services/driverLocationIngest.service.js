@@ -20,10 +20,6 @@ import { normalizeFixes, trackingDirective } from '../utils/locationFix.util.js'
 
 const DRIVER_STATE_FIELDS = 'isOnline isOnTrip lastFixAt approvalStatus isDeleted';
 
-function inspectLiveLocation(event, payload) {
-  console.log(`[liveLocation] ${event}`, payload);
-}
-
 function emptyResult({ driver, rejected, duplicates, deduped = 0 }) {
   return {
     accepted: 0,
@@ -46,22 +42,9 @@ function emptyResult({ driver, rejected, duplicates, deduped = 0 }) {
  */
 export async function ingestDriverLocationBatch(driverId, rawFixes) {
   const { fixes, rejected, duplicates } = normalizeFixes(rawFixes, Date.now());
-  inspectLiveLocation('server HTTP batch received', {
-    driverId: String(driverId),
-    rawCount: Array.isArray(rawFixes) ? rawFixes.length : 0,
-    valid: fixes.length,
-    rejected,
-    duplicates,
-  });
 
   if (fixes.length === 0) {
     const driver = await Driver.findById(driverId).select(DRIVER_STATE_FIELDS).lean();
-    inspectLiveLocation('server HTTP batch empty after normalize', {
-      driverId: String(driverId),
-      rejected,
-      duplicates,
-      mode: trackingDirective(driver).mode,
-    });
     return emptyResult({ driver, rejected, duplicates });
   }
 
@@ -87,12 +70,6 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
 
   if (!previous) {
     const current = await Driver.findById(driverId).select(DRIVER_STATE_FIELDS).lean();
-    inspectLiveLocation('server HTTP batch deduped (already had newer fix)', {
-      driverId: String(driverId),
-      lat: newest.lat,
-      lng: newest.lng,
-      capturedAt: newestDate.toISOString(),
-    });
     return emptyResult({ driver: current, rejected, duplicates, deduped: fixes.length });
   }
 
@@ -104,12 +81,6 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
   // batch was in flight. Keeping the watermark is right, but writing to
   // Firebase would resurrect the presence node `markDriverOfflineLive` cleared.
   if (directive.stopTracking) {
-    inspectLiveLocation('server HTTP batch ignored (stopTracking)', {
-      driverId: String(driverId),
-      mode: directive.mode,
-      lat: newest.lat,
-      lng: newest.lng,
-    });
     return {
       accepted: 0,
       deduped: fixes.length - fresh.length,
@@ -120,29 +91,13 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
     };
   }
 
-  inspectLiveLocation('server HTTP newest fix accepted', {
-    driverId: String(driverId),
+  const result = await recordDriverLocation(driverId, {
     lat: newest.lat,
     lng: newest.lng,
+    accuracy: newest.accuracy,
     heading: newest.heading,
     speed: newest.speed,
-    capturedAt: newestDate.toISOString(),
-    mode: directive.mode,
-    accepted: fresh.length,
   });
-
-  const result = await recordDriverLocation(
-    driverId,
-    {
-      lat: newest.lat,
-      lng: newest.lng,
-      accuracy: newest.accuracy,
-      heading: newest.heading,
-      speed: newest.speed,
-      capturedAt: newest.capturedAt,
-    },
-    { forceMongoSnapshot: true },
-  );
 
   return {
     accepted: fresh.length,

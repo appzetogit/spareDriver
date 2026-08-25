@@ -3,30 +3,6 @@ import api from '../utils/api';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
 import { useDriverKitActiveStore } from '../store/driver/useDriverKitStore';
-import useDriverActiveTripStore from '../store/driver/useDriverActiveTripStore';
-import {
-  startNativeTracking,
-  stopNativeTracking,
-  TRACKING_MODE,
-} from '../utils/nativeTracking';
-import {
-  BOOKING_STATUS,
-  ACTIVE_BOOKING_STATUSES,
-} from '../constants/bookingStatus';
-
-const ON_TRIP_STATUSES = new Set(
-  ACTIVE_BOOKING_STATUSES.filter(
-    (s) =>
-      s !== BOOKING_STATUS.NO_DRIVERS_FOUND &&
-      s !== BOOKING_STATUS.PENDING_ASSIGNMENT &&
-      s !== BOOKING_STATUS.SEARCHING,
-  ),
-);
-
-function driverIsOnTrip() {
-  const status = useDriverActiveTripStore.getState().booking?.status;
-  return Boolean(status && ON_TRIP_STATUSES.has(status));
-}
 
 export function useDriverOnlineToggle() {
   const updateDriver = useDriverAuthStore((s) => s.updateDriver);
@@ -48,13 +24,6 @@ export function useDriverOnlineToggle() {
         const data = res.data?.data;
         updateDriver({ isOnline: data.isOnline, canGoOnline: data.canGoOnline });
         useDriverOnlineStore.getState().invalidate('driver-online-status');
-        if (data.isOnline) {
-          void startNativeTracking(
-            driverIsOnTrip() ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE,
-          );
-        } else if (!driverIsOnTrip()) {
-          void stopNativeTracking();
-        }
         return { success: true, data };
       } catch (err) {
         const payload = err.response?.data;

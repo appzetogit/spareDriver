@@ -8,7 +8,6 @@ import {
   getRefreshToken,
   persistTokensFromPayload,
 } from './authTokens';
-import { stopNativeTracking } from './nativeTracking';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000/api/v1';
 
@@ -41,7 +40,6 @@ function shouldSkipTokenRefresh(config) {
 
 /** Wipe in-memory auth + localStorage + cookies after a failed refresh. */
 function clearClientSession() {
-  void stopNativeTracking();
   useDriverAuthStore.setState({ driver: null, isAuthenticated: false });
   useAdminAuthStore.setState({ admin: null, isAuthenticated: false });
   useUserAuthStore.setState({ user: null, isAuthenticated: false, onboarding: null });

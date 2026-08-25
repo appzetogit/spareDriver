@@ -31,27 +31,14 @@ const DEFAULT_STALE_AFTER_MS = 45_000;
 /** How often to re-evaluate staleness while no new fix arrives. */
 const STALE_TICK_MS = 5_000;
 
-/** Inspect tag — filter DevTools with `liveLocation`. */
-function inspectLiveLocation(event, payload) {
-  console.log(`[liveLocation] ${event}`, payload);
-}
-
-function payloadMatchesBooking(payload, bookingId) {
-  if (!payload || !bookingId) return false;
-  const id = payload.bookingId || payload.tripId;
-  return id != null && String(id) === String(bookingId);
-}
-
 function normalize(raw, bookingId) {
   if (!raw) return null;
-  const lat = Number.isFinite(raw.lat) ? raw.lat : raw.latitude;
-  const lng = Number.isFinite(raw.lng) ? raw.lng : raw.longitude;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  const updatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now();
+  if (typeof raw.lat !== 'number' || typeof raw.lng !== 'number') return null;
+  const updatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : null;
   return {
-    bookingId: raw.bookingId || raw.tripId || bookingId,
-    lat,
-    lng,
+    bookingId,
+    lat: raw.lat,
+    lng: raw.lng,
     accuracy: raw.accuracy ?? null,
     heading: typeof raw.heading === 'number' ? raw.heading : null,
     speed: typeof raw.speed === 'number' ? raw.speed : null,
@@ -85,22 +72,12 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
 
   const active = Boolean(enabled && bookingId);
 
-  useEffect(() => {
-    inspectLiveLocation('customer subscribe', {
-      bookingId: bookingId || null,
-      enabled,
-      active,
-      socketConnected: isConnected,
-    });
-  }, [bookingId, enabled, active, isConnected]);
-
   // Join the booking room so the socket fallback can reach us. The server
   // checks membership, so this is a no-op for a booking that is not ours.
   // Re-sent on reconnect: room membership does not survive a dropped socket.
   useEffect(() => {
     if (!active || !isConnected) return undefined;
     emit(C2S_EVENTS.BOOKING_JOIN, { bookingId });
-    inspectLiveLocation('joined booking room', { bookingId });
     return () => {
       emit(C2S_EVENTS.BOOKING_LEAVE, { bookingId });
     };
@@ -132,21 +109,10 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
       const node = ref(db, `trips/${bookingId}/driver`);
       const handler = (snapshot) => {
         const next = normalize(snapshot.val(), bookingId);
-        if (!next) {
-          inspectLiveLocation('firebase ignored empty fix', { bookingId });
-          return;
-        }
+        if (!next) return;
         latestRef.current = next;
         setFix(next);
         setSource('firebase');
-        inspectLiveLocation('showing user (firebase)', {
-          bookingId,
-          lat: next.lat,
-          lng: next.lng,
-          heading: next.heading,
-          speed: next.speed,
-          updatedAt: next.updatedAt,
-        });
       };
       const onError = (err) => {
         if (import.meta.env.DEV) {
@@ -166,57 +132,25 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
 
   /* ---- Socket: fallback ------------------------------------------- */
 
-  const applySocketFix = (payload) => {
-    if (!active) {
-      inspectLiveLocation('socket skipped (not subscribed)', {
-        bookingId,
-        enabled,
-        payloadBookingId: payload?.bookingId || payload?.tripId || null,
-      });
-      return;
-    }
-    if (!payloadMatchesBooking(payload, bookingId)) {
-      inspectLiveLocation('socket skipped (other trip)', {
-        bookingId,
-        payloadBookingId: payload?.bookingId || payload?.tripId || null,
-      });
-      return;
-    }
+  useSocketEvent(S2C_EVENTS.TRIP_LOCATION_UPDATED, (payload) => {
+    if (!active) return;
+    if (!payload || String(payload.bookingId) !== String(bookingId)) return;
 
     const next = normalize(payload, bookingId);
-    if (!next) {
-      inspectLiveLocation('socket ignored invalid fix', { bookingId, payload });
-      return;
-    }
+    if (!next) return;
 
     // Never let a socket packet move the marker backwards past a newer
     // Firebase fix — the two channels race, and out-of-order is worse than
     // slightly late.
     const current = latestRef.current;
     if (current?.updatedAt && next.updatedAt && next.updatedAt <= current.updatedAt) {
-      inspectLiveLocation('socket skipped (older than current)', {
-        bookingId,
-        incomingAt: next.updatedAt,
-        currentAt: current.updatedAt,
-      });
       return;
     }
 
     latestRef.current = next;
     setFix(next);
     setSource((prev) => (prev === 'firebase' ? prev : 'socket'));
-    inspectLiveLocation('showing user (socket)', {
-      bookingId,
-      lat: next.lat,
-      lng: next.lng,
-      heading: next.heading,
-      speed: next.speed,
-      updatedAt: next.updatedAt,
-    });
-  };
-
-  useSocketEvent(S2C_EVENTS.TRIP_LOCATION_UPDATED, applySocketFix);
-  useSocketEvent(S2C_EVENTS.DRIVER_LOCATION_UPDATE, applySocketFix);
+  });
 
   /* ---- Staleness --------------------------------------------------- */
 

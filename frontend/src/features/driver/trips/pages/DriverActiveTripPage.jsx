@@ -54,7 +54,7 @@ import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyBu
 import TripChatEntry from '../../../../components/chat/TripChatEntry';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { isChatVisibleForBooking } from '../../../../constants/chat';
-import { openDriverMapsNavigation } from '../../../../utils/nativeTracking';
+import { openExternalUrl } from '../../../../utils/openExternalUrl';
 
 /**
  * Driver-side counterpart of `DriverAssignedPage` — one screen that adapts
@@ -348,53 +348,23 @@ const DriverActiveTripPage = () => {
   }, [booking?.dropoff]);
 
   const mapsNav = useMemo(() => {
+    // Pickup nav only — hide once the trip OTP is entered (STARTED).
     const headingToPickup =
       status === BOOKING_STATUS.EN_ROUTE
       || status === BOOKING_STATUS.ARRIVED;
-    if (headingToPickup) {
-      const url = buildGoogleMapsNavUrl({
-        dest: pickupCoords,
-        destQuery: booking?.pickup?.address,
-        origin: driverPoint,
-      });
-      return {
-        url,
-        dest: pickupCoords,
-        destQuery: booking?.pickup?.address,
-        label: 'Navigate to pickup',
-        show: Boolean(url),
-      };
-    }
-
-    const headingToDropoff = status === BOOKING_STATUS.STARTED;
-    if (headingToDropoff) {
-      const destQuery =
-        booking?.dropoff?.address
-        || booking?.outstation?.destinationAddress
-        || '';
-      const url = buildGoogleMapsNavUrl({
-        dest: dropoffCoords,
-        destQuery,
-        origin: driverPoint,
-      });
-      return {
-        url,
-        dest: dropoffCoords,
-        destQuery,
-        label: 'Navigate',
-        show: Boolean(url),
-      };
-    }
-
-    return { url: null, dest: null, destQuery: '', label: 'Navigate', show: false };
+    const url = headingToPickup
+      ? buildGoogleMapsNavUrl({
+          dest: pickupCoords,
+          destQuery: booking?.pickup?.address,
+          origin: driverPoint,
+        })
+      : null;
+    return { url, label: 'Navigate to pickup', show: headingToPickup };
   }, [
     status,
     pickupCoords,
-    dropoffCoords,
     driverPoint,
     booking?.pickup?.address,
-    booking?.dropoff?.address,
-    booking?.outstation?.destinationAddress,
   ]);
 
   // Tick a heartbeat once a second so the cancel preview's grace-window
@@ -1193,12 +1163,8 @@ const DriverActiveTripPage = () => {
           fullWidth
           variant="secondary"
           icon={Navigation}
-          onClick={async () => {
-            const opened = await openDriverMapsNavigation({
-              dest: mapsNav.dest,
-              destQuery: mapsNav.destQuery,
-              mapsUrl: mapsNav.url,
-            });
+          onClick={() => {
+            const opened = openExternalUrl(mapsNav.url);
             if (!opened) toast.error('Could not open Google Maps');
           }}
         >

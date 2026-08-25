@@ -98,21 +98,5 @@ export const ingestDriverLocation = asyncHandler(async (req, res) => {
   const body = locationBatchSchema.parse(req.body);
   const result = await ingestDriverLocationBatch(req.driverId, body.fixes);
 
-  return res.status(200).json({
-    status: 'success',
-    statusCode: 200,
-    success: true,
-    message: 'Location batch processed',
-    data: {
-      accepted: result.accepted,
-      deduped: result.deduped,
-      rejected: result.rejected,
-      mode: result.mode,
-      stopTracking: result.stopTracking,
-      watermark: result.watermark,
-      duplicates: result.duplicates,
-      firebase: result.firebase,
-      mongoSnapshot: result.mongoSnapshot,
-    },
-  });
+  return res.status(200).json(new ApiResponse(200, result, 'Location batch processed'));
 });

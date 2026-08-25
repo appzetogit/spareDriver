@@ -9,7 +9,6 @@ import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import SosEmergencyButton from '../../../user/tracking/components/SosEmergencyButton';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
-import { openDriverMapsNavigation } from '../../../../utils/nativeTracking';
 
 /**
  * Driver-side trip-in-progress screen — replaces the legacy mock with the
@@ -87,24 +86,6 @@ const DriverTripInProgressPage = () => {
     ? `tel:+91${String(customerPhone).replace(/\D/g, '')}`
     : null;
 
-  const mapsDestQuery =
-    booking?.dropoff?.address || booking?.outstation?.destinationAddress || '';
-  const mapsUrl = (() => {
-    const dest =
-      dropPoint
-        ? `${dropPoint.lat},${dropPoint.lng}`
-        : mapsDestQuery;
-    if (!dest) return null;
-    const params = new URLSearchParams({
-      api: '1',
-      travelmode: 'driving',
-      dir_action: 'navigate',
-      destination: dest,
-    });
-    if (driverPoint) params.set('origin', `${driverPoint.lat},${driverPoint.lng}`);
-    return `https://www.google.com/maps/dir/?${params.toString()}`;
-  })();
-
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
       <div className="bg-dark px-4 pt-4 pb-6 rounded-b-3xl text-center">
@@ -165,15 +146,7 @@ const DriverTripInProgressPage = () => {
           </button>
           <button
             type="button"
-            disabled={!mapsUrl}
-            onClick={() => {
-              void openDriverMapsNavigation({
-                dest: dropPoint,
-                destQuery: mapsDestQuery,
-                mapsUrl,
-              });
-            }}
-            className="flex-1 flex flex-col items-center gap-1.5 p-3 bg-white rounded-2xl shadow-card disabled:opacity-50"
+            className="flex-1 flex flex-col items-center gap-1.5 p-3 bg-white rounded-2xl shadow-card"
           >
             <Navigation className="w-5 h-5 text-text-secondary" />
             <span className="text-[10px] text-text-muted">Navigation</span>

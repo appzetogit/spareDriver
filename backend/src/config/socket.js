@@ -181,11 +181,6 @@ export function roomForBooking(bookingId) {
   return `${SOCKET_ROOM_PREFIX.BOOKING}:${bookingId}`;
 }
 
-/** Native / customer-app live-map room. */
-export function roomForTrip(tripId) {
-  return `trip_${tripId}`;
-}
-
 /** Authorized trip-chat room — only join after chat.service access check. */
 export function roomForBookingChat(bookingId) {
   return `${SOCKET_ROOM_PREFIX.BOOKING_CHAT}:${bookingId}`;
@@ -253,7 +248,6 @@ function attachConnectionHandlers(socket) {
       }
 
       socket.join(roomForBooking(bookingId));
-      socket.join(roomForTrip(bookingId));
       if (typeof ack === 'function') ack({ ok: true });
     } catch (err) {
       console.warn('[socket] booking join failed:', err.message);
@@ -264,7 +258,6 @@ function attachConnectionHandlers(socket) {
   socket.on(C2S_EVENTS.BOOKING_LEAVE, ({ bookingId } = {}) => {
     if (!bookingId) return;
     socket.leave(roomForBooking(bookingId));
-    socket.leave(roomForTrip(bookingId));
   });
 
   // Booking-scoped trip chat (authorized join + message handlers).

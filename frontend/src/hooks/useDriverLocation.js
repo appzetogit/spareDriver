@@ -145,22 +145,14 @@ export function useDriverLocation({ enabled }) {
     hasFirstEmitRef.current = true;
     pendingPayloadRef.current = null;
 
-    console.log('[liveLocation] driver sending location', {
+    logGeo('driver location emit', {
       lat: payload.lat,
       lng: payload.lng,
-      heading: payload.heading ?? null,
-      speed: payload.speed ?? null,
-      accuracy: payload.accuracy ?? null,
+      accuracy: payload.accuracy,
       force,
     });
 
     const sent = emitRef.current(C2S_EVENTS.DRIVER_LOCATION_UPDATE, payload, (ack) => {
-      console.log('[liveLocation] driver server ack', {
-        ok: ack?.ok,
-        reason: ack?.reason || null,
-        firebase: ack?.firebase ?? null,
-        mongoSnapshot: ack?.mongoSnapshot ?? null,
-      });
       if (ack?.ok === false && ack.reason !== 'throttled') {
         if (import.meta.env.DEV) console.warn('[location] backend rejected:', ack.reason);
       }

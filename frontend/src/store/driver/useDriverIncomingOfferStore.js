@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 import api from '../../utils/api';
-import useDriverActiveTripStore from './useDriverActiveTripStore';
-import { startNativeTracking, TRACKING_MODE } from '../../utils/nativeTracking';
 
 /**
  * Tracks the single in-flight booking offer a driver may currently hold.
@@ -158,8 +156,6 @@ const useDriverIncomingOfferStore = create((set, get) => ({
       // refetch the active booking so the driver lands on the dashboard
       // already showing the trip.
       const booking = await get().fetchActive();
-      if (booking) useDriverActiveTripStore.getState().setBooking(booking);
-      void startNativeTracking(TRACKING_MODE.ON_TRIP);
       return booking;
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || 'Failed to accept';
