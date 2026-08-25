@@ -93,7 +93,7 @@ const ManageDrivers = () => {
             {
               key: '_select',
               label: '',
-              width: '52px',
+              width: '36px',
               sortable: false,
               unclamp: true,
               compact: true,
@@ -122,21 +122,41 @@ const ManageDrivers = () => {
       {
         key: 'name',
         label: 'Driver',
-        width: '52%',
         unclamp: true,
         render: (val, row) => {
           const selfie = row.documents?.find((d) => d.type === 'selfie')?.fileUrl;
           return (
-            <div className="flex items-center gap-1.5 sm:gap-3 py-1 min-w-0">
-              <Avatar name={val} size="sm" src={selfie} className="ring-1 sm:ring-2 ring-white shadow-sm shrink-0" />
+            <div className="flex items-center gap-2 sm:gap-3 py-0.5 min-w-0">
+              <Avatar
+                name={val}
+                size="sm"
+                src={selfie}
+                className="ring-1 sm:ring-2 ring-white shadow-sm shrink-0 scale-90 sm:scale-100 origin-left"
+              />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate max-w-[120px] xs:max-w-[170px] sm:max-w-none">{val}</p>
+                <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate">
+                  {val || '—'}
+                </p>
                 {row.driverNumber ? (
                   <p className="text-[10px] sm:text-xs font-mono text-slate-500 mt-0.5 truncate">
                     {row.driverNumber}
                   </p>
                 ) : null}
-                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate max-w-[120px] xs:max-w-[170px] sm:max-w-none">{row.phone}</p>
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                  {row.phone || '—'}
+                </p>
+                <div className="sm:hidden flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <StatusBadge status={row.approvalStatus} className="!text-[9px] !px-1.5 !py-0.5" />
+                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        row.isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+                      }`}
+                      aria-hidden
+                    />
+                    {row.isOnline ? (row.isOnTrip ? 'On trip' : 'Online') : 'Offline'}
+                  </span>
+                </div>
               </div>
             </div>
           );
@@ -145,22 +165,22 @@ const ManageDrivers = () => {
       {
         key: 'approvalStatus',
         label: 'Status',
-        width: '33%',
+        className: 'hidden sm:table-cell',
         unclamp: true,
         render: (val) => <StatusBadge status={val} />,
       },
       {
         key: 'reviewTask',
         label: 'Assigned to',
-        className: 'hidden md:table-cell',
+        className: 'hidden lg:table-cell',
         render: (_val, row) => <TaskAssigneeBadge task={row.reviewTask} compact />,
       },
       {
         key: 'experienceYears',
         label: 'Experience',
-        className: 'hidden md:table-cell',
+        className: 'hidden lg:table-cell',
         render: (val) => (
-          <span className="text-sm font-medium text-slate-700">
+          <span className="text-sm font-medium text-slate-700 whitespace-nowrap">
             {val != null && val !== '' ? `${val} yr${Number(val) === 1 ? '' : 's'}` : '—'}
           </span>
         ),
@@ -168,15 +188,16 @@ const ManageDrivers = () => {
       {
         key: 'isOnline',
         label: 'Activity',
-        className: 'hidden lg:table-cell',
+        className: 'hidden xl:table-cell',
         render: (val, row) => <ActivityCell online={val} onTrip={row.isOnTrip} />,
       },
       {
         key: 'carTypeExperience',
         label: 'Vehicle types',
         className: 'hidden xl:table-cell',
+        unclamp: true,
         render: (types) => (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 max-w-[220px]">
             {types?.length ? (
               types.map((type) => {
                 const label = getCarTypeLabel(type);
@@ -199,18 +220,19 @@ const ManageDrivers = () => {
       {
         key: 'createdAt',
         label: 'Joined',
-        className: 'hidden lg:table-cell',
+        className: 'hidden xl:table-cell',
         render: (val) => (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-500 whitespace-nowrap">
             {val ? new Date(val).toLocaleDateString('en-GB') : '—'}
           </span>
         ),
       },
       {
         key: 'actions',
-        label: <span className="hidden sm:inline">Actions</span>,
+        label: 'Actions',
         compact: true,
         unclamp: true,
+        width: '52px',
         align: 'right',
         sortable: false,
         render: (_val, row) => (
@@ -249,7 +271,7 @@ const ManageDrivers = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 space-y-3 sm:space-y-4 animate-fade-in-up">
+    <div className="w-full max-w-full min-w-0 space-y-3 sm:space-y-4 animate-fade-in-up pb-6">
       <DriverFilters
         search={search}
         onSearchChange={(val) => {
@@ -284,7 +306,7 @@ const ManageDrivers = () => {
       )}
 
       {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 sm:px-4 py-3 text-sm text-rose-700">
           {error}
         </div>
       )}
@@ -303,7 +325,7 @@ const ManageDrivers = () => {
         onRowClick={(row) => navigate(`/admin/drivers/${row._id}/profile`)}
         entityLabel="drivers"
         emptyMessage="No drivers found"
-        minWidth="min-w-full md:min-w-[800px] xl:min-w-[1050px]"
+        minWidth="w-full min-w-0"
       />
     </div>
   );

@@ -25,7 +25,7 @@ const ServerPaginatedTable = ({
   const totalPages = Math.max(pagination.pages, 1);
 
   return (
-    <div className="w-full">
+    <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
         {loading && data.length === 0 ? (
           <TableSkeleton rows={limit} columns={columns.length} />
@@ -40,14 +40,14 @@ const ServerPaginatedTable = ({
             embedded
             pageSize={limit}
             bodyMaxHeight="28rem"
-            minWidth={minWidth}
+            minWidth={minWidth || 'w-full min-w-0'}
           />
         )}
       </div>
 
       {/* Pagination Controls */}
       {!loading && pagination.total > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-6 py-3 sm:py-5 border-t border-slate-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50">
           {/* Results info */}
           <div className="text-xs sm:text-sm text-slate-500">
             Showing{' '}
@@ -75,7 +75,7 @@ const ServerPaginatedTable = ({
             </button>
 
             {/* Page indicator */}
-            <div className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-slate-50 text-xs sm:text-sm font-medium text-slate-700">
+            <div className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-white border border-slate-200 text-xs sm:text-sm font-medium text-slate-700">
               Page {page} of {totalPages}
             </div>
 

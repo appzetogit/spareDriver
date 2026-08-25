@@ -103,23 +103,23 @@ const DataTable = ({
           embedded ? 'overflow-hidden' : 'bg-white rounded-2xl border border-slate-200 overflow-hidden'
         }
       >
-        <div className="overflow-auto" style={{ maxHeight: bodyMaxHeight }}>
-          <table className={`w-full ${minWidth} table-auto md:table-fixed`}>
-            <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-100">
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: bodyMaxHeight }}>
+          <table className={`w-full ${minWidth} table-auto`}>
+            <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200">
               <tr>
                 {columns.map((col) => {
                   const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
                   const justifyClass = col.align === 'center' ? 'justify-center' : col.align === 'right' ? 'justify-end' : 'justify-start';
-                  const padClass = col.compact ? 'px-1 sm:px-2' : 'px-1.5 sm:px-4';
+                  const padClass = col.compact ? 'px-1.5 sm:px-3' : 'px-2.5 sm:px-4';
                   return (
                     <th
                       key={col.key}
                       className={`
-                        ${padClass} py-3 text-xs font-medium text-slate-500 uppercase tracking-wider ${alignClass}
-                        ${col.sortable !== false ? 'cursor-pointer select-none hover:text-slate-700 transition-colors' : ''}
+                        ${padClass} py-3 sm:py-3.5 text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap ${alignClass}
+                        ${col.sortable !== false ? 'cursor-pointer select-none hover:text-slate-800 transition-colors' : ''}
                         ${col.className || ''}
                       `}
-                      style={col.width ? { width: col.width, minWidth: col.width } : undefined}
+                      style={col.width ? { width: col.width, minWidth: col.minWidth || col.width } : col.minWidth ? { minWidth: col.minWidth } : undefined}
                       onClick={() => col.sortable !== false && handleSort(col.key)}
                     >
                       <div className={`flex items-center gap-1.5 min-w-0 ${justifyClass}`}>
@@ -135,7 +135,7 @@ const DataTable = ({
                 })}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="bg-white divide-y divide-slate-100">
               {paginated.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-16 text-center">
@@ -167,14 +167,14 @@ const DataTable = ({
                       onRowClick?.(row);
                     }}
                     className={`
-                      border-b border-slate-50 last:border-b-0 transition-colors
+                      transition-colors
                       ${onRowClick ? 'cursor-pointer hover:bg-slate-50' : ''}
                       ${getRowClassName?.(row) || ''}
                     `}
                   >
                     {columns.map((col) => {
                       const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
-                      const padClass = col.compact ? 'px-1 sm:px-2' : 'px-1.5 sm:px-4';
+                      const padClass = col.compact ? 'px-1.5 sm:px-3' : 'px-2.5 sm:px-4';
                       const cell = col.render ? (
                         col.render(row[col.key], row)
                       ) : (
@@ -186,8 +186,8 @@ const DataTable = ({
                       return (
                         <td
                           key={col.key}
-                          className={`${padClass} py-3 text-sm text-slate-700 align-middle ${col.unclamp ? 'overflow-visible' : 'max-w-0'} ${alignClass} ${col.className || ''}`}
-                          style={col.width ? { width: col.width, minWidth: col.width } : undefined}
+                          className={`${padClass} py-3 text-sm text-slate-700 align-middle ${col.unclamp ? 'overflow-visible' : ''} ${alignClass} ${col.className || ''}`}
+                          style={col.width ? { width: col.width, minWidth: col.minWidth || col.width } : col.minWidth ? { minWidth: col.minWidth } : undefined}
                         >
                           {col.unclamp ? cell : <CellContent>{cell}</CellContent>}
                         </td>
