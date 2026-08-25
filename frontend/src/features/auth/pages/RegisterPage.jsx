@@ -222,15 +222,20 @@ const RegisterPage = () => {
     setSubmitLoading(true);
     setError('');
     try {
+      const referralCode =
+        referralProgramEnabled && formData.referralCode.trim()
+          ? formData.referralCode.trim()
+          : '';
+      if (referralCode) {
+        await api.post('/auth/referrals/validate', { referralCode });
+      }
       const res = await api.post('/auth/register/complete', await withFcmAuthPayload({
         name: formData.name.trim(),
         phone: formData.phone,
         email: normalizeUserEmail(formData.email),
         password: formData.password,
         ...(alternatePhone ? { alternatePhone } : {}),
-        ...(referralProgramEnabled && formData.referralCode.trim()
-          ? { referralCode: formData.referralCode.trim() }
-          : {}),
+        ...(referralCode ? { referralCode } : {}),
       }));
       const { user } = res.data.data;
       setAuth(user);

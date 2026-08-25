@@ -128,6 +128,17 @@ export const verifyOtpAndRegisterService = async (data) => {
 
   const normalizedAlternatePhone = normalizeAlternatePhone(alternatePhone, phone);
 
+  const {
+    ensureDriverReferralCode,
+    storeDriverAppliedReferralCode,
+    validateReferralCodeService,
+  } = await import('./referral.service.js');
+  const { REFERRAL_ROLE } = await import('../constants/referral.js');
+
+  if (referralCode) {
+    await validateReferralCodeService(referralCode, REFERRAL_ROLE.DRIVER);
+  }
+
   if (!isTestOtp(otp)) {
     const otpRecord = await OTP.findOne({ phone, otp, purpose: 'registration' });
     if (!otpRecord) {
@@ -137,6 +148,7 @@ export const verifyOtpAndRegisterService = async (data) => {
   }
 
   let driver = await Driver.findOne({ phone });
+  const createdNewDriver = !driver;
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -160,12 +172,16 @@ export const verifyOtpAndRegisterService = async (data) => {
     await driver.save();
   }
 
-  const { ensureDriverReferralCode, storeDriverAppliedReferralCode } = await import(
-    './referral.service.js'
-  );
-  await ensureDriverReferralCode(driver._id);
-  if (referralCode) {
-    await storeDriverAppliedReferralCode(driver, referralCode);
+  try {
+    await ensureDriverReferralCode(driver._id);
+    if (referralCode) {
+      await storeDriverAppliedReferralCode(driver, referralCode);
+    }
+  } catch (err) {
+    if (createdNewDriver) {
+      await Driver.deleteOne({ _id: driver._id });
+    }
+    throw err;
   }
 
   const payload = tokenPayloadFromDriver(driver);

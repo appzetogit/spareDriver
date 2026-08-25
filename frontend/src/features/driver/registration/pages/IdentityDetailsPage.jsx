@@ -78,6 +78,13 @@ const IdentityDetailsPage = () => {
     try {
       setLoading(true);
       setError('');
+      const referralCode =
+        referralProgramEnabled && form.referralCode.trim()
+          ? form.referralCode.trim()
+          : '';
+      if (referralCode) {
+        await api.post('/driver/referrals/validate', { referralCode });
+      }
       await api.post('/driver/auth/send-otp', { phone: form.phone });
       setShowOtpModal(true);
       setOtp('');
@@ -94,15 +101,20 @@ const IdentityDetailsPage = () => {
       setLoading(true);
       setError('');
       const alternatePhone = form.alternatePhone.trim();
+      const referralCode =
+        referralProgramEnabled && form.referralCode.trim()
+          ? form.referralCode.trim()
+          : '';
+      if (referralCode) {
+        await api.post('/driver/referrals/validate', { referralCode });
+      }
       const res = await api.post('/driver/auth/verify-otp', await withFcmAuthPayload({
         phone: form.phone,
         otp,
         name: form.name,
         password: form.password,
         ...(alternatePhone ? { alternatePhone } : {}),
-        ...(referralProgramEnabled && form.referralCode.trim()
-          ? { referralCode: form.referralCode.trim() }
-          : {}),
+        ...(referralCode ? { referralCode } : {}),
       }));
 
       setAuth(res.data.data.driver);

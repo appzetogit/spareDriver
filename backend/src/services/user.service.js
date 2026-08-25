@@ -253,6 +253,17 @@ export const completeRegistrationService = async ({
   await assertPhoneAvailable(phone);
   await assertEmailAvailable(normalizedEmail);
 
+  const {
+    ensureUserReferralCode,
+    applyUserReferralOnRegistration,
+    validateReferralCodeService,
+  } = await import('./referral.service.js');
+  const { REFERRAL_ROLE } = await import('../constants/referral.js');
+
+  if (referralCode) {
+    await validateReferralCodeService(referralCode, REFERRAL_ROLE.USER);
+  }
+
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -268,12 +279,14 @@ export const completeRegistrationService = async ({
     isEmailVerified: true,
   });
 
-  const { ensureUserReferralCode, applyUserReferralOnRegistration } = await import(
-    './referral.service.js'
-  );
-  await ensureUserReferralCode(user._id);
-  if (referralCode) {
-    await applyUserReferralOnRegistration(user, referralCode);
+  try {
+    await ensureUserReferralCode(user._id);
+    if (referralCode) {
+      await applyUserReferralOnRegistration(user, referralCode);
+    }
+  } catch (err) {
+    await User.deleteOne({ _id: user._id });
+    throw err;
   }
 
   await RegistrationDraft.deleteOne({ _id: draft._id });
