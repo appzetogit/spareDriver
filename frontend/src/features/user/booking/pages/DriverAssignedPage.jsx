@@ -319,13 +319,21 @@ const DriverAssignedPage = () => {
   }, [booking?.dropoff]);
 
   const driverPoint = useMemo(() => {
-    if (!liveDriver) return null;
-    return {
-      lat: liveDriver.lat,
-      lng: liveDriver.lng,
-      heading: typeof liveDriver.heading === 'number' ? liveDriver.heading : undefined,
-    };
-  }, [liveDriver]);
+    if (liveDriver) {
+      return {
+        lat: liveDriver.lat,
+        lng: liveDriver.lng,
+        heading: typeof liveDriver.heading === 'number' ? liveDriver.heading : undefined,
+      };
+    }
+    const c = driver?.location?.coordinates;
+    if (Array.isArray(c) && c.length === 2) {
+      const lng = Number(c[0]);
+      const lat = Number(c[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    }
+    return null;
+  }, [liveDriver, driver]);
 
   const distanceMeters = useMemo(() => {
     if (!driverPoint || !pickupPoint) return null;

@@ -36,6 +36,8 @@ app.use('/api/v1/auth', authRoutes);
 app.get('/api/v1/user/firebase-token', protectUser, getUserFirebaseToken);
 app.use('/api/v1/common', commonRoutes);
 app.use('/api/v1/driver', driverRoutes);
+// Flutter AppConfig sometimes concatenates `{host}/v1/driver/...` and drops `/api`.
+app.use('/v1/driver', driverRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/sos', sosRoutes);
 app.use('/api/v1/support', supportRoutes);

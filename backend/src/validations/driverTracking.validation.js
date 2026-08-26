@@ -1,7 +1,25 @@
 import { z } from 'zod';
 import { LOCATION_BATCH } from '../constants/driverTracking.js';
 
-const isoDate = z.union([z.string().datetime({ offset: true }), z.number().int().positive()]);
+/**
+ * Dart `DateTime.toUtc().toIso8601String()` emits microseconds
+ * (`...00.123456Z`) which Zod's datetime regex rejects. Accept epoch ms,
+ * epoch seconds, and any string `Date` can parse, then store ms.
+ */
+const isoDate = z.preprocess((value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 0 && value < 1e12 ? Math.round(value * 1000) : Math.round(value);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const asNum = Number(value);
+    if (Number.isFinite(asNum) && asNum > 0) {
+      return asNum < 1e12 ? Math.round(asNum * 1000) : Math.round(asNum);
+    }
+    const ms = new Date(value).getTime();
+    if (Number.isFinite(ms)) return ms;
+  }
+  return value;
+}, z.number().int().positive());
 
 export const issueTrackingTokenSchema = z.object({
   /**
@@ -20,12 +38,17 @@ export const revokeTrackingTokenSchema = z.object({
   allDevices: z.boolean().optional().default(false),
 });
 
+const optionalNum = z.preprocess(
+  (v) => (v === '' || v === undefined ? undefined : v),
+  z.coerce.number().finite().optional().nullable(),
+);
+
 const fixSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-  accuracy: z.number().nonnegative().optional().nullable(),
-  heading: z.number().optional().nullable(),
-  speed: z.number().optional().nullable(),
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  accuracy: z.coerce.number().nonnegative().optional().nullable(),
+  heading: optionalNum,
+  speed: optionalNum,
   /** When the OS produced the fix — not when it was uploaded. */
   capturedAt: isoDate,
 });
@@ -51,8 +74,8 @@ const singleFixBodySchema = z.object({
   lat: z.coerce.number().gte(-90).lte(90),
   lng: z.coerce.number().gte(-180).lte(180),
   accuracy: z.coerce.number().nonnegative().optional().nullable(),
-  heading: z.coerce.number().optional().nullable(),
-  speed: z.coerce.number().optional().nullable(),
+  heading: optionalNum,
+  speed: optionalNum,
   capturedAt: isoDate.optional(),
 });
 

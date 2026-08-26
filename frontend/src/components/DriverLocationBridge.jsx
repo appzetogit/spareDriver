@@ -208,12 +208,15 @@ export function DriverLocationBridge() {
     };
   }, [shouldTrack, onTrip]);
 
-  // Native uploads in the background. The trip screens still need a local
-  // fix (map + 100 m arrival gate), so keep the browser watch on-trip and
-  // only suppress socket publishes when native is confirmed.
+  // Native is the background uploader. Until Flutter returns
+  // `{ tracking: true }`, the WebView socket/HTTP path is the only thing
+  // that reaches the server while the driver has the app open.
+  // Keep publishing from the browser whenever this page is alive — if native
+  // is also uploading, the backend dedupes. If native is not ready, the
+  // customer map still moves.
   useDriverLocation({
-    enabled: shouldTrack && (!nativeTracking || onTrip),
-    publish: !nativeTracking,
+    enabled: shouldTrack,
+    publish: true,
   });
 
   return null;

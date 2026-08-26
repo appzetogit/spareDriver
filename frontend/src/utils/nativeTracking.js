@@ -106,14 +106,15 @@ async function invokeNative(name, ...args) {
 /**
  * Whether native accepted a startTracking call.
  *
- * Wrapper versions return `{ tracking: true }`, `true`, a status object, or
- * void. Only an explicit refusal means we should fall back to the browser
- * watch — which cannot survive backgrounding.
+ * Only an explicit success counts. A void/null return from an incomplete
+ * Flutter handler must NOT look like coverage — that used to suppress the
+ * WebView socket GPS, so the backend received nothing while the driver
+ * still had the app open.
  */
 export function nativeTrackingStarted(result) {
-  if (result === false) return false;
-  if (result && typeof result === 'object' && result.tracking === false) return false;
-  return hasNativeTracking();
+  if (result === true) return true;
+  if (result && typeof result === 'object' && result.tracking === true) return true;
+  return false;
 }
 
 /**

@@ -66,8 +66,22 @@ export async function ensureFirebaseAuth(audience = 'user', opts = {}) {
 
   inFlight = (async () => {
     try {
-      const res = await api.get(ENDPOINT[audience] || ENDPOINT.user);
-      const data = res.data?.data;
+      const paths = audience === 'user'
+        ? ['/auth/firebase-token', '/user/firebase-token']
+        : [ENDPOINT[audience] || ENDPOINT.user];
+
+      let data = null;
+      for (const path of paths) {
+        try {
+          const res = await api.get(path);
+          data = res.data?.data;
+          if (data?.token) break;
+        } catch (err) {
+          if (err?.response?.status !== 404 || path === paths[paths.length - 1]) {
+            throw err;
+          }
+        }
+      }
       if (!data?.token) return false;
 
       await signInWithCustomToken(a, data.token);
