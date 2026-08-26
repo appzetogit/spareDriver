@@ -55,6 +55,7 @@ import TripChatEntry from '../../../../components/chat/TripChatEntry';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { isChatVisibleForBooking } from '../../../../constants/chat';
 import { openExternalUrl } from '../../../../utils/openExternalUrl';
+import { openNativeNavigation } from '../../../../utils/nativeTracking';
 
 /**
  * Driver-side counterpart of `DriverAssignedPage` — one screen that adapts
@@ -1164,7 +1165,10 @@ const DriverActiveTripPage = () => {
           fullWidth
           variant="secondary"
           icon={Navigation}
-          onClick={() => {
+          onClick={async () => {
+            const dest = pickupCoords || booking?.pickup?.address || '';
+            const nativeOpened = await openNativeNavigation(dest);
+            if (nativeOpened) return;
             const opened = openExternalUrl(mapsNav.url);
             if (!opened) toast.error('Could not open Google Maps');
           }}

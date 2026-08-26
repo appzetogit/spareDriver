@@ -36,6 +36,8 @@ export const S2C_EVENTS = Object.freeze({
 
   DRIVER_STATUS_CHANGED: 'driver:status:changed',
   TRIP_LOCATION_UPDATED: 'trip:location:updated',
+  /** Alias emitted alongside TRIP_LOCATION_UPDATED for native customer apps. */
+  DRIVER_LOCATION_UPDATE: 'driverLocationUpdate',
 
   BOOKING_OFFERED: 'booking:offered',
   BOOKING_OFFER_WITHDRAWN: 'booking:offer:withdrawn',

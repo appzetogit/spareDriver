@@ -80,6 +80,12 @@ export const S2C_EVENTS = Object.freeze({
   /** Driver's live location update mirrored to a booking room. */
   TRIP_LOCATION_UPDATED: 'trip:location:updated',
 
+  /**
+   * Alias of TRIP_LOCATION_UPDATED for native customer apps that join
+   * `trip_{bookingId}` and listen for camelCase `driverLocationUpdate`.
+   */
+  DRIVER_LOCATION_UPDATE: 'driverLocationUpdate',
+
   /** A new booking offer arrived for a driver. */
   BOOKING_OFFERED: 'booking:offered',
 

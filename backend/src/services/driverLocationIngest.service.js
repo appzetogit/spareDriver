@@ -97,6 +97,7 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
     accuracy: newest.accuracy,
     heading: newest.heading,
     speed: newest.speed,
+    capturedAt: newest.capturedAt,
   });
 
   return {

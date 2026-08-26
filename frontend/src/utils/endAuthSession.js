@@ -45,5 +45,14 @@ export async function endAuthSession(audience = 'user') {
     /* best-effort — still clear local tokens below */
   }
 
+  if (audience === 'driver') {
+    try {
+      const { stopNativeTracking } = await import('./nativeTracking.js');
+      await withTimeout(Promise.resolve(stopNativeTracking()));
+    } catch {
+      /* best-effort */
+    }
+  }
+
   clearAuthTokens();
 }

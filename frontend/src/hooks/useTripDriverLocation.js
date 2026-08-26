@@ -16,8 +16,8 @@ import { C2S_EVENTS, S2C_EVENTS } from '../constants/socketEvents';
  *
  * Two channels, same shape:
  *   - Firebase RTDB `/trips/{bookingId}/driver` — primary, authenticated.
- *   - Socket `trip:location:updated` — fallback for when RTDB is unreachable
- *     or Firebase is not configured at all.
+ *   - Socket `trip:location:updated` / `driverLocationUpdate` — fallback
+ *     for when RTDB is unreachable or Firebase is not configured at all.
  *
  * Freshness is first-class. The backend stamps `staleAfter` on every write, so
  * a position that stopped updating is reported as `isStale` rather than
@@ -31,14 +31,24 @@ const DEFAULT_STALE_AFTER_MS = 45_000;
 /** How often to re-evaluate staleness while no new fix arrives. */
 const STALE_TICK_MS = 5_000;
 
+function readCoord(raw, ...keys) {
+  for (const key of keys) {
+    const n = Number(raw?.[key]);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 function normalize(raw, bookingId) {
   if (!raw) return null;
-  if (typeof raw.lat !== 'number' || typeof raw.lng !== 'number') return null;
+  const lat = readCoord(raw, 'lat', 'latitude');
+  const lng = readCoord(raw, 'lng', 'longitude');
+  if (lat == null || lng == null) return null;
   const updatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : null;
   return {
     bookingId,
-    lat: raw.lat,
-    lng: raw.lng,
+    lat,
+    lng,
     accuracy: raw.accuracy ?? null,
     heading: typeof raw.heading === 'number' ? raw.heading : null,
     speed: typeof raw.speed === 'number' ? raw.speed : null,
@@ -50,6 +60,13 @@ function normalize(raw, bookingId) {
           ? updatedAt + DEFAULT_STALE_AFTER_MS
           : null,
   };
+}
+
+function payloadMatchesBooking(payload, bookingId) {
+  if (!payload || !bookingId) return false;
+  const ids = [payload.bookingId, payload.tripId].filter(Boolean).map(String);
+  if (ids.length === 0) return true;
+  return ids.includes(String(bookingId));
 }
 
 /**
@@ -132,9 +149,9 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
 
   /* ---- Socket: fallback ------------------------------------------- */
 
-  useSocketEvent(S2C_EVENTS.TRIP_LOCATION_UPDATED, (payload) => {
+  const applySocketFix = (payload) => {
     if (!active) return;
-    if (!payload || String(payload.bookingId) !== String(bookingId)) return;
+    if (!payloadMatchesBooking(payload, bookingId)) return;
 
     const next = normalize(payload, bookingId);
     if (!next) return;
@@ -150,7 +167,10 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
     latestRef.current = next;
     setFix(next);
     setSource((prev) => (prev === 'firebase' ? prev : 'socket'));
-  });
+  };
+
+  useSocketEvent(S2C_EVENTS.TRIP_LOCATION_UPDATED, applySocketFix);
+  useSocketEvent(S2C_EVENTS.DRIVER_LOCATION_UPDATE, applySocketFix);
 
   /* ---- Staleness --------------------------------------------------- */
 

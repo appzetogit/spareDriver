@@ -7,6 +7,7 @@ import useDriverAuthStore from '../store/useDriverAuthStore';
 import { onAuthTokensChanged } from '../utils/authTokens';
 import {
   getNativeLastLocation,
+  hasLocationBridge,
   hasNativeTracking,
   nativeTrackingStatus,
   startNativeTracking,
@@ -62,11 +63,10 @@ const ON_TRIP_STATUSES = new Set(
  * while a trip is active we keep a browser watch for the WebView only and
  * stop emitting on the socket. Idle-online stays native-only.
  *
- * Merge note: this replaced `syncNativeBackgroundLocation`, which pushed the
- * access and refresh tokens into native and let it drive its own polling loop.
- * The contract here is deliberately narrower — the web app says only *when* to
- * track and at what cadence, and native authenticates with its own long-lived,
- * per-device, revocable credential instead of borrowing the session's.
+ * Flutter injects `window.LocationBridge` (and/or `flutter_inappwebview`
+ * handlers). Session JWT stays in `localStorage.accessToken` so native can
+ * authenticate background uploads. A long-lived tracking token is still
+ * minted by native when it needs one; this component only says *when*.
  */
 export function DriverLocationBridge() {
   const authOnline = useDriverAuthStore((s) => s.driver?.isOnline === true);
@@ -105,9 +105,30 @@ export function DriverLocationBridge() {
 
   // Tokens rotated — login, logout, or a refresh. Minting a tracking token
   // needs a live access token, so a start that failed for want of one has to be
-  // retried once the session is good again. (Kept from the `main` side of this
-  // merge; it is the one piece of that approach that still applies.)
+  // retried once the session is good again.
   useEffect(() => onAuthTokensChanged(() => setSyncNonce((n) => n + 1)), []);
+
+  // LocationBridge is often injected after the first WebView load. Keep
+  // probing until it appears so an early flutter_inappwebview-only start
+  // is re-issued through the real bridge.
+  useEffect(() => {
+    if (hasLocationBridge()) return undefined;
+    if (!shouldTrack) return undefined;
+    const id = setInterval(() => {
+      if (hasLocationBridge()) {
+        setSyncNonce((n) => n + 1);
+        clearInterval(id);
+      }
+    }, 1000);
+    const timeout = setTimeout(() => clearInterval(id), 20_000);
+    const onReady = () => setSyncNonce((n) => n + 1);
+    window.addEventListener('LocationBridgeReady', onReady);
+    return () => {
+      clearInterval(id);
+      clearTimeout(timeout);
+      window.removeEventListener('LocationBridgeReady', onReady);
+    };
+  }, [shouldTrack]);
 
   useEffect(() => {
     if (!hasNativeTracking()) return undefined;

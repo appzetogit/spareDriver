@@ -3,6 +3,11 @@ import api from '../utils/api';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
 import { useDriverKitActiveStore } from '../store/driver/useDriverKitStore';
+import {
+  startNativeTracking,
+  stopNativeTracking,
+  TRACKING_MODE,
+} from '../utils/nativeTracking';
 
 export function useDriverOnlineToggle() {
   const updateDriver = useDriverAuthStore((s) => s.updateDriver);
@@ -24,6 +29,11 @@ export function useDriverOnlineToggle() {
         const data = res.data?.data;
         updateDriver({ isOnline: data.isOnline, canGoOnline: data.canGoOnline });
         useDriverOnlineStore.getState().invalidate('driver-online-status');
+        if (data.isOnline) {
+          void startNativeTracking(TRACKING_MODE.IDLE);
+        } else {
+          void stopNativeTracking();
+        }
         return { success: true, data };
       } catch (err) {
         const payload = err.response?.data;

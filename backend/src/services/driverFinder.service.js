@@ -23,9 +23,8 @@ const ONE_KM_METERS = 1000;
  * How stale a driver's Mongo position may be and still be offered a ride.
  *
  * Sized off the slowest legitimate cadence: the native uploader posts every
- * 60s while idle-online, and `MONGO_SNAPSHOT_MIN_INTERVAL_MS` throttles the
- * write to once a minute on top of that. Three minutes clears both with room
- * for one failed upload.
+ * 30s while idle-online. Three minutes clears a few failed uploads with room
+ * to spare.
  */
 const LOCATION_FRESHNESS_MS = 3 * 60_000;
 

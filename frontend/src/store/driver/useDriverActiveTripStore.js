@@ -7,6 +7,7 @@ import {
   useDriverEarningsLedgerStore,
 } from './useDriverTripsStore';
 import { BOOKING_STATUS } from '../../constants/bookingStatus';
+import { startNativeTracking, TRACKING_MODE } from '../../utils/nativeTracking';
 
 /**
  * Wipe every dashboard cache that depends on trip-history. Called whenever
@@ -226,8 +227,10 @@ const useDriverActiveTripStore = create((set, get) => ({
     }
   },
 
-  markEnRoute() {
-    return get()._runTransition('en-route', 'en-route');
+  async markEnRoute() {
+    const booking = await get()._runTransition('en-route', 'en-route');
+    void startNativeTracking(TRACKING_MODE.ON_TRIP);
+    return booking;
   },
   /**
    * Driver taps "I have arrived". We forward the driver's current GPS
@@ -247,16 +250,20 @@ const useDriverActiveTripStore = create((set, get) => ({
    * the booking to `started`. The server treats `otp` as required and
    * surfaces a clean 400 if it's blank or wrong.
    */
-  startTrip(otp) {
-    return get()._runTransition('start', 'start', { otp });
+  async startTrip(otp) {
+    const booking = await get()._runTransition('start', 'start', { otp });
+    void startNativeTracking(TRACKING_MODE.ON_TRIP);
+    return booking;
   },
   async completeTrip() {
     const booking = await get()._runTransition('complete', 'complete');
+    void startNativeTracking(TRACKING_MODE.IDLE);
     invalidateDriverDashboardCaches();
     return booking;
   },
   async cancelTrip(reason = 'cancelled_by_driver') {
     const booking = await get()._runTransition('cancel', 'cancel', { reason });
+    void startNativeTracking(TRACKING_MODE.IDLE);
     invalidateDriverDashboardCaches();
     return booking;
   },

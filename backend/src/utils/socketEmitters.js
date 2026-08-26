@@ -4,6 +4,7 @@ import {
   roomForDriver,
   roomForBooking,
   roomForBookingChat,
+  roomForTripAlias,
   ADMIN_ROOM,
   ADMIN_SOS_ROOM,
   OPERATIONS_SOS_ROOM,
@@ -60,6 +61,26 @@ export function emitToBooking(bookingId, event, payload) {
   const id = toRoomId(bookingId);
   if (!id) return false;
   return safeEmit(roomForBooking(id), event, payload);
+}
+
+/** Native customer apps that join `trip_{bookingId}` instead of `booking:{id}`. */
+export function emitToTripAlias(tripId, event, payload) {
+  const id = toRoomId(tripId);
+  if (!id) return false;
+  return safeEmit(roomForTripAlias(id), event, payload);
+}
+
+/**
+ * Fan a live GPS fix out to every room/event name customer apps subscribe to.
+ */
+export function emitDriverLocationUpdate(bookingId, payload) {
+  const id = toRoomId(bookingId);
+  if (!id) return false;
+  const a = emitToBooking(id, S2C_EVENTS.TRIP_LOCATION_UPDATED, payload);
+  const b = emitToBooking(id, S2C_EVENTS.DRIVER_LOCATION_UPDATE, payload);
+  const c = emitToTripAlias(id, S2C_EVENTS.TRIP_LOCATION_UPDATED, payload);
+  const d = emitToTripAlias(id, S2C_EVENTS.DRIVER_LOCATION_UPDATE, payload);
+  return a || b || c || d;
 }
 
 /** Send to everyone who joined the authorized booking chat room. */

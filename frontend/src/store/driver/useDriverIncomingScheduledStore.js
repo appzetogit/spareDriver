@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../../utils/api';
 import { BOOKING_TYPE } from '../../constants/bookingStatus';
+import { startNativeTracking, TRACKING_MODE } from '../../utils/nativeTracking';
 
 /**
  * Open scheduled inbox requests for the signed-in driver.
@@ -127,6 +128,7 @@ const useDriverIncomingScheduledStore = create((set, get) => ({
         return { kind: 'subscription', subscriptionId };
       }
       await api.post(`/driver/bookings/${id}/accept`);
+      void startNativeTracking(TRACKING_MODE.ON_TRIP);
       get().removeByBookingId(id);
       const activeRes = await api.get('/driver/bookings/active');
       const booking = activeRes?.data?.data?.booking || null;

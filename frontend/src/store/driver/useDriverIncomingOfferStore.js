@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../../utils/api';
+import { startNativeTracking, TRACKING_MODE } from '../../utils/nativeTracking';
 
 /**
  * Tracks the single in-flight booking offer a driver may currently hold.
@@ -151,6 +152,7 @@ const useDriverIncomingOfferStore = create((set, get) => ({
     set({ busy: 'accept', error: null });
     try {
       await api.post(`/driver/bookings/${offer.bookingId}/accept`);
+      void startNativeTracking(TRACKING_MODE.ON_TRIP);
       get().clearOffer();
       // The server already broadcasts BOOKING_UPDATED, but we proactively
       // refetch the active booking so the driver lands on the dashboard

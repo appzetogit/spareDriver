@@ -281,6 +281,16 @@ const driverSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    /** Degrees clockwise from north. Live GPS only — not a dispatch input. */
+    heading: {
+      type: Number,
+      default: null,
+    },
+    /** Metres per second from the OS location provider. */
+    speed: {
+      type: Number,
+      default: null,
+    },
     city: {
       type: String,
       default: '',
