@@ -42,6 +42,13 @@ const HIGH_ACCURACY_RETRY_OPTIONS = Object.freeze({
   timeout: 15_000,
 });
 
+/** First driver UI pin — network/OS cache so the map is not blank for 12s. */
+export const DRIVER_UI_FIRST_FIX_OPTIONS = Object.freeze({
+  enableHighAccuracy: false,
+  maximumAge: 30_000,
+  timeout: 6_000,
+});
+
 /** First driver fix — allow a short-lived OS cache so indoor cold-start is faster. */
 export const DRIVER_FIRST_FIX_OPTIONS = Object.freeze({
   enableHighAccuracy: true,
@@ -58,8 +65,35 @@ export const DRIVER_WATCH_OPTIONS = Object.freeze({
 
 let cache = null;
 
+const PERSIST_KEY = 'sd.geo.lastCoords';
+const PERSIST_MAX_AGE_MS = 30 * 60_000;
+
 function isDev() {
   return Boolean(import.meta.env?.DEV);
+}
+
+function readPersistedLocation() {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(PERSIST_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Number.isFinite(parsed.lat) || !Number.isFinite(parsed.lng)) return null;
+    const age = Date.now() - (parsed.fetchedAt || 0);
+    if (age > PERSIST_MAX_AGE_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedLocation(coords) {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(PERSIST_KEY, JSON.stringify(coords));
+  } catch {
+    // quota / private mode
+  }
 }
 
 export function logGeo(event, detail) {
@@ -150,7 +184,13 @@ export function getCachedLocation({
 
 /** Last known coords even if stale/poor — for UI keep-alive, not for "fresh". */
 export function getLastKnownLocation() {
-  return cache;
+  if (cache) return cache;
+  const persisted = readPersistedLocation();
+  if (persisted) {
+    cache = persisted;
+    return cache;
+  }
+  return null;
 }
 
 export function setCachedLocation(coords) {
@@ -159,10 +199,18 @@ export function setCachedLocation(coords) {
     ...coords,
     fetchedAt: coords.fetchedAt ?? Date.now(),
   };
+  writePersistedLocation(cache);
 }
 
 export function invalidateLocationCache() {
   cache = null;
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.removeItem(PERSIST_KEY);
+    } catch {
+      // ignore
+    }
+  }
   logGeo('cache invalidated');
 }
 

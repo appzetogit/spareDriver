@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import useAppResumeSync from '../hooks/useAppResumeSync';
-import { useDriverLocation } from '../hooks/useDriverLocation';
+import { reportDriverLocation, useDriverLocation } from '../hooks/useDriverLocation';
 import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
 import useDriverActiveTripStore from '../store/driver/useDriverActiveTripStore';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { onAuthTokensChanged } from '../utils/authTokens';
 import {
+  getNativeLastLocation,
   hasNativeTracking,
+  nativeTrackingStatus,
   startNativeTracking,
   stopNativeTracking,
   TRACKING_MODE,
@@ -15,6 +17,24 @@ import {
   BOOKING_STATUS,
   ACTIVE_BOOKING_STATUSES,
 } from '../constants/bookingStatus';
+
+function coordsFromNativePayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const src = payload.location && typeof payload.location === 'object'
+    ? payload.location
+    : payload;
+  const lat = Number(src.lat ?? src.latitude);
+  const lng = Number(src.lng ?? src.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {
+    lat,
+    lng,
+    accuracy: Number.isFinite(Number(src.accuracy)) ? Number(src.accuracy) : null,
+    heading: Number.isFinite(Number(src.heading)) ? Number(src.heading) : null,
+    speed: Number.isFinite(Number(src.speed)) ? Number(src.speed) : null,
+    timestamp: src.timestamp ?? src.capturedAt ?? src.fetchedAt,
+  };
+}
 
 const ONLINE_CACHE_KEY = 'driver-online-status';
 
@@ -37,11 +57,10 @@ const ON_TRIP_STATUSES = new Set(
  *   - Browser `watchPosition` — only survives while the page is visible, so it
  *     freezes the moment the driver opens Maps or locks the screen.
  *
- * When native accepts the job the browser watch is switched off: running both
- * means two GPS consumers draining the same battery for one position. When
- * native refuses — permission not granted, location switched off — or we are
- * in a plain browser, the watch stays on so the driver is not silently
- * untracked.
+ * Native owns the *upload* (it survives backgrounding). The trip UI still
+ * needs a local lat/lng for the map pin and the "I've arrived" geofence, so
+ * while a trip is active we keep a browser watch for the WebView only and
+ * stop emitting on the socket. Idle-online stays native-only.
  *
  * Merge note: this replaced `syncNativeBackgroundLocation`, which pushed the
  * access and refresh tokens into native and let it drive its own polling loop.
@@ -107,9 +126,20 @@ export function DriverLocationBridge() {
     // Re-sent whenever `onTrip` flips so the service switches cadence:
     // 5 s / 20 m on a trip, 30 s / 100 m while idle-online.
     const mode = onTrip ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
-    startNativeTracking(mode).then((result) => {
+    startNativeTracking(mode).then(async (result) => {
       if (cancelled) return;
-      setNativeTracking(result?.tracking === true);
+      const tracking = result?.tracking === true;
+      setNativeTracking(tracking);
+      if (!tracking) return;
+      const fromStart = coordsFromNativePayload(result);
+      if (fromStart) {
+        reportDriverLocation(fromStart, { source: 'native' });
+        return;
+      }
+      const lastRaw =
+        (await getNativeLastLocation()) || (await nativeTrackingStatus());
+      const last = coordsFromNativePayload(lastRaw);
+      if (!cancelled && last) reportDriverLocation(last, { source: 'native' });
     });
 
     return () => {
@@ -125,8 +155,13 @@ export function DriverLocationBridge() {
     };
   }, []);
 
-  // Hand GPS duty to native only once it has actually confirmed.
-  useDriverLocation({ enabled: shouldTrack && !nativeTracking });
+  // Native uploads in the background. The trip screens still need a local
+  // fix (map + 100 m arrival gate), so keep the browser watch on-trip and
+  // only suppress socket publishes when native is confirmed.
+  useDriverLocation({
+    enabled: shouldTrack && (!nativeTracking || onTrip),
+    publish: !nativeTracking,
+  });
 
   return null;
 }

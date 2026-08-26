@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { useSocket } from './useSocket';
 import { C2S_EVENTS } from '../constants/socketEvents';
 import {
-  DRIVER_FIRST_FIX_OPTIONS,
+  DRIVER_UI_FIRST_FIX_OPTIONS,
   DRIVER_WATCH_OPTIONS,
   classifyAccuracy,
   geoErrorMessage,
+  getCachedLocation,
+  getLastKnownLocation,
   getLocationOnce,
   isGeolocationSupported,
   logGeo,
+  setCachedLocation,
   watchLocation,
   GEO_ERROR,
   classifyGeoError,
@@ -18,9 +21,13 @@ import {
  * Driver-side GPS streamer.
  *
  * Pipeline:
- *   1. Fast first fix (`maximumAge` allowed) → then one `watchPosition`.
- *   2. Throttle emits to the backend to one every `MIN_EMIT_INTERVAL_MS`.
- *   3. Socket.IO carries accepted emits → Firebase + throttled Mongo.
+ *   1. Seed last-known coords so trip maps are not blank on remount.
+ *   2. Fast first fix (`maximumAge` allowed) → then one `watchPosition`.
+ *   3. Throttle emits to the backend to one every `MIN_EMIT_INTERVAL_MS`.
+ *   4. Socket.IO carries accepted emits → Firebase + throttled Mongo.
+ *
+ * When native (Flutter) is uploading, `publish` is false: the watch still
+ * feeds the driver UI (pin, arrival geofence) but does not double-post.
  *
  * GPS is independent of Socket.IO: disconnect only buffers the latest point;
  * it never clears the watch.
@@ -28,11 +35,27 @@ import {
 
 const MIN_EMIT_INTERVAL_MS = 5_000;
 
+function toStatusCoords(c) {
+  if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
+  return {
+    lat: c.lat,
+    lng: c.lng,
+    accuracy: Number.isFinite(c.accuracy) ? c.accuracy : null,
+    heading: Number.isFinite(c.heading) ? c.heading : null,
+    speed: Number.isFinite(c.speed) ? c.speed : null,
+    ts: c.timestamp ?? c.fetchedAt ?? c.ts ?? Date.now(),
+  };
+}
+
+function readSeededCoords() {
+  return toStatusCoords(getCachedLocation() || getLastKnownLocation());
+}
+
 const locationStatusListeners = new Set();
 let locationStatusSnapshot = {
   permission: 'unknown',
   error: null,
-  coords: null,
+  coords: readSeededCoords(),
   isSharing: false,
 };
 
@@ -64,12 +87,45 @@ const PERMISSION = Object.freeze({
 });
 
 /**
- * @param {{ enabled: boolean }} opts
+ * Push a fix into the shared driver-GPS store (browser watch, native callback,
+ * or last-known seed). Trip screens read this; they never talk to the OS.
+ *
+ * @param {object} raw
+ * @param {{ source?: string }} [opts]
+ * @returns {boolean}
  */
-export function useDriverLocation({ enabled }) {
-  const { socket, isConnected, emit } = useSocket();
+export function reportDriverLocation(raw, { source = 'browser' } = {}) {
+  const coords = toStatusCoords(raw);
+  if (!coords) return false;
+  setCachedLocation({ ...coords, fetchedAt: coords.ts });
+  logGeo('driver location report', {
+    source,
+    lat: coords.lat,
+    lng: coords.lng,
+    accuracy: coords.accuracy,
+  });
+  emitLocationStatus({
+    coords,
+    error: null,
+    permission: PERMISSION.GRANTED,
+    isSharing: true,
+  });
+  return true;
+}
+
+if (typeof window !== 'undefined') {
+  window.__sdOnDriverLocation = (fix) => reportDriverLocation(fix, { source: 'native' });
+}
+
+/**
+ * @param {{ enabled: boolean, publish?: boolean }} opts
+ *   `publish` — when false, still watch GPS for the driver UI but do not
+ *   emit on the socket (native is already uploading).
+ */
+export function useDriverLocation({ enabled, publish = true }) {
+  const { isConnected, emit } = useSocket();
   const [permission, setPermission] = useState(PERMISSION.UNKNOWN);
-  const [coords, setCoords] = useState(null);
+  const [coords, setCoords] = useState(() => readSeededCoords());
   const [lastEmittedAt, setLastEmittedAt] = useState(null);
   const [error, setError] = useState(null);
 
@@ -77,6 +133,7 @@ export function useDriverLocation({ enabled }) {
   const hasFirstEmitRef = useRef(false);
   const pendingPayloadRef = useRef(null);
   const latestPayloadRef = useRef(null);
+  const publishRef = useRef(publish);
 
   // Keep socket emit path stable so the GPS watch effect does not restart.
   const emitRef = useRef(emit);
@@ -87,6 +144,9 @@ export function useDriverLocation({ enabled }) {
   useEffect(() => {
     isConnectedRef.current = isConnected;
   }, [isConnected]);
+  useEffect(() => {
+    publishRef.current = publish;
+  }, [publish]);
 
   /* ---- permission probe ------------------------------------------- */
 
@@ -123,6 +183,7 @@ export function useDriverLocation({ enabled }) {
 
   const emitLocationPayload = useCallback((payload, { force = false } = {}) => {
     if (!payload) return false;
+    if (!publishRef.current) return false;
     latestPayloadRef.current = payload;
 
     const now = Date.now();
@@ -177,14 +238,16 @@ export function useDriverLocation({ enabled }) {
   useEffect(() => {
     if (!enabled || !isConnected) return;
 
-    const pending = pendingPayloadRef.current || latestPayloadRef.current;
-    if (pending) {
-      logGeo('driver socket reconnect — flushing latest location');
-      emitLocationPayload(pending, { force: true });
+    if (publish) {
+      const pending = pendingPayloadRef.current || latestPayloadRef.current;
+      if (pending) {
+        logGeo('driver socket reconnect — flushing latest location');
+        emitLocationPayload(pending, { force: true });
+      }
     }
 
     emitRef.current(C2S_EVENTS.DRIVER_ONLINE);
-  }, [enabled, isConnected, emitLocationPayload]);
+  }, [enabled, isConnected, publish, emitLocationPayload]);
 
   /* ---- GPS watch: depends on enabled + blocked permission only ---- */
 
@@ -206,12 +269,9 @@ export function useDriverLocation({ enabled }) {
       if (stopped) return;
       setError(null);
       setPermission((prev) => (prev === PERMISSION.GRANTED ? prev : PERMISSION.GRANTED));
-      setCoords({
-        lat: next.lat,
-        lng: next.lng,
-        accuracy: next.accuracy,
-        ts: next.timestamp ?? next.fetchedAt ?? Date.now(),
-      });
+      const statusCoords = toStatusCoords(next);
+      setCoords(statusCoords);
+      reportDriverLocation(next, { source: 'browser' });
       const payload = coordsToPayload(next);
       emitLocationPayload(payload, { force: forceEmit || !hasFirstEmitRef.current });
     };
@@ -232,13 +292,20 @@ export function useDriverLocation({ enabled }) {
       // Do not clear coords — keep last valid fix on transient GPS errors.
     };
 
+    const seeded = readSeededCoords();
+    if (seeded) {
+      setCoords(seeded);
+      emitLocationStatus({ coords: seeded, error: null });
+    }
+
     logGeo('driver GPS pipeline start', {
-      firstFix: DRIVER_FIRST_FIX_OPTIONS,
+      firstFix: DRIVER_UI_FIRST_FIX_OPTIONS,
       watch: DRIVER_WATCH_OPTIONS,
+      seeded: Boolean(seeded),
     });
 
-    // First fix: allow recent OS cache for a faster cold start (esp. indoors).
-    getLocationOnce(DRIVER_FIRST_FIX_OPTIONS)
+    // Fast first pin from the OS cache / network, then high-accuracy watch.
+    getLocationOnce(DRIVER_UI_FIRST_FIX_OPTIONS)
       .then((c) => {
         if (stopped) return;
         logGeo('driver first fix', {

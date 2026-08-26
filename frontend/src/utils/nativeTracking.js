@@ -57,3 +57,11 @@ export function stopNativeTracking() {
 export function nativeTrackingStatus() {
   return call('trackingStatus');
 }
+
+/**
+ * Last native fix, if the wrapper exposes it.
+ * Shape: `{ lat, lng, accuracy?, heading?, speed?, timestamp? }` or null.
+ */
+export function getNativeLastLocation() {
+  return call('lastLocation');
+}

@@ -324,9 +324,10 @@ const DriverActiveTripPage = () => {
     if (searchParams.get('chat') === '1') setSheetExpanded(true);
   }, [searchParams]);
 
-  // Live GPS from `DriverLocationBridge` (watchPosition → shared status).
-  // Do NOT use one-shot `useGeolocation` here — that froze the polyline
-  // after the first fix while the customer map (Firebase) kept updating.
+  // Live GPS from `DriverLocationBridge` (shared status: last-known seed +
+  // watchPosition, even when native is the one uploading). Do NOT use
+  // one-shot `useGeolocation` here — that froze the polyline after the
+  // first fix while the customer map (Firebase) kept updating.
   const { coords: driverCoords } = useDriverLocationStatus();
   const driverPoint = useMemo(
     () => (driverCoords ? { lat: driverCoords.lat, lng: driverCoords.lng } : null),
