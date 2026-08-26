@@ -46,6 +46,11 @@ export function createRateLimiter({
     if (entry.count > max) {
       const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
       res.set('Retry-After', String(retryAfterSec));
+      if (keyPrefix === 'driver:location') {
+        console.log(
+          `[flutter] location RATE-LIMIT driver=${identity} retryAfter=${retryAfterSec}s`,
+        );
+      }
       return res.status(429).json({
         status: 429,
         message: 'Too many requests. Please try again later.',

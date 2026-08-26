@@ -33,6 +33,13 @@ export const issueDriverTrackingToken = asyncHandler(async (req, res) => {
     appVersion: body.appVersion,
   });
 
+  console.log(
+    `[flutter] tracking-token OK driver=${req.driver._id}` +
+      ` device=${body.deviceId}` +
+      ` platform=${body.platform || '-'}` +
+      ` expiresAt=${expiresAt instanceof Date ? expiresAt.toISOString() : expiresAt}`,
+  );
+
   return res.status(201).json(
     new ApiResponse(
       201,
@@ -97,6 +104,16 @@ export const revokeDriverTrackingToken = asyncHandler(async (req, res) => {
 export const ingestDriverLocation = asyncHandler(async (req, res) => {
   const body = locationBatchSchema.parse(req.body);
   const result = await ingestDriverLocationBatch(req.driverId, body.fixes);
+
+  console.log(
+    `[flutter] location OK driver=${req.driverId}` +
+      ` auth=${req.trackingAuth || '-'}` +
+      ` accepted=${result.accepted ?? 0}` +
+      ` deduped=${result.deduped ?? 0}` +
+      ` rejected=${result.rejected ?? 0}` +
+      ` stopTracking=${Boolean(result.stopTracking)}` +
+      ` mode=${result.mode || '-'}`,
+  );
 
   return res.status(200).json(new ApiResponse(200, result, 'Location batch processed'));
 });

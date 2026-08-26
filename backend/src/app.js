@@ -66,6 +66,14 @@ app.use((err, req, res, _next) => {
     const issues = err.issues || err.errors || [];
     const first = issues[0];
     const field = first?.path?.length ? first.path.join('.') : null;
+    const url = req.originalUrl || req.url || '';
+    if (url.includes('/driver/location') || url.includes('/tracking/token')) {
+      console.log(
+        `[flutter] BAD-BODY path=${url}` +
+          ` field=${field || '-'}` +
+          ` message=${first?.message || 'Invalid request body'}`,
+      );
+    }
     return res.status(400).json({
       status: 400,
       message: first
