@@ -47,7 +47,11 @@ import {
   revokeDriverTrackingToken,
   ingestDriverLocation,
 } from '../controllers/driverTracking.controller.js';
-import { protectDriverTracking } from '../middlewares/trackingAuth.js';
+import {
+  protectDriverTracking,
+  logFlutterLocationHit,
+  logFlutterTokenHit,
+} from '../middlewares/trackingAuth.js';
 import { getDriverFirebaseToken } from '../controllers/firebaseAuth.controller.js';
 import { driverLocationRateLimiter } from '../middlewares/rateLimit.js';
 import {
@@ -176,9 +180,15 @@ router.put('/online', protectDriver, setOnlineStatus);
 //
 // `/tracking/token` is driver-authenticated because the app has a fresh access
 // token at the moment the driver goes online, which is exactly when it is called.
-router.post('/tracking/token', protectDriver, issueDriverTrackingToken);
+router.post('/tracking/token', logFlutterTokenHit, protectDriver, issueDriverTrackingToken);
 router.delete('/tracking/token', protectDriver, revokeDriverTrackingToken);
-router.post('/location', protectDriverTracking, driverLocationRateLimiter, ingestDriverLocation);
+router.post(
+  '/location',
+  logFlutterLocationHit,
+  protectDriverTracking,
+  driverLocationRateLimiter,
+  ingestDriverLocation,
+);
 router.get('/firebase-token', protectDriver, getDriverFirebaseToken);
 
 // Dashboard: today summary, paginated trip history, earnings analytics
