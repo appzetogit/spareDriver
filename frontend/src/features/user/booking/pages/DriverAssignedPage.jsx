@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -26,6 +26,7 @@ import useUserActiveBookingStore from '../../../../store/user/useUserActiveBooki
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
 import { useTripDriverLocation } from '../../../../hooks/useTripDriverLocation';
+import useAppResumeSync from '../../../../hooks/useAppResumeSync';
 import { useRideTimer } from '../hooks/useRideTimer';
 import { formatRideCountdown } from '../../../../utils/formatters';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
@@ -124,6 +125,12 @@ const DriverAssignedPage = () => {
 
   const [cancelling, setCancelling] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+
+  const refetchOnResume = useCallback(() => {
+    if (routeBookingId) return fetchById(routeBookingId);
+    return refreshCurrentOrActive();
+  }, [routeBookingId, fetchById, refreshCurrentOrActive]);
+  useAppResumeSync(refetchOnResume);
 
   // Hydrate the active booking on mount. Two paths:
   //   1. URL carries `/:id` (preferred) → fetch *that* booking. This

@@ -50,6 +50,10 @@ function toDriverSession(doc) {
     approvalStatus: doc.approvalStatus,
     approvalNote: doc.approvalNote || '',
     needsPhone: doc.needsPhone,
+    // Needed immediately so DriverLocationBridge does not call stopTracking
+    // on remount while the native foreground service is still uploading.
+    isOnline: doc.isOnline === true,
+    isOnTrip: doc.isOnTrip === true,
   };
 }
 

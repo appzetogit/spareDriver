@@ -1,5 +1,8 @@
 import { Driver } from '../models/driverModels/driver.model.js';
-import { markDriverOfflineLive } from './driverLocation.service.js';
+import {
+  markDriverOfflineLive,
+  listLiveFirebaseDriverIds,
+} from './driverLocation.service.js';
 
 /**
  * Periodic reconciliation of live map presence — not the driver's online toggle.
@@ -47,6 +50,7 @@ export async function sweepStalePresence() {
 
   const stale = await Driver.find({
     isOnline: true,
+    isOnTrip: { $ne: true },
     isDeleted: false,
     $or: [
       { lastFixAt: { $lt: staleBefore } },
@@ -65,9 +69,17 @@ export async function sweepStalePresence() {
 
   if (stale.length === 0) return { sweptCount: 0 };
 
-  const ids = stale.map((d) => d._id);
+  // Only touch drivers who still have an RTDB node. Idle-online drivers with
+  // a stale Mongo flag otherwise get "cleared" every minute forever — noisy
+  // logs, and a risk of racing a driver who just started a trip.
+  const liveIds = new Set(await listLiveFirebaseDriverIds());
+  const ids = stale
+    .map((d) => String(d._id))
+    .filter((id) => liveIds.has(id));
 
-  await Promise.allSettled(ids.map((id) => markDriverOfflineLive(String(id))));
+  if (ids.length === 0) return { sweptCount: 0 };
+
+  await Promise.allSettled(ids.map((id) => markDriverOfflineLive(id)));
 
   console.log(`[presenceSweeper] cleared live presence for ${ids.length} stale driver(s)`);
   return { sweptCount: ids.length };

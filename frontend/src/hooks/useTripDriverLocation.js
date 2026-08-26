@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { onValue, ref, off } from 'firebase/database';
 import { getRealtimeDb, isFirebaseConfigured } from '../config/firebase';
 import { ensureFirebaseAuth } from '../config/firebaseAuth';
+import { onAppResume } from '../utils/appResume';
+import useSocketStore from '../store/useSocketStore';
 import { useSocket, useSocketEvent } from './useSocket';
 import { C2S_EVENTS, S2C_EVENTS } from '../constants/socketEvents';
 
@@ -84,6 +86,7 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
   const [fix, setFix] = useState(null);
   const [source, setSource] = useState(null);
   const [now, setNow] = useState(() => Date.now());
+  const [resumeNonce, setResumeNonce] = useState(0);
   const latestRef = useRef(null);
   const { emit, isConnected } = useSocket();
 
@@ -99,6 +102,21 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
       emit(C2S_EVENTS.BOOKING_LEAVE, { bookingId });
     };
   }, [active, isConnected, bookingId, emit]);
+
+  // WebView freeze / lock screen does not unmount this hook, so a failed
+  // first Firebase sign-in (or a dropped socket) would otherwise sit forever.
+  // Resume re-mints the RTDB session and kicks Socket.IO immediately.
+  useEffect(() => {
+    if (!active) return undefined;
+    return onAppResume(() => {
+      setResumeNonce((n) => n + 1);
+      const { socket, isConnected: connected, connect } = useSocketStore.getState();
+      if (!connected) {
+        if (socket && !socket.connected) socket.connect();
+        else connect();
+      }
+    });
+  }, [active]);
 
   /* ---- Firebase: the primary channel ------------------------------ */
 
@@ -117,7 +135,18 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
     (async () => {
       // Rules require an identity carrying this bookingId. Without a session
       // the read is denied, and we fall through to the socket channel.
-      const authed = await ensureFirebaseAuth('user', { bookingId });
+      // Retry a couple of times: a 404/deploy race or a brief network blip
+      // must not leave the customer map stuck on the last pin.
+      let authed = false;
+      for (let attempt = 0; attempt < 3 && !cancelled && !authed; attempt += 1) {
+        authed = await ensureFirebaseAuth('user', {
+          bookingId,
+          force: attempt > 0,
+        });
+        if (!authed && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
+      }
       if (cancelled || !authed) return;
 
       const db = getRealtimeDb();
@@ -145,7 +174,7 @@ export function useTripDriverLocation(bookingId, { enabled = true } = {}) {
       cancelled = true;
       detach?.();
     };
-  }, [active, bookingId]);
+  }, [active, bookingId, resumeNonce]);
 
   /* ---- Socket: fallback ------------------------------------------- */
 

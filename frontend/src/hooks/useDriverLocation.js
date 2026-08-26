@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useSocket } from './useSocket';
 import { C2S_EVENTS } from '../constants/socketEvents';
+import api from '../utils/api';
 import {
   DRIVER_UI_FIRST_FIX_OPTIONS,
   DRIVER_WATCH_OPTIONS,
@@ -194,11 +195,17 @@ export function useDriverLocation({ enabled, publish = true }) {
 
     if (!isConnectedRef.current) {
       pendingPayloadRef.current = payload;
+      lastEmitRef.current = now;
+      hasFirstEmitRef.current = true;
       logGeo('driver location buffered (socket down)', {
         lat: payload.lat,
         lng: payload.lng,
         accuracy: payload.accuracy,
       });
+      // Socket dies as soon as the WebView backgrounds. Native is the real
+      // uploader, but while JS is still scheduled post over HTTP so a brief
+      // pause does not freeze the customer map.
+      api.post('/driver/location', { ...payload, capturedAt: Date.now() }).catch(() => {});
       return false;
     }
 

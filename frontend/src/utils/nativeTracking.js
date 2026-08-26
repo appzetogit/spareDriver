@@ -4,15 +4,19 @@
  * The web app decides *when* to track — it is what knows whether the driver is
  * online and whether a trip is running. Native decides *how*, because only it
  * can keep a GPS stream alive once the app leaves the foreground (lock screen,
- * Google Maps, another app).
+ * Google Maps, another app). Browser `watchPosition` dies the moment the
+ * WebView is frozen; never rely on it for an in-progress trip.
  *
  * Call order, matching what the wrapper injects as `window.LocationBridge`:
  *
  *   online          → startTracking('idle')     (or CustomEvent 'driverOnline')
  *   accept / start  → startTracking('onTrip')   (or CustomEvent 'startTrip')
- *   Navigate        → openNavigation(dest)      (starts high-accuracy tracking)
+ *   Navigate        → startTracking('onTrip') THEN openNavigation(dest)
  *   trip complete   → startTracking('idle')
  *   offline / logout → stopTracking()
+ *
+ * `stopTracking` must NOT run on WebView pause/unmount. Android will treat
+ * that as "the ride is over" and kill the foreground service.
  *
  * In a plain browser every call here is a no-op returning `null`, and the
  * caller falls back to `navigator.geolocation`. Nothing needs a UA sniff.
@@ -63,19 +67,18 @@ function dispatchWindowEvent(name, detail) {
 
 /**
  * Flutter may listen to CustomEvents instead of LocationBridge methods.
- * Only fire on a real transition so token-refresh re-aims don't look like
- * a fresh go-online / trip-start to native.
+ * Re-fires on `force` so a Navigate / pagehide can re-assert the service
+ * even when we already think we are in that mode.
  */
-function emitModeEvents(mode) {
-  if (mode === lastIssuedMode) return;
-  const prev = lastIssuedMode;
+function emitModeEvents(mode, force = false) {
+  if (!force && mode === lastIssuedMode) return;
   lastIssuedMode = mode;
 
   if (mode === TRACKING_MODE.ON_TRIP) {
     dispatchWindowEvent('startTrip', { mode });
     return;
   }
-  if (mode === TRACKING_MODE.IDLE && prev !== TRACKING_MODE.ON_TRIP) {
+  if (mode === TRACKING_MODE.IDLE) {
     dispatchWindowEvent('driverOnline', { mode });
   }
 }
@@ -101,17 +104,31 @@ async function invokeNative(name, ...args) {
 }
 
 /**
+ * Whether native accepted a startTracking call.
+ *
+ * Wrapper versions return `{ tracking: true }`, `true`, a status object, or
+ * void. Only an explicit refusal means we should fall back to the browser
+ * watch — which cannot survive backgrounding.
+ */
+export function nativeTrackingStarted(result) {
+  if (result === false) return false;
+  if (result && typeof result === 'object' && result.tracking === false) return false;
+  return hasNativeTracking();
+}
+
+/**
  * Start (or re-aim) background tracking.
  *
  * @param {'onTrip'|'idle'} mode
+ * @param {{ forceEvent?: boolean }} [opts]
  * @returns {Promise<null | { tracking: boolean, mode: string, failure: string }>}
  *   `null` outside the wrapper. Inside it, `tracking: false` means native
  *   refused — usually a permission the driver has to grant — and the caller
  *   should keep the browser watch running rather than assume coverage.
  */
-export function startNativeTracking(mode = TRACKING_MODE.IDLE) {
+export function startNativeTracking(mode = TRACKING_MODE.IDLE, opts = {}) {
   const next = mode === TRACKING_MODE.ON_TRIP ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
-  emitModeEvents(next);
+  emitModeEvents(next, Boolean(opts.forceEvent));
   return invokeNative('startTracking', next);
 }
 
@@ -142,17 +159,26 @@ export function serializeNavDestination(destination) {
  * Open Google Maps via the Flutter wrapper so background GPS keeps running
  * while the driver is in another app.
  *
+ * Tracking is started *before* the activity switch. Awaiting openNavigation
+ * first backgrounds the WebView and the startTracking call never runs.
+ *
  * @returns {Promise<boolean>} true when native accepted the request
  */
 export async function openNativeNavigation(destination) {
   const dest = serializeNavDestination(destination);
   if (!dest) return false;
 
+  const startPromise = startNativeTracking(TRACKING_MODE.ON_TRIP, { forceEvent: true });
+  // Give Flutter a beat to promote the foreground service before Maps takes over.
+  await Promise.race([
+    startPromise,
+    new Promise((resolve) => setTimeout(resolve, 300)),
+  ]);
+
   const loc = locationBridge();
   if (typeof loc?.openNavigation === 'function') {
     try {
       await loc.openNavigation(dest);
-      void startNativeTracking(TRACKING_MODE.ON_TRIP);
       return true;
     } catch (err) {
       if (import.meta.env.DEV) console.warn('[nativeTracking] LocationBridge.openNavigation failed', err);
@@ -160,9 +186,6 @@ export async function openNativeNavigation(destination) {
   }
 
   const viaHandler = await invokeNative('openNavigation', dest);
-  // Always ask for on-trip cadence — even if Maps is opened by the web
-  // fallback, native still has to upload while the WebView is backgrounded.
-  void startNativeTracking(TRACKING_MODE.ON_TRIP);
   return viaHandler != null;
 }
 

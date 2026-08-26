@@ -10,6 +10,8 @@ import authRoutes from './routes/user.routes.js';
 import webhookRoutes from './routes/webhook.route.js';
 import sosRoutes from './routes/sos.route.js';
 import supportRoutes from './routes/support.route.js';
+import { protectUser } from './middlewares/authMiddleware.js';
+import { getUserFirebaseToken } from './controllers/firebaseAuth.controller.js';
 
 // Dev-only routes — imported lazily so they are fully tree-shaken in production.
 const loadDevRoutes = () => import('./routes/dev.route.js').then((m) => m.default);
@@ -29,6 +31,9 @@ app.use(express.json({ limit: '16kb' }));
 app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 
 app.use('/api/v1/auth', authRoutes);
+// Alias: native/Flutter customers call `/api/v1/user/firebase-token`.
+// Canonical path is `/api/v1/auth/firebase-token` (user router lives under /auth).
+app.get('/api/v1/user/firebase-token', protectUser, getUserFirebaseToken);
 app.use('/api/v1/common', commonRoutes);
 app.use('/api/v1/driver', driverRoutes);
 app.use('/api/v1/admin', adminRoutes);

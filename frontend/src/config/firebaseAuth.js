@@ -17,7 +17,8 @@ import api from '../utils/api';
  */
 
 const ENDPOINT = {
-  user: '/user/firebase-token',
+  // Customer routes are mounted at `/api/v1/auth`, not `/api/v1/user`.
+  user: '/auth/firebase-token',
   driver: '/driver/firebase-token',
   admin: '/admin/firebase-token',
 };

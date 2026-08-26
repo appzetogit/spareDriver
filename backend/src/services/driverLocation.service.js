@@ -472,6 +472,10 @@ function validDriverIds(ids) {
   return out;
 }
 
+export async function listLiveFirebaseDriverIds() {
+  return listFirebaseDriverIds();
+}
+
 async function listFirebaseDriverIds() {
   const rtdb = getRtdb();
   if (!rtdb) return [];

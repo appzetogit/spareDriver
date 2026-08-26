@@ -41,8 +41,9 @@ Deploying these rules **breaks any client that reads RTDB anonymously.** That
 is the point — it is what closes the leak — but it means the web app must ship
 the matching change first (or at the same time):
 
-1. Web app calls `GET /api/v1/user/firebase-token` (or the driver / admin
-   equivalent) and passes the result to `signInWithCustomToken`.
+1. Web app calls `GET /api/v1/auth/firebase-token` (or `/api/v1/driver/firebase-token`
+   / `/api/v1/admin/firebase-token`). `GET /api/v1/user/firebase-token` is kept as
+   an alias for native clients. Pass the result to `signInWithCustomToken`.
 2. Customer surfaces read `/trips/{bookingId}/driver`, not `/drivers`.
 
 If you deploy rules before the web app, customer maps go blank. If you deploy

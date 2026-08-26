@@ -64,6 +64,18 @@ export function attachDriverSocketHandlers(socket) {
   // Any reconnect = cancel a pending offline sweep
   clearOfflineTimer(driverId);
 
+  // Socket drop is normal when the driver backgrounds the app. Native GPS
+  // keeps uploading, but the live status node can lag until the next fix.
+  // Re-mirror online presence as soon as they are reachable again.
+  Driver.findById(driverId)
+    .select('isOnline')
+    .lean()
+    .then((driver) => {
+      if (driver?.isOnline) return markDriverOnlineLive(driverId);
+      return null;
+    })
+    .catch(() => {});
+
   socket.on(C2S_EVENTS.DRIVER_LOCATION_UPDATE, async (payload, ack) => {
     try {
       if (isThrottled(driverId)) {

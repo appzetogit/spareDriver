@@ -9,6 +9,7 @@ import {
   getNativeLastLocation,
   hasLocationBridge,
   hasNativeTracking,
+  nativeTrackingStarted,
   nativeTrackingStatus,
   startNativeTracking,
   stopNativeTracking,
@@ -70,12 +71,21 @@ const ON_TRIP_STATUSES = new Set(
  */
 export function DriverLocationBridge() {
   const authOnline = useDriverAuthStore((s) => s.driver?.isOnline === true);
+  const authOnTrip = useDriverAuthStore((s) => s.driver?.isOnTrip === true);
   const onlineEntry = useDriverOnlineStore((s) => s.entries[ONLINE_CACHE_KEY]);
   const storeOnline = onlineEntry?.data?.isOnline === true;
   const bookingStatus = useDriverActiveTripStore((s) => s.booking?.status);
-  const onTrip = Boolean(bookingStatus && ON_TRIP_STATUSES.has(bookingStatus));
+  const onTrip = Boolean(
+    authOnTrip || (bookingStatus && ON_TRIP_STATUSES.has(bookingStatus)),
+  );
 
   const shouldTrack = authOnline || storeOnline || onTrip;
+  // First paint / WebView remount often has empty stores. Stopping native
+  // here would kill the foreground service the moment the driver opens Maps.
+  const driverOnlineFlag = useDriverAuthStore((s) => s.driver?.isOnline);
+  const trackingKnown = Boolean(
+    onlineEntry?.isFetched || driverOnlineFlag === true || driverOnlineFlag === false || onTrip,
+  );
 
   /** True once native has confirmed it is doing the tracking. */
   const [nativeTracking, setNativeTracking] = useState(false);
@@ -136,6 +146,13 @@ export function DriverLocationBridge() {
     let cancelled = false;
 
     if (!shouldTrack) {
+      // Unknown / still hydrating: do NOT stop. A remount while Maps is
+      // open used to send stopTracking and kill background GPS.
+      if (!trackingKnown) {
+        return () => {
+          cancelled = true;
+        };
+      }
       stopNativeTracking().finally(() => {
         if (!cancelled) setNativeTracking(false);
       });
@@ -149,7 +166,7 @@ export function DriverLocationBridge() {
     const mode = onTrip ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
     startNativeTracking(mode).then(async (result) => {
       if (cancelled) return;
-      const tracking = result?.tracking === true;
+      const tracking = nativeTrackingStarted(result);
       setNativeTracking(tracking);
       if (!tracking) return;
       const fromStart = coordsFromNativePayload(result);
@@ -166,15 +183,30 @@ export function DriverLocationBridge() {
     return () => {
       cancelled = true;
     };
-  }, [shouldTrack, onTrip, syncNonce]);
+  }, [shouldTrack, onTrip, syncNonce, trackingKnown]);
 
-  // Leaving the driver area entirely: stand native tracking down rather than
-  // leave a foreground service running with nothing watching it.
+  // Last JS that still runs as the WebView freezes: re-assert the native
+  // service so Flutter does not treat pause as stop.
   useEffect(() => {
-    return () => {
-      if (hasNativeTracking()) stopNativeTracking();
+    if (!shouldTrack || !hasNativeTracking()) return undefined;
+    const mode = onTrip ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
+    const keepAlive = () => {
+      void startNativeTracking(mode, { forceEvent: true });
     };
-  }, []);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') keepAlive();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', keepAlive);
+    document.addEventListener('freeze', keepAlive);
+    window.addEventListener('freeze', keepAlive);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', keepAlive);
+      document.removeEventListener('freeze', keepAlive);
+      window.removeEventListener('freeze', keepAlive);
+    };
+  }, [shouldTrack, onTrip]);
 
   // Native uploads in the background. The trip screens still need a local
   // fix (map + 100 m arrival gate), so keep the browser watch on-trip and
