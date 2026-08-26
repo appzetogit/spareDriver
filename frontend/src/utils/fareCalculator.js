@@ -508,5 +508,30 @@ export function calculateOutstationFareV2({
   };
 }
 
+/**
+ * Mirror of backend `bookingExtension.service.js#computeExtensionDelta`
+ * tax layers. Used so the extend-ride time picker shows the same
+ * rupees the OTP / wallet debit will lock in.
+ *
+ * Does not include unpaid overtime — callers add that on top.
+ */
+export function applyExtensionPlatformLayers(subtotal, fareBreakdown = {}) {
+  const amount = Number(subtotal) || 0;
+  const type =
+    fareBreakdown?.platformFeeType === 'flat' ? 'flat' : 'percentage';
+  const feeAmount =
+    Number(
+      fareBreakdown?.platformFeeAmount
+        ?? (type === 'percentage' ? fareBreakdown?.serviceChargePercent : 0),
+    ) || 0;
+  const gstPercent = Number(fareBreakdown?.gstPercent) || 0;
+  const serviceCharge =
+    type === 'flat'
+      ? round2(Math.max(0, feeAmount))
+      : round2((amount * feeAmount) / 100);
+  const gst = ((amount + serviceCharge) * gstPercent) / 100;
+  return round2(amount + serviceCharge + gst);
+}
+
 export const formatCurrency = (n) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;

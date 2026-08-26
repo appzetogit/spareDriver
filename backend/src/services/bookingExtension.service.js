@@ -242,8 +242,10 @@ function outstationBumpFromExtension(ext) {
  *
  *   1. Validates the booking is currently started and the user owns it.
  *   2. Computes the incremental fare as
- *        delta = additionalHours × pricing.extraHourCharge
- *      then layers on the same service charge + GST factors the original
+ *        delta = additionalHours × extraHourChargeRate
+ *      preferring the booking fare snapshot (same rate the customer
+ *      agreed at booking), then live ServicePricing.extraHourCharge.
+ *      Then layers on the same service charge + GST factors the original
  *      fare used (we re-derive them from the snapshot rather than re-querying
  *      pricing to keep behaviour deterministic during the trip).
  *   3. Appends an entry to `booking.extensions[]` with the agreed fareDelta.
@@ -313,6 +315,24 @@ function parseExtensionMinutes(body = {}) {
     );
   }
   return minutes;
+}
+
+/**
+ * ₹/hr for hourly/scheduled extensions — prefer the snapshot rate the
+ * customer saw at booking. Never fall back to packagePrice / hours
+ * (that is the slab average, not extra-hour pricing).
+ */
+function resolveHourlyExtraHourRate(pricing, fareBreakdown) {
+  const fromSnapshot = Number(fareBreakdown?.extraHourChargeRate) || 0;
+  if (fromSnapshot > 0) return fromSnapshot;
+
+  const extraHours = Number(fareBreakdown?.extraHours) || 0;
+  const extraTotal = Number(fareBreakdown?.extraHourCharge) || 0;
+  if (extraHours > 0 && extraTotal > 0) {
+    return round2(extraTotal / extraHours);
+  }
+
+  return Number(pricing?.extraHourCharge) || 0;
 }
 
 /** ₹/hr for outstation hour-slice extensions — prefer booking snapshot. */
@@ -938,7 +958,7 @@ function computeExtensionDelta(pricing, fareBreakdown, additionalHours, rateOver
   const extraRate =
     rateOverride != null && Number(rateOverride) > 0
       ? Number(rateOverride)
-      : pricing?.extraHourCharge || 0;
+      : resolveHourlyExtraHourRate(pricing, fareBreakdown);
   if (!extraRate || extraRate <= 0) {
     throw new ApiError(400, 'Extra-hour pricing is not configured for this service');
   }
@@ -1560,11 +1580,18 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
       usedSnapshotRates: true,
     };
   } else {
+    const hourlyRate = resolveHourlyExtraHourRate(pricing, fareBreakdown);
     ({ fareDelta, breakdown } = computeExtensionDelta(
       pricing,
       fareBreakdown,
       additionalHours,
+      hourlyRate,
     ));
+    breakdown = {
+      ...breakdown,
+      extensionUnit: 'hours',
+      usedSnapshotRates: true,
+    };
   }
 
   await tickOvertimeQuote(booking._id);

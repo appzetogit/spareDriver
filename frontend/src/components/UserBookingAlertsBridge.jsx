@@ -392,6 +392,8 @@ export function UserBookingAlertsBridge() {
         onClearRejection={() => clearExtensionRejection()}
         onWalletRefresh={() => fetchWallet().catch(() => {})}
         extraHourRate={isOutstation ? outstationHourlyRate : extraHourRate}
+        fareBreakdown={booking?.fareSnapshot?.breakdown || null}
+        unpaidOvertimeRupees={unpaidOvertimeRupeesFromBooking(booking)}
         walletBalance={
           wallet?.availableRupees != null
             ? Number(wallet.availableRupees)
@@ -425,15 +427,26 @@ export function UserBookingAlertsBridge() {
   );
 }
 
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 function extraHourRateFromBooking(booking) {
   const bd = booking?.fareSnapshot?.breakdown || {};
-  if (bd.extraHourCharge && bd.extraHours) {
-    return Math.round(bd.extraHourCharge / bd.extraHours);
-  }
-  if (bd.packagePrice && booking?.hourly?.durationHours) {
-    return Math.round(bd.packagePrice / booking.hourly.durationHours);
+  const snapshotRate = Number(bd.extraHourChargeRate) || 0;
+  if (snapshotRate > 0) return round2(snapshotRate);
+
+  const extraHours = Number(bd.extraHours) || 0;
+  const extraTotal = Number(bd.extraHourCharge) || 0;
+  if (extraHours > 0 && extraTotal > 0) {
+    return round2(extraTotal / extraHours);
   }
   return 0;
+}
+
+function unpaidOvertimeRupeesFromBooking(booking) {
+  const ot = booking?.overtime;
+  if (!ot?.required) return 0;
+  if (ot.paymentStatus === 'paid') return 0;
+  return round2(Number(ot.amountRupees) || 0);
 }
 
 function outstationHourlyRateFromBooking(booking) {

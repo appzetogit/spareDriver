@@ -16,6 +16,7 @@ import {
   formatExtensionHours,
   HOURLY_EXTENSION_PRESETS_MINUTES,
 } from '../../../../utils/formatters';
+import { applyExtensionPlatformLayers } from '../../../../utils/fareCalculator';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -44,6 +45,8 @@ const ExtendRideModal = ({
   extensionRejection = null,
   onClearRejection,
   extraHourRate = 0,
+  fareBreakdown = null,
+  unpaidOvertimeRupees = 0,
   walletBalance = 0,
   onWalletRefresh,
   remainingMinutes = 0,
@@ -152,10 +155,14 @@ const ExtendRideModal = ({
     setStep('dismissed');
   }, [open, extensionRejection, extension?._id, step, onClearRejection]);
 
-  const previewCost = useMemo(
-    () => round2(Math.max(0, hours) * unitRate),
-    [hours, unitRate],
-  );
+  const previewCost = useMemo(() => {
+    const subtotal = round2(Math.max(0, hours) * unitRate);
+    const extensionFare = applyExtensionPlatformLayers(
+      subtotal,
+      fareBreakdown || {},
+    );
+    return round2(extensionFare + Math.max(0, Number(unpaidOvertimeRupees) || 0));
+  }, [hours, unitRate, fareBreakdown, unpaidOvertimeRupees]);
 
   const lockedFareDelta = round2(extension?.fareDelta || 0);
   const walletShortBy = round2(
@@ -423,6 +430,7 @@ const ExtendRideModal = ({
                 busy={busy}
                 previewCost={previewCost}
                 extraHourRate={unitRate}
+                unpaidOvertimeRupees={unpaidOvertimeRupees}
                 unitLabel={unitLabel}
                 unitLabelLong={unitLabelLong}
                 isDays={isDays}
@@ -682,11 +690,20 @@ function HoursStep({
   busy,
   previewCost,
   extraHourRate,
+  unpaidOvertimeRupees = 0,
   unitLabel = 'h',
   unitLabelLong = 'hours',
   isDays = false,
   presets = [],
 }) {
+  const overtimeAmt = round2(Math.max(0, Number(unpaidOvertimeRupees) || 0));
+  const rateHint = isDays
+    ? `~₹${round2(extraHourRate).toFixed(2)}/day + taxes`
+    : `~₹${round2(extraHourRate).toFixed(2)}/hr + taxes`;
+  const overdueHint =
+    overtimeAmt > 0
+      ? ` Includes ₹${overtimeAmt.toFixed(2)} overdue time.`
+      : '';
   if (!isDays) {
     return (
       <>
@@ -720,11 +737,11 @@ function HoursStep({
         </div>
 
         <div className="mt-4 flex items-center justify-between text-sm">
-          <span className="text-text-muted">Approx extra fare</span>
+          <span className="text-text-muted">Extra fare</span>
           <span className="text-base font-bold text-text">₹{round2(previewCost).toFixed(2)}</span>
         </div>
         <p className="text-[11px] text-text-muted mt-1 leading-snug">
-          ~₹{round2(extraHourRate).toFixed(2)}/hr (final amount shown after your driver shares the code).
+          {rateHint}.{overdueHint} Same amount is locked when your driver shares the code.
         </p>
       </>
     );
@@ -765,11 +782,11 @@ function HoursStep({
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-text-muted">Approx extra fare</span>
+        <span className="text-text-muted">Extra fare</span>
           <span className="text-base font-bold text-text">₹{round2(previewCost).toFixed(2)}</span>
         </div>
         <p className="text-[11px] text-text-muted mt-1 leading-snug">
-          ~₹{round2(extraHourRate).toFixed(2)}/day (final amount shown after your driver shares the code).
+          {rateHint}.{overdueHint} Same amount is locked when your driver shares the code.
       </p>
     </>
   );
