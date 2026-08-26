@@ -72,7 +72,11 @@ export function attachDriverSocketHandlers(socket) {
       }
 
       const { lat, lng, accuracy, heading, speed } = payload || {};
-      const result = await recordDriverLocation(driverId, { lat, lng, accuracy, heading, speed });
+      const result = await recordDriverLocation(
+        driverId,
+        { lat, lng, accuracy, heading, speed },
+        { source: 'socket' },
+      );
 
       if (!result.accepted) {
         if (typeof ack === 'function') ack({ ok: false, reason: result.reason });

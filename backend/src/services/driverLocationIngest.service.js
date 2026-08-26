@@ -44,6 +44,10 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
   const { fixes, rejected, duplicates } = normalizeFixes(rawFixes, Date.now());
 
   if (fixes.length === 0) {
+    console.log(
+      `[driverLocation] native-skip driver=${driverId} reason=empty-batch` +
+        ` rejected=${rejected} duplicates=${duplicates} raw=${Array.isArray(rawFixes) ? rawFixes.length : 0}`,
+    );
     const driver = await Driver.findById(driverId).select(DRIVER_STATE_FIELDS).lean();
     return emptyResult({ driver, rejected, duplicates });
   }
@@ -69,6 +73,11 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
     .lean();
 
   if (!previous) {
+    console.log(
+      `[driverLocation] native-skip driver=${driverId} reason=deduped` +
+        ` fixes=${fixes.length} rejected=${rejected} duplicates=${duplicates}` +
+        ` newest=${newestDate.toISOString()}`,
+    );
     const current = await Driver.findById(driverId).select(DRIVER_STATE_FIELDS).lean();
     return emptyResult({ driver: current, rejected, duplicates, deduped: fixes.length });
   }
@@ -81,6 +90,10 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
   // batch was in flight. Keeping the watermark is right, but writing to
   // Firebase would resurrect the presence node `markDriverOfflineLive` cleared.
   if (directive.stopTracking) {
+    console.log(
+      `[driverLocation] native-skip driver=${driverId} reason=stopTracking` +
+        ` fixes=${fixes.length} newest=${newestDate.toISOString()}`,
+    );
     return {
       accepted: 0,
       deduped: fixes.length - fresh.length,
@@ -91,14 +104,18 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
     };
   }
 
-  const result = await recordDriverLocation(driverId, {
-    lat: newest.lat,
-    lng: newest.lng,
-    accuracy: newest.accuracy,
-    heading: newest.heading,
-    speed: newest.speed,
-    capturedAt: newest.capturedAt,
-  });
+  const result = await recordDriverLocation(
+    driverId,
+    {
+      lat: newest.lat,
+      lng: newest.lng,
+      accuracy: newest.accuracy,
+      heading: newest.heading,
+      speed: newest.speed,
+      capturedAt: newest.capturedAt,
+    },
+    { source: 'native' },
+  );
 
   return {
     accepted: fresh.length,

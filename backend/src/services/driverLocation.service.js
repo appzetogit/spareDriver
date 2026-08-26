@@ -61,12 +61,58 @@ const KEY = {
 const ONLINE_SINCE_TTL_MS = 24 * 60 * 60 * 1000;
 const STATUS_PRINT_TTL_MS = 10 * 60_000;
 
+/** Last accepted lat/lng per driver — used only to log real movement. */
+const lastLoggedCoords = new Map();
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
 function isFiniteNum(n) {
   return typeof n === 'number' && Number.isFinite(n);
+}
+
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+function logDriverLocationFix(driverId, {
+  source,
+  lat,
+  lng,
+  accuracy,
+  heading,
+  speed,
+  tripStatus,
+  bookingId,
+  tripPublished,
+  firebase,
+}) {
+  const key = String(driverId);
+  const prev = lastLoggedCoords.get(key);
+  const movedM = prev ? haversineMeters(prev, { lat, lng }) : null;
+  lastLoggedCoords.set(key, { lat, lng });
+
+  const movedLabel = movedM == null ? 'first' : `${movedM.toFixed(1)}m`;
+  console.log(
+    `[driverLocation] ${source} driver=${key}` +
+      ` lat=${lat.toFixed(6)} lng=${lng.toFixed(6)}` +
+      ` moved=${movedLabel}` +
+      ` acc=${isFiniteNum(accuracy) ? Math.round(accuracy) : '-'}` +
+      ` heading=${isFiniteNum(heading) ? Math.round(heading) : '-'}` +
+      ` speed=${isFiniteNum(speed) ? speed.toFixed(1) : '-'}` +
+      ` trip=${tripStatus || 'none'}` +
+      ` booking=${bookingId || '-'}` +
+      ` published=${Boolean(tripPublished)}` +
+      ` firebase=${Boolean(firebase)}`,
+  );
 }
 
 function validateCoords({ lat, lng }) {
@@ -282,9 +328,11 @@ async function snapshotMongoLocation(driverId, { lat, lng, heading, speed, at })
  *
  * @param {string} driverId
  * @param {{ lat:number; lng:number; accuracy?:number; heading?:number; speed?:number; capturedAt?:number }} coords
+ * @param {{ source?: 'native'|'socket' }} [opts]
+ *   `native` = Flutter background HTTP batch; `socket` = in-app WebView watch.
  * @returns {{ accepted: boolean; firebase: boolean; mongoSnapshot: boolean; trip: boolean; reason?: string }}
  */
-export async function recordDriverLocation(driverId, coords) {
+export async function recordDriverLocation(driverId, coords, { source = 'unknown' } = {}) {
   if (!driverId) return { accepted: false, firebase: false, mongoSnapshot: false, trip: false, reason: 'no driverId' };
   if (!validateCoords(coords)) {
     return { accepted: false, firebase: false, mongoSnapshot: false, trip: false, reason: 'invalid coordinates' };
@@ -354,6 +402,19 @@ export async function recordDriverLocation(driverId, coords) {
   } catch (err) {
     console.warn('[driverLocation] Mongo snapshot failed:', err.message);
   }
+
+  logDriverLocationFix(driverId, {
+    source,
+    lat,
+    lng,
+    accuracy,
+    heading,
+    speed,
+    tripStatus: activeTrip?.status || null,
+    bookingId: activeTrip?.bookingId || null,
+    tripPublished: tripOk,
+    firebase: firebaseOk,
+  });
 
   return { accepted: true, firebase: firebaseOk, mongoSnapshot, trip: tripOk };
 }
