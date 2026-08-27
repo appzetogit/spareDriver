@@ -20,6 +20,7 @@ import {
   emitToDriver,
 } from '../utils/socketEmitters.js';
 import { getServicePricingByTypeService } from './pricing.service.js';
+import { notifyDriverExtensionOtp } from '../utils/notificationDispatch.js';
 import {
   computeOutstationTripMetrics,
   assertOutstationDaysWithinLimits,
@@ -1637,7 +1638,7 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
   // service charge, GST, platform commission — which the driver app
   // shouldn't display). They only see what they will earn.
   if (booking.driverId) {
-    emitToDriver(booking.driverId, S2C_EVENTS.BOOKING_EXTENSION_OTP, {
+    const otpPayload = {
       bookingId: String(booking._id),
       extensionId: String(ext._id),
       otp: otpCode,
@@ -1646,7 +1647,17 @@ export async function initiateExtensionService(userId, bookingId, body = {}) {
       serviceType: booking.serviceType,
       driverEarning: round2(Number(breakdown?.driverEarning) || 0),
       expiresAt,
-    });
+    };
+    emitToDriver(booking.driverId, S2C_EVENTS.BOOKING_EXTENSION_OTP, otpPayload);
+    // FCM so the driver still sees the code when the app is backgrounded
+    // or they are not on the trip screen (socket-only was easy to miss).
+    notifyDriverExtensionOtp(booking.driverId, booking, {
+      extensionId: ext._id,
+      otp: otpCode,
+      additionalHours,
+      additionalDays,
+      expiresAt,
+    }).catch(() => null);
   }
   // Admin audit trail (with the code so support can troubleshoot live).
   emitToAdmins(S2C_EVENTS.BOOKING_EXTENSION_OTP, {

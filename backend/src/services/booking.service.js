@@ -341,10 +341,16 @@ export function sanitizeBookingForDriver(booking) {
         requestedAt: ext.requestedAt || null,
         respondedAt: ext.respondedAt || null,
         paidAt: ext.paidAt || null,
-        // OTP block is presence-only — the code itself stays out of the
-        // sanitized view (sockets carry it separately when needed).
+        // Driver reads the extend OTP aloud to the customer. Include
+        // `code` while the handshake is still `pending_otp` so the
+        // banner can hydrate if they missed the live socket (other
+        // screen, backgrounded app, or a refresh). Ride-start OTP
+        // stays stripped — that one is the customer's to share.
         otp: ext.otp
           ? {
+              ...(ext.status === 'pending_otp' && ext.otp.code
+                ? { code: ext.otp.code }
+                : {}),
               generatedAt: ext.otp.generatedAt || null,
               verifiedAt: ext.otp.verifiedAt || null,
               expiresAt: ext.otp.expiresAt || null,

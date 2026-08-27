@@ -36,12 +36,14 @@ import Button from '../../../../components/Button';
 import Avatar from '../../../../components/Avatar';
 import TripTrackingMap from '../../../../components/maps/TripTrackingMap';
 import StartRideOtpSheet from '../components/StartRideOtpSheet';
+import ExtensionOtpBanner from '../components/ExtensionOtpBanner';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import { useSocket, useSocketEvent } from '../../../../hooks/useSocket';
 import { useDriverLocationStatus } from '../../../../hooks/useDriverLocation';
 import useDriverActiveTripStore, {
   invalidateDriverDashboardCaches,
 } from '../../../../store/driver/useDriverActiveTripStore';
+import useDriverExtensionOtpStore from '../../../../store/driver/useDriverExtensionOtpStore';
 import useDriverIncomingOfferStore from '../../../../store/driver/useDriverIncomingOfferStore';
 import { S2C_EVENTS, C2S_EVENTS } from '../../../../constants/socketEvents';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
@@ -143,6 +145,8 @@ const DriverActiveTripPage = () => {
   const applyUpdate = useDriverActiveTripStore((s) => s.applyUpdate);
   const clear = useDriverActiveTripStore((s) => s.clear);
   const dismissExtension = useDriverActiveTripStore((s) => s.dismissExtension);
+  const extensionOtpBanner = useDriverExtensionOtpStore((s) => s.banner);
+  const clearExtensionOtp = useDriverExtensionOtpStore((s) => s.clear);
 
   // When the trip completes/cancels, also clear the incoming-offer store's
   // `activeBooking` mirror so the rest of the driver app sees a clean slate.
@@ -182,81 +186,6 @@ const DriverActiveTripPage = () => {
       }
     }
   });
-
-  // Extension OTP banner — the customer hit "extend" in their app. We
-  // show them the 4-digit code so they can read it back to the customer
-  // (mirrors the ride-start OTP flow). Local state because this is
-  // ephemeral, transient UI that fades when the customer pays.
-  const [extensionOtpBanner, setExtensionOtpBanner] = useState(null);
-  useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_OTP, (payload) => {
-    if (!payload?.otp) return;
-    setExtensionOtpBanner({
-      bookingId: payload.bookingId,
-      extensionId: payload.extensionId,
-      otp: String(payload.otp),
-      additionalHours: payload.additionalHours,
-      additionalDays: Number(payload.additionalDays) || 0,
-      serviceType: payload.serviceType || null,
-      driverEarning: Number(payload.driverEarning) || 0,
-      expiresAt: payload.expiresAt
-        ? new Date(payload.expiresAt).getTime()
-        : Date.now() + 5 * 60 * 1000,
-      stage: 'otp', // 'otp' → 'verified' → 'paid'
-    });
-  });
-
-  // Lifecycle updates for an in-flight extension:
-  //   - 'otp_verified' → customer typed the code; flip banner to amber
-  //     "waiting for payment".
-  //   - 'cancelled'    → customer abandoned the extension (closed the
-  //     modal + chose "Change hours" or the OTP window expired). We
-  //     drop the banner immediately so the driver isn't stuck reading
-  //     a stale code that no longer works.
-  useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_RESOLVED, (payload) => {
-    if (!payload) return;
-    if (payload.stage === 'otp_verified') {
-      setExtensionOtpBanner((b) =>
-        b && String(b.extensionId) === String(payload.extensionId)
-          ? { ...b, stage: 'verified' }
-          : b,
-      );
-      return;
-    }
-    if (payload.stage === 'cancelled' || payload.stage === 'dismissed_by_driver') {
-      // 'cancelled'           → customer abandoned via "Change hours".
-      // 'dismissed_by_driver' → this driver (possibly on another
-      //                          device) hit Dismiss; echo clears
-      //                          the banner everywhere.
-      setExtensionOtpBanner((b) =>
-        b && String(b.extensionId) === String(payload.extensionId) ? null : b,
-      );
-    }
-  });
-
-  // Customer paid → mark banner as paid then drop it after a beat.
-  useSocketEvent(S2C_EVENTS.BOOKING_EXTENSION_PAID, (payload) => {
-    setExtensionOtpBanner((b) => {
-      if (!b || String(b.extensionId) !== String(payload?.extension?._id || '')) return b;
-      return { ...b, stage: 'paid' };
-    });
-    // Re-fetch booking so the driver UI gets the longer trip clock.
-    if (payload?.bookingId) {
-      fetchById(payload.bookingId).catch(() => { });
-    }
-    setTimeout(() => setExtensionOtpBanner(null), 2500);
-  });
-
-  // Auto-dismiss expired banners so a stale OTP doesn't linger.
-  useEffect(() => {
-    if (!extensionOtpBanner?.expiresAt) return undefined;
-    const ms = extensionOtpBanner.expiresAt - Date.now();
-    if (ms <= 0) {
-      setExtensionOtpBanner(null);
-      return undefined;
-    }
-    const t = setTimeout(() => setExtensionOtpBanner(null), ms);
-    return () => clearTimeout(t);
-  }, [extensionOtpBanner?.expiresAt]);
 
   // Join the booking room — same pattern as the user side. The driver
   // receives the same room broadcasts as the user, which is useful for
@@ -892,7 +821,9 @@ const DriverActiveTripPage = () => {
           )
         )}
 
-        {extensionOtpBanner && (
+        {extensionOtpBanner
+          && (!booking?._id || String(extensionOtpBanner.bookingId) === String(booking._id))
+          && (
           <ExtensionOtpBanner
             banner={extensionOtpBanner}
             onDismiss={async () => {
@@ -913,7 +844,7 @@ const DriverActiveTripPage = () => {
                   return;
                 }
               }
-              setExtensionOtpBanner(null);
+              clearExtensionOtp();
             }}
           />
         )}
@@ -1535,115 +1466,6 @@ function formatGraceRemaining(minutes) {
  *                       sized to cover exactly this many minutes).
  *   bufferRupees        Total buffer collected upfront, for display.
  */
-/**
- * Banner the driver sees while the customer is mid-way through the
- * extension handshake. Renders the OTP code prominently so it can be
- * read aloud, and updates as the customer verifies + pays.
- *
- *   stage 'otp'       → big code, "Read this out to the customer"
- *   stage 'verified'  → "Customer entered code, waiting for payment…"
- *   stage 'paid'      → "Extended by Xh — keep going!"
- */
-function ExtensionOtpBanner({ banner, onDismiss }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const expiresInSec = Math.max(
-    0,
-    Math.ceil((banner.expiresAt - now) / 1000),
-  );
-  const mm = Math.floor(expiresInSec / 60)
-    .toString()
-    .padStart(1, '0');
-  const ss = (expiresInSec % 60).toString().padStart(2, '0');
-
-  const days = Number(banner.additionalDays) || 0;
-  const amountLabel = days > 0
-    ? `+${days}d`
-    : `+${formatExtensionHours(banner.additionalHours)}`;
-
-  if (banner.stage === 'paid') {
-    return (
-      <Card className="bg-emerald-50 border border-emerald-200">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-emerald-900">
-              Extension paid &middot; {amountLabel}
-            </p>
-            <p className="text-[12px] text-emerald-800">
-              You&rsquo;ll earn ₹{banner.driverEarning ?? 0} extra. Trip just got{' '}
-              {amountLabel.replace('+', '')} longer.
-            </p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  if (banner.stage === 'verified') {
-    return (
-      <Card className="bg-amber-50 border border-amber-200">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-amber-900">
-              Waiting for customer payment…
-            </p>
-            <p className="text-[12px] text-amber-800">
-              Code accepted. You&rsquo;ll earn ₹{banner.driverEarning ?? 0}{' '}
-              extra for {amountLabel}.
-            </p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="bg-gradient-to-br from-indigo-600 to-indigo-700 text-white border border-indigo-700/30">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wide text-white/70">
-            Customer wants to extend
-          </p>
-          <p className="text-sm font-bold mt-0.5">
-            {amountLabel} &middot; you&rsquo;ll earn ₹
-            {banner.driverEarning ?? 0}
-          </p>
-        </div>
-        <span className="text-[11px] font-medium text-white/80 bg-white/15 rounded-full px-2 py-0.5">
-          {mm}:{ss}
-        </span>
-      </div>
-      <div className="bg-white/10 rounded-2xl p-3 text-center">
-        <p className="text-[10px] uppercase tracking-wide text-white/70">
-          Read this code to the customer
-        </p>
-        <p className="text-3xl font-extrabold tracking-[0.4em] mt-1 select-all">
-          {banner.otp}
-        </p>
-      </div>
-      <p className="text-[11px] text-white/80 mt-2 leading-snug">
-        They&rsquo;ll type this in their app. Once verified, they pay from their wallet and your trip clock extends automatically.
-      </p>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="mt-2 w-full h-9 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold"
-      >
-        Dismiss
-      </button>
-    </Card>
-  );
-}
-
 function WaitingTimerCard({
   arrivedAt,
   freeMinutes,
