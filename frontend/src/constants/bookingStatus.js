@@ -81,7 +81,28 @@ export const BOOKING_PAYMENT_STATUS = Object.freeze({
   REFUNDED: 'refunded',
   PARTIAL_REFUND: 'partial_refund',
   FAILED: 'failed',
+  CANCELLED: 'cancelled',
 });
+
+/**
+ * Label for the payment badge. Unpaid cancelled bookings used to keep
+ * `pending` (or timeout `failed`) on the ledger — show `cancelled` so
+ * coming back after an abandoned checkout matches the trip status.
+ */
+export function displayBookingPaymentStatus(booking) {
+  const status = booking?.paymentStatus || '';
+  const settled = status === BOOKING_PAYMENT_STATUS.PAID
+    || status === BOOKING_PAYMENT_STATUS.REFUNDED
+    || status === BOOKING_PAYMENT_STATUS.PARTIAL_REFUND;
+  if (
+    booking?.status === BOOKING_STATUS.CANCELLED
+    && !settled
+    && Number(booking?.payment?.amountPaidRupees || 0) <= 0
+  ) {
+    return BOOKING_PAYMENT_STATUS.CANCELLED;
+  }
+  return status;
+}
 
 /**
  * Payment policy mirror — keep in sync with backend/src/constants/bookingStatus.js

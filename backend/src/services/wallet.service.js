@@ -73,8 +73,30 @@ export async function getWalletService(userId) {
   };
 }
 
+/** Razorpay orders expire; abandoned checkout rows should not stay pending. */
+const STALE_TOPUP_MS = 15 * 60 * 1000;
+
+export async function expireStalePendingTopups(userId) {
+  const cutoff = new Date(Date.now() - STALE_TOPUP_MS);
+  await WalletTransaction.updateMany(
+    {
+      userId,
+      source: WALLET_TXN_SOURCE.TOPUP,
+      status: WALLET_TXN_STATUS.PENDING,
+      createdAt: { $lte: cutoff },
+    },
+    {
+      $set: {
+        status: WALLET_TXN_STATUS.CANCELLED,
+        description: 'Wallet top-up cancelled — payment was not completed',
+      },
+    },
+  );
+}
+
 export async function listWalletTransactionsService(userId, { page = 1, limit = 20 } = {}) {
   if (!userId) throw new ApiError(400, 'userId is required');
+  await expireStalePendingTopups(userId);
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
   const safePage = Math.max(1, Number(page) || 1);
   const filter = { userId };
@@ -87,6 +109,32 @@ export async function listWalletTransactionsService(userId, { page = 1, limit = 
     WalletTransaction.countDocuments(filter),
   ]);
   return { transactions, total, page: safePage, limit: safeLimit };
+}
+
+/**
+ * User closed Razorpay without paying. Flip the matching PENDING top-up
+ * to cancelled so the ledger does not keep showing Pending.
+ */
+export async function cancelTopupOrderService(userId, orderId) {
+  if (!userId || !orderId) {
+    throw new ApiError(400, 'orderId is required');
+  }
+  const txn = await WalletTransaction.findOneAndUpdate(
+    {
+      userId,
+      source: WALLET_TXN_SOURCE.TOPUP,
+      'razorpay.orderId': String(orderId),
+      status: WALLET_TXN_STATUS.PENDING,
+    },
+    {
+      $set: {
+        status: WALLET_TXN_STATUS.CANCELLED,
+        description: 'Wallet top-up cancelled — payment was not completed',
+      },
+    },
+    { new: true },
+  );
+  return txn ? txn.toObject() : null;
 }
 
 /* ------------------------------------------------------------------ */

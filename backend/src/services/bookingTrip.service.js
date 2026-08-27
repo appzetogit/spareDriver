@@ -44,7 +44,7 @@ import {
 import { queueBookingInvoiceEmail } from './bookingInvoiceEmail.service.js';
 import { isTestOtp } from '../utils/otpService.js';
 import { resolveBookingSearchStartAt } from '../utils/bookingInbox.js';
-import { cancelPaymentTimeout } from './bookingPaymentTimeout.service.js';
+import { cancelPaymentTimeout, stampUnpaidPaymentCancelled } from './bookingPaymentTimeout.service.js';
 import { cancelScheduledBookingJobs } from './bookingScheduled.service.js';
 import {
   clearTripLocation,
@@ -1149,6 +1149,7 @@ async function terminateBookingByDriver(
   const userBreakdown = computeUserCancellation(booking, policy);
 
   booking.status = BOOKING_STATUS.CANCELLED;
+  stampUnpaidPaymentCancelled(booking);
   booking.cancellation = {
     reason:
       reason ||

@@ -187,6 +187,32 @@ const useUserWalletStore = create((set, get) => ({
     }
   },
 
+  /**
+   * User dismissed Razorpay. Mark the pending top-up cancelled so the
+   * ledger does not keep showing Pending.
+   */
+  async cancelTopup(orderId) {
+    if (!orderId) return null;
+    try {
+      const res = await api.post('/auth/wallet/topup/cancel', { orderId });
+      const transaction = res?.data?.data?.transaction;
+      if (transaction) {
+        set((state) => ({
+          transactions: state.transactions.map((tx) =>
+            tx._id === transaction._id
+              || tx.razorpay?.orderId === orderId
+              ? { ...tx, ...transaction }
+              : tx,
+          ),
+        }));
+      }
+      await get().fetchTransactions({ page: 1, limit: 20 }).catch(() => {});
+      return transaction;
+    } catch {
+      return null;
+    }
+  },
+
   reset() {
     walletInflight = null;
     set({

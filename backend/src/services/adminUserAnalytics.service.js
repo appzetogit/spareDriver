@@ -4,6 +4,7 @@ import Car from '../models/user/car.model.js';
 import Booking from '../models/booking.model.js';
 import UserSubscription from '../models/userSubscription.model.js';
 import WalletTransaction from '../models/walletTransaction.model.js';
+import { expireStalePendingTopups } from './wallet.service.js';
 import SupportTicket from '../models/supportTicket.model.js';
 import SosAlert from '../models/sosAlert.model.js';
 import Refund from '../models/refund.model.js';
@@ -76,6 +77,8 @@ export async function listAdminUserWalletTransactionsService(userId, query = {})
       { 'razorpay.orderId': { $regex: q, $options: 'i' } },
     ];
   }
+
+  await expireStalePendingTopups(userId);
 
   const [items, total] = await Promise.all([
     WalletTransaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(safeLimit).lean(),

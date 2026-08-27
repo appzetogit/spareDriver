@@ -529,6 +529,7 @@ const DevBookingTestPage = () => {
                       <option value="refunded">refunded</option>
                       <option value="partial_refund">partial_refund</option>
                       <option value="failed">failed</option>
+                      <option value="cancelled">cancelled</option>
                     </select>
                   </label>
                 </div>
