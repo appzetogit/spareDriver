@@ -44,7 +44,7 @@ messaging.onBackgroundMessage(async (payload) => {
     data,
     tag,
     renotify: Boolean(tag),
-    requireInteraction: kind === 'booking_offer' || kind === 'inbox_offer' || kind === 'extension_otp',
+    requireInteraction: kind === 'booking_offer' || kind === 'inbox_offer' || kind === 'order_assigned' || kind === 'extension_otp',
   };
   await self.registration.showNotification(title, options);
 });

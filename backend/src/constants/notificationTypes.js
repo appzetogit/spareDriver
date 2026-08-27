@@ -70,6 +70,10 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   BOOKING_OFFER_WITHDRAWN: 'booking_offer_withdrawn',
   BOOKING_CANCELLED: 'booking_cancelled',
   CUSTOMER_CANCELLED: 'customer_cancelled',
+  /**
+   * Driver assigned by admin / scheduled dispatch / emergency pool.
+   * Flutter rings on this kind (same as inbox_offer) and opens the trip.
+   */
   ORDER_ASSIGNED: 'order_assigned',
   EARNINGS_CREDITED: 'earnings_credited',
   TRIP_OVERTIME_STARTED: 'trip_overtime_started',
@@ -168,6 +172,7 @@ const NOTIFICATION_TYPE_LABELS = Object.freeze({
   [ADMIN_NOTIFICATION.NO_DRIVERS_FOUND]: 'No drivers',
   [DRIVER_NOTIFICATION.BOOKING_OFFER]: 'New request',
   [DRIVER_NOTIFICATION.INBOX_OFFER]: 'Inbox request',
+  [DRIVER_NOTIFICATION.ORDER_ASSIGNED]: 'Trip assigned',
   [DRIVER_NOTIFICATION.EXTENSION_OTP]: 'Extend OTP',
 });
 

@@ -640,13 +640,22 @@ export function notifyDriverBookingOfferWithdrawn(driverId, { bookingId, reason 
 }
 
 export function notifyDriverOrderAssigned(driverId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
   return sendPushNotification(
     { driverId },
     {
-      title: 'Ride assigned',
+      title: 'Trip assigned',
       body: `Booking ${booking.bookingNumber || ''} has been assigned to you.`,
       type: DRIVER_NOTIFICATION.ORDER_ASSIGNED,
-      data: bookingRef(booking),
+      data: {
+        ...bookingRef(booking),
+        kind: DRIVER_NOTIFICATION.ORDER_ASSIGNED,
+        path: bookingId ? `/driver/trip/${bookingId}` : '/driver/home',
+        bookingType: booking.bookingType || booking.serviceType || '',
+        status: booking.status || '',
+        priority: 'high',
+        fcmTag: bookingId ? `order_assigned_${bookingId}` : 'order_assigned',
+      },
     },
   );
 }
