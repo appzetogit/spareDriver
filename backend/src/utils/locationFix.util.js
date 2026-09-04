@@ -1,4 +1,21 @@
-import { LOCATION_BATCH } from '../constants/driverTracking.js';
+import {
+  LOCATION_BATCH,
+  MAX_ACCEPTED_ACCURACY_M,
+  MAX_PLAUSIBLE_SPEED_MPS,
+} from '../constants/driverTracking.js';
+
+const EARTH_RADIUS_METERS = 6_371_000;
+
+/** Great-circle distance in metres between two `{ lat, lng }` points. */
+function haversineMeters(a, b) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
+}
 
 /**
  * Pure helpers for the location batch pipeline.
@@ -31,18 +48,34 @@ export function toEpochMs(value) {
  * the same batch — a retrying uploader that appends before it acks can send
  * the same fix twice in one payload.
  *
+ * Two quality gates run after that, and they are counted separately so the
+ * logs say *why* a driver went quiet rather than just that they did:
+ *
+ *   - `rejectedAccuracy` — the fix is a tower lookup, not GPS. See
+ *     `MAX_ACCEPTED_ACCURACY_M`. A fix with no `accuracy` at all is
+ *     kept: older clients do not send one, and refusing them would be a
+ *     silent outage on upgrade day.
+ *
+ *   - `rejectedJump` — the fix is plausible on its own but implies an
+ *     impossible speed from the previous accepted one. Each fix is compared
+ *     against the last one *kept*, so a single wild outlier is dropped instead
+ *     of dragging the rest of the batch out with it.
+ *
  * @param {Array<object>} rawFixes
  * @param {number} now epoch ms
- * @returns {{ fixes: Array<object>, rejected: number, duplicates: number }}
+ * @returns {{ fixes: Array<object>, rejected: number, duplicates: number,
+ *             rejectedAccuracy: number, rejectedJump: number }}
  */
 export function normalizeFixes(rawFixes, now) {
   const oldestAllowed = now - LOCATION_BATCH.MAX_AGE_MS;
   const newestAllowed = now + LOCATION_BATCH.MAX_FUTURE_SKEW_MS;
 
   const seen = new Set();
-  const out = [];
+  const candidates = [];
   let rejected = 0;
   let duplicates = 0;
+  let rejectedAccuracy = 0;
+  let rejectedJump = 0;
 
   for (const fix of Array.isArray(rawFixes) ? rawFixes : []) {
     const capturedAt = toEpochMs(fix?.capturedAt);
@@ -59,6 +92,12 @@ export function normalizeFixes(rawFixes, now) {
       continue;
     }
 
+    const accuracy = optionalNum(fix.accuracy);
+    if (accuracy != null && accuracy > MAX_ACCEPTED_ACCURACY_M) {
+      rejectedAccuracy += 1;
+      continue;
+    }
+
     const key = `${capturedAt}:${fix.lat}:${fix.lng}`;
     if (seen.has(key)) {
       duplicates += 1;
@@ -66,18 +105,38 @@ export function normalizeFixes(rawFixes, now) {
     }
     seen.add(key);
 
-    out.push({
+    candidates.push({
       lat: fix.lat,
       lng: fix.lng,
-      accuracy: optionalNum(fix.accuracy),
+      accuracy,
       heading: optionalNum(fix.heading),
       speed: optionalNum(fix.speed),
       capturedAt,
     });
   }
 
-  out.sort((a, b) => a.capturedAt - b.capturedAt);
-  return { fixes: out, rejected, duplicates };
+  // Sort before the jump check: the buffer is a queue, not a guarantee of
+  // order, and "impossible speed" only means anything along a timeline.
+  candidates.sort((a, b) => a.capturedAt - b.capturedAt);
+
+  const out = [];
+  let previous = null;
+  for (const fix of candidates) {
+    if (previous) {
+      const elapsedSec = (fix.capturedAt - previous.capturedAt) / 1000;
+      if (elapsedSec > 0) {
+        const impliedMps = haversineMeters(previous, fix) / elapsedSec;
+        if (impliedMps > MAX_PLAUSIBLE_SPEED_MPS) {
+          rejectedJump += 1;
+          continue;
+        }
+      }
+    }
+    out.push(fix);
+    previous = fix;
+  }
+
+  return { fixes: out, rejected, duplicates, rejectedAccuracy, rejectedJump };
 }
 
 /**

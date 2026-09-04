@@ -10,6 +10,7 @@ import {
   Heart,
 } from 'lucide-react';
 import BottomSheet from '../../../../components/BottomSheet';
+import ConfirmLocationMap from './ConfirmLocationMap';
 import { useGoogleMaps } from '../../../../hooks/useGoogleMaps';
 import { useMapPlaceSearch } from '../../../../hooks/useMapPlaceSearch';
 import useUserSavedLocationsStore from '../../../../store/user/useUserSavedLocationsStore';
@@ -33,6 +34,17 @@ import useUserSavedLocationsStore from '../../../../store/user/useUserSavedLocat
  *     - hideCurrentLocation        hide the "Use my current location" CTA — set
  *                                  for destination pickers where "where I am"
  *                                  isn't a sensible default.
+ *     - confirmOnMap               insert a map step between choosing a place
+ *                                  and committing to it. Autocomplete returns
+ *                                  a centroid, which for anything bigger than
+ *                                  a shopfront is not where the customer is
+ *                                  standing — and that coordinate is what
+ *                                  every later distance is measured from. Off
+ *                                  by default so destination pickers, where
+ *                                  the exact metre matters far less, don't pay
+ *                                  an extra tap.
+ *     - confirmTitle               heading for that step.
+ *     - confirmLabel               its commit button.
  */
 const LocationPickerSheet = ({
   open,
@@ -44,12 +56,17 @@ const LocationPickerSheet = ({
   currentLocationError = null,
   currentPickup = null,
   hideCurrentLocation = false,
+  confirmOnMap = false,
+  confirmTitle = 'Confirm pickup point',
+  confirmLabel = 'Confirm pickup',
 }) => {
   const { maps, ready } = useGoogleMaps();
   const inputRef = useRef(null);
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(null);
+  /** Chosen but not yet committed — the map step is showing it. */
+  const [pendingPoint, setPendingPoint] = useState(null);
 
   const items = useUserSavedLocationsStore((s) => s.items);
   const loaded = useUserSavedLocationsStore((s) => s.loaded);
@@ -69,39 +86,67 @@ const LocationPickerSheet = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery('');
     setSavedFlash(null);
+    setPendingPoint(null);
   }, [open]);
+
+  /**
+   * Every route into the picker funnels through here: search result, saved
+   * place, or "use my current location". When the map step is on, the choice
+   * becomes a proposal the customer still has to place; otherwise it commits
+   * straight through as before.
+   */
+  const choosePoint = useCallback(
+    (point) => {
+      if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return;
+      if (confirmOnMap) {
+        setPendingPoint(point);
+        return;
+      }
+      onSelect?.(point);
+      onClose?.();
+    },
+    [confirmOnMap, onSelect, onClose],
+  );
+
+  const handleConfirmPoint = useCallback(
+    (point) => {
+      setPendingPoint(null);
+      onSelect?.(point);
+      onClose?.();
+    },
+    [onSelect, onClose],
+  );
 
   useMapPlaceSearch(inputRef, {
     maps,
     enabled: ready && open,
     onSelect: ({ lat, lng, address, name }) => {
-      onSelect?.({
+      choosePoint({
         address: address || name || '',
         city: '',
         lat,
         lng,
       });
-      onClose?.();
     },
   });
 
   const handleUseCurrent = useCallback(async () => {
     if (!onRequestCurrentLocation) return;
     const point = await onRequestCurrentLocation();
-    if (point) {
-      onSelect?.(point);
-      onClose?.();
-    }
-  }, [onRequestCurrentLocation, onSelect, onClose]);
+    if (point) choosePoint(point);
+  }, [onRequestCurrentLocation, choosePoint]);
 
   const handleSavedTap = (saved) => {
-    onSelect?.({
+    // A saved place was confirmed once already, but it was saved from whatever
+    // the picker produced at the time — so it gets the same map step. Cheap to
+    // accept, and it lets a customer correct a favourite that was always
+    // slightly off.
+    choosePoint({
       address: saved.address,
       city: saved.city || '',
       lat: saved.lat,
       lng: saved.lng,
     });
-    onClose?.();
   };
 
   const handleSavedRemove = async (event, id) => {
@@ -144,8 +189,17 @@ const LocationPickerSheet = ({
   };
 
   return (
+    <>
+    <ConfirmLocationMap
+      open={Boolean(pendingPoint)}
+      initialPoint={pendingPoint}
+      title={confirmTitle}
+      confirmLabel={confirmLabel}
+      onConfirm={handleConfirmPoint}
+      onBack={() => setPendingPoint(null)}
+    />
     <BottomSheet
-      isOpen={open}
+      isOpen={open && !pendingPoint}
       onClose={onClose}
       title={title}
       className="max-h-[90vh]"
@@ -287,6 +341,7 @@ const LocationPickerSheet = ({
         </div>
       </div>
     </BottomSheet>
+    </>
   );
 };
 

@@ -24,6 +24,24 @@ export const HOME_ACCEPTABLE_ACCURACY_M = 150;
 /** Arrival / pickup-critical: prefer ≤100m when available. */
 export const STRICT_ACCEPTABLE_ACCURACY_M = 100;
 
+/**
+ * Worst accuracy worth sending to the server at all.
+ *
+ * Mirrors `MAX_ACCEPTED_ACCURACY_M` in
+ * `backend/src/constants/driverTracking.js`, which is the loosest gate any fix
+ * can pass. The server tightens this to 100 m once a customer is actually
+ * watching the trip, and it is the one that decides — this check only avoids
+ * burning a round trip on a fix that could never be accepted for any purpose.
+ *
+ * Deliberately not the stricter on-trip number: withholding something the
+ * server would have taken is the one failure mode a client-side gate must not
+ * have.
+ *
+ * A coarse fix is still perfectly good for painting the driver's own map while
+ * a real one is acquired. It just must not leave the device.
+ */
+export const MAX_PUBLISH_ACCURACY_M = 250;
+
 const FAST_OPTIONS = Object.freeze({
   enableHighAccuracy: false,
   maximumAge: 20_000,

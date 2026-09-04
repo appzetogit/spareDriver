@@ -111,6 +111,31 @@ export function formatDistance(meters) {
 }
 
 /**
+ * The same label, but allowed to say it does not know.
+ *
+ * A distance is always computable from two coordinates, which is exactly the
+ * trap: a frozen or vague position still yields a confident "1.2 km" that
+ * nobody can tell apart from a good one. When the fix behind the number cannot
+ * carry it, say so instead — a customer reads "Locating…" as a system working
+ * on it, and reads a wrong number as a system that is lying.
+ *
+ * Under `NEARBY_METERS` the exact figure stops being useful and starts being
+ * noise, because at that range GPS error is the same size as the answer.
+ *
+ * @param {number|null} meters
+ * @param {{ isReliable?: boolean }} [opts]
+ */
+export function formatTripDistance(meters, { isReliable = true } = {}) {
+  if (!Number.isFinite(meters)) return 'Locating…';
+  if (!isReliable) return 'Nearby';
+  if (meters <= NEARBY_METERS) return 'Nearby';
+  return formatDistance(meters);
+}
+
+/** Below this, GPS error and the distance itself are the same magnitude. */
+export const NEARBY_METERS = 60;
+
+/**
  * Estimate ETA from straight-line distance assuming an average urban speed
  * of 25 km/h. Good enough for nearby-driver chips; routing-based ETAs come
  * from Google Directions later.

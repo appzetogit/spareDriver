@@ -400,6 +400,34 @@ export async function markDriverEnRouteService(driverId, bookingId) {
  */
 export const ARRIVAL_PROXIMITY_METERS = 100;
 
+/**
+ * How much of a fix's own stated uncertainty the arrival check will absorb.
+ *
+ * A GPS fix is a circle, not a point. When a phone reports 90 m accuracy the
+ * driver could genuinely be standing on the pickup and still measure 90 m away
+ * from it, so holding them to a flat 100 m punishes them for their handset and
+ * the weather. Widening by the reported radius keeps the guard honest — a
+ * driver across town is still across town, whatever their accuracy claims.
+ *
+ * Capped, because otherwise a fix that admits to 2 km of uncertainty would buy
+ * a 2 km arrival radius, which is the fraud this guard exists to stop. The
+ * ingest pipeline already refuses anything looser than
+ * `LOCATION_ACCURACY.ON_TRIP_M` while a customer is watching, so in practice
+ * the cap is rarely what binds.
+ *
+ * @param {number|undefined} accuracyMeters
+ * @returns {number} radius in metres
+ */
+export function arrivalRadiusFor(accuracyMeters) {
+  if (!Number.isFinite(accuracyMeters) || accuracyMeters <= 0) {
+    return ARRIVAL_PROXIMITY_METERS;
+  }
+  return (
+    ARRIVAL_PROXIMITY_METERS
+    + Math.min(Math.round(accuracyMeters), ARRIVAL_PROXIMITY_METERS)
+  );
+}
+
 const EARTH_RADIUS_METERS = 6371000;
 
 function toRadians(deg) {
@@ -481,11 +509,12 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   }
 
   const distance = haversineMeters(driverCoords, pickupCoords);
-  if (distance > ARRIVAL_PROXIMITY_METERS) {
+  const allowed = arrivalRadiusFor(driverCoords.accuracy);
+  if (distance > allowed) {
     throw new ApiError(
       409,
-      `You're too far from the pickup (${Math.round(distance)} m). Move within ${ARRIVAL_PROXIMITY_METERS} m to mark arrival.`,
-      { distanceMeters: Math.round(distance), maxDistanceMeters: ARRIVAL_PROXIMITY_METERS },
+      `You're too far from the pickup (${Math.round(distance)} m). Move within ${allowed} m to mark arrival.`,
+      { distanceMeters: Math.round(distance), maxDistanceMeters: allowed },
     );
   }
 

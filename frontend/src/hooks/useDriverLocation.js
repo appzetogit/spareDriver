@@ -14,6 +14,7 @@ import {
   logGeo,
   setCachedLocation,
   watchLocation,
+  MAX_PUBLISH_ACCURACY_M,
   GEO_ERROR,
   classifyGeoError,
 } from '../utils/geolocation';
@@ -35,6 +36,16 @@ import {
  */
 
 const MIN_EMIT_INTERVAL_MS = 5_000;
+
+/**
+ * Server-side "no thanks" answers that are routine rather than faults.
+ *
+ * `native_preferred` means the Flutter uploader is alive and owns the stream —
+ * the expected steady state inside the wrapper, not an error. `stale_fix` means
+ * a newer fix already landed. Neither deserves console noise; anything else
+ * does.
+ */
+const EXPECTED_REJECTIONS = new Set(['throttled', 'native_preferred', 'stale_fix']);
 
 function toStatusCoords(c) {
   if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
@@ -185,6 +196,24 @@ export function useDriverLocation({ enabled, publish = true }) {
   const emitLocationPayload = useCallback((payload, { force = false } = {}) => {
     if (!payload) return false;
     if (!publishRef.current) return false;
+
+    // A coarse fix still paints this driver's own map — `reportDriverLocation`
+    // has already taken it — but it must not reach the server, where it would
+    // become the customer's "1 km away" and the arrival check's input. `force`
+    // does not override this: the first fix is exactly the coarse one, and
+    // rushing a wrong position out is worse than showing none for a few
+    // seconds.
+    if (
+      Number.isFinite(payload.accuracy)
+      && payload.accuracy > MAX_PUBLISH_ACCURACY_M
+    ) {
+      logGeo('driver location withheld (accuracy)', {
+        accuracy: payload.accuracy,
+        limit: MAX_PUBLISH_ACCURACY_M,
+      });
+      return false;
+    }
+
     latestPayloadRef.current = payload;
 
     const now = Date.now();
@@ -205,7 +234,7 @@ export function useDriverLocation({ enabled, publish = true }) {
       // Socket dies as soon as the WebView backgrounds. Native is the real
       // uploader, but while JS is still scheduled post over HTTP so a brief
       // pause does not freeze the customer map.
-      api.post('/driver/location', { ...payload, capturedAt: Date.now() }).catch(() => {});
+      api.post('/driver/location', payload).catch(() => {});
       return false;
     }
 
@@ -221,7 +250,7 @@ export function useDriverLocation({ enabled, publish = true }) {
     });
 
     const sent = emitRef.current(C2S_EVENTS.DRIVER_LOCATION_UPDATE, payload, (ack) => {
-      if (ack?.ok === false && ack.reason !== 'throttled') {
+      if (ack?.ok === false && !EXPECTED_REJECTIONS.has(ack.reason)) {
         if (import.meta.env.DEV) console.warn('[location] backend rejected:', ack.reason);
       }
     });
@@ -237,6 +266,11 @@ export function useDriverLocation({ enabled, publish = true }) {
       accuracy: Number.isFinite(c.accuracy) ? c.accuracy : null,
       heading: Number.isFinite(c.heading) ? c.heading : null,
       speed: Number.isFinite(c.speed) ? c.speed : null,
+      // When the OS produced this fix. The server orders the browser and
+      // native streams against each other on this value, so sending send-time
+      // here (which is what the HTTP fallback used to do) lets a stale
+      // buffered fix outrank a fresh native one.
+      capturedAt: c.timestamp ?? c.fetchedAt ?? Date.now(),
     };
   }, []);
 

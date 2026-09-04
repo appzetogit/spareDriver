@@ -20,12 +20,21 @@ import { normalizeFixes, trackingDirective } from '../utils/locationFix.util.js'
 
 const DRIVER_STATE_FIELDS = 'isOnline isOnTrip lastFixAt approvalStatus isDeleted';
 
-function emptyResult({ driver, rejected, duplicates, deduped = 0 }) {
+function emptyResult({
+  driver,
+  rejected,
+  duplicates,
+  rejectedAccuracy = 0,
+  rejectedJump = 0,
+  deduped = 0,
+}) {
   return {
     accepted: 0,
     deduped,
     rejected,
     duplicates,
+    rejectedAccuracy,
+    rejectedJump,
     watermark: driver?.lastFixAt ? driver.lastFixAt.toISOString() : null,
     ...trackingDirective(driver),
   };
@@ -34,22 +43,35 @@ function emptyResult({ driver, rejected, duplicates, deduped = 0 }) {
 /**
  * @param {string} driverId
  * @param {Array<object>} rawFixes
+ * @param {{ source?: 'native'|'webview-http' }} [opts]
+ *   Which producer sent this batch, decided by which credential authenticated
+ *   it. A tracking token is the background service; a driver access token is
+ *   the WebView's own HTTP fallback. They must not be conflated — only the
+ *   real background uploader is allowed to claim priority over the socket
+ *   stream, and labelling the fallback `native` would let the browser lock
+ *   itself out for 90 seconds at a time.
  * @returns {Promise<{
  *   accepted:number; deduped:number; rejected:number; duplicates:number;
  *   watermark:string|null; stopTracking:boolean; mode:'onTrip'|'idle'|'stopped';
  *   firebase?:boolean; mongoSnapshot?:boolean;
  * }>}
  */
-export async function ingestDriverLocationBatch(driverId, rawFixes) {
-  const { fixes, rejected, duplicates } = normalizeFixes(rawFixes, Date.now());
+export async function ingestDriverLocationBatch(driverId, rawFixes, { source = 'native' } = {}) {
+  const { fixes, rejected, duplicates, rejectedAccuracy, rejectedJump } =
+    normalizeFixes(rawFixes, Date.now());
 
   if (fixes.length === 0) {
+    // Distinguish "nothing arrived" from "everything arrived and was junk" —
+    // a batch fully rejected on accuracy is a driver stuck on a tower fix, and
+    // that reads very differently in the logs from an empty upload.
     console.log(
-      `[driverLocation] native-skip driver=${driverId} reason=empty-batch` +
-        ` rejected=${rejected} duplicates=${duplicates} raw=${Array.isArray(rawFixes) ? rawFixes.length : 0}`,
+      `[driverLocation] ${source}-skip driver=${driverId} reason=empty-batch` +
+        ` rejected=${rejected} duplicates=${duplicates}` +
+        ` rejectedAccuracy=${rejectedAccuracy} rejectedJump=${rejectedJump}` +
+        ` raw=${Array.isArray(rawFixes) ? rawFixes.length : 0}`,
     );
     const driver = await Driver.findById(driverId).select(DRIVER_STATE_FIELDS).lean();
-    return emptyResult({ driver, rejected, duplicates });
+    return emptyResult({ driver, rejected, duplicates, rejectedAccuracy, rejectedJump });
   }
 
   const newest = fixes[fixes.length - 1];
@@ -74,12 +96,20 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
 
   if (!previous) {
     console.log(
-      `[driverLocation] native-skip driver=${driverId} reason=deduped` +
+      `[driverLocation] ${source}-skip driver=${driverId} reason=deduped` +
         ` fixes=${fixes.length} rejected=${rejected} duplicates=${duplicates}` +
+        ` rejectedAccuracy=${rejectedAccuracy} rejectedJump=${rejectedJump}` +
         ` newest=${newestDate.toISOString()}`,
     );
     const current = await Driver.findById(driverId).select(DRIVER_STATE_FIELDS).lean();
-    return emptyResult({ driver: current, rejected, duplicates, deduped: fixes.length });
+    return emptyResult({
+      driver: current,
+      rejected,
+      duplicates,
+      rejectedAccuracy,
+      rejectedJump,
+      deduped: fixes.length,
+    });
   }
 
   const previousMs = previous.lastFixAt ? previous.lastFixAt.getTime() : 0;
@@ -91,7 +121,7 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
   // Firebase would resurrect the presence node `markDriverOfflineLive` cleared.
   if (directive.stopTracking) {
     console.log(
-      `[driverLocation] native-skip driver=${driverId} reason=stopTracking` +
+      `[driverLocation] ${source}-skip driver=${driverId} reason=stopTracking` +
         ` fixes=${fixes.length} newest=${newestDate.toISOString()}`,
     );
     return {
@@ -99,6 +129,8 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
       deduped: fixes.length - fresh.length,
       rejected,
       duplicates,
+      rejectedAccuracy,
+      rejectedJump,
       watermark: newestDate.toISOString(),
       ...directive,
     };
@@ -114,7 +146,7 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
       speed: newest.speed,
       capturedAt: newest.capturedAt,
     },
-    { source: 'native' },
+    { source },
   );
 
   return {
@@ -122,6 +154,8 @@ export async function ingestDriverLocationBatch(driverId, rawFixes) {
     deduped: fixes.length - fresh.length,
     rejected,
     duplicates,
+    rejectedAccuracy,
+    rejectedJump,
     watermark: newestDate.toISOString(),
     firebase: result.firebase,
     mongoSnapshot: result.mongoSnapshot,
