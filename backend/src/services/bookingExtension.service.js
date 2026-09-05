@@ -705,12 +705,30 @@ export async function settleWaitingBuffer(booking) {
  * settle driver-side rupees at trip-end and share the same Driver /
  * Payment / todayKey helpers.
  */
-export async function settleDriverEarning(booking) {
+export async function settleDriverEarning(
+  booking,
+  { creditedAt = null, countTowardToday = true } = {},
+) {
   const driverId = booking?.driverId;
   if (!driverId) return;
   const breakdown = booking?.fareSnapshot?.breakdown || {};
   const driverEarning = round2(Number(breakdown.driverEarning) || 0);
   if (driverEarning <= 0) return;
+
+  // Idempotency guard. The wallet `$inc` below is NOT protected by a
+  // unique index — Payment's unique `{referenceId, referenceModel}`
+  // index is partial and only covers KitOrder / UserSubscription /
+  // WalletTransaction — so a second call for the same booking would
+  // pay the same trip twice. That's reachable now that more than one
+  // path completes a booking (driver taps complete, the no-show timer
+  // auto-completes, an admin overrides the status). The ledger row is
+  // the marker: if it exists, this trip has already been settled.
+  const alreadySettled = await Payment.exists({
+    referenceId: booking._id,
+    purpose: { $in: [PAYMENT_PURPOSE.TRIP_FARE, PAYMENT_PURPOSE.TRIP_ALLOWANCE] },
+    status: 'captured',
+  });
+  if (alreadySettled) return;
 
   // Prefer the explicit `driverFareEarning` / `driverAllowanceEarning`
   // fields the pricing engine stamps when the booking was created
@@ -740,6 +758,30 @@ export async function settleDriverEarning(booking) {
   // ledger always sums exactly to the wallet credit.
   const drift = round2(driverEarning - (fareShare + allowanceShare));
   if (drift !== 0) fareShare = round2(fareShare + drift);
+
+  // Repairing a historical trip (see `backfill:driver-earnings`): the
+  // rupees are owed and belong in the wallet, but the trip did not
+  // happen today, so it must not pollute today's tile.
+  if (!countTowardToday) {
+    await Driver.updateOne(
+      { _id: driverId },
+      {
+        $inc: {
+          'wallet.balance': driverEarning,
+          'wallet.totalEarnings': driverEarning,
+        },
+      },
+    );
+    await writeTripEarningLedger(booking, {
+      driverId,
+      driverEarning,
+      fareShare,
+      allowanceShare,
+      breakdown,
+      creditedAt,
+    });
+    return;
+  }
 
   const todayDateKey = todayKey();
   const driverDoc = await Driver.findById(driverId)
@@ -780,13 +822,53 @@ export async function settleDriverEarning(booking) {
     );
   }
 
+  await writeTripEarningLedger(booking, {
+    driverId,
+    driverEarning,
+    fareShare,
+    allowanceShare,
+    breakdown,
+    creditedAt,
+  });
+}
+
+/**
+ * Write the `Payment` ledger rows behind a trip's wallet credit.
+ *
+ * These rows are the driver Earnings page's source of truth (and the
+ * marker `settleDriverEarning`'s idempotency guard looks for), so they
+ * are awaited rather than fire-and-forget — a credit the driver can't
+ * see is the bug this whole path exists to prevent.
+ *
+ * `creditedAt` back-dates `createdAt` when repairing a historical
+ * trip, so a trip completed three weeks ago lands in that day's
+ * earnings bucket instead of spiking today's. Mongoose would stamp
+ * `createdAt` itself, hence the follow-up write with
+ * `timestamps: false`.
+ */
+async function writeTripEarningLedger(
+  booking,
+  { driverId, driverEarning, fareShare, allowanceShare, breakdown, creditedAt = null },
+) {
   const commonMeta = {
     bookingNumber: booking.bookingNumber || '',
     serviceType: booking.serviceType || '',
     completedAt: booking.timeline?.completedAt || new Date(),
   };
+
+  const backdate = async (doc) => {
+    if (!doc || !creditedAt) return;
+    await Payment.updateOne(
+      { _id: doc._id },
+      { $set: { createdAt: creditedAt } },
+      { timestamps: false },
+    ).catch((err) =>
+      console.warn('[booking] failed to back-date ledger row:', err?.message),
+    );
+  };
+
   if (fareShare > 0) {
-    Payment.create({
+    const row = await Payment.create({
       provider: PAYMENT_PROVIDER.WALLET,
       purpose: PAYMENT_PURPOSE.TRIP_FARE,
       referenceId: booking._id,
@@ -797,15 +879,17 @@ export async function settleDriverEarning(booking) {
       method: 'wallet',
       driverId,
       meta: { ...commonMeta, driverEarning, allowanceShare, fareShare },
-    }).catch((err) =>
+    }).catch((err) => {
       console.warn(
         '[booking] failed to write trip-fare ledger row:',
         err?.message,
-      ),
-    );
+      );
+      return null;
+    });
+    await backdate(row);
   }
   if (allowanceShare > 0) {
-    Payment.create({
+    const row = await Payment.create({
       provider: PAYMENT_PROVIDER.WALLET,
       purpose: PAYMENT_PURPOSE.TRIP_ALLOWANCE,
       referenceId: booking._id,
@@ -824,12 +908,14 @@ export async function settleDriverEarning(booking) {
         stayAllowanceTotal: Number(breakdown.stayAllowanceTotal) || 0,
         legacyAllowanceTotal: Number(breakdown.legacyAllowanceTotal) || 0,
       },
-    }).catch((err) =>
+    }).catch((err) => {
       console.warn(
         '[booking] failed to write trip-allowance ledger row:',
         err?.message,
-      ),
-    );
+      );
+      return null;
+    });
+    await backdate(row);
   }
 }
 
