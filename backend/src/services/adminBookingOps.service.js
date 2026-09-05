@@ -392,6 +392,23 @@ export async function adminUpdateBookingStatusService(
     if (booking.driverId) {
       await Driver.updateOne({ _id: booking.driverId }, { $set: { isOnTrip: false } });
     }
+
+    // Settle the same trip-end money the driver's own complete path
+    // settles, BEFORE the save below so the consumed/released waiting
+    // buffer and the cleared pending extensions persist with the
+    // booking. Without this an admin-completed trip left the waiting
+    // hold on the customer's wallet and pending extension intents
+    // dangling forever.
+    const { settleWaitingBuffer, clearPendingExtensionsOnTerminate } = await import(
+      './bookingExtension.service.js'
+    );
+    await settleWaitingBuffer(booking).catch((err) =>
+      console.warn('[adminBookingOps] waiting settle failed:', err?.message),
+    );
+    await clearPendingExtensionsOnTerminate(booking, reason || 'completed_by_admin').catch(
+      (err) =>
+        console.warn('[adminBookingOps] extension cleanup failed:', err?.message),
+    );
   }
 
   if (TERMINAL_BOOKING_STATUSES.includes(status) && booking.driverId) {
@@ -401,6 +418,15 @@ export async function adminUpdateBookingStatusService(
   await booking.save();
 
   if (justCompleted) {
+    // Credit the driver, book platform revenue, count the coupon and
+    // fire referral rewards — the same payout sequence the driver-side
+    // complete runs. Admin-completed trips used to skip all of it, so
+    // the driver was never paid and the trip never showed on their
+    // Earnings page.
+    const { settleCompletedTripPayouts } = await import('./bookingTrip.service.js');
+    await settleCompletedTripPayouts(booking).catch((err) =>
+      console.warn('[adminBookingOps] trip payout settle failed:', err?.message),
+    );
     queueBookingInvoiceEmail(booking);
   }
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/generate-fcm-sw.mjs && vite build",
+    "test": "node --test src/utils/trackingDecision.test.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

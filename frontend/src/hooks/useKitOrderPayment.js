@@ -8,12 +8,15 @@ import {
   useDriverOrdersStore,
   useDriverPaymentHistoryStore,
 } from '../store/driver/useDriverHistoryStore';
-import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
+import {
+  useDriverOnlineStore,
+  DRIVER_ONLINE_NAMESPACE,
+} from '../store/driver/useDriverOnlineStore';
 
 function invalidatePaymentCaches() {
   useDriverKitActiveStore.getState().invalidate('driver-kit-active');
   useDriverKitsListStore.getState().invalidate('driver-kits-list');
-  useDriverOnlineStore.getState().invalidate('driver-online-status');
+  useDriverOnlineStore.getState().invalidate(DRIVER_ONLINE_NAMESPACE);
   useDriverOrdersStore.getState().invalidate('driver-orders');
   useDriverPaymentHistoryStore.getState().invalidate('driver-payment-history');
 }

@@ -5,7 +5,10 @@ import TrainingVideoCard from '../components/TrainingVideoCard';
 import { ArrowLeft, Shield } from 'lucide-react';
 import api from '../../../../utils/api';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
-import { useDriverOnlineStore } from '../../../../store/driver/useDriverOnlineStore';
+import {
+  useDriverOnlineStore,
+  DRIVER_ONLINE_NAMESPACE,
+} from '../../../../store/driver/useDriverOnlineStore';
 
 const TrainingPage = () => {
   const navigate = useNavigate();
@@ -19,7 +22,7 @@ const TrainingPage = () => {
   const isApproved = driver?.approvalStatus === 'approved';
 
   const refreshOnlineEligibility = useCallback(() => {
-    useDriverOnlineStore.getState().invalidate('driver-online-status');
+    useDriverOnlineStore.getState().invalidate(DRIVER_ONLINE_NAMESPACE);
   }, []);
 
   const fetchTraining = useCallback(async () => {
