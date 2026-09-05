@@ -43,6 +43,11 @@ const RegisterPage = () => {
   const [emailLoading, setEmailLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
+  // Field-scoped errors so the message renders next to the input that caused
+  // it. The shared `error` below the form is for whole-form failures only —
+  // on a phone it sits well below the fold when a field-level call fails.
+  const [phoneError, setPhoneError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [phoneAlreadyRegistered, setPhoneAlreadyRegistered] = useState(false);
   const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
   const [referralProgramEnabled, setReferralProgramEnabled] = useState(true);
@@ -69,6 +74,8 @@ const RegisterPage = () => {
     if (error) setError('');
     if (phoneAlreadyRegistered) setPhoneAlreadyRegistered(false);
     if (emailAlreadyRegistered) setEmailAlreadyRegistered(false);
+    if (field === 'phone' && phoneError) setPhoneError('');
+    if (field === 'email' && emailError) setEmailError('');
 
     if (field === 'phone') {
       setPhoneVerified(false);
@@ -78,6 +85,7 @@ const RegisterPage = () => {
       setEmailVerified(false);
       setEmailOtpSent(false);
       setEmailOtp('');
+      setEmailError('');
       emailCooldown.reset();
     }
     if (field === 'email') {
@@ -91,11 +99,12 @@ const RegisterPage = () => {
 
   const handleSendPhoneOtp = async () => {
     if (!/^[0-9]{10}$/.test(formData.phone)) {
-      setError('Enter a valid 10-digit mobile number');
+      setPhoneError('Enter a valid 10-digit mobile number');
       return;
     }
     setPhoneLoading(true);
     setError('');
+    setPhoneError('');
     setPhoneAlreadyRegistered(false);
     try {
       await api.post('/auth/send-otp', { phone: formData.phone });
@@ -104,7 +113,7 @@ const RegisterPage = () => {
       phoneCooldown.start();
     } catch (err) {
       const message = err.response?.data?.message || 'Failed to send OTP';
-      setError(message);
+      setPhoneError(message);
       if (message.toLowerCase().includes('already registered')) {
         setPhoneAlreadyRegistered(true);
       }
@@ -117,6 +126,7 @@ const RegisterPage = () => {
     if (phoneOtp.length !== 6) return;
     setPhoneLoading(true);
     setError('');
+    setPhoneError('');
     try {
       await api.post('/auth/register/verify-phone', {
         phone: formData.phone,
@@ -127,7 +137,7 @@ const RegisterPage = () => {
       setPhoneOtp('');
       phoneCooldown.reset();
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid mobile OTP');
+      setPhoneError(err.response?.data?.message || 'Invalid mobile OTP');
     } finally {
       setPhoneLoading(false);
     }
@@ -136,15 +146,16 @@ const RegisterPage = () => {
   const handleSendEmailOtp = async () => {
     const email = normalizeUserEmail(formData.email);
     if (!isValidUserEmail(email)) {
-      setError('Enter a valid email address (example: name@gmail.com)');
+      setEmailError('Enter a valid email address (example: name@gmail.com)');
       return;
     }
     if (!phoneVerified) {
-      setError('Verify your mobile number first');
+      setEmailError('Verify your mobile number first');
       return;
     }
     setEmailLoading(true);
     setError('');
+    setEmailError('');
     setEmailAlreadyRegistered(false);
     try {
       await api.post('/auth/register/email/send-otp', {
@@ -156,7 +167,7 @@ const RegisterPage = () => {
       emailCooldown.start();
     } catch (err) {
       const message = err.response?.data?.message || 'Failed to send email code';
-      setError(message);
+      setEmailError(message);
       if (message.toLowerCase().includes('already registered')) {
         setEmailAlreadyRegistered(true);
       }
@@ -169,6 +180,7 @@ const RegisterPage = () => {
     if (emailOtp.length !== 6) return;
     setEmailLoading(true);
     setError('');
+    setEmailError('');
     try {
       await api.post('/auth/register/email/verify', {
         phone: formData.phone,
@@ -181,7 +193,7 @@ const RegisterPage = () => {
       emailCooldown.reset();
     } catch (err) {
       const message = err.response?.data?.message || 'Invalid email OTP';
-      setError(message);
+      setEmailError(message);
       if (message.toLowerCase().includes('already registered')) {
         setEmailAlreadyRegistered(true);
         setEmailOtpSent(false);
@@ -341,6 +353,19 @@ const RegisterPage = () => {
                 />
               </div>
             )}
+            {phoneError && (
+              <p className="text-danger text-xs font-medium" role="alert">
+                {phoneError}
+                {phoneAlreadyRegistered && (
+                  <>
+                    {' '}
+                    <Link to="/login" className="text-primary font-semibold hover:underline">
+                      Login here
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -397,6 +422,19 @@ const RegisterPage = () => {
                 />
               </div>
             )}
+            {emailError && (
+              <p className="text-danger text-xs font-medium" role="alert">
+                {emailError}
+                {emailAlreadyRegistered && (
+                  <>
+                    {' '}
+                    <Link to="/login" className="text-primary font-semibold hover:underline">
+                      Login here
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
           </div>
 
           <Input
@@ -434,23 +472,9 @@ const RegisterPage = () => {
             </p>
           </div>
 
-          {error && <p className="text-danger text-xs font-medium">{error}</p>}
-
-          {phoneAlreadyRegistered && (
-            <p className="text-sm text-text-secondary">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary font-semibold hover:underline">
-                Login here
-              </Link>
-            </p>
-          )}
-
-          {emailAlreadyRegistered && (
-            <p className="text-sm text-text-secondary">
-              This email is already registered.{' '}
-              <Link to="/login" className="text-primary font-semibold hover:underline">
-                Login here
-              </Link>
+          {error && (
+            <p className="text-danger text-xs font-medium" role="alert">
+              {error}
             </p>
           )}
 

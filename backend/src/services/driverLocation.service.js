@@ -655,6 +655,81 @@ export async function listLiveDriverMapMetadata(extraIds = []) {
 }
 
 /**
+ * Fleet snapshot for the admin "Driver locations" map.
+ *
+ * Unlike `listLiveDriverMapMetadata` (which is online-only and carries NO
+ * coordinates — the live map reads positions from Firebase), this returns the
+ * LAST-KNOWN position persisted in Mongo for every approved driver. That is
+ * what lets the admin see where a driver is even after they go OFFLINE: the
+ * `location` snapshot survives in Mongo long after the Firebase RTDB node is
+ * cleared on disconnect.
+ *
+ * Online drivers still appear here at their last Mongo snapshot; the frontend
+ * overlays their live Firebase pin on top when a fresher one is streaming.
+ *
+ * @param {{ includeUnlocated?: boolean }} [opts] include drivers who have
+ *   never reported a fix (no map pin — listed only so counts add up).
+ */
+export async function listDriverLastKnownLocations({ includeUnlocated = false } = {}) {
+  const drivers = await Driver.find({
+    isDeleted: false,
+    approvalStatus: 'approved',
+  })
+    .select(
+      '_id name phone driverNumber rating isOnline isOnTrip lastOnlineAt lastLocationAt location heading speed city',
+    )
+    .lean();
+
+  const onTripIds = drivers.filter((d) => d.isOnTrip).map((d) => d._id);
+  const bookings = onTripIds.length
+    ? await Booking.find({
+        driverId: { $in: onTripIds },
+        status: { $in: ACTIVE_BOOKING_STATUSES },
+      })
+        .select('_id driverId bookingNumber status serviceType pickup dropoff outstation userId')
+        .populate('userId', 'name phone_no')
+        .lean()
+    : [];
+
+  const tripByDriver = new Map();
+  for (const booking of bookings) {
+    tripByDriver.set(String(booking.driverId), serializeActiveTrip(booking));
+  }
+
+  const items = [];
+  for (const d of drivers) {
+    const coords = Array.isArray(d.location?.coordinates) ? d.location.coordinates : null;
+    const lng = coords?.[0];
+    const lat = coords?.[1];
+    // `[0, 0]` is the schema default for a driver who has never sent a fix —
+    // treat it as "no location", not a pin in the Gulf of Guinea.
+    const hasLocation =
+      isFiniteNum(lat) && isFiniteNum(lng) && !(lat === 0 && lng === 0);
+    if (!hasLocation && !includeUnlocated) continue;
+
+    items.push({
+      driverId: String(d._id),
+      name: d.name,
+      phone: d.phone,
+      driverNumber: d.driverNumber || '',
+      rating: d.rating ?? null,
+      isOnline: Boolean(d.isOnline),
+      isOnTrip: Boolean(d.isOnTrip),
+      lat: hasLocation ? lat : null,
+      lng: hasLocation ? lng : null,
+      heading: typeof d.heading === 'number' ? d.heading : null,
+      speed: typeof d.speed === 'number' ? d.speed : null,
+      city: d.city || '',
+      lastOnlineAt: d.lastOnlineAt || null,
+      lastLocationAt: d.lastLocationAt || null,
+      activeTrip: tripByDriver.get(String(d._id)) || null,
+    });
+  }
+
+  return items;
+}
+
+/**
  * Returns true when the live pipeline is fully usable (Firebase initialized).
  */
 export function isLiveLocationReady() {

@@ -183,6 +183,7 @@ const ManageReferrals = lazy(() => import('./features/admin/pages/ManageReferral
 const ManageSubscriptionRevenue = lazy(() => import('./features/admin/pages/ManageSubscriptionRevenue'));
 const ManageKitRevenue = lazy(() => import('./features/admin/pages/ManageKitRevenue'));
 const LiveDriverMap = lazy(() => import('./features/admin/pages/LiveDriverMap'));
+const DriverLocationsMap = lazy(() => import('./features/admin/pages/DriverLocationsMap'));
 const ManageKitOrders = lazy(() => import('./features/admin/pages/ManageKitOrders'));
 const KitOrderDetailPage = lazy(() => import('./features/admin/pages/KitOrderDetailPage'));
 const ManageTasks = lazy(() => import('./features/admin/pages/ManageTasks'));
@@ -400,6 +401,7 @@ function App() {
             </Route>
             <Route path="/admin/drivers" element={<ManageDrivers />} />
             <Route path="/admin/drivers/live" element={<LiveDriverMap />} />
+            <Route path="/admin/drivers/locations" element={<DriverLocationsMap />} />
             <Route path="/admin/sos" element={<ManageSosAlerts />} />
             <Route path="/admin/support" element={<ManageSupport />} />
             <Route path="/admin/drivers/:driverId/profile" element={<DriverProfilePage />} />

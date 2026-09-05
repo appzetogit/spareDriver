@@ -25,7 +25,6 @@ const sosAlertSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
       required: true,
-      index: true,
     },
     bookingNumber: { type: String, default: '', trim: true },
     userId: {
