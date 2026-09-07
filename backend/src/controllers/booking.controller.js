@@ -305,7 +305,14 @@ export const driverMarkArrived = asyncHandler(async (req, res) => {
   const booking = await markDriverArrivedService(req.driver._id, req.params.id, {
     driverCoords:
       driverCoords && typeof driverCoords === 'object'
-        ? { lat: Number(driverCoords.lat), lng: Number(driverCoords.lng) }
+        ? {
+            lat: Number(driverCoords.lat),
+            lng: Number(driverCoords.lng),
+            // Forwarded so the proximity guard can widen its radius by however
+            // uncertain the fix admits it is. Without it a driver standing at
+            // the gate with a 90 m fix is told they are too far away.
+            accuracy: Number(driverCoords.accuracy),
+          }
         : null,
   });
   return res

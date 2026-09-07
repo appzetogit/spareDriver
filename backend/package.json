@@ -10,6 +10,7 @@
     "fix:payment-index": "node scripts/fixPaymentIndex.js",
     "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
     "backfill:driver-numbers": "node scripts/backfillDriverNumbers.js",
+    "backfill:driver-earnings": "node scripts/backfillDriverTripEarnings.js",
     "seed": "node scripts/seed.js",
     "seed:fresh": "node scripts/seed.js --fresh",
     "seed:developer": "node scripts/seedDeveloper.js",
@@ -43,5 +44,9 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "qs": "^6.16.0"
   }
 }

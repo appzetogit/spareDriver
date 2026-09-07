@@ -61,6 +61,7 @@ const navItems = [
   { path: '/admin/drivers', label: 'Drivers', icon: Car, end: true },
   { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
   { path: '/admin/drivers/live', label: 'Live Map', icon: Navigation },
+  { path: '/admin/drivers/locations', label: 'Driver Locations', icon: MapPin },
   { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
   { path: '/admin/sos', label: 'SOS Alerts', icon: ShieldAlert, roles: ['admin', 'sub_admin', 'team_member'] },
   { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },

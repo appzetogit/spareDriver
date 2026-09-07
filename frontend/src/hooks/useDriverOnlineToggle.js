@@ -1,7 +1,11 @@
 import { useCallback, useState } from 'react';
 import api from '../utils/api';
 import useDriverAuthStore from '../store/useDriverAuthStore';
-import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
+import {
+  useDriverOnlineStore,
+  DRIVER_ONLINE_CACHE_KEY,
+  DRIVER_ONLINE_NAMESPACE,
+} from '../store/driver/useDriverOnlineStore';
 import { useDriverKitActiveStore } from '../store/driver/useDriverKitStore';
 import {
   startNativeTracking,
@@ -15,9 +19,8 @@ export function useDriverOnlineToggle() {
   const [toggling, setToggling] = useState(false);
 
   const refreshStatus = useCallback(async () => {
-    const key = 'driver-online-status';
-    await useDriverOnlineStore.getState().refresh(key, {});
-    return useDriverOnlineStore.getState().entries[key]?.data;
+    await useDriverOnlineStore.getState().refresh(DRIVER_ONLINE_CACHE_KEY, {});
+    return useDriverOnlineStore.getState().entries[DRIVER_ONLINE_CACHE_KEY]?.data;
   }, []);
 
   const setOnline = useCallback(
@@ -28,7 +31,7 @@ export function useDriverOnlineToggle() {
         const res = await api.put('/driver/online', { online });
         const data = res.data?.data;
         updateDriver({ isOnline: data.isOnline, canGoOnline: data.canGoOnline });
-        useDriverOnlineStore.getState().invalidate('driver-online-status');
+        useDriverOnlineStore.getState().invalidate(DRIVER_ONLINE_NAMESPACE);
         if (data.isOnline) {
           void startNativeTracking(TRACKING_MODE.IDLE);
         } else {
@@ -44,7 +47,7 @@ export function useDriverOnlineToggle() {
             reasons: payload?.data?.reasons || [payload?.message].filter(Boolean),
           });
           useDriverKitActiveStore.getState().invalidate('driver-kit-active');
-          useDriverOnlineStore.getState().invalidate('driver-online-status');
+          useDriverOnlineStore.getState().invalidate(DRIVER_ONLINE_NAMESPACE);
         }
         return { success: false, error: payload?.message };
       } finally {

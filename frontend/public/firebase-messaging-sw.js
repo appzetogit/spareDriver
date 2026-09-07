@@ -3,12 +3,12 @@ importScripts('https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  "apiKey": "AIzaSyAEWOflMUIV1tg2x0EqBA13ijdrI79Ard4",
-  "authDomain": "sparedriver-d05e7.firebaseapp.com",
-  "projectId": "sparedriver-d05e7",
-  "storageBucket": "sparedriver-d05e7.firebasestorage.app",
-  "messagingSenderId": "635960012035",
-  "appId": "1:635960012035:web:1b707672afd8434f2f8d36"
+  "apiKey": "",
+  "authDomain": "",
+  "projectId": "",
+  "storageBucket": "",
+  "messagingSenderId": "",
+  "appId": ""
 });
 
 const messaging = firebase.messaging();
@@ -49,26 +49,12 @@ messaging.onBackgroundMessage(async (payload) => {
   await self.registration.showNotification(title, options);
 });
 
-/**
- * Browser-displayed FCM notifications nest custom data under FCM_MSG.
- * Our own showNotification() puts fields at the top level.
- */
-function normalizeNotificationData(raw) {
-  const base = raw && typeof raw === 'object' ? raw : {};
-  const nested = base.FCM_MSG && typeof base.FCM_MSG === 'object' ? base.FCM_MSG : null;
-  const nestedData = nested && nested.data && typeof nested.data === 'object' ? nested.data : {};
-  return Object.assign({}, nestedData, base, {
-    kind: nestedData.kind || base.kind || (nested && nested.data && nested.data.kind) || '',
-  });
-}
-
 function resolveNotificationOpenUrl(data) {
   const path = typeof data.path === 'string' ? data.path.trim() : '';
   const kind = data.kind || data.type || '';
-  const bookingId = data.bookingId ? String(data.bookingId) : '';
   if (path.startsWith('/')) {
-    if (kind === 'trip_chat_message' && path.indexOf('chat=') === -1) {
-      return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'chat=1';
+    if (kind === 'trip_chat_message' && !path.includes('chat=')) {
+      return path + (path.includes('?') ? '&' : '?') + 'chat=1';
     }
     return path;
   }
@@ -84,19 +70,20 @@ function resolveNotificationOpenUrl(data) {
   if (kind === 'emergency_pool_entered') {
     return '/admin/bookings/emergency-pool';
   }
-  if (kind === 'trip_chat_message' && bookingId) {
-    const chatQuery = (data.channel ? '&channel=' + encodeURIComponent(data.channel) : '');
-    if (data.recipientRole === 'driver') return '/driver/trip/' + bookingId + '?chat=1' + chatQuery;
-    if (data.recipientRole === 'admin') {
-      return '/admin/bookings?bookingId=' + bookingId + '&chat=1' + chatQuery;
+  if (kind === 'trip_chat_message' && data.bookingId) {
+    const chatQuery = data.channel ? '&channel=' + encodeURIComponent(data.channel) : '';
+    if (data.recipientRole === 'driver') {
+      return '/driver/trip/' + data.bookingId + '?chat=1' + chatQuery;
     }
-    return '/user/book/assigned/' + bookingId + '?chat=1' + chatQuery;
+    if (data.recipientRole === 'admin') {
+      return '/admin/bookings?bookingId=' + data.bookingId + '&chat=1' + chatQuery;
+    }
+    return '/user/book/assigned/' + data.bookingId + '?chat=1' + chatQuery;
   }
-  if (bookingId && (
+  if (data.bookingId && (
     kind === 'noshow_prompt'
     || kind === 'driver_arrived'
     || kind === 'driver_assigned'
-    || kind === 'driver_accepted'
     || kind === 'trip_started'
     || kind === 'ride_ending_soon'
     || kind === 'trip_overtime_started'
@@ -112,7 +99,7 @@ function resolveNotificationOpenUrl(data) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const data = normalizeNotificationData(event.notification.data || {});
+  const data = event.notification.data || {};
   const openUrl = resolveNotificationOpenUrl(data);
   event.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -121,16 +108,6 @@ self.addEventListener('notificationclick', (event) => {
       client.postMessage({ type: 'SD_NOTIFICATION_OPEN', payload: data, url: openUrl });
       if ('focus' in client) {
         await client.focus();
-        if (openUrl && openUrl !== '/' && typeof client.navigate === 'function') {
-          try {
-            const current = new URL(client.url);
-            const targetPath = openUrl.split('?')[0];
-            const currentFull = current.pathname + current.search;
-            if (current.pathname !== targetPath || currentFull !== openUrl) {
-              await client.navigate(openUrl);
-            }
-          } catch (_) { /* soft-nav via postMessage */ }
-        }
         return;
       }
     }

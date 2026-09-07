@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeFixes, toEpochMs, trackingDirective } from './locationFix.util.js';
-import { LOCATION_BATCH } from '../constants/driverTracking.js';
+import { LOCATION_BATCH, MAX_ACCEPTED_ACCURACY_M } from '../constants/driverTracking.js';
 
 const NOW = Date.UTC(2026, 7, 18, 12, 0, 0);
 
@@ -141,5 +141,88 @@ describe('trackingDirective', () => {
 
   it('missing driver: stand down', () => {
     assert.deepEqual(trackingDirective(null), { stopTracking: true, mode: 'stopped' });
+  });
+});
+
+describe('normalizeFixes — accuracy gate', () => {
+  it('drops a tower-grade fix and counts it separately', () => {
+    const { fixes, rejectedAccuracy, rejected } = normalizeFixes(
+      [fix(10, { accuracy: 1500 })],
+      NOW,
+    );
+    assert.equal(fixes.length, 0);
+    assert.equal(rejectedAccuracy, 1);
+    // Not lumped in with malformed input — the logs have to tell them apart.
+    assert.equal(rejected, 0);
+  });
+
+  it('keeps a fix sitting exactly on the threshold', () => {
+    const { fixes, rejectedAccuracy } = normalizeFixes(
+      [fix(10, { accuracy: MAX_ACCEPTED_ACCURACY_M })],
+      NOW,
+    );
+    assert.equal(fixes.length, 1);
+    assert.equal(rejectedAccuracy, 0);
+  });
+
+  it('keeps a fix that reports no accuracy at all', () => {
+    // Older clients omit the field. Refusing them would be a silent outage on
+    // the day the gate ships.
+    const { fixes, rejectedAccuracy } = normalizeFixes([fix(10, { accuracy: null })], NOW);
+    assert.equal(fixes.length, 1);
+    assert.equal(fixes[0].accuracy, null);
+    assert.equal(rejectedAccuracy, 0);
+  });
+
+  it('keeps the good fixes in a mixed batch', () => {
+    const { fixes, rejectedAccuracy } = normalizeFixes(
+      [fix(30, { accuracy: 8 }), fix(20, { accuracy: 2400 }), fix(10, { accuracy: 12 })],
+      NOW,
+    );
+    assert.equal(fixes.length, 2);
+    assert.equal(rejectedAccuracy, 1);
+    assert.deepEqual(fixes.map((f) => f.accuracy), [8, 12]);
+  });
+});
+
+describe('normalizeFixes — implausible jumps', () => {
+  /** ~1.1 km east of the base fix at this latitude. */
+  const FAR = { lat: 28.6139, lng: 77.22 };
+
+  it('drops a fix that implies an impossible speed', () => {
+    const { fixes, rejectedJump } = normalizeFixes(
+      [fix(20), fix(19, FAR)],
+      NOW,
+    );
+    // 1.1 km in one second is ~4000 km/h.
+    assert.equal(fixes.length, 1);
+    assert.equal(rejectedJump, 1);
+  });
+
+  it('allows the same distance when enough time has passed', () => {
+    // Same two points, 10 minutes apart — an ordinary drive.
+    const { fixes, rejectedJump } = normalizeFixes([fix(600), fix(0, FAR)], NOW);
+    assert.equal(fixes.length, 2);
+    assert.equal(rejectedJump, 0);
+  });
+
+  it('drops only the outlier, not the batch behind it', () => {
+    // The wild fix sits in the middle; the ones after it are back on track and
+    // must survive, or one bad sample blanks the driver for a whole batch.
+    const { fixes, rejectedJump } = normalizeFixes(
+      [fix(30), fix(29, FAR), fix(28), fix(27)],
+      NOW,
+    );
+    assert.equal(rejectedJump, 1);
+    assert.equal(fixes.length, 3);
+    assert.ok(fixes.every((f) => f.lng === 77.209));
+  });
+
+  it('checks the jump along the timeline, not upload order', () => {
+    // Shuffled input: sorting has to happen before the speed maths or the
+    // check compares points that were never consecutive.
+    const { fixes, rejectedJump } = normalizeFixes([fix(0, FAR), fix(600)], NOW);
+    assert.equal(fixes.length, 2);
+    assert.equal(rejectedJump, 0);
   });
 });

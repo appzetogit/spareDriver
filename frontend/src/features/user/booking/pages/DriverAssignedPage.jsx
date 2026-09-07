@@ -36,7 +36,8 @@ import {
   isBookingContactRevealed,
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
-import { haversineMeters, formatDistance } from '../../../../utils/geo';
+import { formatTripDistance } from '../../../../utils/geo';
+import useTripEta from '../../../../hooks/useTripEta';
 import { maskPersonName, formatExtensionHours } from '../../../../utils/formatters';
 import useBookingDraftStore from '../../../../store/user/useBookingDraftStore';
 import PaymentChoiceSheet from '../components/PaymentChoiceSheet';
@@ -335,10 +336,26 @@ const DriverAssignedPage = () => {
     return null;
   }, [liveDriver, driver]);
 
-  const distanceMeters = useMemo(() => {
-    if (!driverPoint || !pickupPoint) return null;
-    return haversineMeters(driverPoint, pickupPoint);
-  }, [driverPoint, pickupPoint]);
+  // One number for the whole screen: the map asks Directions for a real route
+  // and reports it back here, so the sheet can no longer disagree with the
+  // polyline drawn above it.
+  const {
+    distanceMeters,
+    isReliable: distanceReliable,
+    onEtaChange: handleEtaChange,
+  } = useTripEta({
+    origin: driverPoint,
+    // Mirrors the map's own destination swap: once STARTED the customer is
+    // watching the run to the dropoff, not back to a pickup already left.
+    // Inlined rather than reusing `isTripStarted`, which is declared below the
+    // early returns and would be in its temporal dead zone here.
+    destination:
+      booking?.status === BOOKING_STATUS.STARTED
+        ? dropoffPoint || pickupPoint
+        : pickupPoint,
+    isStale: driverLocationStale,
+    accuracyMeters: liveDriver?.accuracy ?? null,
+  });
 
   /**
    * Driver vehicle expertise we want to surface as the "Drives:" line
@@ -606,6 +623,7 @@ const DriverAssignedPage = () => {
           className="absolute inset-0"
         >
           <TripTrackingMap
+            onEtaChange={handleEtaChange}
             driver={driverPoint}
             // Once the trip is STARTED the customer cares about the
             // route to the destination, not back to the pickup they
@@ -795,7 +813,7 @@ const DriverAssignedPage = () => {
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-gray-500 truncate min-w-0">
                 {liveDriver && distanceMeters != null && booking.status !== BOOKING_STATUS.ARRIVED
-                  ? `${formatDistance(distanceMeters)} away · ${view.subtitle}`
+                  ? `${formatTripDistance(distanceMeters, { isReliable: distanceReliable })} away · ${view.subtitle}`
                   : view.subtitle}
               </p>
               {cancellable && (
@@ -868,7 +886,7 @@ const DriverAssignedPage = () => {
                           ) : null}
                           {liveDriver ? (
                             <span className="text-xs text-emerald-600 font-medium">
-                              · {formatDistance(distanceMeters)} away
+                              · {formatTripDistance(distanceMeters, { isReliable: distanceReliable })} away
                             </span>
                           ) : null}
                         </div>

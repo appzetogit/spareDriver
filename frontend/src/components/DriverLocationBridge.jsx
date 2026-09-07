@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import useAppResumeSync from '../hooks/useAppResumeSync';
 import { reportDriverLocation, useDriverLocation } from '../hooks/useDriverLocation';
-import { useDriverOnlineStore } from '../store/driver/useDriverOnlineStore';
+import {
+  useDriverOnlineStore,
+  DRIVER_ONLINE_CACHE_KEY,
+} from '../store/driver/useDriverOnlineStore';
 import useDriverActiveTripStore from '../store/driver/useDriverActiveTripStore';
 import useDriverAuthStore from '../store/useDriverAuthStore';
 import { onAuthTokensChanged } from '../utils/authTokens';
@@ -19,6 +22,7 @@ import {
   BOOKING_STATUS,
   ACTIVE_BOOKING_STATUSES,
 } from '../constants/bookingStatus';
+import { resolveTrackingIntent, TRACKING_INTENT } from '../utils/trackingDecision';
 
 function coordsFromNativePayload(payload) {
   if (!payload || typeof payload !== 'object') return null;
@@ -38,7 +42,13 @@ function coordsFromNativePayload(payload) {
   };
 }
 
-const ONLINE_CACHE_KEY = 'driver-online-status';
+/**
+ * Shared with the home page and the toggle hook. It used to be a bare
+ * namespace string here while the home page used `buildCacheKey(...)`, which
+ * meant this component watched a cache entry the rest of the app never wrote
+ * to — so it read "offline" while the screen said "online".
+ */
+const ONLINE_CACHE_KEY = DRIVER_ONLINE_CACHE_KEY;
 
 const ON_TRIP_STATUSES = new Set(
   ACTIVE_BOOKING_STATUSES.filter(
@@ -79,13 +89,27 @@ export function DriverLocationBridge() {
     authOnTrip || (bookingStatus && ON_TRIP_STATUSES.has(bookingStatus)),
   );
 
-  const shouldTrack = authOnline || storeOnline || onTrip;
-  // First paint / WebView remount often has empty stores. Stopping native
-  // here would kill the foreground service the moment the driver opens Maps.
-  const driverOnlineFlag = useDriverAuthStore((s) => s.driver?.isOnline);
-  const trackingKnown = Boolean(
-    onlineEntry?.isFetched || driverOnlineFlag === true || driverOnlineFlag === false || onTrip,
-  );
+  /**
+   * Has the server actually answered "is this driver online?" yet.
+   *
+   * False while the request is in flight, and again after the cache is
+   * invalidated. Both mean "we do not know", which the decision below is
+   * careful to treat differently from "the driver is off" — see
+   * `resolveTrackingIntent`. A persisted `driver.isOnline === false` used to
+   * count as proof here, and because that value is rehydrated from storage on
+   * every launch, an online driver got `stopTracking` on boot and
+   * `startTracking` a moment later. That was the flapping.
+   */
+  const statusFetched = Boolean(onlineEntry?.isFetched);
+
+  const { intent, mode: trackingMode } = resolveTrackingIntent({
+    authOnline,
+    storeOnline,
+    onTrip,
+    statusFetched,
+  });
+
+  const shouldTrack = intent === TRACKING_INTENT.START;
 
   /** True once native has confirmed it is doing the tracking. */
   const [nativeTracking, setNativeTracking] = useState(false);
@@ -145,14 +169,15 @@ export function DriverLocationBridge() {
 
     let cancelled = false;
 
-    if (!shouldTrack) {
-      // Unknown / still hydrating: do NOT stop. A remount while Maps is
-      // open used to send stopTracking and kill background GPS.
-      if (!trackingKnown) {
-        return () => {
-          cancelled = true;
-        };
-      }
+    // Still finding out. Leave whatever is running alone — a remount while
+    // Maps is open used to send stopTracking and kill background GPS.
+    if (intent === TRACKING_INTENT.HOLD) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (intent === TRACKING_INTENT.STOP) {
       stopNativeTracking().finally(() => {
         if (!cancelled) setNativeTracking(false);
       });
@@ -161,9 +186,10 @@ export function DriverLocationBridge() {
       };
     }
 
-    // Re-sent whenever `onTrip` flips so the service switches cadence:
-    // 5 s / 20 m on a trip, 30 s / 100 m while idle-online.
-    const mode = onTrip ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
+    // Re-sent whenever the cadence changes: 5 s / 20 m on a trip,
+    // 30 s / 100 m while idle-online.
+    const mode =
+      trackingMode === 'onTrip' ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
     startNativeTracking(mode).then(async (result) => {
       if (cancelled) return;
       const tracking = nativeTrackingStarted(result);
@@ -183,13 +209,14 @@ export function DriverLocationBridge() {
     return () => {
       cancelled = true;
     };
-  }, [shouldTrack, onTrip, syncNonce, trackingKnown]);
+  }, [intent, trackingMode, syncNonce]);
 
   // Last JS that still runs as the WebView freezes: re-assert the native
   // service so Flutter does not treat pause as stop.
   useEffect(() => {
     if (!shouldTrack || !hasNativeTracking()) return undefined;
-    const mode = onTrip ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
+    const mode =
+      trackingMode === 'onTrip' ? TRACKING_MODE.ON_TRIP : TRACKING_MODE.IDLE;
     const keepAlive = () => {
       void startNativeTracking(mode, { forceEvent: true });
     };
@@ -206,7 +233,7 @@ export function DriverLocationBridge() {
       document.removeEventListener('freeze', keepAlive);
       window.removeEventListener('freeze', keepAlive);
     };
-  }, [shouldTrack, onTrip]);
+  }, [shouldTrack, trackingMode]);
 
   // Native is the background uploader. Until Flutter returns
   // `{ tracking: true }`, the WebView socket/HTTP path is the only thing

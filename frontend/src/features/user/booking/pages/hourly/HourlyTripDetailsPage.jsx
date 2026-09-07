@@ -367,6 +367,7 @@ const HourlyTripDetailsPage = () => {
         currentLocationLoading={locating}
         currentLocationError={geoError}
         currentPickup={pickup}
+        confirmOnMap
       />
 
       <OutOfServiceDialog

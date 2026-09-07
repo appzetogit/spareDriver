@@ -3,6 +3,7 @@ import { ApiResponse } from '../utils/apiResponse.js';
 import { ApiError } from '../utils/apiError.js';
 import {
   listLiveDriverMapMetadata,
+  listDriverLastKnownLocations,
   isLiveLocationReady,
 } from '../services/driverLocation.service.js';
 import { findDriversWithinRadius } from '../services/driverFinder.service.js';
@@ -32,6 +33,30 @@ export const getLiveDriversSnapshot = asyncHandler(async (req, res) => {
         liveLocationReady: isLiveLocationReady(),
       },
       'Live driver metadata',
+    ),
+  );
+});
+
+/**
+ * GET /admin/drivers/locations
+ *
+ * Fleet map for the admin panel: last-known position of every approved
+ * driver, ONLINE and OFFLINE. Positions come from the persisted Mongo
+ * `Driver.location` snapshot (survives disconnect), unlike `/drivers/live`
+ * which is online-only and carries no coordinates.
+ */
+export const getDriverLocationsSnapshot = asyncHandler(async (req, res) => {
+  const includeUnlocated = req.query.includeUnlocated === 'true';
+  const items = await listDriverLastKnownLocations({ includeUnlocated });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        items,
+        liveLocationReady: isLiveLocationReady(),
+      },
+      'Driver last-known locations',
     ),
   );
 });

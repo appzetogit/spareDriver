@@ -400,6 +400,34 @@ export async function markDriverEnRouteService(driverId, bookingId) {
  */
 export const ARRIVAL_PROXIMITY_METERS = 100;
 
+/**
+ * How much of a fix's own stated uncertainty the arrival check will absorb.
+ *
+ * A GPS fix is a circle, not a point. When a phone reports 90 m accuracy the
+ * driver could genuinely be standing on the pickup and still measure 90 m away
+ * from it, so holding them to a flat 100 m punishes them for their handset and
+ * the weather. Widening by the reported radius keeps the guard honest — a
+ * driver across town is still across town, whatever their accuracy claims.
+ *
+ * Capped, because otherwise a fix that admits to 2 km of uncertainty would buy
+ * a 2 km arrival radius, which is the fraud this guard exists to stop. The
+ * ingest pipeline already refuses anything looser than
+ * `LOCATION_ACCURACY.ON_TRIP_M` while a customer is watching, so in practice
+ * the cap is rarely what binds.
+ *
+ * @param {number|undefined} accuracyMeters
+ * @returns {number} radius in metres
+ */
+export function arrivalRadiusFor(accuracyMeters) {
+  if (!Number.isFinite(accuracyMeters) || accuracyMeters <= 0) {
+    return ARRIVAL_PROXIMITY_METERS;
+  }
+  return (
+    ARRIVAL_PROXIMITY_METERS
+    + Math.min(Math.round(accuracyMeters), ARRIVAL_PROXIMITY_METERS)
+  );
+}
+
 const EARTH_RADIUS_METERS = 6371000;
 
 function toRadians(deg) {
@@ -481,11 +509,12 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   }
 
   const distance = haversineMeters(driverCoords, pickupCoords);
-  if (distance > ARRIVAL_PROXIMITY_METERS) {
+  const allowed = arrivalRadiusFor(driverCoords.accuracy);
+  if (distance > allowed) {
     throw new ApiError(
       409,
-      `You're too far from the pickup (${Math.round(distance)} m). Move within ${ARRIVAL_PROXIMITY_METERS} m to mark arrival.`,
-      { distanceMeters: Math.round(distance), maxDistanceMeters: ARRIVAL_PROXIMITY_METERS },
+      `You're too far from the pickup (${Math.round(distance)} m). Move within ${allowed} m to mark arrival.`,
+      { distanceMeters: Math.round(distance), maxDistanceMeters: allowed },
     );
   }
 
@@ -900,8 +929,40 @@ export async function finalizeTripCompletionService(booking, { reason = 'complet
     invalidateDriverTripCache(claimed.driverId).catch(() => {});
   }
 
-  const snap = claimed.fareSnapshot || {};
-  recordCompletedTripPlatformRevenue(claimed).catch((err) =>
+  await settleCompletedTripPayouts(claimed);
+
+  broadcastUpdate(claimed);
+  notifyUserTripCompleted(claimed.userId, claimed).catch(() => null);
+  queueBookingInvoiceEmail(claimed);
+  return claimed;
+}
+
+/**
+ * Everything that must happen, money-wise, once a booking reaches
+ * COMPLETED: platform revenue booked, coupon usage counted, the
+ * driver's wallet credited (+ ledger rows written), referral rewards
+ * evaluated, and the driver told their earnings landed.
+ *
+ * Extracted from `finalizeCompletion` because a booking can reach
+ * COMPLETED through more than one door — the driver tapping complete,
+ * the no-show auto-complete timer, and an admin overriding the status
+ * from the panel. Before this existed the admin door skipped every
+ * step here, so an admin-completed trip paid the driver nothing and
+ * never appeared on their Earnings page.
+ *
+ * Safe to call more than once for the same booking:
+ * `settleDriverEarning` bails out when the trip's ledger rows already
+ * exist, so a driver-completed trip an admin later re-touches is not
+ * paid twice.
+ *
+ * Every step is non-fatal — a booking that has already been marked
+ * COMPLETED must not be wedged by a downstream write failing.
+ */
+export async function settleCompletedTripPayouts(booking) {
+  if (!booking?._id) return;
+
+  const snap = booking.fareSnapshot || {};
+  recordCompletedTripPlatformRevenue(booking).catch((err) =>
     console.warn(
       '[bookingTrip] failed to log trip platform revenue:',
       err?.message,
@@ -917,7 +978,7 @@ export async function finalizeTripCompletionService(booking, { reason = 'complet
     );
   }
 
-  await settleDriverEarning(claimed).catch((err) =>
+  await settleDriverEarning(booking).catch((err) =>
     console.warn(
       '[bookingTrip] failed to settle driver earning:',
       err?.message,
@@ -927,26 +988,22 @@ export async function finalizeTripCompletionService(booking, { reason = 'complet
   const { handleUserBookingCompleted, handleDriverTripCompleted } = await import(
     './referral.service.js'
   );
-  handleUserBookingCompleted(claimed).catch((err) =>
+  handleUserBookingCompleted(booking).catch((err) =>
     console.warn('[bookingTrip] user referral check failed:', err?.message),
   );
-  handleDriverTripCompleted(claimed).catch((err) =>
+  handleDriverTripCompleted(booking).catch((err) =>
     console.warn('[bookingTrip] driver referral check failed:', err?.message),
   );
 
-  broadcastUpdate(claimed);
-  notifyUserTripCompleted(claimed.userId, claimed).catch(() => null);
-  queueBookingInvoiceEmail(claimed);
-  if (claimed.driverId) {
-    const earning = driverEarningFromFareSnapshot(claimed.fareSnapshot);
+  if (booking.driverId) {
+    const earning = driverEarningFromFareSnapshot(booking.fareSnapshot);
     if (earning > 0) {
-      notifyDriverEarningsCredited(claimed.driverId, {
+      notifyDriverEarningsCredited(booking.driverId, {
         amountRupees: earning,
-        bookingId: claimed._id,
+        bookingId: booking._id,
       }).catch(() => null);
     }
   }
-  return claimed;
 }
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;

@@ -8,7 +8,8 @@ import useUserActiveBookingStore from '../../../../store/user/useUserActiveBooki
 import { useTripDriverLocation } from '../../../../hooks/useTripDriverLocation';
 import useAppResumeSync from '../../../../hooks/useAppResumeSync';
 import { BOOKING_STATUS } from '../../../../constants/bookingStatus';
-import { formatDistance, haversineMeters } from '../../../../utils/geo';
+import { formatTripDistance } from '../../../../utils/geo';
+import useTripEta from '../../../../hooks/useTripEta';
 import { SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
 import SosEmergencyButton from '../components/SosEmergencyButton';
 
@@ -92,10 +93,17 @@ const TripInProgressPage = () => {
 
   const totalFare = booking?.fareSnapshot?.total || 0;
   const minutesElapsed = Math.floor(elapsedSec / 60);
-  const tripDistance = useMemo(() => {
-    if (driverPoint && pickupPoint) return haversineMeters(driverPoint, pickupPoint);
-    return null;
-  }, [driverPoint, pickupPoint]);
+  // Same single source as the map above — a road distance once Directions
+  // answers, and honest about itself when the driver's position goes stale.
+  const {
+    distanceMeters: tripDistance,
+    isReliable: tripDistanceReliable,
+    onEtaChange: handleEtaChange,
+  } = useTripEta({
+    origin: driverPoint,
+    destination: dropPoint || pickupPoint,
+    isStale: driverLocationStale,
+  });
 
   const tripLabel =
     booking?.serviceType && SERVICE_TYPE_LABELS[booking.serviceType]
@@ -106,6 +114,7 @@ const TripInProgressPage = () => {
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
       {pickupPoint ? (
         <TripTrackingMap
+          onEtaChange={handleEtaChange}
           driver={driverPoint}
           pickup={pickupPoint}
           dropoff={dropPoint}
@@ -139,10 +148,14 @@ const TripInProgressPage = () => {
           <Card className="text-center !p-3">
             <MapPin className="w-5 h-5 text-info mx-auto mb-1" />
             <p className="text-lg font-bold">
-              {tripDistance != null ? formatDistance(tripDistance).replace(' km', '').replace(' m', '') : '—'}
+              {formatTripDistance(tripDistance, { isReliable: tripDistanceReliable })
+                .replace(' km', '')
+                .replace(' m', '')}
             </p>
             <p className="text-[10px] text-text-muted">
-              {tripDistance != null && tripDistance >= 1000 ? 'km' : 'm'}
+              {tripDistanceReliable && tripDistance != null
+                ? (tripDistance >= 1000 ? 'km' : 'm')
+                : 'to drop'}
             </p>
           </Card>
           <Card className="text-center !p-3">

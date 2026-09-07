@@ -103,7 +103,20 @@ export const revokeDriverTrackingToken = asyncHandler(async (req, res) => {
  */
 export const ingestDriverLocation = asyncHandler(async (req, res) => {
   const body = locationBatchSchema.parse(req.body);
-  const result = await ingestDriverLocationBatch(req.driverId, body.fixes);
+  // The credential says who is posting: a tracking token can only have come
+  // from the background service, an access token only from the WebView.
+  const source = req.trackingAuth === 'access_token' ? 'webview-http' : 'native';
+  const result = await ingestDriverLocationBatch(req.driverId, body.fixes, { source });
+
+  console.log(
+    `[flutter] location OK driver=${req.driverId}` +
+      ` auth=${req.trackingAuth || '-'}` +
+      ` accepted=${result.accepted ?? 0}` +
+      ` deduped=${result.deduped ?? 0}` +
+      ` rejected=${result.rejected ?? 0}` +
+      ` stopTracking=${Boolean(result.stopTracking)}` +
+      ` mode=${result.mode || '-'}`,
+  );
 
   console.log(
     `[flutter] location OK driver=${req.driverId}` +

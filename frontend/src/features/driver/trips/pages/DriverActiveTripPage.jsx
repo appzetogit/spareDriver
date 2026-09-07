@@ -78,6 +78,24 @@ import { openNativeNavigation } from '../../../../utils/nativeTracking';
 const ARRIVAL_PROXIMITY_METERS = 100;
 
 /**
+ * Mirrors `arrivalRadiusFor` in `backend/src/services/bookingTrip.service.js`.
+ *
+ * A fix is a circle, not a point, so the radius absorbs however much
+ * uncertainty the phone reports — capped, so a vague fix cannot buy an
+ * arbitrarily generous arrival. The server enforces the same number; this copy
+ * only exists so the CTA does not invite a tap the server will refuse.
+ */
+function arrivalRadiusFor(accuracyMeters) {
+  if (!Number.isFinite(accuracyMeters) || accuracyMeters <= 0) {
+    return ARRIVAL_PROXIMITY_METERS;
+  }
+  return (
+    ARRIVAL_PROXIMITY_METERS
+    + Math.min(Math.round(accuracyMeters), ARRIVAL_PROXIMITY_METERS)
+  );
+}
+
+/**
  * Per-status header + CTA. Drivers never see anything payment-related;
  * `AWAITING_PAYMENT` collapses to a neutral "customer is getting ready"
  * line so the driver can't deduce whether the customer is paying upfront
@@ -260,7 +278,16 @@ const DriverActiveTripPage = () => {
   // first fix while the customer map (Firebase) kept updating.
   const { coords: driverCoords } = useDriverLocationStatus();
   const driverPoint = useMemo(
-    () => (driverCoords ? { lat: driverCoords.lat, lng: driverCoords.lng } : null),
+    () =>
+      driverCoords
+        ? {
+            lat: driverCoords.lat,
+            lng: driverCoords.lng,
+            accuracy: Number.isFinite(driverCoords.accuracy)
+              ? driverCoords.accuracy
+              : null,
+          }
+        : null,
     [driverCoords],
   );
   // Pickup coordinates from the booking — derived above the early returns
@@ -358,11 +385,16 @@ const DriverActiveTripPage = () => {
     return haversineMeters(driverPoint, pickupCoords);
   }, [driverPoint, pickupCoords]);
 
+  const arrivalRadius = useMemo(
+    () => arrivalRadiusFor(driverPoint?.accuracy),
+    [driverPoint?.accuracy],
+  );
+
   const isEnRoute = status === BOOKING_STATUS.EN_ROUTE;
   const arrivalReady =
     isEnRoute &&
     distanceToPickup != null &&
-    distanceToPickup <= ARRIVAL_PROXIMITY_METERS;
+    distanceToPickup <= arrivalRadius;
 
   // Time gate on every pre-trip CTA (Start to pickup, I have arrived,
   // Start ride). Mirrors backend `assertWithinScheduledLead` /
@@ -527,9 +559,9 @@ const DriverActiveTripPage = () => {
         toast.error('We need your location to confirm arrival. Enable GPS and try again.');
         return;
       }
-      if (distanceToPickup == null || distanceToPickup > ARRIVAL_PROXIMITY_METERS) {
+      if (distanceToPickup == null || distanceToPickup > arrivalRadius) {
         toast.error(
-          `You're too far from the pickup (${formatDistance(distanceToPickup || 0)}). Move within ${ARRIVAL_PROXIMITY_METERS} m to mark arrival.`,
+          `You're too far from the pickup (${formatDistance(distanceToPickup || 0)}). Move within ${arrivalRadius} m to mark arrival.`,
         );
         return;
       }
@@ -549,6 +581,7 @@ const DriverActiveTripPage = () => {
     config,
     driverPoint,
     distanceToPickup,
+    arrivalRadius,
     enRouteTooEarly,
     arrivedTooEarly,
     startTooEarly,
@@ -976,7 +1009,7 @@ const DriverActiveTripPage = () => {
                 {arrivalReady
                   ? `Tap "I have arrived" to start the trip with the customer.`
                   : driverPoint
-                    ? `You need to be within ${ARRIVAL_PROXIMITY_METERS} m of the pickup before you can mark arrival.`
+                    ? `You need to be within ${arrivalRadius} m of the pickup before you can mark arrival.`
                     : 'Enable GPS so we can confirm you have reached the pickup.'}
               </p>
             </div>

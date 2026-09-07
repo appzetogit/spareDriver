@@ -44,6 +44,20 @@ function clearOfflineTimer(driverId) {
   }
 }
 
+/**
+ * Accept epoch ms or an ISO string, and treat anything else as "not stamped"
+ * so the service falls back to arrival time.
+ *
+ * `null` deliberately does not survive: `new Date(null)` is the epoch, and an
+ * epoch-dated fix would be silently rejected as stale rather than handled as
+ * the missing value it actually is.
+ */
+function readCapturedAt(value) {
+  if (value == null) return undefined;
+  const ms = typeof value === 'number' ? value : new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
 function isThrottled(driverId) {
   const now = Date.now();
   const last = lastEventAt.get(driverId) || 0;
@@ -83,10 +97,14 @@ export function attachDriverSocketHandlers(socket) {
         return;
       }
 
-      const { lat, lng, accuracy, heading, speed } = payload || {};
+      // `capturedAt` is when the OS produced the fix, not when it reached us.
+      // Both producers now stamp it, so the shared `lastFixAt` watermark
+      // orders them against each other instead of against arrival order —
+      // which is what let a late browser packet bury a fresher native one.
+      const { lat, lng, accuracy, heading, speed, capturedAt } = payload || {};
       const result = await recordDriverLocation(
         driverId,
-        { lat, lng, accuracy, heading, speed },
+        { lat, lng, accuracy, heading, speed, capturedAt: readCapturedAt(capturedAt) },
         { source: 'socket' },
       );
 

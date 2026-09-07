@@ -5,7 +5,11 @@ import { getRtdb, isFirebaseReady } from '../config/firebase.js';
 import { emitToAdmins, emitToUser, emitDriverLocationUpdate } from '../utils/socketEmitters.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import { ACTIVE_BOOKING_STATUSES, BOOKING_STATUS, isBookingContactRevealed } from '../constants/bookingStatus.js';
-import { LOCATION_STALE_AFTER_MS } from '../constants/driverTracking.js';
+import {
+  LOCATION_STALE_AFTER_MS,
+  LOCATION_ACCURACY,
+  NATIVE_PRIORITY_WINDOW_MS,
+} from '../constants/driverTracking.js';
 import { getJson, setJson, deleteKeys } from '../utils/ephemeralStore.js';
 
 /**
@@ -56,10 +60,17 @@ const KEY = {
   onlineSince: (id) => `driverloc:since:${id}`,
   statusPrint: (id) => `driverloc:print:${id}`,
   activeTrip: (id) => `driverloc:trip:${id}`,
+  nativeFix: (id) => `driverloc:native:${id}`,
 };
 
 const ONLINE_SINCE_TTL_MS = 24 * 60 * 60 * 1000;
 const STATUS_PRINT_TTL_MS = 10 * 60_000;
+
+/**
+ * Outlive the priority window comfortably so the key expiring is never what
+ * ends native's turn — only silence is.
+ */
+const NATIVE_FIX_TTL_MS = NATIVE_PRIORITY_WINDOW_MS * 4;
 
 /** Last accepted lat/lng per driver — used only to log real movement. */
 const lastLoggedCoords = new Map();
@@ -308,15 +319,44 @@ export async function clearTripLocation(bookingId) {
 /* Mongo writes                                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Write the dispatch-facing position, but never move it backwards in time.
+ *
+ * `lastFixAt` is the one watermark both producers share, and it used to be set
+ * unconditionally here. That is what let the WebView socket stamp it with
+ * `Date.now()` and then starve the native uploader: the batch ingest gates on
+ * `lastFixAt < newest`, so an accurate GPS batch whose newest fix was a few
+ * seconds older than the browser's clock was dropped as a replay.
+ *
+ * The guard is `$lte`, not `$lt`, because the batch path advances the
+ * watermark itself before calling in here — with exactly this fix's
+ * `capturedAt`. `$lt` would reject that write and leave Mongo holding a
+ * position the driver has already left.
+ *
+ * @returns {Promise<boolean>} false when a newer fix already won the race.
+ */
 async function snapshotMongoLocation(driverId, { lat, lng, heading, speed, at }) {
+  const fixAt = new Date(at);
   const $set = {
     location: { type: 'Point', coordinates: [lng, lat] },
-    lastLocationAt: new Date(at),
-    lastFixAt: new Date(at),
+    lastLocationAt: fixAt,
+    lastFixAt: fixAt,
   };
   if (isFiniteNum(heading)) $set.heading = heading;
   if (isFiniteNum(speed)) $set.speed = speed;
-  await Driver.updateOne({ _id: driverId }, { $set });
+
+  const res = await Driver.updateOne(
+    {
+      _id: driverId,
+      $or: [
+        { lastFixAt: null },
+        { lastFixAt: { $exists: false } },
+        { lastFixAt: { $lte: fixAt } },
+      ],
+    },
+    { $set },
+  );
+  return (res.matchedCount ?? res.n ?? 0) > 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -342,6 +382,88 @@ export async function recordDriverLocation(driverId, coords, { source = 'unknown
   const now = nowMs();
   const at = isFiniteNum(capturedAt) ? capturedAt : now;
 
+  // Resolved before anything is written, because how good a fix has to be
+  // depends on who is reading it. This is a 30-second cached lookup, not a
+  // query per fix.
+  const activeTrip = await loadActiveTripForDriver(driverId);
+  const customerWatching = Boolean(
+    activeTrip && CUSTOMER_VISIBLE_STATUSES.has(activeTrip.status),
+  );
+
+  // The batch path screened against the loose ceiling in `normalizeFixes`, and
+  // the socket path has no filter of its own at all — it is the one carrying
+  // the WebView's deliberately-coarse first fix. This is where the standard
+  // tightens to match the audience: a customer watching a marker, and the
+  // arrival check that decides whether a driver is really at the pickup, both
+  // need a real GPS fix. A fix this vague stops here rather than becoming a
+  // confident wrong answer on someone's screen.
+  //
+  // A fix with no `accuracy` at all is let through — older clients omit it.
+  const accuracyLimit = customerWatching
+    ? LOCATION_ACCURACY.ON_TRIP_M
+    : LOCATION_ACCURACY.IDLE_M;
+  if (isFiniteNum(accuracy) && accuracy > accuracyLimit) {
+    return {
+      accepted: false,
+      firebase: false,
+      mongoSnapshot: false,
+      trip: false,
+      reason: 'accuracy_too_poor',
+    };
+  }
+
+  // While the native uploader is demonstrably alive it is the only producer we
+  // believe. Everything else — the socket stream and its HTTP fallback — is a
+  // standby, not a second opinion. See NATIVE_PRIORITY_WINDOW_MS for why the
+  // weaker source must not get a vote.
+  if (source !== 'native') {
+    const lastNative = await getJson(KEY.nativeFix(String(driverId)));
+    if (isFiniteNum(lastNative?.at) && now - lastNative.at < NATIVE_PRIORITY_WINDOW_MS) {
+      return {
+        accepted: false,
+        firebase: false,
+        mongoSnapshot: false,
+        trip: false,
+        reason: 'native_preferred',
+      };
+    }
+  }
+
+  // Mongo first, and bail if it loses. It is the source of truth for dispatch
+  // matching, and a fix that is not good enough to match on is not good enough
+  // to show a customer either. Writing RTDB first meant a failed (or
+  // superseded) Mongo write left the customer watching a car the dispatcher
+  // could no longer see.
+  let mongoSnapshot = false;
+  try {
+    mongoSnapshot = await snapshotMongoLocation(driverId, { lat, lng, heading, speed, at });
+  } catch (err) {
+    console.warn('[driverLocation] Mongo snapshot failed:', err.message);
+    return {
+      accepted: false,
+      firebase: false,
+      mongoSnapshot: false,
+      trip: false,
+      reason: 'mongo_write_failed',
+    };
+  }
+
+  if (!mongoSnapshot) {
+    // A newer fix already landed. Publishing this one would walk the marker
+    // backwards on every screen watching it.
+    return {
+      accepted: false,
+      firebase: false,
+      mongoSnapshot: false,
+      trip: false,
+      reason: 'stale_fix',
+    };
+  }
+
+  if (source === 'native') {
+    await setJson(KEY.nativeFix(String(driverId)), { at: now }, NATIVE_FIX_TTL_MS);
+  }
+
   const fbPayload = {
     lat,
     lng,
@@ -362,8 +484,7 @@ export async function recordDriverLocation(driverId, coords, { source = 'unknown
 
   // Fan out to the customer, but only for a ride actually in flight.
   let tripOk = false;
-  const activeTrip = await loadActiveTripForDriver(driverId);
-  if (activeTrip && CUSTOMER_VISIBLE_STATUSES.has(activeTrip.status)) {
+  if (customerWatching) {
     tripOk = await writeFirebaseTripLocation(activeTrip.bookingId, {
       ...fbPayload,
       bookingId: activeTrip.bookingId,
@@ -393,14 +514,6 @@ export async function recordDriverLocation(driverId, coords, { source = 'unknown
       emitToUser(activeTrip.userId, S2C_EVENTS.TRIP_LOCATION_UPDATED, locationPayload);
       emitToUser(activeTrip.userId, S2C_EVENTS.DRIVER_LOCATION_UPDATE, locationPayload);
     }
-  }
-
-  let mongoSnapshot = false;
-  try {
-    await snapshotMongoLocation(driverId, { lat, lng, heading, speed, at });
-    mongoSnapshot = true;
-  } catch (err) {
-    console.warn('[driverLocation] Mongo snapshot failed:', err.message);
   }
 
   logDriverLocationFix(driverId, {
@@ -539,6 +652,81 @@ export async function listLiveDriverMapMetadata(extraIds = []) {
     isOnTrip: d.isOnTrip,
     activeTrip: tripByDriver.get(String(d._id)) || null,
   }));
+}
+
+/**
+ * Fleet snapshot for the admin "Driver locations" map.
+ *
+ * Unlike `listLiveDriverMapMetadata` (which is online-only and carries NO
+ * coordinates — the live map reads positions from Firebase), this returns the
+ * LAST-KNOWN position persisted in Mongo for every approved driver. That is
+ * what lets the admin see where a driver is even after they go OFFLINE: the
+ * `location` snapshot survives in Mongo long after the Firebase RTDB node is
+ * cleared on disconnect.
+ *
+ * Online drivers still appear here at their last Mongo snapshot; the frontend
+ * overlays their live Firebase pin on top when a fresher one is streaming.
+ *
+ * @param {{ includeUnlocated?: boolean }} [opts] include drivers who have
+ *   never reported a fix (no map pin — listed only so counts add up).
+ */
+export async function listDriverLastKnownLocations({ includeUnlocated = false } = {}) {
+  const drivers = await Driver.find({
+    isDeleted: false,
+    approvalStatus: 'approved',
+  })
+    .select(
+      '_id name phone driverNumber rating isOnline isOnTrip lastOnlineAt lastLocationAt location heading speed city',
+    )
+    .lean();
+
+  const onTripIds = drivers.filter((d) => d.isOnTrip).map((d) => d._id);
+  const bookings = onTripIds.length
+    ? await Booking.find({
+        driverId: { $in: onTripIds },
+        status: { $in: ACTIVE_BOOKING_STATUSES },
+      })
+        .select('_id driverId bookingNumber status serviceType pickup dropoff outstation userId')
+        .populate('userId', 'name phone_no')
+        .lean()
+    : [];
+
+  const tripByDriver = new Map();
+  for (const booking of bookings) {
+    tripByDriver.set(String(booking.driverId), serializeActiveTrip(booking));
+  }
+
+  const items = [];
+  for (const d of drivers) {
+    const coords = Array.isArray(d.location?.coordinates) ? d.location.coordinates : null;
+    const lng = coords?.[0];
+    const lat = coords?.[1];
+    // `[0, 0]` is the schema default for a driver who has never sent a fix —
+    // treat it as "no location", not a pin in the Gulf of Guinea.
+    const hasLocation =
+      isFiniteNum(lat) && isFiniteNum(lng) && !(lat === 0 && lng === 0);
+    if (!hasLocation && !includeUnlocated) continue;
+
+    items.push({
+      driverId: String(d._id),
+      name: d.name,
+      phone: d.phone,
+      driverNumber: d.driverNumber || '',
+      rating: d.rating ?? null,
+      isOnline: Boolean(d.isOnline),
+      isOnTrip: Boolean(d.isOnTrip),
+      lat: hasLocation ? lat : null,
+      lng: hasLocation ? lng : null,
+      heading: typeof d.heading === 'number' ? d.heading : null,
+      speed: typeof d.speed === 'number' ? d.speed : null,
+      city: d.city || '',
+      lastOnlineAt: d.lastOnlineAt || null,
+      lastLocationAt: d.lastLocationAt || null,
+      activeTrip: tripByDriver.get(String(d._id)) || null,
+    });
+  }
+
+  return items;
 }
 
 /**

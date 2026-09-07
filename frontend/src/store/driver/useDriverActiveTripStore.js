@@ -268,7 +268,18 @@ const useDriverActiveTripStore = create((set, get) => ({
    */
   markArrived(driverCoords) {
     const body = driverCoords
-      ? { driverCoords: { lat: driverCoords.lat, lng: driverCoords.lng } }
+      ? {
+          driverCoords: {
+            lat: driverCoords.lat,
+            lng: driverCoords.lng,
+            // The server widens its radius by whatever uncertainty the fix
+            // admits to, so a driver at the gate with a mediocre fix is not
+            // told they are across town.
+            accuracy: Number.isFinite(driverCoords.accuracy)
+              ? driverCoords.accuracy
+              : null,
+          },
+        }
       : undefined;
     return get()._runTransition('arrived', 'arrived', body);
   },

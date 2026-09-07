@@ -484,9 +484,288 @@ async function buildDailyBuckets(driverId, fromDate, days = 7) {
   return buckets;
 }
 
+/* ------------------------------------------------------------------ */
+/* Today snapshot                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Every rupee that moved the driver's wallet inside one window, split
+ * by component and returned alongside the individual rows.
+ *
+ * Same four sources (and the same source-of-truth rules) as the
+ * lifetime ledger — Payment for trip credits, Booking for cancellation
+ * shares, UserSubscription for stint payouts, PlatformRevenue for
+ * penalties — but scoped to a single day so the Earnings page can
+ * answer "what did I actually make today, and where did it come from?"
+ *
+ * `net` is credits MINUS penalties: the real change in the driver's
+ * wallet for the day. `earnings` stays gross-credits so it keeps
+ * matching `aggregateEarnings` (and therefore the home-page tile).
+ */
+async function collectDayLedger(driverId, gte, lte) {
+  const driverOid = new mongoose.Types.ObjectId(String(driverId));
+
+  const [tripGroups, cancellations, subscriptions, penalties] = await Promise.all([
+    Payment.aggregate([
+      {
+        $match: {
+          driverId,
+          purpose: { $in: TRIP_PAYMENT_PURPOSES },
+          status: 'captured',
+          createdAt: { $gte: gte, $lte: lte },
+        },
+      },
+      {
+        $group: {
+          _id: '$referenceId',
+          bookingNumber: { $first: '$meta.bookingNumber' },
+          serviceType: { $first: '$meta.serviceType' },
+          occurredAt: { $max: '$createdAt' },
+          total: { $sum: '$amount' },
+          fareEarning: {
+            $sum: {
+              $cond: [{ $eq: ['$purpose', PAYMENT_PURPOSE.TRIP_FARE] }, '$amount', 0],
+            },
+          },
+          allowanceEarning: {
+            $sum: {
+              $cond: [
+                { $eq: ['$purpose', PAYMENT_PURPOSE.TRIP_ALLOWANCE] },
+                '$amount',
+                0,
+              ],
+            },
+          },
+          waitingEarning: {
+            $sum: {
+              $cond: [
+                { $eq: ['$purpose', PAYMENT_PURPOSE.TRIP_WAITING] },
+                '$amount',
+                0,
+              ],
+            },
+          },
+          waitingMinutes: { $max: { $ifNull: ['$meta.billableMinutes', 0] } },
+          waitingNoShow: { $max: { $ifNull: ['$meta.noShow', false] } },
+        },
+      },
+    ]),
+    Booking.find({
+      driverId,
+      status: BOOKING_STATUS.CANCELLED,
+      isDeleted: false,
+      'cancellation.driverShare': { $gt: 0 },
+      'timeline.cancelledAt': { $gte: gte, $lte: lte },
+    })
+      .select('bookingNumber serviceType cancellation timeline')
+      .lean(),
+    UserSubscription.aggregate([
+      { $unwind: '$driverPayouts' },
+      {
+        $match: {
+          'driverPayouts.driverId': driverOid,
+          'driverPayouts.paidAt': { $gte: gte, $lte: lte },
+        },
+      },
+      {
+        $project: {
+          payoutId: '$driverPayouts._id',
+          planName: '$planNameSnapshot',
+          amountRupees: '$driverPayouts.amountRupees',
+          paidAt: '$driverPayouts.paidAt',
+          workingDays: '$driverPayouts.workingDays',
+        },
+      },
+    ]),
+    PlatformRevenue.find({
+      driverId,
+      source: PLATFORM_REVENUE_SOURCE.DRIVER_PENALTY,
+      occurredAt: { $gte: gte, $lte: lte },
+    })
+      .select('_id bookingId bookingNumber serviceType amountRupees occurredAt meta')
+      .lean(),
+  ]);
+
+  const rows = [];
+  let tripFare = 0;
+  let allowance = 0;
+  let waiting = 0;
+  let cancellationShare = 0;
+  let subscription = 0;
+  let penalty = 0;
+
+  for (const g of tripGroups) {
+    const total = round2(g.total || 0);
+    if (!(total > 0)) continue;
+    tripFare += Number(g.fareEarning) || 0;
+    allowance += Number(g.allowanceEarning) || 0;
+    waiting += Number(g.waitingEarning) || 0;
+    rows.push({
+      _id: g._id,
+      kind: LEDGER_KIND.TRIP,
+      direction: 'credit',
+      bookingNumber: g.bookingNumber || null,
+      bookingId: g._id,
+      serviceType: g.serviceType || null,
+      amountRupees: total,
+      occurredAt: g.occurredAt,
+      meta: {
+        fareEarning: round2(g.fareEarning || 0),
+        allowanceEarning: round2(g.allowanceEarning || 0),
+        waitingChargeRupees: round2(g.waitingEarning || 0),
+        waitingMinutes: Number(g.waitingMinutes) || 0,
+        waitingNoShow: !!g.waitingNoShow,
+      },
+    });
+  }
+
+  for (const b of cancellations) {
+    const amount = round2(Number(b.cancellation?.driverShare) || 0);
+    if (!(amount > 0)) continue;
+    cancellationShare += amount;
+    rows.push({
+      _id: b._id,
+      kind: LEDGER_KIND.CANCELLATION_SHARE,
+      direction: 'credit',
+      bookingNumber: b.bookingNumber || null,
+      bookingId: b._id,
+      serviceType: b.serviceType || null,
+      amountRupees: amount,
+      occurredAt: b.timeline?.cancelledAt,
+      meta: {
+        reason: b.cancellation?.reason || null,
+        cancelledBy: b.cancellation?.cancelledBy || null,
+        feeCharged: round2(b.cancellation?.feeCharged || 0),
+      },
+    });
+  }
+
+  for (const s of subscriptions) {
+    const amount = round2(Number(s.amountRupees) || 0);
+    if (!(amount > 0)) continue;
+    subscription += amount;
+    rows.push({
+      _id: s.payoutId || `${s._id}-${s.paidAt}`,
+      kind: LEDGER_KIND.SUBSCRIPTION_PAYOUT,
+      direction: 'credit',
+      bookingNumber: null,
+      bookingId: null,
+      serviceType: null,
+      amountRupees: amount,
+      occurredAt: s.paidAt,
+      meta: {
+        planName: s.planName || 'Subscription',
+        workingDays: s.workingDays || 0,
+      },
+    });
+  }
+
+  for (const p of penalties) {
+    const amount = round2(Number(p.amountRupees) || 0);
+    if (!(amount > 0)) continue;
+    penalty += amount;
+    rows.push({
+      _id: p._id,
+      kind: LEDGER_KIND.PENALTY,
+      direction: 'debit',
+      bookingNumber: p.bookingNumber || null,
+      bookingId: p.bookingId || null,
+      serviceType: p.serviceType || null,
+      amountRupees: amount,
+      occurredAt: p.occurredAt,
+      meta: {
+        reason: p.meta?.reason || 'cancelled_by_driver',
+        bookingStatus: p.meta?.status || null,
+      },
+    });
+  }
+
+  rows.sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+  );
+
+  const tripCredits = tripFare + allowance + waiting;
+  const credits = tripCredits + cancellationShare + subscription;
+  const creditRows = rows.filter((r) => r.direction === 'credit');
+  const countOf = (kind) => rows.filter((r) => r.kind === kind).length;
+  const tripCount = countOf(LEDGER_KIND.TRIP);
+
+  return {
+    date: localDateKey(gte),
+    earnings: round2(credits),
+    penalties: round2(penalty),
+    net: round2(credits - penalty),
+    trips: tripCount,
+    avgPerTrip: tripCount ? round2(tripCredits / tripCount) : 0,
+    breakdown: {
+      tripFare: round2(tripFare),
+      allowance: round2(allowance),
+      waiting: round2(waiting),
+      cancellationShare: round2(cancellationShare),
+      subscription: round2(subscription),
+      penalty: round2(penalty),
+    },
+    counts: {
+      trips: tripCount,
+      cancellations: countOf(LEDGER_KIND.CANCELLATION_SHARE),
+      subscriptionPayouts: countOf(LEDGER_KIND.SUBSCRIPTION_PAYOUT),
+      penalties: countOf(LEDGER_KIND.PENALTY),
+    },
+    // Bookends of the earning day — the UI renders these as
+    // "09:14 → 21:40" so the number has a shape, not just a size.
+    firstCreditAt: creditRows.length
+      ? creditRows[creditRows.length - 1].occurredAt
+      : null,
+    lastCreditAt: creditRows.length ? creditRows[0].occurredAt : null,
+    rows,
+  };
+}
+
+/**
+ * Today against yesterday and against the 7-day daily average, so the
+ * page can tell the driver whether today is a good day instead of just
+ * printing a number.
+ *
+ * `percent` is null when yesterday was a zero day — a percentage
+ * change off zero is meaningless and the UI falls back to the rupee
+ * delta.
+ */
+function buildTodayComparison(today, yesterday, buckets) {
+  const delta = round2(today.net - yesterday.net);
+  const percent =
+    yesterday.net > 0 ? Math.round((delta / yesterday.net) * 100) : null;
+  const dayAverage = buckets.length
+    ? round2(
+        buckets.reduce((sum, b) => sum + (Number(b.earnings) || 0), 0)
+          / buckets.length,
+      )
+    : 0;
+  return {
+    yesterday: {
+      earnings: yesterday.earnings,
+      net: yesterday.net,
+      trips: yesterday.trips,
+    },
+    delta: {
+      amount: delta,
+      percent,
+      direction: delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat',
+    },
+    // Mean daily earnings across the same 7 days the chart shows.
+    dayAverage,
+    // Compared against GROSS today, because the buckets behind
+    // `dayAverage` are gross credits too — comparing net-to-gross
+    // would quietly understate the day whenever a penalty landed.
+    vsAverage: round2(today.earnings - dayAverage),
+  };
+}
+
 /**
  * Drives `/driver/earnings`. Returns:
  *  - today / week / month aggregates
+ *  - a full `today` snapshot: net, component breakdown, per-trip
+ *    average, the day's own ledger rows, and today-vs-yesterday /
+ *    vs-7-day-average comparisons
  *  - last-7-days bar chart buckets
  *  - last 10 completed trips for the "recent payouts" feed
  */
@@ -495,6 +774,8 @@ export async function getDriverEarningsService(driverId) {
   const now = new Date();
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
+  const yesterdayStart = addDays(todayStart, -1);
+  const yesterdayEnd = endOfDay(yesterdayStart);
   const weekStart = startOfWeek(now);
   const monthStart = startOfMonth(now);
   const sevenDaysAgo = addDays(startOfDay(now), -6); // last 7 days inclusive
@@ -522,7 +803,15 @@ export async function getDriverEarningsService(driverId) {
   ]);
   const recentBookingIds = recentPaymentIds.map((r) => r._id);
 
-  const [today, week, month, daily, recentBookings] = await Promise.all([
+  const [
+    today,
+    week,
+    month,
+    daily,
+    recentBookings,
+    todayLedger,
+    yesterdayLedger,
+  ] = await Promise.all([
     aggregateEarnings(driverId, todayStart, todayEnd),
     aggregateEarnings(driverId, weekStart, todayEnd),
     aggregateEarnings(driverId, monthStart, todayEnd),
@@ -532,6 +821,8 @@ export async function getDriverEarningsService(driverId) {
           .populate('userId', 'name')
           .lean()
       : Promise.resolve([]),
+    collectDayLedger(driverId, todayStart, todayEnd),
+    collectDayLedger(driverId, yesterdayStart, yesterdayEnd),
   ]);
 
   // Preserve the Payment-ledger ordering (most-recent credit first).
@@ -547,6 +838,19 @@ export async function getDriverEarningsService(driverId) {
 
   return {
     summary: { today, week, month },
+    // Rich today-only view. `summary.today` stays as-is (gross credits,
+    // same shape as week/month) for back-compat; `today` is the one the
+    // Earnings page headlines.
+    today: {
+      ...todayLedger,
+      ...buildTodayComparison(todayLedger, yesterdayLedger, daily),
+      // Best single day in the charted window — gives "today" something
+      // to be measured against beyond yesterday.
+      bestDay: daily.reduce(
+        (best, b) => (b.earnings > (best?.earnings || 0) ? b : best),
+        null,
+      ),
+    },
     daily: {
       buckets: daily,
       peak: round2(peak),

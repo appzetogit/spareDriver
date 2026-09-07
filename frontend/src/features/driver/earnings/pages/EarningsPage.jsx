@@ -15,6 +15,11 @@ import {
   TimerReset,
   ChevronRight,
   Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Sunrise,
+  Route,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
@@ -73,19 +78,21 @@ const EarningsPage = () => {
   }, [fetchLedger]);
 
   const summary = data?.summary || {};
-  const today = summary.today || EMPTY;
   const week = summary.week || EMPTY;
   const month = summary.month || EMPTY;
+  // Rich today snapshot (net, breakdown, comparisons, the day's own
+  // rows). Falls back to the flat `summary.today` shape if the API is
+  // an older build that doesn't send it.
+  const todaySnapshot = data?.today || null;
   const buckets = data?.daily?.buckets || [];
   const peak = data?.daily?.peak || 0;
 
   const stats = useMemo(
     () => [
-      { label: 'Today', amount: formatCurrency(today.earnings), trips: today.trips },
       { label: 'This Week', amount: formatCurrency(week.earnings), trips: week.trips },
       { label: 'This Month', amount: formatCurrency(month.earnings), trips: month.trips },
     ],
-    [today, week, month],
+    [week, month],
   );
 
   const onLoadMore = () => {
@@ -181,6 +188,8 @@ const EarningsPage = () => {
 
       {!!data && (
         <>
+          <TodayCard today={todaySnapshot} onSelectRow={setSelectedLedgerRow} />
+
           <Card>
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-text-muted font-semibold uppercase tracking-wide">
@@ -192,29 +201,26 @@ const EarningsPage = () => {
                 </span>
               )}
             </div>
-            <EarningsBarChart buckets={buckets} peak={peak} />
+            <EarningsBarChart
+              buckets={buckets}
+              peak={peak}
+              todayKey={todaySnapshot?.date}
+            />
           </Card>
 
-          <Card padding="p-0">
-            <ul className="divide-y divide-border-light">
-              {stats.map((stat) => (
-                <li
-                  key={stat.label}
-                  className="flex items-center justify-between px-4 py-3.5"
-                >
-                  <div>
-                    <p className="text-xs text-text-muted font-semibold uppercase tracking-wide">
-                      {stat.label}
-                    </p>
-                    <p className="text-[11px] text-text-muted mt-0.5">
-                      {stat.trips} trip{stat.trips === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  <p className="text-base font-bold text-text">{stat.amount}</p>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <div className="grid grid-cols-2 gap-3">
+            {stats.map((stat) => (
+              <Card key={stat.label} padding="p-3.5">
+                <p className="text-[11px] text-text-muted font-semibold uppercase tracking-wide">
+                  {stat.label}
+                </p>
+                <p className="text-lg font-bold text-text mt-1">{stat.amount}</p>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  {stat.trips} trip{stat.trips === 1 ? '' : 's'}
+                </p>
+              </Card>
+            ))}
+          </div>
 
           <EarningsBreakdown totals={ledgerTotals} />
 
@@ -236,6 +242,284 @@ const EarningsPage = () => {
     </DriverScreenShell>
   );
 };
+
+/* ------------------------------------------------------------------ */
+/* Today                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Components of a day's credits, in the order they're stacked in the
+ * composition bar. Keys match `today.breakdown` from the API.
+ */
+const TODAY_SEGMENTS = [
+  { key: 'tripFare', label: 'Trip fares', bar: 'bg-emerald-500', dot: 'bg-emerald-500' },
+  { key: 'allowance', label: 'Allowance', bar: 'bg-teal-500', dot: 'bg-teal-500' },
+  { key: 'waiting', label: 'Waiting', bar: 'bg-amber-500', dot: 'bg-amber-500' },
+  {
+    key: 'cancellationShare',
+    label: 'Cancellation share',
+    bar: 'bg-orange-400',
+    dot: 'bg-orange-400',
+  },
+  {
+    key: 'subscription',
+    label: 'Subscription',
+    bar: 'bg-violet-500',
+    dot: 'bg-violet-500',
+  },
+];
+
+/**
+ * The headline of the page: what the driver made today, what it's made
+ * of, how it compares to yesterday and to their own 7-day average, and
+ * the individual credits behind it.
+ *
+ * The big number is NET (credits − penalties) because that's the real
+ * change in their wallet; when a penalty landed we spell out the gross
+ * and the deduction underneath so the number is never a surprise.
+ */
+function TodayCard({ today, onSelectRow }) {
+  if (!today) return null;
+
+  const net = Number(today.net) || 0;
+  const gross = Number(today.earnings) || 0;
+  const penalty = Number(today.penalties) || 0;
+  const trips = Number(today.trips) || 0;
+  const avgPerTrip = Number(today.avgPerTrip) || 0;
+  const dayAverage = Number(today.dayAverage) || 0;
+  const vsAverage = Number(today.vsAverage) || 0;
+  const rows = today.rows || [];
+  const breakdown = today.breakdown || {};
+  const yesterday = today.yesterday || {};
+
+  const segments = TODAY_SEGMENTS.map((s) => ({
+    ...s,
+    amount: Number(breakdown[s.key]) || 0,
+  })).filter((s) => s.amount > 0);
+  const creditTotal = segments.reduce((sum, s) => sum + s.amount, 0);
+  const hasActivity = rows.length > 0;
+
+  return (
+    <Card padding="p-0" className="overflow-hidden">
+      <div className="px-4 pt-4 pb-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Today&apos;s earnings
+            </p>
+            <p className="text-[11px] text-text-muted mt-0.5">{formatTodayDate()}</p>
+          </div>
+          <TodayDeltaChip delta={today.delta} yesterday={yesterday} />
+        </div>
+
+        <div className="flex items-baseline gap-2 mt-2">
+          <span
+            className={`text-[34px] leading-none font-bold tracking-tight ${
+              net < 0 ? 'text-rose-700' : 'text-text'
+            }`}
+          >
+            {formatCurrency(net)}
+          </span>
+        </div>
+
+        {penalty > 0 && (
+          <p className="text-[11px] text-text-muted mt-1.5">
+            {formatCurrency(gross)} earned
+            <span className="text-text-muted/60"> &middot; </span>
+            <span className="text-rose-700 font-semibold">
+              &minus;{formatCurrency(penalty)} penalty
+            </span>
+          </p>
+        )}
+
+        {hasActivity ? (
+          <>
+            {creditTotal > 0 && (
+              <>
+                <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mt-3.5">
+                  {segments.map((s) => (
+                    <div
+                      key={s.key}
+                      className={s.bar}
+                      style={{ width: `${(s.amount / creditTotal) * 100}%` }}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5">
+                  {segments.map((s) => (
+                    <span
+                      key={s.key}
+                      className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                      {s.label}
+                      <span className="font-semibold text-text">
+                        {formatCurrency(s.amount)}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <TodayStat
+                icon={Route}
+                label="Trips"
+                value={String(trips)}
+              />
+              <TodayStat
+                icon={Wallet}
+                label="Avg / trip"
+                value={trips ? formatCurrency(avgPerTrip) : '—'}
+              />
+              <TodayStat
+                icon={Sunrise}
+                label="Active"
+                value={formatWindow(today.firstCreditAt, today.lastCreditAt)}
+              />
+            </div>
+
+            {dayAverage > 0 && (
+              <p className="text-[11px] text-text-muted mt-3">
+                {vsAverage >= 0 ? (
+                  <>
+                    <span className="font-semibold text-emerald-600">
+                      {formatCurrency(Math.abs(vsAverage))} above
+                    </span>{' '}
+                    your 7-day average of {formatCurrency(dayAverage)}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-text-secondary">
+                      {formatCurrency(Math.abs(vsAverage))} below
+                    </span>{' '}
+                    your 7-day average of {formatCurrency(dayAverage)}
+                  </>
+                )}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="mt-3 rounded-2xl bg-gray-50 px-3.5 py-3">
+            <p className="text-sm font-semibold text-text">No earnings yet today</p>
+            <p className="text-[11px] text-text-muted mt-0.5">
+              {Number(yesterday.net) > 0
+                ? `You made ${formatCurrency(yesterday.net)} across ${
+                    yesterday.trips
+                  } trip${yesterday.trips === 1 ? '' : 's'} yesterday.`
+                : 'Go online — completed trips are credited the moment you finish.'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {hasActivity && (
+        <div className="border-t border-border-light">
+          <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            Today&apos;s credits
+          </p>
+          <div className="divide-y divide-border-light">
+            {rows.map((row) => (
+              <EarningsLedgerRow key={row._id} row={row} onSelect={onSelectRow} />
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function TodayStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl bg-gray-50 px-2.5 py-2">
+      <div className="flex items-center gap-1 text-text-muted">
+        <Icon className="w-3 h-3" />
+        <span className="text-[10px] font-semibold uppercase tracking-wide">
+          {label}
+        </span>
+      </div>
+      <p className="text-sm font-bold text-text mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Today vs. yesterday. Percentages are only meaningful when yesterday
+ * was non-zero — otherwise the API sends `percent: null` and we show
+ * the rupee delta instead.
+ */
+function TodayDeltaChip({ delta, yesterday }) {
+  const amount = Number(delta?.amount) || 0;
+  const percent = delta?.percent;
+  const direction = delta?.direction || 'flat';
+  const yesterdayNet = Number(yesterday?.net) || 0;
+
+  // Nothing today and nothing yesterday — a "0%" chip would be noise.
+  if (direction === 'flat' && yesterdayNet === 0) return null;
+
+  const tone =
+    direction === 'up'
+      ? 'bg-emerald-50 text-emerald-700'
+      : direction === 'down'
+        ? 'bg-rose-50 text-rose-700'
+        : 'bg-gray-100 text-text-secondary';
+  const Icon =
+    direction === 'up' ? TrendingUp : direction === 'down' ? TrendingDown : Minus;
+  const text =
+    percent === null || percent === undefined
+      ? `${amount > 0 ? '+' : amount < 0 ? '−' : ''}${formatCurrency(
+          Math.abs(amount),
+        )}`
+      : `${percent > 0 ? '+' : ''}${percent}%`;
+
+  return (
+    <div className="shrink-0 text-right">
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold ${tone}`}
+      >
+        <Icon className="w-3 h-3" />
+        {text}
+      </span>
+      <p className="text-[10px] text-text-muted mt-1">
+        vs {formatCurrency(yesterdayNet)} yesterday
+      </p>
+    </div>
+  );
+}
+
+function formatTodayDate() {
+  try {
+    return new Date().toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function formatClock(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** "09:14 → 21:40", or a single time when there's only one credit. */
+function formatWindow(firstIso, lastIso) {
+  const first = formatClock(firstIso);
+  const last = formatClock(lastIso);
+  if (!first) return '—';
+  if (!last || first === last) return first;
+  return `${first} → ${last}`;
+}
 
 /* ------------------------------------------------------------------ */
 /* Earnings breakdown (trips vs. cancellation shares)                  */
@@ -505,7 +789,7 @@ function formatLedgerDate(iso) {
 /* Bar chart                                                           */
 /* ------------------------------------------------------------------ */
 
-function EarningsBarChart({ buckets, peak }) {
+function EarningsBarChart({ buckets, peak, todayKey }) {
   const safePeak = peak > 0 ? peak : 1;
   return (
     <div className="flex items-stretch justify-between gap-2.5 h-36 mt-2">
@@ -513,33 +797,46 @@ function EarningsBarChart({ buckets, peak }) {
         const hasEarnings = bucket.earnings > 0;
         const heightPct = hasEarnings ? Math.max(6, Math.round((bucket.earnings / safePeak) * 100)) : 0;
         const isPeak = hasEarnings && bucket.earnings === peak;
+        // Today is the bar the driver is actually acting on — always
+        // mark it, whether or not it's the peak.
+        const isToday = !!todayKey && bucket.date === todayKey;
         return (
           <div
             key={bucket.date}
             className="flex-1 flex flex-col items-center min-w-0 h-full justify-between"
           >
             {/* Value Label */}
-            <span className="text-[9px] font-bold text-slate-500 h-4 flex items-center shrink-0">
+            <span
+              className={`text-[9px] font-bold h-4 flex items-center shrink-0 ${
+                isToday ? 'text-text' : 'text-slate-500'
+              }`}
+            >
               {hasEarnings ? `₹${Math.round(bucket.earnings)}` : '—'}
             </span>
-            
+
             {/* Bar Track & Fill */}
             <div className="flex-1 w-3 bg-slate-100 rounded-full relative flex items-end overflow-hidden border border-slate-100/30">
               {hasEarnings && (
                 <div
                   className={`w-full rounded-full transition-all duration-500 ease-out ${
-                    isPeak 
-                      ? 'bg-primary shadow-sm shadow-primary/20' 
-                      : 'bg-slate-300'
+                    isToday
+                      ? 'bg-dark'
+                      : isPeak
+                        ? 'bg-primary shadow-sm shadow-primary/20'
+                        : 'bg-slate-300'
                   }`}
                   style={{ height: `${heightPct}%` }}
                 />
               )}
             </div>
-            
+
             {/* Date Label */}
-            <span className="text-[10px] font-semibold text-slate-400 mt-2 shrink-0 capitalize">
-              {bucket.label}
+            <span
+              className={`text-[10px] font-semibold mt-2 shrink-0 capitalize ${
+                isToday ? 'text-text' : 'text-slate-400'
+              }`}
+            >
+              {isToday ? 'Today' : bucket.label}
             </span>
           </div>
         );

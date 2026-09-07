@@ -1107,6 +1107,7 @@ function OutstationVariants({ pricing, draft, onPatch, onContinue }) {
         currentLocationLoading={locating}
         currentLocationError={geoError}
         currentPickup={localPickup}
+        confirmOnMap
       />
       <LocationPickerSheet
         open={pickerOpen === 'drop'}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../../../components/Card';
 import Toggle from '../../../../components/Toggle';
@@ -18,8 +18,14 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useCachedQuery } from '../../../../hooks/useCachedQuery';
+import { haversineMeters } from '../../../../utils/geo';
+import { getLocationOnce } from '../../../../utils/geolocation';
+import { reportDriverLocation } from '../../../../hooks/useDriverLocation';
 import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
-import { useDriverOnlineStore } from '../../../../store/driver/useDriverOnlineStore';
+import {
+  useDriverOnlineStore,
+  DRIVER_ONLINE_CACHE_KEY,
+} from '../../../../store/driver/useDriverOnlineStore';
 import { useDriverKitActiveStore } from '../../../../store/driver/useDriverKitStore';
 import { useDriverHomeSummaryStore } from '../../../../store/driver/useDriverTripsStore';
 import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
@@ -50,6 +56,22 @@ import { useAfterPaint } from '../../../../hooks/useAfterPaint';
 import { Skeleton } from '../../../../components/skeleton/Skeleton';
 import { TripCardSkeleton } from '../../../../components/skeleton/SectionSkeletons';
 
+/** One-shot options for an explicit "Retry" tap: freshest fix available. */
+const RETRY_FIX_OPTIONS = Object.freeze({
+  enableHighAccuracy: true,
+  maximumAge: 0,
+  timeout: 15_000,
+});
+
+/**
+ * How far the driver must move before the address line is looked up again.
+ *
+ * Comfortably past normal GPS jitter, and short enough that turning onto a
+ * different road updates the label while the driver is still on it.
+ */
+const LOCATION_LABEL_REFRESH_METERS = 75;
+
+
 const ACTIVE_STATUS_COPY = {
   [BOOKING_STATUS.DRIVER_ASSIGNED]: 'Heading to customer',
   [BOOKING_STATUS.AWAITING_PAYMENT]: 'Customer is getting ready',
@@ -70,7 +92,7 @@ const DriverHomePage = () => {
   const assignedSubscriptions = useDriverSubscriptionsStore((s) => s.subscriptions);
   const assignedSubsLoading = useDriverSubscriptionsStore((s) => s.loading);
   const fetchAssignedSubscriptions = useDriverSubscriptionsStore((s) => s.fetchAssigned);
-  const onlineKey = buildCacheKey('driver-online-status', {});
+  const onlineKey = DRIVER_ONLINE_CACHE_KEY;
   const activeKey = buildCacheKey('driver-kit-active', {});
   const summaryKey = buildCacheKey('driver-home-summary', {});
 
@@ -173,10 +195,27 @@ const DriverHomePage = () => {
     : null;
 
   const [currentLocation, setCurrentLocation] = useState(null);
+  /** Where we last spent a Geocoding call, so we can tell real movement from jitter. */
+  const geocodedAtRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     if (!mapsReady || !maps || !coords) return undefined;
+
+    // While the driver is online this runs off the live GPS stream, which
+    // ticks every couple of seconds. Reverse-geocoding each tick meant a
+    // billed Geocoding request per tick, and an address line that rewrote
+    // itself constantly as consecutive fixes resolved to neighbouring
+    // buildings. A driver parked at a pickup does not change address.
+    const previous = geocodedAtRef.current;
+    const movedEnough =
+      !previous
+      || haversineMeters(previous, { lat: coords.lat, lng: coords.lng })
+        >= LOCATION_LABEL_REFRESH_METERS;
+    if (!movedEnough) return undefined;
+
+    geocodedAtRef.current = { lat: coords.lat, lng: coords.lng };
+
     (async () => {
       const point = await reverseGeocode(maps, { lat: coords.lat, lng: coords.lng });
       if (!cancelled && point) setCurrentLocation(point);
@@ -207,6 +246,36 @@ const DriverHomePage = () => {
   const showLocationRetry = Boolean(
     geoError || softError || location.error || accuracyQuality === 'poor' || !coords,
   );
+
+  const [retryingLocation, setRetryingLocation] = useState(false);
+
+  /**
+   * "Retry" has two jobs depending on who owns the coordinates.
+   *
+   * When the driver is online the live GPS stream is the source, so
+   * `useGeolocation` is disabled — and its `refresh()` returns immediately
+   * without asking the OS for anything. The button was therefore dead in
+   * exactly the state that shows it (online with a weak fix), and worse, it
+   * still wiped the shared coords cache on the way out.
+   *
+   * So in that mode we ask the OS ourselves and publish the result into the
+   * same shared stream every driver screen reads.
+   */
+  const handleLocationRetry = useCallback(async () => {
+    if (needDisplayGeo) {
+      refreshGeo();
+      return;
+    }
+    setRetryingLocation(true);
+    try {
+      const fresh = await getLocationOnce(RETRY_FIX_OPTIONS);
+      reportDriverLocation(fresh, { source: 'browser' });
+    } catch {
+      // The stream surfaces its own error state; a failed retry adds nothing.
+    } finally {
+      setRetryingLocation(false);
+    }
+  }, [needDisplayGeo, refreshGeo]);
 
   useEffect(() => {
     if (onlineStatus) {
@@ -273,13 +342,13 @@ const DriverHomePage = () => {
               >
                 {locationLine}
               </span>
-              {locationLoading && (
+              {(locationLoading || retryingLocation) && (
                 <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin shrink-0" />
               )}
-              {showLocationRetry && !locationLoading && (
+              {showLocationRetry && !locationLoading && !retryingLocation && (
                 <button
                   type="button"
-                  onClick={() => refreshGeo()}
+                  onClick={handleLocationRetry}
                   className="p-1 rounded-full hover:bg-bg text-primary shrink-0"
                   aria-label="Retry location"
                 >
@@ -488,7 +557,7 @@ const DriverHomePage = () => {
                 </p>
                 <button
                   type="button"
-                  onClick={() => refreshGeo()}
+                  onClick={handleLocationRetry}
                   className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
