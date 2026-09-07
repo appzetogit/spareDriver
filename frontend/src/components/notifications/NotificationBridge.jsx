@@ -9,6 +9,8 @@ import { useSocketEvent } from '../../hooks/useSocket';
 import { S2C_EVENTS } from '../../constants/socketEvents';
 import { useInAppAlertRing } from '../../hooks/useInAppAlertRing';
 import { ADMIN_NOTIFICATION, DRIVER_NOTIFICATION } from '../../constants/notificationTypes';
+import { BOOKING_STATUS } from '../../constants/bookingStatus';
+import { syncDriverDashboardFromBookingUpdate } from '../../store/driver/useDriverActiveTripStore';
 
 function isAdminAlertKind(kind) {
   return (
@@ -42,6 +44,10 @@ export function DriverNotificationBridge() {
 
   const ringIfAssigned = useCallback((kind, data = {}) => {
     if (!isDriverAssignedKind(kind || data.kind || data.type)) return;
+    syncDriverDashboardFromBookingUpdate({
+      status: data.status || BOOKING_STATUS.DRIVER_ASSIGNED,
+      bookingId: data.bookingId,
+    });
     const key = String(data.bookingId || Date.now());
     if (lastAssignedKeyRef.current === key) return;
     lastAssignedKeyRef.current = key;

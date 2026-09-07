@@ -34,6 +34,15 @@ export const TERMINAL_BOOKING_STATUSES = Object.freeze([
   BOOKING_STATUS.CANCELLED,
 ]);
 
+/** Assigned / in-progress trips shown on driver Home → Active trips. */
+export const DRIVER_LIVE_TRIP_STATUSES = Object.freeze([
+  BOOKING_STATUS.DRIVER_ASSIGNED,
+  BOOKING_STATUS.AWAITING_PAYMENT,
+  BOOKING_STATUS.EN_ROUTE,
+  BOOKING_STATUS.ARRIVED,
+  BOOKING_STATUS.STARTED,
+]);
+
 export const PAYMENT_MODE = Object.freeze({
   PRE_RIDE: 'pre_ride',
   POST_RIDE: 'post_ride',

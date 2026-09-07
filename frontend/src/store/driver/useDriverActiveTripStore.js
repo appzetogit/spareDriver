@@ -6,7 +6,7 @@ import {
   useDriverEarningsStore,
   useDriverEarningsLedgerStore,
 } from './useDriverTripsStore';
-import { BOOKING_STATUS } from '../../constants/bookingStatus';
+import { BOOKING_STATUS, DRIVER_LIVE_TRIP_STATUSES } from '../../constants/bookingStatus';
 import { startNativeTracking, TRACKING_MODE } from '../../utils/nativeTracking';
 
 /**
@@ -36,6 +36,34 @@ const DRIVER_TRIP_ENDED_STATUSES = new Set([
   BOOKING_STATUS.NO_DRIVERS_FOUND,
   BOOKING_STATUS.IN_EMERGENCY_POOL,
 ]);
+
+const DRIVER_HOME_LIVE_STATUSES = new Set(DRIVER_LIVE_TRIP_STATUSES);
+
+/**
+ * Keep Home → Active trips and the in-memory active booking in sync
+ * when admin assigns (or a trip ends) while the driver is on another
+ * screen. Home uses a cached `/driver/home/summary` that otherwise
+ * stays stale until a manual refresh; Trips → Ongoing refetches on
+ * every `BOOKING_UPDATED`, which is why that tab could show the trip
+ * while Home still said "No active trips".
+ */
+export function syncDriverDashboardFromBookingUpdate(payload = {}) {
+  const status = payload.status;
+  if (!status) return;
+  if (
+    DRIVER_HOME_LIVE_STATUSES.has(status)
+    || DRIVER_TRIP_ENDED_STATUSES.has(status)
+  ) {
+    invalidateDriverDashboardCaches();
+  }
+  if (DRIVER_HOME_LIVE_STATUSES.has(status)) {
+    const current = useDriverActiveTripStore.getState().booking;
+    const incomingId = payload.bookingId ? String(payload.bookingId) : '';
+    if (!current || (incomingId && String(current._id) !== incomingId)) {
+      useDriverActiveTripStore.getState().fetchActive().catch(() => {});
+    }
+  }
+}
 
 function isPopulatedDoc(value) {
   return Boolean(value) && typeof value === 'object' && (value.name || value.vehicleNumber);
@@ -96,14 +124,17 @@ const useDriverActiveTripStore = create((set, get) => ({
   applyUpdate(patch = {}) {
     const current = get().booking;
     if (!current) {
-      // Still refresh home tiles when a cancel/complete arrives while
-      // the driver is on /driver/home (no in-memory active booking).
-      if (patch.status && DRIVER_TRIP_ENDED_STATUSES.has(patch.status)) {
-        invalidateDriverDashboardCaches();
-      }
+      // No in-memory trip yet (driver is on Home). Assignment must
+      // hydrate the store + home cache; cancel/complete must drop the tile.
+      if (patch.status) syncDriverDashboardFromBookingUpdate(patch);
       return;
     }
-    if (patch.bookingId && String(patch.bookingId) !== String(current._id)) return;
+    if (patch.bookingId && String(patch.bookingId) !== String(current._id)) {
+      // A different booking was assigned to this driver (admin assign /
+      // reassign) while an old row was still in memory.
+      if (patch.status) syncDriverDashboardFromBookingUpdate(patch);
+      return;
+    }
     const merged = { ...current };
     if (patch.status) merged.status = patch.status;
     if (patch.timeline) {
@@ -151,12 +182,8 @@ const useDriverActiveTripStore = create((set, get) => ({
     }
     set({ booking: merged });
 
-    // Customer/admin cancel (or outstation re-dispatch) must drop the
-    // home "Active trips" tile immediately — otherwise the cached
-    // summary keeps showing the pre-cancel DRIVER_ASSIGNED row.
-    if (patch.status && DRIVER_TRIP_ENDED_STATUSES.has(patch.status)) {
-      invalidateDriverDashboardCaches();
-    }
+    // Assignment / cancel / complete must refresh Home → Active trips.
+    if (patch.status) syncDriverDashboardFromBookingUpdate(patch);
   },
 
   async fetchActive() {

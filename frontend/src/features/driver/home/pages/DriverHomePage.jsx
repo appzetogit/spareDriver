@@ -22,6 +22,7 @@ import { buildCacheKey } from '../../../../store/lib/buildCacheKey';
 import { useDriverOnlineStore } from '../../../../store/driver/useDriverOnlineStore';
 import { useDriverKitActiveStore } from '../../../../store/driver/useDriverKitStore';
 import { useDriverHomeSummaryStore } from '../../../../store/driver/useDriverTripsStore';
+import useDriverActiveTripStore from '../../../../store/driver/useDriverActiveTripStore';
 import useDriverIncomingScheduledStore from '../../../../store/driver/useDriverIncomingScheduledStore';
 import useDriverSubscriptionsStore from '../../../../store/driver/useDriverSubscriptionsStore';
 import { useDriverOnlineToggle } from '../../../../hooks/useDriverOnlineToggle';
@@ -33,8 +34,10 @@ import { formatLocationLabel } from '../../../../utils/locationLabel';
 import { classifyAccuracy } from '../../../../utils/geolocation';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { formatCurrency } from '../../../../utils/formatters';
+import { mergeLiveBookingIntoList } from '../../../../utils/mergeLiveBooking';
 import {
   BOOKING_STATUS,
+  DRIVER_LIVE_TRIP_STATUSES,
 } from '../../../../constants/bookingStatus';
 import OnlineBlockedDialog from '../../kit/components/OnlineBlockedDialog';
 import DriverKitHomeCard from '../../kit/components/DriverKitHomeCard';
@@ -54,15 +57,6 @@ const ACTIVE_STATUS_COPY = {
   [BOOKING_STATUS.ARRIVED]: 'At pickup — start the ride',
   [BOOKING_STATUS.STARTED]: 'Trip in progress',
 };
-
-/** Statuses a driver should see under Home → Active trips. */
-const DRIVER_HOME_ACTIVE_STATUSES = Object.freeze([
-  BOOKING_STATUS.DRIVER_ASSIGNED,
-  BOOKING_STATUS.AWAITING_PAYMENT,
-  BOOKING_STATUS.EN_ROUTE,
-  BOOKING_STATUS.ARRIVED,
-  BOOKING_STATUS.STARTED,
-]);
 
 const DriverHomePage = () => {
   const navigate = useNavigate();
@@ -100,6 +94,12 @@ const DriverHomePage = () => {
     summaryKey,
     {},
   );
+  const liveBooking = useDriverActiveTripStore((s) => s.booking);
+  const fetchActive = useDriverActiveTripStore((s) => s.fetchActive);
+
+  useEffect(() => {
+    fetchActive().catch(() => {});
+  }, [fetchActive]);
 
   const profileKey = buildCacheKey('driver-profile', {});
   const { data: driverProfile } = useCachedQuery(
@@ -109,13 +109,15 @@ const DriverHomePage = () => {
   );
 
   const todayEarnings = summary?.today?.earnings ?? 0;
-  const activeBookings = (
+  const summaryBookings = (
     summary?.activeBookings?.length
       ? summary.activeBookings
       : summary?.activeBooking
         ? [summary.activeBooking]
         : []
-  ).filter((b) => b && DRIVER_HOME_ACTIVE_STATUSES.includes(b.status));
+  );
+  const activeBookings = mergeLiveBookingIntoList(liveBooking, summaryBookings)
+    .filter((b) => b && DRIVER_LIVE_TRIP_STATUSES.includes(b.status));
   const cancellationChances = summary?.cancellationChances || null;
 
   const { setOnline, toggling, blocked, showBlocked, clearBlocked, refreshStatus } =
