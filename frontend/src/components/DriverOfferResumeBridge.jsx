@@ -3,26 +3,16 @@ import useDriverAuthStore from '../store/useDriverAuthStore';
 import useDriverIncomingOfferStore from '../store/driver/useDriverIncomingOfferStore';
 import useDriverIncomingScheduledStore from '../store/driver/useDriverIncomingScheduledStore';
 import {
-  invalidateDriverDashboardCaches,
+  syncDriverDashboardFromBookingUpdate,
 } from '../store/driver/useDriverActiveTripStore';
 import { useSocket, useSocketEvent } from '../hooks/useSocket';
 import { S2C_EVENTS } from '../constants/socketEvents';
-import { BOOKING_STATUS, BOOKING_TYPE } from '../constants/bookingStatus';
+import { BOOKING_TYPE } from '../constants/bookingStatus';
 import {
   applyDriverOfferFcmAction,
   parseDriverOfferFcmData,
 } from '../utils/fcmOfferPayload';
 import { useInAppAlertRing } from '../hooks/useInAppAlertRing';
-
-/** Trip ended / unassigned for this driver — refresh home Active trips. */
-const DRIVER_HOME_REFRESH_STATUSES = new Set([
-  BOOKING_STATUS.CANCELLED,
-  BOOKING_STATUS.COMPLETED,
-  BOOKING_STATUS.SEARCHING,
-  BOOKING_STATUS.PENDING_ASSIGNMENT,
-  BOOKING_STATUS.NO_DRIVERS_FOUND,
-  BOOKING_STATUS.IN_EMERGENCY_POOL,
-]);
 
 /**
  * Driver-side offer resume + FCM bridge + scheduled inbox hydration.
@@ -149,11 +139,9 @@ export function DriverOfferResumeBridge() {
     ) {
       removeByBookingId(payload.bookingId);
     }
-    // Drop stale "Active trips" on /driver/home after customer cancel,
-    // complete, or outstation re-dispatch (driver unassigned).
-    if (payload.status && DRIVER_HOME_REFRESH_STATUSES.has(payload.status)) {
-      invalidateDriverDashboardCaches();
-    }
+    // Home → Active trips is a cached summary. Refresh on assign AND
+    // on trip end so the tile matches Trips → Ongoing.
+    syncDriverDashboardFromBookingUpdate(payload);
   });
 
   return null;

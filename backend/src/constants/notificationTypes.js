@@ -70,6 +70,10 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   BOOKING_OFFER_WITHDRAWN: 'booking_offer_withdrawn',
   BOOKING_CANCELLED: 'booking_cancelled',
   CUSTOMER_CANCELLED: 'customer_cancelled',
+  /**
+   * Driver assigned by admin / scheduled dispatch / emergency pool.
+   * Flutter rings on this kind (same as inbox_offer) and opens the trip.
+   */
   ORDER_ASSIGNED: 'order_assigned',
   EARNINGS_CREDITED: 'earnings_credited',
   TRIP_OVERTIME_STARTED: 'trip_overtime_started',
@@ -87,6 +91,12 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   BOOKING_REMINDER: 'booking_reminder',
   /** Outstation expected return reached — driver may complete or await extension. */
   OUTSTATION_RETURN_REACHED: 'outstation_return_reached',
+  /**
+   * Customer initiated a ride extension. Push carries the 4-digit OTP
+   * so the driver can read it aloud even when they are not on the trip
+   * screen (or the app is backgrounded).
+   */
+  EXTENSION_OTP: 'extension_otp',
   ACCOUNT_APPROVED: 'account_approved',
   ACCOUNT_REJECTED: 'account_rejected',
   ACCOUNT_SUSPENDED: 'account_suspended',
@@ -162,6 +172,8 @@ const NOTIFICATION_TYPE_LABELS = Object.freeze({
   [ADMIN_NOTIFICATION.NO_DRIVERS_FOUND]: 'No drivers',
   [DRIVER_NOTIFICATION.BOOKING_OFFER]: 'New request',
   [DRIVER_NOTIFICATION.INBOX_OFFER]: 'Inbox request',
+  [DRIVER_NOTIFICATION.ORDER_ASSIGNED]: 'Trip assigned',
+  [DRIVER_NOTIFICATION.EXTENSION_OTP]: 'Extend OTP',
 });
 
 /** Human label for FCM / inbox. Unknown kinds become Title Case. */

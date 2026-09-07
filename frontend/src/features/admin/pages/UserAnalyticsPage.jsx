@@ -464,6 +464,17 @@ const UserAnalyticsPage = () => {
               >
                 {row.direction}
               </span>
+              {row.status && row.status !== 'success' ? (
+                <span
+                  className={`text-[10px] font-semibold capitalize ${
+                    row.status === 'cancelled' || row.status === 'failed'
+                      ? 'text-rose-600'
+                      : 'text-amber-700'
+                  }`}
+                >
+                  · {row.status}
+                </span>
+              ) : null}
               <span className="sm:hidden text-[10px] text-slate-500 capitalize truncate">
                 · {row.source?.replace(/_/g, ' ') || '—'}
               </span>

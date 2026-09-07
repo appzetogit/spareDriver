@@ -246,7 +246,7 @@ function TransactionRow({ tx, onSelect }) {
         <p className="text-sm font-medium text-text truncate">
           {sourceLabel(tx.source)}
         </p>
-        <p className="text-[11px] text-text-muted truncate">
+        <p className={`text-[11px] truncate ${tx.status === 'cancelled' || tx.status === 'failed' ? 'text-rose-600' : 'text-text-muted'}`}>
           {formatDate(tx.createdAt)} · {statusLabel(tx.status)}
         </p>
       </div>
@@ -451,6 +451,7 @@ function sourceLabel(source) {
 
 function statusLabel(status) {
   if (!status) return '';
+  if (status === 'cancelled') return 'Cancelled';
   return String(status).charAt(0).toUpperCase() + String(status).slice(1);
 }
 

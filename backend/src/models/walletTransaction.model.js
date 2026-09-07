@@ -62,6 +62,7 @@ export const WALLET_TXN_STATUS = Object.freeze({
   SUCCESS: 'success',
   PENDING: 'pending',
   FAILED: 'failed',
+  CANCELLED: 'cancelled',
 });
 
 const walletTransactionSchema = new mongoose.Schema(

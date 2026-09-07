@@ -22,7 +22,9 @@ import { attachOutstationReturnPhase } from './bookingOutstationReturn.service.j
 import { attachOvertimeQuote, tickOvertimeQuote } from './bookingOvertime.service.js';
 import {
   cancelPaymentTimeout,
+  honourPaymentDeadlineOnRead,
   releaseDriverFromBooking,
+  stampUnpaidPaymentCancelled,
 } from './bookingPaymentTimeout.service.js';
 import {
   cancelNoShowSchedule,
@@ -339,10 +341,16 @@ export function sanitizeBookingForDriver(booking) {
         requestedAt: ext.requestedAt || null,
         respondedAt: ext.respondedAt || null,
         paidAt: ext.paidAt || null,
-        // OTP block is presence-only — the code itself stays out of the
-        // sanitized view (sockets carry it separately when needed).
+        // Driver reads the extend OTP aloud to the customer. Include
+        // `code` while the handshake is still `pending_otp` so the
+        // banner can hydrate if they missed the live socket (other
+        // screen, backgrounded app, or a refresh). Ride-start OTP
+        // stays stripped — that one is the customer's to share.
         otp: ext.otp
           ? {
+              ...(ext.status === 'pending_otp' && ext.otp.code
+                ? { code: ext.otp.code }
+                : {}),
               generatedAt: ext.otp.generatedAt || null,
               verifiedAt: ext.otp.verifiedAt || null,
               expiresAt: ext.otp.expiresAt || null,
@@ -537,15 +545,20 @@ export async function getActiveBookingForUserService(userId) {
     .lean();
   if (!candidates.length) return null;
   candidates.sort((a, b) => rankActiveBooking(a) - rankActiveBooking(b));
-  const booking = candidates[0];
-  // Cold-start safety: if the server restarted while a booking was
-  // sitting at ARRIVED, the in-process no-show timer got dropped.
-  // Re-attach it here so the prompt + auto-complete cycle never goes
-  // missing for an active customer fetch.
-  resumeNoShowScheduleIfNeeded(booking).catch(() => {});
-  resumeRideEndScheduleIfNeeded(booking);
-  await refreshOvertimeOnRead(booking);
-  return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
+  for (let i = 0; i < candidates.length; i += 1) {
+    const honoured = await honourPaymentDeadlineOnRead(candidates[i]);
+    if (honoured?.status === BOOKING_STATUS.CANCELLED) continue;
+    const booking = honoured || candidates[i];
+    // Cold-start safety: if the server restarted while a booking was
+    // sitting at ARRIVED, the in-process no-show timer got dropped.
+    // Re-attach it here so the prompt + auto-complete cycle never goes
+    // missing for an active customer fetch.
+    resumeNoShowScheduleIfNeeded(booking).catch(() => {});
+    resumeRideEndScheduleIfNeeded(booking);
+    await refreshOvertimeOnRead(booking);
+    return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
+  }
+  return null;
 }
 
 /**
@@ -565,8 +578,14 @@ export async function listActiveBookingsForUserService(userId) {
     .populate('driverId', DRIVER_USER_FIELDS)
     .lean();
   candidates.sort((a, b) => rankActiveBooking(a) - rankActiveBooking(b));
+  const live = [];
+  for (const candidate of candidates) {
+    const honoured = await honourPaymentDeadlineOnRead(candidate);
+    if (honoured?.status === BOOKING_STATUS.CANCELLED) continue;
+    live.push(honoured || candidate);
+  }
   return Promise.all(
-    candidates.map((b) =>
+    live.map((b) =>
       attachCancellationPreview(sanitizeBookingForUser(b), 'user'),
     ),
   );
@@ -581,10 +600,14 @@ export async function listAllBookingsForUserService(userId) {
     .sort({ createdAt: -1 })
     .populate('driverId', DRIVER_USER_FIELDS)
     .lean();
-  
+
+  const resolved = await Promise.all(
+    bookings.map((b) => honourPaymentDeadlineOnRead(b)),
+  );
+
   // Attach cancellation preview for consistency, even on history items.
   return Promise.all(
-    bookings.map((b) =>
+    resolved.map((b) =>
       attachCancellationPreview(sanitizeBookingForUser(b), 'user'),
     ),
   );
@@ -606,21 +629,22 @@ export async function getBookingByIdService(bookingId, { userId, driverId } = {}
   query.populate(CAR_DRIVER_POPULATE);
   const booking = await query.lean();
   if (!booking) throw new ApiError(404, 'Booking not found');
-  resumeNoShowScheduleIfNeeded(booking).catch(() => {});
-  resumeRideEndScheduleIfNeeded(booking);
-  await refreshOvertimeOnRead(booking);
+  const honoured = await honourPaymentDeadlineOnRead(booking);
+  resumeNoShowScheduleIfNeeded(honoured).catch(() => {});
+  resumeRideEndScheduleIfNeeded(honoured);
+  await refreshOvertimeOnRead(honoured);
   if (driverId) {
     return attachCancellationPreview(
-      sanitizeBookingForDriver(booking),
+      sanitizeBookingForDriver(honoured),
       'driver',
       { driverId },
     );
   }
   if (userId) {
-    return attachCancellationPreview(sanitizeBookingForUser(booking), 'user');
+    return attachCancellationPreview(sanitizeBookingForUser(honoured), 'user');
   }
   // Admin / internal callers get the full document (including phones).
-  return booking;
+  return honoured;
 }
 
 export async function getActiveBookingForDriverService(driverId) {
@@ -633,11 +657,14 @@ export async function getActiveBookingForDriverService(driverId) {
     .populate('userId', CUSTOMER_DRIVER_FIELDS)
     .populate(CAR_DRIVER_POPULATE)
     .lean();
-  resumeNoShowScheduleIfNeeded(booking).catch(() => {});
-  resumeRideEndScheduleIfNeeded(booking);
-  await refreshOvertimeOnRead(booking);
+  if (!booking) return null;
+  const honoured = await honourPaymentDeadlineOnRead(booking);
+  if (honoured?.status === BOOKING_STATUS.CANCELLED) return null;
+  resumeNoShowScheduleIfNeeded(honoured).catch(() => {});
+  resumeRideEndScheduleIfNeeded(honoured);
+  await refreshOvertimeOnRead(honoured);
   return attachCancellationPreview(
-    sanitizeBookingForDriver(booking),
+    sanitizeBookingForDriver(honoured),
     'driver',
     { driverId },
   );
@@ -1321,6 +1348,7 @@ export async function cancelBookingByUserService(
     || wasNoDriversFound;
 
   booking.status = BOOKING_STATUS.CANCELLED;
+  stampUnpaidPaymentCancelled(booking);
   booking.cancellation = {
     reason: resolvedReason,
     cancelledBy,
@@ -1961,7 +1989,7 @@ export async function listAdminBookingsService(query = {}, { staff } = {}) {
     },
   ]);
 
-  const [bookings, total, statsRaw] = await Promise.all([
+  const [rawBookings, total, statsRaw] = await Promise.all([
     Booking.find(filter)
       .populate('userId', 'name phone_no email')
       .populate('driverId', 'name phone_no email')
@@ -1974,6 +2002,10 @@ export async function listAdminBookingsService(query = {}, { staff } = {}) {
     Booking.countDocuments(filter),
     statsPromise,
   ]);
+
+  const bookings = await Promise.all(
+    rawBookings.map((b) => honourPaymentDeadlineOnRead(b)),
+  );
 
   const statusCounts = statsRaw.reduce((acc, curr) => {
     acc[curr._id] = curr.count;

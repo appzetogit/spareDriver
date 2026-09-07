@@ -100,6 +100,8 @@ export const BOOKING_PAYMENT_STATUS = Object.freeze({
   REFUNDED: 'refunded',
   PARTIAL_REFUND: 'partial_refund',
   FAILED: 'failed',
+  /** Checkout abandoned or booking cancelled before any money was collected. */
+  CANCELLED: 'cancelled',
 });
 
 /** Dispatch policy knobs. */

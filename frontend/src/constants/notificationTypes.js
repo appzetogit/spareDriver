@@ -37,6 +37,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   /** Scheduled / outstation / subscription inbox — ring + open Incoming. */
   INBOX_OFFER: 'inbox_offer',
   BOOKING_OFFER_WITHDRAWN: 'booking_offer_withdrawn',
+  /** Admin / dispatch assignment — ring + open the trip. */
   ORDER_ASSIGNED: 'order_assigned',
   SUBSCRIPTION_ASSIGNED: 'subscription_assigned',
   BOOKING_CANCELLED: 'booking_cancelled',
@@ -48,6 +49,7 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   ACCOUNT_SUSPENDED: 'account_suspended',
   ACCOUNT_UNSUSPENDED: 'account_unsuspended',
   TRIP_CHAT_MESSAGE: 'trip_chat_message',
+  EXTENSION_OTP: 'extension_otp',
 });
 
 export const ADMIN_NOTIFICATION = Object.freeze({
@@ -167,6 +169,10 @@ function resolveNotificationNavigatePath(kind, data = {}, audience = 'user') {
     if (kind === DRIVER_NOTIFICATION.INBOX_OFFER || data.kind === 'inbox_offer') {
       return '/driver/trips?tab=incoming';
     }
+    if (kind === DRIVER_NOTIFICATION.ORDER_ASSIGNED || data.kind === 'order_assigned') {
+      if (bookingId) return `/driver/trip/${bookingId}`;
+      return '/driver/home';
+    }
     if (kind === DRIVER_NOTIFICATION.SUBSCRIPTION_ASSIGNED || data.kind === 'subscription_assigned') {
       return '/driver/account';
     }
@@ -236,6 +242,8 @@ const NOTIFICATION_TYPE_LABELS = Object.freeze({
   [ADMIN_NOTIFICATION.NO_DRIVERS_FOUND]: 'No drivers',
   [DRIVER_NOTIFICATION.BOOKING_OFFER]: 'New request',
   [DRIVER_NOTIFICATION.INBOX_OFFER]: 'Inbox request',
+  [DRIVER_NOTIFICATION.ORDER_ASSIGNED]: 'Trip assigned',
+  [DRIVER_NOTIFICATION.EXTENSION_OTP]: 'Extend OTP',
 });
 
 const TYPE_BADGE_VARIANT = Object.freeze({

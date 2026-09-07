@@ -45,6 +45,7 @@ const TopupSheet = ({
   const limits = useUserWalletStore((s) => s.limits);
   const createTopupOrder = useUserWalletStore((s) => s.createTopupOrder);
   const verifyTopup = useUserWalletStore((s) => s.verifyTopup);
+  const cancelTopup = useUserWalletStore((s) => s.cancelTopup);
   const topupLoading = useUserWalletStore((s) => s.topupLoading);
   const user = useUserAuthStore((s) => s.user);
   const { openCheckout, loading: checkoutLoading } = useRazorpayCheckout();
@@ -115,10 +116,14 @@ const TopupSheet = ({
           onClose?.();
         },
         onDismiss: () => {
+          cancelTopup(order.orderId).catch(() => {});
           toast('Top-up cancelled');
         },
       });
     } catch (err) {
+      if (err?.message === 'Payment cancelled') {
+        return;
+      }
       toast.error(err?.response?.data?.message || err?.message || 'Top-up failed');
     } finally {
       setSubmitting(false);

@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
 import { Home, MapPin, User, Car, DollarSign } from 'lucide-react';
 import BookingOfferModal from '../features/driver/trips/components/BookingOfferModal';
-import { UserNotificationBridge, DriverNotificationBridge } from '../components/notifications/NotificationBridge';
+import { UserNotificationBridge } from '../components/notifications/NotificationBridge';
 import { DriverOfferResumeBridge } from '../components/DriverOfferResumeBridge';
 import useDriverIncomingScheduledStore from '../store/driver/useDriverIncomingScheduledStore';
 
@@ -37,7 +37,6 @@ export const DriverDashboardLayout = () => {
 
   return (
     <div className="flex-1 flex flex-col pb-16">
-      <DriverNotificationBridge />
       <DriverOfferResumeBridge />
       <Outlet />
       <BottomNav items={driverNavItems} />
