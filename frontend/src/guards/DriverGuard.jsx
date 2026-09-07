@@ -3,6 +3,8 @@ import useDriverAuthStore from '../store/useDriverAuthStore';
 import { isApplicationSubmitted } from '../utils/driverOnboarding';
 import { useStoreHydration } from '../hooks/useStoreHydration';
 import { DriverLocationBridge } from '../components/DriverLocationBridge';
+import { DriverExtensionOtpBridge } from '../components/DriverExtensionOtpBridge';
+import { DriverNotificationBridge } from '../components/notifications/NotificationBridge';
 import { BootstrapShellSkeleton } from '../components/skeleton/SectionSkeletons';
 
 const DriverGuard = () => {
@@ -59,6 +61,8 @@ const DriverGuard = () => {
   return (
     <>
       <DriverLocationBridge />
+      <DriverNotificationBridge />
+      <DriverExtensionOtpBridge />
       <Outlet />
     </>
   );

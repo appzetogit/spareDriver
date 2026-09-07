@@ -5,6 +5,7 @@ import {
   listWalletTransactionsService,
   createTopupOrderService,
   verifyTopupPaymentService,
+  cancelTopupOrderService,
   WALLET_LIMITS,
 } from '../services/wallet.service.js';
 
@@ -15,6 +16,7 @@ import {
  *   GET    /auth/wallet/transactions    → paginated ledger
  *   POST   /auth/wallet/topup           → start a Razorpay top-up order
  *   POST   /auth/wallet/topup/verify    → confirm Razorpay payment → credit
+ *   POST   /auth/wallet/topup/cancel    → user dismissed checkout
  */
 
 export const getMyWallet = asyncHandler(async (req, res) => {
@@ -46,4 +48,14 @@ export const verifyWalletTopupPayment = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, result, 'Top-up successful'));
+});
+
+export const cancelWalletTopupOrder = asyncHandler(async (req, res) => {
+  const transaction = await cancelTopupOrderService(
+    req.user._id,
+    req.body?.orderId,
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { transaction }, 'Top-up cancelled'));
 });

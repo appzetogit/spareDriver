@@ -270,10 +270,10 @@ const extensionSchema = new mongoose.Schema(
       default: 'pending_otp',
     },
     /**
-     * Customer reads this code aloud to the driver, who reads it back
-     * to the customer's screen. We never emit `code` to the customer
-     * directly — the driver app gets it via the EXTENSION_OTP socket
-     * event so it stays a true human handshake.
+     * Driver reads this code aloud to the customer, who types it in
+     * their app. We never emit `code` to the customer. The driver gets
+     * it via the EXTENSION_OTP socket, FCM push, and the sanitized
+     * booking payload while status is `pending_otp`.
      */
     otp: {
       code: { type: String, default: '' },

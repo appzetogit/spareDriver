@@ -186,6 +186,65 @@ export function notifyDriverTripOvertimeStarted(driverId, booking) {
   );
 }
 
+function formatExtensionDurationLabel({ additionalHours, additionalDays } = {}) {
+  const days = Number(additionalDays) || 0;
+  if (days > 0) return `${days} day${days === 1 ? '' : 's'}`;
+  const hours = Number(additionalHours) || 0;
+  const totalMin = Math.round(hours * 60);
+  if (totalMin <= 0) return 'more time';
+  if (totalMin < 60) return `${totalMin} min`;
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (mins === 0) return `${hrs} hour${hrs === 1 ? '' : 's'}`;
+  return `${hrs}h ${mins}m`;
+}
+
+/**
+ * Customer hit Extend. Push the 4-digit OTP so the driver can read it
+ * aloud even when they are not on the trip screen or the app is closed.
+ * Socket `BOOKING_EXTENSION_OTP` already drives in-app UI, so we skip
+ * the generic notification toast (`emitSocket: false`).
+ */
+export function notifyDriverExtensionOtp(
+  driverId,
+  booking,
+  {
+    extensionId,
+    otp,
+    additionalHours = 0,
+    additionalDays = 0,
+    expiresAt,
+  } = {},
+) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  const code = String(otp || '').trim();
+  const duration = formatExtensionDurationLabel({ additionalHours, additionalDays });
+  return sendPushNotification(
+    { driverId },
+    {
+      title: 'Customer wants to extend',
+      body: code
+        ? `OTP ${code} — read this code to the customer to extend by ${duration}.`
+        : `Customer wants to extend by ${duration}. Open the trip to share the OTP.`,
+      type: DRIVER_NOTIFICATION.EXTENSION_OTP,
+      persist: true,
+      emitSocket: false,
+      data: {
+        ...bookingRef(booking),
+        extensionId: String(extensionId || ''),
+        otp: code,
+        additionalHours,
+        additionalDays,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : '',
+        priority: 'high',
+        fcmTag: bookingId ? `extension_otp_${bookingId}` : 'extension_otp',
+        fcmChannelId: 'ride_alerts',
+        path: bookingId ? `/driver/trip/${bookingId}` : '/driver/trips',
+      },
+    },
+  );
+}
+
 function formatReturnClock(booking) {
   const src =
     booking?.outstation?.expectedReturnAt || booking?.outstation?.endDate;
@@ -581,13 +640,22 @@ export function notifyDriverBookingOfferWithdrawn(driverId, { bookingId, reason 
 }
 
 export function notifyDriverOrderAssigned(driverId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
   return sendPushNotification(
     { driverId },
     {
-      title: 'Ride assigned',
+      title: 'Trip assigned',
       body: `Booking ${booking.bookingNumber || ''} has been assigned to you.`,
       type: DRIVER_NOTIFICATION.ORDER_ASSIGNED,
-      data: bookingRef(booking),
+      data: {
+        ...bookingRef(booking),
+        kind: DRIVER_NOTIFICATION.ORDER_ASSIGNED,
+        path: bookingId ? `/driver/trip/${bookingId}` : '/driver/home',
+        bookingType: booking.bookingType || booking.serviceType || '',
+        status: booking.status || '',
+        priority: 'high',
+        fcmTag: bookingId ? `order_assigned_${bookingId}` : 'order_assigned',
+      },
     },
   );
 }

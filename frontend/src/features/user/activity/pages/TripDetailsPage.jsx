@@ -37,6 +37,7 @@ import Badge from '../../../../components/Badge';
 import {
   ACTIVE_BOOKING_STATUSES,
   BOOKING_STATUS,
+  displayBookingPaymentStatus,
   isBookingContactRevealed,
 } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../../../../constants/serviceTypes';
@@ -572,7 +573,7 @@ const TripDetailsPage = () => {
           amountPaid={amountPaid}
           amountDue={amountDue}
           paymentMethod={booking.paymentMethod}
-          paymentStatus={booking.paymentStatus}
+          paymentStatus={displayBookingPaymentStatus(booking)}
         />
 
         {booking.status === BOOKING_STATUS.CANCELLED && booking.cancellation && (
@@ -610,7 +611,7 @@ const TripDetailsPage = () => {
           completedAt={completedAt}
           cancelledAt={cancelledAt}
           paymentReceivedAt={booking?.timeline?.paymentReceivedAt}
-          paymentStatus={booking?.paymentStatus}
+          paymentStatus={displayBookingPaymentStatus(booking)}
           amountPaid={amountPaid}
           amountDue={amountDue}
           scheduledAt={scheduledAt}
@@ -1117,8 +1118,16 @@ function FareCard({
             </span>
           </span>
           {paymentStatus && (
-            <Badge variant={paymentStatus === 'paid' ? 'success' : 'warning'}>
-              {paymentStatus}
+            <Badge
+              variant={
+                paymentStatus === 'paid'
+                  ? 'success'
+                  : paymentStatus === 'cancelled' || paymentStatus === 'failed'
+                    ? 'danger'
+                    : 'warning'
+              }
+            >
+              {String(paymentStatus).replace(/_/g, ' ')}
             </Badge>
           )}
         </div>

@@ -118,5 +118,15 @@ export const ingestDriverLocation = asyncHandler(async (req, res) => {
       ` mode=${result.mode || '-'}`,
   );
 
+  console.log(
+    `[flutter] location OK driver=${req.driverId}` +
+      ` auth=${req.trackingAuth || '-'}` +
+      ` accepted=${result.accepted ?? 0}` +
+      ` deduped=${result.deduped ?? 0}` +
+      ` rejected=${result.rejected ?? 0}` +
+      ` stopTracking=${Boolean(result.stopTracking)}` +
+      ` mode=${result.mode || '-'}`,
+  );
+
   return res.status(200).json(new ApiResponse(200, result, 'Location batch processed'));
 });

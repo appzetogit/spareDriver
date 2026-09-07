@@ -80,6 +80,7 @@ import {
   getMyWalletTransactions,
   createWalletTopupOrder,
   verifyWalletTopupPayment,
+  cancelWalletTopupOrder,
 } from '../controllers/wallet.controller.js';
 import {
   listEmergencyContacts,
@@ -198,6 +199,7 @@ router.get('/wallet', getMyWallet);
 router.get('/wallet/transactions', getMyWalletTransactions);
 router.post('/wallet/topup', createWalletTopupOrder);
 router.post('/wallet/topup/verify', verifyWalletTopupPayment);
+router.post('/wallet/topup/cancel', cancelWalletTopupOrder);
 
 router.get('/referrals/summary', getMyUserReferralSummary);
 router.get('/referrals', listMyUserReferrals);

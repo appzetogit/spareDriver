@@ -14,6 +14,7 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { formatDateTime12, formatPickupDateTime } from '../../../../utils/datetime';
+import { displayBookingPaymentStatus } from '../../../../constants/bookingStatus';
 
 function SectionLabel({ icon: Icon, children }) {
   return (
@@ -407,7 +408,7 @@ const AssignBookingTripSummary = ({
             </div>
             <div className="flex justify-between text-xs text-slate-500 pt-1">
               <span className="capitalize">{booking.paymentMethod || 'wallet'}</span>
-              <span className="capitalize">{booking.paymentStatus?.replace(/_/g, ' ') || '—'}</span>
+              <span className="capitalize">{displayBookingPaymentStatus(booking)?.replace(/_/g, ' ') || '—'}</span>
             </div>
           </div>
         </section>

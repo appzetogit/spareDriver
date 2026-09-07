@@ -5,7 +5,7 @@ import Badge from '../../../../components/Badge';
 import Button from '../../../../components/Button';
 import ConfirmDialog from '../../../../components/ConfirmDialog';
 import api from '../../../../utils/api';
-import { BOOKING_STATUS, BOOKING_STATUS_LIST } from '../../../../constants/bookingStatus';
+import { BOOKING_STATUS, BOOKING_STATUS_LIST, displayBookingPaymentStatus } from '../../../../constants/bookingStatus';
 import { SERVICE_TYPES } from '../../../../constants/serviceTypes';
 import { isOutstationV2Pricing } from '../../../../constants/outstationPricing.js';
 import useAdminAuthStore from '../../../../store/useAdminAuthStore';
@@ -1005,15 +1005,16 @@ const BookingDetailsModal = ({
               </div>
               <Badge
                 variant={
-                  booking.paymentStatus === 'paid'
+                  displayBookingPaymentStatus(booking) === 'paid'
                     ? 'success'
-                    : booking.paymentStatus === 'failed'
+                    : displayBookingPaymentStatus(booking) === 'failed'
+                      || displayBookingPaymentStatus(booking) === 'cancelled'
                       ? 'danger'
                       : 'warning'
                 }
                 className="capitalize"
               >
-                {booking.paymentStatus?.replace(/_/g, ' ')}
+                {displayBookingPaymentStatus(booking)?.replace(/_/g, ' ')}
               </Badge>
             </div>
 

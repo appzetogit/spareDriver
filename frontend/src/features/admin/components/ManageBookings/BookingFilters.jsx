@@ -130,6 +130,7 @@ const BookingFilters = ({
             { value: 'refunded', label: 'Refunded' },
             { value: 'partial_refund', label: 'Partial refund' },
             { value: 'failed', label: 'Failed' },
+            { value: 'cancelled', label: 'Cancelled' },
           ]}
         />
         <label className="flex flex-col gap-1.5">

@@ -32,6 +32,24 @@ import {
  * up. This is the same trade-off the dispatcher's wave timer makes.
  */
 
+const SETTLED_PAYMENT = new Set([
+  BOOKING_PAYMENT_STATUS.PAID,
+  BOOKING_PAYMENT_STATUS.REFUNDED,
+  BOOKING_PAYMENT_STATUS.PARTIAL_REFUND,
+]);
+
+/**
+ * Unpaid cancels used to leave `paymentStatus: pending`, so trip details
+ * and admin still showed Pending after the user walked away from checkout.
+ */
+export function stampUnpaidPaymentCancelled(booking) {
+  if (!booking) return booking;
+  if (!SETTLED_PAYMENT.has(booking.paymentStatus)) {
+    booking.paymentStatus = BOOKING_PAYMENT_STATUS.CANCELLED;
+  }
+  return booking;
+}
+
 /** bookingId → setTimeout handle. */
 const paymentTimers = new Map();
 
@@ -133,7 +151,7 @@ export async function handlePaymentTimeoutService(bookingId) {
   const driverId = booking.driverId;
 
   booking.status = BOOKING_STATUS.CANCELLED;
-  booking.paymentStatus = BOOKING_PAYMENT_STATUS.FAILED;
+  stampUnpaidPaymentCancelled(booking);
   booking.cancellation = {
     reason: 'payment_timeout',
     cancelledBy: 'system',
@@ -170,6 +188,46 @@ export async function handlePaymentTimeoutService(bookingId) {
   emitToAdmins(S2C_EVENTS.BOOKING_UPDATED, payload);
 
   return booking.toObject();
+}
+
+/**
+ * Re-arm (or immediately fire) the pay-deadline timer when a booking is
+ * read. In-process timers die on restart; coming back to the app after
+ * an abandoned checkout must still land on cancelled, not pending.
+ */
+export async function honourPaymentDeadlineOnRead(booking) {
+  if (!booking?._id) return booking;
+  if (booking.status !== BOOKING_STATUS.AWAITING_PAYMENT) return booking;
+  if (booking.paymentStatus === BOOKING_PAYMENT_STATUS.PAID) return booking;
+
+  const deadline = booking.timeline?.paymentDeadlineAt;
+  const assignedAt = booking.timeline?.driverAssignedAt;
+  let deadlineMs = deadline ? new Date(deadline).getTime() : NaN;
+  if (!Number.isFinite(deadlineMs) && assignedAt) {
+    deadlineMs =
+      new Date(assignedAt).getTime() + PAYMENT_POLICY.PAYMENT_DEADLINE_SECONDS * 1000;
+  }
+  if (!Number.isFinite(deadlineMs)) return booking;
+
+  const remaining = deadlineMs - Date.now();
+  if (remaining > 1000) {
+    if (!paymentTimers.has(key(booking._id))) {
+      schedulePaymentTimeoutForMs(booking._id, remaining);
+    }
+    return booking;
+  }
+
+  const updated = await handlePaymentTimeoutService(booking._id);
+  if (!updated) return booking;
+  return {
+    ...booking,
+    status: updated.status,
+    paymentStatus: updated.paymentStatus,
+    cancellation: updated.cancellation,
+    timeline: updated.timeline || booking.timeline,
+    driverId: updated.driverId ?? null,
+    razorpay: updated.razorpay || booking.razorpay,
+  };
 }
 
 /**

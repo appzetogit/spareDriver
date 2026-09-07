@@ -44,7 +44,7 @@ messaging.onBackgroundMessage(async (payload) => {
     data,
     tag,
     renotify: Boolean(tag),
-    requireInteraction: kind === 'booking_offer' || kind === 'inbox_offer',
+    requireInteraction: kind === 'booking_offer' || kind === 'inbox_offer' || kind === 'order_assigned' || kind === 'extension_otp',
   };
   await self.registration.showNotification(title, options);
 });
@@ -89,7 +89,10 @@ function resolveNotificationOpenUrl(data) {
     || kind === 'trip_overtime_started'
     || kind === 'overtime_payment_failed'
   )) {
-    return '/user/book/assigned/' + data.bookingId;
+    return '/user/book/assigned/' + bookingId;
+  }
+  if (bookingId && (kind === 'extension_otp' || kind === 'order_assigned')) {
+    return '/driver/trip/' + bookingId;
   }
   return '/';
 }
