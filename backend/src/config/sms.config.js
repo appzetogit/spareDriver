@@ -2,6 +2,8 @@
  * SMS / OTP environment flags.
  *
  * USE_DEFAULT_OTP=true  → accept 1234 / 123456 without checking the OTP collection.
+ *                         Ignored in production, whatever the env says — see
+ *                         `isDefaultOtpEnabled`.
  * SMS_INDIA_HUB_ENABLED=true → send real SMS via SMS India Hub (otherwise log mock).
  */
 
@@ -16,8 +18,32 @@ function stripEnvQuotes(value) {
   return text;
 }
 
+/**
+ * Whether the fixed test codes (1234 / 123456) are accepted.
+ *
+ * Hard-off in production regardless of the env var. This flag does not only
+ * shortcut login OTPs — `isTestOtp` is also consulted by the ride-start and
+ * ride-extension checks, so a stray `USE_DEFAULT_OTP=true` in a production
+ * environment would let any driver start any customer's trip by typing 1234.
+ * An env var is too easy to inherit from a copied .env for that to be the only
+ * thing standing in the way.
+ */
 export function isDefaultOtpEnabled() {
+  if (process.env.NODE_ENV === 'production') return false;
   return process.env.USE_DEFAULT_OTP === 'true';
+}
+
+/**
+ * Called once at boot so an operator who expected the test codes to work in
+ * production finds out from the logs rather than from a support ticket.
+ */
+export function warnIfTestOtpSuppressed() {
+  if (process.env.NODE_ENV === 'production' && process.env.USE_DEFAULT_OTP === 'true') {
+    console.warn(
+      '[sms] USE_DEFAULT_OTP=true is set but IGNORED in production — '
+        + 'test OTPs (1234 / 123456) are disabled.',
+    );
+  }
 }
 
 export function isSmsIndiaHubEnabled() {

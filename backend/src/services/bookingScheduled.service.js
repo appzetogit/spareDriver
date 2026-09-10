@@ -450,6 +450,9 @@ export async function scheduleAssignmentRetryOrEscalate(bookingId) {
  *   0. Auto-cancel + full refund unassigned bookings past ride time
  *   1. Rebroadcast inbox to newly-matching drivers (came online, etc.)
  *   2. Escalate past escalateAt into the emergency pool
+ *   3. Recover outstation bookings wedged at EN_ROUTE past pickup
+ *      (driver never reached the pickup, so the GPS-guarded ARRIVED
+ *      transition — and its OTP — could never fire)
  *
  * Workers call this from the escalate-batch (scheduled-batch) job.
  */
@@ -457,6 +460,23 @@ export async function runScheduledInboxBatchJob() {
   const expired = await expirePastUnassignedScheduledBookings();
   const rebroadcast = await rebroadcastOpenScheduledInboxes();
   const escalate = await runEmergencyPoolBatchEscalate();
+
+  // Stuck-EN_ROUTE recovery. Imported lazily and failure-isolated for the
+  // same reason as the subscription batch below — a recovery hiccup must
+  // never take down inbox rebroadcast or emergency-pool escalation.
+  let stuckRecovery = { ok: true, skipped: true };
+  try {
+    const {
+      runStuckBookingRecoverySweep,
+      clearResolvedStuckRecoveryStamps,
+    } = await import('./bookingStuckRecovery.service.js');
+    const sweep = await runStuckBookingRecoverySweep();
+    const cleared = await clearResolvedStuckRecoveryStamps();
+    stuckRecovery = { ...sweep, cleared: cleared?.cleared || 0 };
+  } catch (err) {
+    console.warn('[bookingScheduled] stuck-recovery batch failed:', err?.message);
+    stuckRecovery = { ok: false, error: err?.message || 'failed' };
+  }
   let subscription = { ok: true, skipped: true };
   try {
     const {
@@ -469,7 +489,7 @@ export async function runScheduledInboxBatchJob() {
   } catch (err) {
     console.warn('[bookingScheduled] subscription batch failed:', err?.message);
   }
-  return { ok: true, expired, rebroadcast, escalate, subscription };
+  return { ok: true, expired, rebroadcast, escalate, subscription, stuckRecovery };
 }
 
 const UNASSIGNED_EXPIRE_STATUSES = Object.freeze([

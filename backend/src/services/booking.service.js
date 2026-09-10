@@ -74,6 +74,7 @@ import { Driver } from '../models/driverModels/driver.model.js';
 import {
   BOOKING_STATUS,
   ACTIVE_BOOKING_STATUSES,
+  TERMINAL_BOOKING_STATUSES,
   PAYMENT_MODE,
   PAYMENT_MODE_LIST,
   BOOKING_PAYMENT_STATUS,
@@ -84,6 +85,11 @@ import {
   isBookingContactRevealed,
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES, SERVICE_TYPE_LIST } from '../constants/serviceTypes.js';
+import BookingIdempotency from '../models/bookingIdempotency.model.js';
+import {
+  resolveIdempotencyKey,
+  IDEMPOTENCY_TTL_MS,
+} from '../utils/bookingIdempotency.js';
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
   emitToUser,
@@ -908,7 +914,100 @@ async function assertCarAvailableForWindow({ userId, carId, body, excludeBooking
   }
 }
 
-export async function createBookingService(userId, body) {
+/**
+ * Drop a claim so a genuine retry of a failed attempt is not blocked.
+ * Best-effort: a stranded row expires on its own via the TTL index, and
+ * failing to delete it must never mask the error that caused the rollback.
+ */
+async function releaseIdempotencyClaim(key) {
+  if (!key) return;
+  try {
+    await BookingIdempotency.deleteOne({ key });
+  } catch (err) {
+    console.warn(
+      '[booking] failed to release idempotency claim:',
+      err?.message,
+    );
+  }
+}
+
+/**
+ * Claim a fingerprint for this create attempt.
+ *
+ * The unique index does the work: of two concurrent double-submits only one
+ * insert survives, and the loser lands in the duplicate-key branch below
+ * BEFORE either has touched the wallet.
+ *
+ * @returns {Promise<{ claimed: true } | { claimed: false, replayOf: object }>}
+ *   `replayOf` is the booking the first attempt already produced.
+ */
+async function claimIdempotency(key, userId) {
+  try {
+    await BookingIdempotency.create({
+      key,
+      userId,
+      expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+    });
+    return { claimed: true };
+  } catch (err) {
+    if (err?.code !== 11000) throw err;
+
+    const existing = await BookingIdempotency.findOne({ key }).lean();
+    if (!existing) {
+      // The row expired between our insert failing and this read. The
+      // window is microscopic; proceeding unguarded is no worse than the
+      // behaviour before this guard existed.
+      return { claimed: true };
+    }
+
+    if (!existing.bookingId) {
+      // First attempt is still mid-flight — its wallet debit may not have
+      // landed yet, so we cannot return "its" booking. Tell the caller to
+      // stop rather than risk a second charge.
+      throw new ApiError(
+        409,
+        'This booking is already being created. Please wait a moment before trying again.',
+        { code: 'BOOKING_IN_PROGRESS' },
+      );
+    }
+
+    const priorBooking = await Booking.findOne({
+      _id: existing.bookingId,
+      isDeleted: false,
+    });
+
+    // A booking that has since been cancelled or completed is not a replay
+    // target — the customer is legitimately re-booking the same car for the
+    // same window. Re-take the row rather than deleting it, so this fresh
+    // attempt is itself protected: deleting would leave the new booking with
+    // no claim behind it and a double-tap on the re-book would go through.
+    // Filtering on the stale `bookingId` makes the takeover atomic — if two
+    // re-books race, only one wins and the other is told to wait.
+    if (!priorBooking || TERMINAL_BOOKING_STATUSES.includes(priorBooking.status)) {
+      const retaken = await BookingIdempotency.findOneAndUpdate(
+        { key, bookingId: existing.bookingId },
+        {
+          $set: {
+            userId,
+            bookingId: null,
+            expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+          },
+        },
+        { new: true },
+      );
+      if (retaken) return { claimed: true };
+      throw new ApiError(
+        409,
+        'This booking is already being created. Please wait a moment before trying again.',
+        { code: 'BOOKING_IN_PROGRESS' },
+      );
+    }
+
+    return { claimed: false, replayOf: priorBooking };
+  }
+}
+
+export async function createBookingService(userId, body, { idempotencyKey } = {}) {
   validateCreateInput(body);
 
   const { serviceType, bookingType, carId, pickup, dropoff, hourly, outstation, couponCode } = body;
@@ -1044,6 +1143,23 @@ export async function createBookingService(userId, body) {
 
   const bookingNumber = generateBookingNumber();
 
+  // Duplicate-submit guard. Deliberately sits AFTER all validation and fare
+  // work (so a rejected request leaves no claim behind to block the user's
+  // corrected retry) and BEFORE the wallet debit below (the whole point is
+  // to stop the second charge, not to notice it afterwards).
+  const dedupeKey = resolveIdempotencyKey(userId, body, idempotencyKey);
+  const claim = await claimIdempotency(dedupeKey, userId);
+  if (!claim.claimed) {
+    // Same request, already succeeded. Hand back the original booking
+    // instead of charging again. `shouldDispatchNow: false` keeps the
+    // controller from kicking dispatch a second time.
+    return {
+      booking: claim.replayOf.toObject(),
+      reused: true,
+      shouldDispatchNow: false,
+    };
+  }
+
   // Pay-then-search with a soft hold for the waiting buffer:
   //   1. Pre-check the wallet can cover fare + buffer (so a short wallet
   //      surfaces a single clear "you need ₹X" error, before any side
@@ -1111,6 +1227,7 @@ export async function createBookingService(userId, body) {
           refundErr,
         );
       }
+      await releaseIdempotencyClaim(dedupeKey);
       throw holdErr;
     }
   }
@@ -1220,12 +1337,39 @@ export async function createBookingService(userId, body) {
         refundErr,
       );
     }
+    await releaseIdempotencyClaim(dedupeKey);
     throw err;
   }
 
   // Coupon usage is credited only when the trip completes successfully
   // (see bookingTrip.service). Cancelled / no-drivers bookings must not
   // burn a limited-use code.
+
+  // Point the claim at the booking it produced. From here a replay of the
+  // same request returns this booking instead of charging again.
+  try {
+    await BookingIdempotency.updateOne(
+      { key: dedupeKey },
+      {
+        $set: { bookingId: booking._id },
+        // `key` is deliberately absent: the filter's equality already
+        // supplies it on insert, and naming it here as well makes Mongo
+        // reject the update as a conflicting path.
+        $setOnInsert: {
+          userId,
+          expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+        },
+      },
+      // The row can be missing if its TTL fired mid-attempt; recreate it so
+      // a replay still resolves to this booking rather than charging again.
+      { upsert: true },
+    );
+  } catch (linkErr) {
+    console.warn(
+      '[booking] failed to link idempotency claim to booking:',
+      linkErr?.message,
+    );
+  }
 
   // Backfill the refId on the wallet txn now that we know the booking id.
   try {
@@ -1269,6 +1413,37 @@ export async function createBookingService(userId, body) {
           persistErr?.message,
         );
       }
+
+      // Park it visibly, not silently. The customer has already been charged
+      // at this point, and until now the only thing that would ever pick this
+      // row up again was the expire sweep at pickup time — for an outstation
+      // booking with an 8-day minimum lead, that is money held for over a week
+      // on a booking no driver was ever offered. A FailedJob row puts it on
+      // the admin failed-jobs queue immediately, with a retry path.
+      //
+      // Deliberately not escalated to the emergency pool: that queue is for
+      // bookings near their pickup, and this one may be days away.
+      try {
+        const { recordFailedJobService } = await import('./failedJob.service.js');
+        await recordFailedJobService({
+          jobName: 'setupScheduledBooking',
+          payload: {
+            bookingId: String(booking._id),
+            bookingNumber: booking.bookingNumber,
+            serviceType: booking.serviceType,
+            bookingType: booking.bookingType,
+          },
+          error: scheduleErr?.message || 'schedule setup failed',
+          bookingId: booking._id,
+          escalateBooking: false,
+        });
+      } catch (recordErr) {
+        console.error(
+          '[booking] failed to record schedule-setup failure for admin review:',
+          recordErr?.message,
+        );
+      }
+
       shouldDispatchNow = false;
     }
   }
@@ -1347,6 +1522,42 @@ export async function cancelBookingByUserService(
     || resolvedReason === 'no_drivers_available'
     || wasNoDriversFound;
 
+  // Atomic claim — exactly one caller may enter the side-effect region
+  // below (refund, cancellation-fee split, driver release, broadcasts).
+  //
+  // Everything above this point is pure computation off the doc we read,
+  // so re-running it costs nothing; everything below moves money and must
+  // happen once. Without this claim two concurrent cancels both passed the
+  // `ACTIVE_BOOKING_STATUSES` check at the top and both issued a refund,
+  // and a cancel racing a driver's complete overwrote COMPLETED with
+  // CANCELLED — paying the driver AND refunding the customer.
+  //
+  // The filter doubles as the guard for that second case: COMPLETED and
+  // CANCELLED are both absent from ACTIVE_BOOKING_STATUSES, so a booking
+  // that finished (or was already cancelled) while we were computing fails
+  // the claim instead of being clobbered.
+  //
+  // Losers get the same 400 the status pre-check raises, so existing
+  // clients need no change to handle it.
+  const cancelledAt = new Date();
+  const claimed = await Booking.findOneAndUpdate(
+    {
+      _id: booking._id,
+      isDeleted: false,
+      status: { $in: ACTIVE_BOOKING_STATUSES },
+    },
+    {
+      $set: {
+        status: BOOKING_STATUS.CANCELLED,
+        'timeline.cancelledAt': cancelledAt,
+      },
+    },
+    { new: true, projection: { _id: 1 } },
+  );
+  if (!claimed) {
+    throw new ApiError(400, 'This booking is no longer cancellable');
+  }
+
   booking.status = BOOKING_STATUS.CANCELLED;
   stampUnpaidPaymentCancelled(booking);
   booking.cancellation = {
@@ -1360,7 +1571,7 @@ export async function cancelBookingByUserService(
     hoursUntilPickup:
       typeof hoursUntilPickup === 'number' ? hoursUntilPickup : null,
   };
-  booking.timeline.cancelledAt = new Date();
+  booking.timeline.cancelledAt = cancelledAt;
   booking.dispatch.pendingOfferIds = [];
   booking.dispatch.currentExpiresAt = null;
   // Unlink so driver home/active queries never keep matching this row

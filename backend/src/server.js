@@ -4,6 +4,7 @@ dotenv.config();
 
 import { createServer } from 'node:http';
 import { connectDB } from './config/connectDB.js';
+import { warnIfTestOtpSuppressed } from './config/sms.config.js';
 import { initSuperAdmin } from './utils/initAdmin.js';
 import { initializeSocket } from './config/socket.js';
 import { initializeFirebase } from './config/firebase.js';
@@ -14,6 +15,7 @@ import app from './app.js';
 const PORT = process.env.PORT || 9000;
 
 async function bootstrap() {
+  warnIfTestOtpSuppressed();
   await connectDB();
   await initSuperAdmin();
   await initializeFirebase();

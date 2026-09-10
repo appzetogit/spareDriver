@@ -145,13 +145,9 @@ const FareCard = ({
   error = null,
   dense = false,
   footnote = null,
-  title = 'Fare estimate',
+  title = 'Fare breakdown',
   bare = false,
 }) => {
-  // `breakdown` is wrapped in useMemo so the identity is stable
-  // whenever the estimate hasn't changed — otherwise the
-  // `useMemo(detailRows)` below would re-fire every render
-  // because the `|| {}` fallback returns a fresh object each time.
   const breakdown = useMemo(
     () => estimate?.fareBreakdown || {},
     [estimate],
@@ -188,146 +184,149 @@ const FareCard = ({
   const subscriptionDiscount = Number(breakdown.subscriptionDiscount) || 0;
   const fareTotal = breakdown.totalPayable || 0;
   const grandTotal = Math.round((fareTotal + bufferRupees) * 100) / 100;
+  const hasDiscounts = couponDiscount > 0 || subscriptionDiscount > 0;
 
   const body = (
-    <>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-text">{title}</h3>
-        {estimating && <Loader2 className="w-4 h-4 animate-spin text-text-muted" />}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-text tracking-tight">{title}</h3>
+          {isOutstation && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary-dark">
+              Outstation
+            </span>
+          )}
+        </div>
+        {estimating && (
+          <div className="flex items-center gap-1.5 text-xs text-text-muted">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-dark" />
+            <span>Updating fare…</span>
+          </div>
+        )}
       </div>
 
       {error && (
-        <div className="text-xs text-danger bg-danger/10 rounded-xl px-3 py-2">{error}</div>
+        <div className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-3 py-2.5 flex items-center gap-2">
+          <span>{error}</span>
+        </div>
       )}
 
       {!error && (
-        <div className={dense ? 'space-y-1.5' : 'space-y-2.5'}>
-          {/* Per-line breakdown with explicit multipliers (\u00d7 days,
-              \u00d7 nights, etc.) so the customer can audit every rupee. */}
-          {durationLabelRow && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">{durationLabelRow[0]}</span>
-              <span className="text-sm font-medium text-text">{durationLabelRow[1]}</span>
+        <div className="space-y-2.5">
+          {/* Main Trip Line Items */}
+          <div className="rounded-xl bg-gray-50/70 p-3 space-y-2 text-xs">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
+              Base &amp; Service Charges
+            </p>
+            {durationLabelRow && (
+              <div className="flex items-center justify-between pb-1 border-b border-gray-200/60">
+                <span className="text-text-secondary">{durationLabelRow[0]}</span>
+                <span className="font-medium text-text">{durationLabelRow[1]}</span>
+              </div>
+            )}
+            {detailRowsDisplay.map(([label, amount]) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-text-secondary">{label}</span>
+                <span className={`font-semibold ${amount < 0 ? 'text-emerald-600' : 'text-text'}`}>
+                  {rupees(amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Discounts section if applied */}
+          {hasDiscounts && (
+            <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-3 space-y-1.5 text-xs">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 mb-1">
+                Discounts &amp; Savings
+              </p>
+              {couponDiscount > 0 && (
+                <div className="flex items-center justify-between text-emerald-700">
+                  <span>Coupon discount</span>
+                  <span className="font-bold">{rupees(-couponDiscount)}</span>
+                </div>
+              )}
+              {subscriptionDiscount > 0 && (
+                <div className="flex items-center justify-between text-emerald-700">
+                  <span>Subscription discount</span>
+                  <span className="font-bold">{rupees(-subscriptionDiscount)}</span>
+                </div>
+              )}
             </div>
           )}
-          {detailRowsDisplay.map(([label, amount]) => (
-            <div key={label} className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">{label}</span>
-              <span className={`text-sm ${amount < 0 ? 'text-success' : 'text-text'}`}>
-                {rupees(amount)}
-              </span>
-            </div>
-          ))}
-          {detailRowsDisplay.length > 0 && (
-            <div className="h-px bg-border-light my-1" />
-          )}
-          {/* Pre-platform subtotal — the boundary between trip costs and
-              platform-side charges. Highlighted on outstation where the
-              detail is rich enough to be worth a separator. */}
-          {subtotal > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Ride fare</span>
-              <span className="text-sm text-text">{rupees(subtotal)}</span>
-            </div>
-          )}
-          {couponDiscount > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Coupon discount</span>
-              <span className="text-sm text-success">{rupees(-couponDiscount)}</span>
-            </div>
-          )}
-          {couponDiscount > 0 && netSubtotal >= 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Net ride subtotal</span>
-              <span className="text-sm text-text">{rupees(netSubtotal)}</span>
-            </div>
-          )}
-          {serviceCharge > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">
-                Platform fee
-                {breakdown.platformFeeType === 'flat'
-                  ? ' (flat)'
-                  : (breakdown.platformFeeAmount ?? breakdown.serviceChargePercent) > 0 && (
+
+          {/* Taxes & Platform Fees */}
+          {(serviceCharge > 0 || gst > 0) && (
+            <div className="space-y-1.5 px-1 text-xs">
+              {serviceCharge > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-text-secondary">
+                    Platform fee
+                    {breakdown.platformFeeType === 'flat'
+                      ? ' (flat)'
+                      : (breakdown.platformFeeAmount ?? breakdown.serviceChargePercent) > 0 && (
+                          <span className="ml-1 text-[10px] text-text-muted">
+                            ({breakdown.platformFeeAmount ?? breakdown.serviceChargePercent}%)
+                          </span>
+                        )}
+                  </span>
+                  <span className="text-text font-medium">{rupees(serviceCharge)}</span>
+                </div>
+              )}
+              {gst > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-text-secondary">
+                    GST
+                    {breakdown.gstPercent > 0 && (
                       <span className="ml-1 text-[10px] text-text-muted">
-                        ({breakdown.platformFeeAmount ?? breakdown.serviceChargePercent}%)
+                        ({breakdown.gstPercent}%)
                       </span>
                     )}
-              </span>
-              <span className="text-sm text-text">{rupees(serviceCharge)}</span>
-            </div>
-          )}
-          {gst > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">
-                GST
-                {breakdown.gstPercent > 0 && (
-                  <span className="ml-1 text-[10px] text-text-muted">
-                    ({breakdown.gstPercent}%)
                   </span>
-                )}
-              </span>
-              <span className="text-sm text-text">{rupees(gst)}</span>
-            </div>
-          )}
-          {subscriptionDiscount > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">
-                Subscription discount
-              </span>
-              <span className="text-sm text-success">
-                {rupees(-subscriptionDiscount)}
-              </span>
-            </div>
-          )}
-          <div className="h-px bg-border-light my-1" />
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-text">Fare total</span>
-            <span className="text-base font-semibold text-text">{rupees(fareTotal)}</span>
-          </div>
-          {/*
-            Pre-collected waiting buffer. Shown as a separate row so the
-            user understands the difference between the fare and the
-            refundable hold. Unused portion is auto-credited to the
-            wallet after the trip ends (settleWaitingBuffer in the
-            backend).
-          */}
-          {bufferRupees > 0 && (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-text-secondary">
-                  Waiting reserve
-                  <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">
-                    Held
-                  </span>
-                </span>
-                <span className="text-sm text-text">₹{bufferRupees}</span>
-              </div>
-              {!dense && (
-                <p className="text-[11px] text-text-muted -mt-1">
-                  Held for waiting beyond {buffer?.freeWaitingMinutes || 0} min.
-                  Unused amount unlocks after the trip.
-                </p>
+                  <span className="text-text font-medium">{rupees(gst)}</span>
+                </div>
               )}
-              <div className="h-px bg-border-light my-1" />
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-text">
-                  Wallet needed
-                </span>
-                <span className="text-base font-bold text-text">₹{grandTotal}</span>
-              </div>
-            </>
-          )}
-          {bufferRupees <= 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-text">Total</span>
-              <span className="text-lg font-bold text-text">{rupees(fareTotal)}</span>
             </div>
           )}
-          {footnote && <p className="text-[11px] text-text-muted">{footnote}</p>}
+
+          {/* Divider */}
+          <div className="h-px bg-border-light my-1" />
+
+          {/* Fare Total Row */}
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <p className="text-xs font-semibold text-text">Fare Total</p>
+              <p className="text-[10px] text-text-muted">Direct fare charged to wallet</p>
+            </div>
+            <span className="text-base font-bold text-text">{rupees(fareTotal)}</span>
+          </div>
+
+          {/* Waiting Reserve Buffer */}
+          {bufferRupees > 0 && (
+            <div className="rounded-xl bg-amber-50/70 border border-amber-200/80 p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-amber-950">Waiting Reserve</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
+                    Refundable Hold
+                  </span>
+                </div>
+                <span className="font-bold text-amber-950">₹{bufferRupees}</span>
+              </div>
+              <p className="text-[11px] text-amber-900/90 leading-snug">
+                Held for extra waiting beyond {buffer?.freeWaitingMinutes || 0} min. Unused amount is automatically unlocked after trip completion.
+              </p>
+              <div className="pt-1.5 border-t border-amber-200/60 flex items-center justify-between">
+                <span className="font-bold text-amber-950">Total Wallet Amount Needed</span>
+                <span className="text-base font-extrabold text-amber-950">₹{grandTotal}</span>
+              </div>
+            </div>
+          )}
+
+          {footnote && <p className="text-[11px] text-text-muted px-1">{footnote}</p>}
         </div>
       )}
-    </>
+    </div>
   );
 
   if (bare) return <div>{body}</div>;

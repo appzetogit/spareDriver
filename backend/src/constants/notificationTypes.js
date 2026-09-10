@@ -75,6 +75,8 @@ export const DRIVER_NOTIFICATION = Object.freeze({
    * Flutter rings on this kind (same as inbox_offer) and opens the trip.
    */
   ORDER_ASSIGNED: 'order_assigned',
+  /** Stuck-recovery nudge: marked on the way but never marked arrival. */
+  ARRIVAL_REMINDER: 'arrival_reminder',
   EARNINGS_CREDITED: 'earnings_credited',
   TRIP_OVERTIME_STARTED: 'trip_overtime_started',
   WITHDRAWAL_REQUESTED: 'withdrawal_requested',
@@ -122,6 +124,13 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   SUPPORT_TICKET_RECEIVED: 'support_ticket_received',
   SUBSCRIPTION_CANCEL_REQUEST: 'subscription_cancel_request',
   TRIP_CHAT_MESSAGE: 'trip_chat_message',
+  /**
+   * Outstation booking wedged at EN_ROUTE past its pickup time — the
+   * driver never reached the pickup, so the GPS-guarded ARRIVED
+   * transition (and the ride OTP it mints) can never fire. Needs a human
+   * to force-arrive, reassign, or settle.
+   */
+  BOOKING_STUCK_EN_ROUTE: 'booking_stuck_en_route',
 });
 
 export const NOTIFICATION_AUDIENCE = Object.freeze({
@@ -147,6 +156,7 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
     ADMIN_NOTIFICATION.PAYMENT_MISMATCH,
     ADMIN_NOTIFICATION.ACCOUNTING_MISMATCH,
     ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
+    ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE,
     ADMIN_NOTIFICATION.NO_DRIVERS_FOUND,
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
     ADMIN_NOTIFICATION.SUBSCRIPTION_CANCEL_REQUEST,
@@ -158,6 +168,7 @@ export const ADMIN_PERSISTED_NOTIFICATION_TYPES = Object.freeze(
 export const ADMIN_FCM_NOTIFICATION_TYPES = Object.freeze(
   new Set([
     ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED,
+    ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE,
     ADMIN_NOTIFICATION.SOS_TRIGGERED,
     ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED,
   ]),
@@ -170,6 +181,8 @@ const NOTIFICATION_TYPE_LABELS = Object.freeze({
   [ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED]: 'Emergency pool',
   [ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED]: 'Support',
   [ADMIN_NOTIFICATION.NO_DRIVERS_FOUND]: 'No drivers',
+  [ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE]: 'Stuck en route',
+  [DRIVER_NOTIFICATION.ARRIVAL_REMINDER]: 'Mark arrival',
   [DRIVER_NOTIFICATION.BOOKING_OFFER]: 'New request',
   [DRIVER_NOTIFICATION.INBOX_OFFER]: 'Inbox request',
   [DRIVER_NOTIFICATION.ORDER_ASSIGNED]: 'Trip assigned',

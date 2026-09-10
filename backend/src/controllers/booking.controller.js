@@ -95,9 +95,12 @@ import Booking from '../models/booking.model.js';
  * frontend can pop a specific toast.
  */
 export const createBooking = asyncHandler(async (req, res) => {
-  const { booking, shouldDispatchNow } = await createBookingService(
+  const { booking, shouldDispatchNow, reused } = await createBookingService(
     req.user._id,
     req.body,
+    // Honoured when the client sends one; otherwise the service falls back
+    // to a fingerprint derived from the request itself.
+    { idempotencyKey: req.get('Idempotency-Key') },
   );
   // Scheduled (long-lead) bookings sit in PENDING_ASSIGNMENT until the
   // queue's `assign` job fires (rideTime − LONG_LEAD_HOURS). Instant
@@ -110,7 +113,13 @@ export const createBooking = asyncHandler(async (req, res) => {
   }
   return res
     .status(201)
-    .json(new ApiResponse(201, { booking, reused: false }, 'Booking created'));
+    .json(
+      new ApiResponse(
+        201,
+        { booking, reused: Boolean(reused) },
+        reused ? 'Booking already created' : 'Booking created',
+      ),
+    );
 });
 
 export const getMyActiveBooking = asyncHandler(async (req, res) => {

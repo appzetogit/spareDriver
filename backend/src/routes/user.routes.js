@@ -105,6 +105,7 @@ import {
   validateUserReferralCode,
 } from '../controllers/referral.controller.js';
 import { protectUser, protectProfileViewer } from '../middlewares/authMiddleware.js';
+import { bookingCreateRateLimiter } from '../middlewares/rateLimit.js';
 
 const router = express.Router();
 
@@ -161,7 +162,7 @@ router.delete('/notifications', deleteUserNotifications);
 router.delete('/notifications/:id', deleteUserNotification);
 
 // Booking lifecycle (Phase 4)
-router.post('/bookings', createBooking);
+router.post('/bookings', bookingCreateRateLimiter, createBooking);
 router.get('/bookings', getMyBookings);
 router.get('/bookings/active', getMyActiveBooking);
 router.get('/bookings/active-list', getMyActiveBookings);

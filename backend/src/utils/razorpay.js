@@ -61,5 +61,11 @@ export function verifyRazorpayWebhookSignature(rawBody, signature) {
     .update(rawBody)
     .digest('hex');
 
-  return expected === signature;
+  // Constant-time compare. `===` leaks how many leading characters matched
+  // through its return timing; over enough attempts that is enough to
+  // reconstruct a valid signature without ever knowing the secret.
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const providedBuf = Buffer.from(String(signature), 'utf8');
+  if (expectedBuf.length !== providedBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, providedBuf);
 }

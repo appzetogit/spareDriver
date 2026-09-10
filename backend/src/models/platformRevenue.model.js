@@ -98,6 +98,22 @@ const platformRevenueSchema = new mongoose.Schema(
     },
 
     /**
+     * Uniqueness handle for booking-scoped revenue: `<bookingId>:<source>`.
+     *
+     * A booking produces at most one row per source — commission, platform
+     * fee and coupon discount are written once at completion off the final
+     * fareSnapshot (extensions and overtime fold into that snapshot rather
+     * than writing their own rows), cancellation fee once at cancel, driver
+     * penalty once at driver-cancel. Anything beyond that is a re-settle of
+     * the same booking, which used to duplicate the row and double-count the
+     * revenue.
+     *
+     * Null for rows with no booking (subscription income, admin refunds) —
+     * those are genuinely unbounded, and the partial index below skips them.
+     */
+    dedupeKey: { type: String, default: null },
+
+    /**
      * When the revenue actually accrued. Defaults to write-time but
      * we keep it separate so back-fills and corrections don't bend
      * the time-series.
@@ -109,6 +125,25 @@ const platformRevenueSchema = new mongoose.Schema(
 
 platformRevenueSchema.index({ source: 1, occurredAt: -1 });
 platformRevenueSchema.index({ occurredAt: -1 });
+
+/**
+ * The double-count guard.
+ *
+ * Partial on purpose: a plain unique index over `{bookingId, source}` would
+ * refuse to build at all on a collection that already contains historical
+ * duplicates, turning a safety fix into a deployment blocker. Keying on a
+ * field that is null for every pre-existing row means the index builds
+ * instantly and constrains new writes only. Cleaning up historical rows is a
+ * separate, reversible reporting exercise — see
+ * `scripts/reportDuplicatePlatformRevenue.js`.
+ */
+platformRevenueSchema.index(
+  { dedupeKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { dedupeKey: { $type: 'string' } },
+  },
+);
 
 const PlatformRevenue =
   mongoose.models.PlatformRevenue ||

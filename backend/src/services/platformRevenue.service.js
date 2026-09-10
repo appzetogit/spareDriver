@@ -165,7 +165,7 @@ export async function recordPlatformRevenue({
     throw new ApiError(400, 'bookingId is required');
   }
 
-  return PlatformRevenue.create({
+  const row = {
     source,
     amountRupees: amt,
     bookingId: bookingId || null,
@@ -176,7 +176,37 @@ export async function recordPlatformRevenue({
     driverId: driverId || null,
     meta: meta && typeof meta === 'object' ? meta : {},
     occurredAt: occurredAt || new Date(),
-  });
+  };
+
+  // Rows with no booking (subscription income, admin refunds) are genuinely
+  // unbounded — nothing to deduplicate against.
+  if (!bookingId) {
+    return PlatformRevenue.create(row);
+  }
+
+  // Booking-scoped: at most one row per source. `settleCompletedTripPayouts`
+  // advertises itself as safe to call more than once, but only the driver
+  // earning was actually idempotent — this write was a plain insert, so a
+  // re-settle (an admin rewinding a completed booking and it completing
+  // again) silently double-booked the platform's revenue.
+  const dedupeKey = `${String(bookingId)}:${source}`;
+  try {
+    return await PlatformRevenue.findOneAndUpdate(
+      { dedupeKey },
+      // `dedupeKey` is omitted here deliberately: the filter's equality
+      // supplies it on insert, and naming it again is a conflicting path.
+      { $setOnInsert: row },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  } catch (err) {
+    // Two concurrent upserts on one key: MongoDB lets both through the
+    // lookup and rejects the loser's insert. The winner's row is what we
+    // wanted, so return it rather than surfacing the collision.
+    if (err?.code === 11000) {
+      return PlatformRevenue.findOne({ dedupeKey });
+    }
+    throw err;
+  }
 }
 
 /**

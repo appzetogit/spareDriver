@@ -10,6 +10,7 @@ import {
   SCHEDULED_BOOKING,
 } from '../constants/bookingStatus.js';
 import { SERVICE_TYPES } from '../constants/serviceTypes.js';
+import { checkAdminTransition } from '../utils/adminBookingTransitions.js';
 
 const ADMIN_OVERRIDE_BLOCKED = new Set([
   BOOKING_STATUS.PENDING_ASSIGNMENT,
@@ -17,6 +18,25 @@ const ADMIN_OVERRIDE_BLOCKED = new Set([
   BOOKING_STATUS.DRIVER_ASSIGNED,
   BOOKING_STATUS.AWAITING_PAYMENT,
 ]);
+
+/**
+ * Guard one admin override. The matrix itself lives in
+ * `utils/adminBookingTransitions.js` so it can be unit-tested without the
+ * model graph; this only turns a rejection into the HTTP error the panel
+ * shows, listing the sources that would have worked.
+ */
+function assertAdminTransitionAllowed(fromStatus, toStatus, booking) {
+  const verdict = checkAdminTransition(fromStatus, toStatus, {
+    hasDriver: Boolean(booking?.driverId),
+  });
+  if (verdict.ok) return;
+  throw new ApiError(
+    verdict.code === 'STATUS_NOT_OVERRIDABLE' ? 400 : 409,
+    verdict.message,
+    { code: verdict.code, from: fromStatus, to: toStatus },
+  );
+}
+
 import { S2C_EVENTS } from '../constants/socketEvents.js';
 import {
   emitToUser,
@@ -344,6 +364,8 @@ export async function adminUpdateBookingStatusService(
   if (previousStatus === status && !needsOtpBackfill) {
     return { booking: booking.toObject(), previousStatus, changed: false };
   }
+
+  assertAdminTransitionAllowed(previousStatus, status, booking);
 
   if (status === BOOKING_STATUS.CANCELLED) {
     const { cancelBookingByAdminService } = await import('./booking.service.js');

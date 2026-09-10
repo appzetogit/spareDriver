@@ -76,6 +76,8 @@ import {
   settleDriverEarning,
 } from './bookingExtension.service.js';
 import { incrementCouponUsageService } from './coupon.service.js';
+import { chooseArrivalFix, coordsFromDriverLocation } from '../utils/arrivalFix.js';
+import { LOCATION_ACCURACY } from '../constants/driverTracking.js';
 import { creditWalletService } from './wallet.service.js';
 import { WALLET_TXN_SOURCE } from '../models/walletTransaction.model.js';
 
@@ -497,30 +499,60 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
   if (!pickupCoords) {
     throw new ApiError(500, 'Pickup coordinates missing from booking');
   }
-  if (
-    !driverCoords ||
-    typeof driverCoords.lat !== 'number' ||
-    typeof driverCoords.lng !== 'number'
-  ) {
+  // Prefer the server's own tracked position over whatever the request body
+  // claims — the body is client-controlled, so checking it against the pickup
+  // never actually enforced anything. Falls back to the client fix only when
+  // the server has nothing recent, so a driver whose uploader is wedged is
+  // not stranded at the pickup. See utils/arrivalFix.js.
+  const driverRow = await Driver.findById(driverId)
+    .select('location lastLocationAt')
+    .lean();
+  const chosenFix = chooseArrivalFix({
+    serverCoords: coordsFromDriverLocation(driverRow?.location),
+    serverFixAt: driverRow?.lastLocationAt,
+    clientCoords: driverCoords,
+  });
+
+  if (!chosenFix) {
     throw new ApiError(
       400,
       'Driver location is required to mark arrival — enable location and try again',
     );
   }
 
-  const distance = haversineMeters(driverCoords, pickupCoords);
-  const allowed = arrivalRadiusFor(driverCoords.accuracy);
+  const distance = haversineMeters(chosenFix.coords, pickupCoords);
+  // A stored on-trip fix has already cleared LOCATION_ACCURACY.ON_TRIP_M at
+  // ingest, so widen by that rather than by an accuracy the client asserts.
+  const allowed =
+    chosenFix.source === 'server'
+      ? arrivalRadiusFor(LOCATION_ACCURACY.ON_TRIP_M)
+      : arrivalRadiusFor(chosenFix.coords.accuracy);
   if (distance > allowed) {
     throw new ApiError(
       409,
       `You're too far from the pickup (${Math.round(distance)} m). Move within ${allowed} m to mark arrival.`,
-      { distanceMeters: Math.round(distance), maxDistanceMeters: allowed },
+      {
+        distanceMeters: Math.round(distance),
+        maxDistanceMeters: allowed,
+        fixSource: chosenFix.source,
+      },
     );
   }
 
   const arrivedAt = new Date();
   booking.status = BOOKING_STATUS.ARRIVED;
   booking.timeline.arrivedAt = arrivedAt;
+  booking.arrivalFix = {
+    source: chosenFix.source,
+    distanceMeters: Math.round(distance),
+    serverAgeMs: Number.isFinite(chosenFix.serverAgeMs) ? chosenFix.serverAgeMs : null,
+  };
+  if (chosenFix.source === 'client') {
+    console.warn(
+      `[bookingTrip] arrival accepted on client-reported location for ${booking.bookingNumber || booking._id}`
+        + ` (server fix age: ${chosenFix.serverAgeMs ?? 'none'}ms)`,
+    );
+  }
   booking.rideStartOtp = {
     code: generateRideOtp(),
     generatedAt: arrivedAt,
@@ -537,6 +569,18 @@ export async function markDriverArrivedService(driverId, bookingId, { driverCoor
     respondedAt: null,
     firedFor: 0,
   };
+  // Same reasoning for stuck-EN_ROUTE recovery state: reaching ARRIVED is
+  // exactly the wedge clearing, so drop any nudge/escalation stamps now
+  // rather than waiting for the batch sweep's cleanup pass. A future wedge
+  // on this booking then starts from a clean slate.
+  if (booking.stuckRecovery?.kind) {
+    booking.stuckRecovery = {
+      kind: '',
+      nudgedAt: null,
+      escalatedAt: null,
+      minutesLate: 0,
+    };
+  }
   // Snapshot the active waiting-charge policy so the live driver UI
   // can render a "free wait 15:00 → ₹2/min after" ticker without
   // having to fetch pricing separately. The actual `chargeRupees`
@@ -618,17 +662,53 @@ export async function startTripService(driverId, bookingId, { otp } = {}) {
   if (!submitted) {
     throw new ApiError(400, 'OTP is required to start the ride');
   }
-  if (submitted !== String(expected) && !isTestOtp(submitted)) {
-    booking.rideStartOtp.attempts = (booking.rideStartOtp.attempts || 0) + 1;
-    await booking.save();
-    const tooMany =
-      booking.rideStartOtp.attempts >= PAYMENT_POLICY.RIDE_OTP_MAX_ATTEMPTS;
-    throw new ApiError(
-      400,
-      tooMany
-        ? 'OTP entered incorrectly too many times — please confirm with the customer'
-        : 'Incorrect OTP',
+
+  // Refuse while a cooldown from a previous run of wrong codes is still
+  // running. Checked before the comparison so a locked-out caller learns
+  // nothing at all from the attempt.
+  const lockedUntil = booking.rideStartOtp?.lockedUntil;
+  if (lockedUntil && new Date(lockedUntil).getTime() > Date.now()) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((new Date(lockedUntil).getTime() - Date.now()) / 1000),
     );
+    throw new ApiError(
+      429,
+      `Too many incorrect codes. Try again in ${Math.ceil(retryAfterSeconds / 60)} min, or ask the customer to re-read the OTP.`,
+      { code: 'OTP_LOCKED', retryAfterSeconds },
+    );
+  }
+
+  if (submitted !== String(expected) && !isTestOtp(submitted)) {
+    const attempts = (booking.rideStartOtp.attempts || 0) + 1;
+    const tooMany = attempts >= PAYMENT_POLICY.RIDE_OTP_MAX_ATTEMPTS;
+
+    if (tooMany) {
+      // Start a cooldown and reset the counter, so the next window is a fresh
+      // batch of attempts rather than one-strike-and-locked forever.
+      booking.rideStartOtp.attempts = 0;
+      booking.rideStartOtp.lockedUntil = new Date(
+        Date.now() + PAYMENT_POLICY.RIDE_OTP_LOCKOUT_SECONDS * 1000,
+      );
+    } else {
+      booking.rideStartOtp.attempts = attempts;
+    }
+    await booking.save();
+
+    if (tooMany) {
+      throw new ApiError(
+        429,
+        `OTP entered incorrectly ${PAYMENT_POLICY.RIDE_OTP_MAX_ATTEMPTS} times. Try again in ${Math.ceil(PAYMENT_POLICY.RIDE_OTP_LOCKOUT_SECONDS / 60)} min, or ask the customer to re-read the OTP.`,
+        {
+          code: 'OTP_LOCKED',
+          retryAfterSeconds: PAYMENT_POLICY.RIDE_OTP_LOCKOUT_SECONDS,
+        },
+      );
+    }
+    throw new ApiError(400, 'Incorrect OTP', {
+      code: 'OTP_INCORRECT',
+      attemptsLeft: Math.max(0, PAYMENT_POLICY.RIDE_OTP_MAX_ATTEMPTS - attempts),
+    });
   }
 
   const startedAt = new Date();
@@ -970,12 +1050,25 @@ export async function settleCompletedTripPayouts(booking) {
   );
 
   if (snap.couponId) {
-    incrementCouponUsageService(snap.couponId).catch((err) =>
-      console.warn(
-        '[bookingTrip] failed to increment coupon usage:',
-        err?.message,
-      ),
-    );
+    // Count the coupon at most once per booking. `incrementCouponUsageService`
+    // is a bare `$inc`, so stamping the booking first — conditionally, so two
+    // racing settles cannot both win — is what makes the count exact. A
+    // limited-use code was previously burnt twice whenever this ran again for
+    // the same booking.
+    Booking.updateOne(
+      { _id: booking._id, couponCountedAt: null },
+      { $set: { couponCountedAt: new Date() } },
+    )
+      .then((res) => {
+        if (res?.modifiedCount !== 1) return null;
+        return incrementCouponUsageService(snap.couponId);
+      })
+      .catch((err) =>
+        console.warn(
+          '[bookingTrip] failed to increment coupon usage:',
+          err?.message,
+        ),
+      );
   }
 
   await settleDriverEarning(booking).catch((err) =>

@@ -3,12 +3,12 @@ importScripts('https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  "apiKey": "",
-  "authDomain": "",
-  "projectId": "",
-  "storageBucket": "",
-  "messagingSenderId": "",
-  "appId": ""
+  "apiKey": "AIzaSyAEWOflMUIV1tg2x0EqBA13ijdrI79Ard4",
+  "authDomain": "sparedriver-d05e7.firebaseapp.com",
+  "projectId": "sparedriver-d05e7",
+  "storageBucket": "sparedriver-d05e7.firebasestorage.app",
+  "messagingSenderId": "635960012035",
+  "appId": "1:635960012035:web:1b707672afd8434f2f8d36"
 });
 
 const messaging = firebase.messaging();
@@ -89,10 +89,10 @@ function resolveNotificationOpenUrl(data) {
     || kind === 'trip_overtime_started'
     || kind === 'overtime_payment_failed'
   )) {
-    return '/user/book/assigned/' + bookingId;
+    return '/user/book/assigned/' + data.bookingId;
   }
-  if (bookingId && (kind === 'extension_otp' || kind === 'order_assigned')) {
-    return '/driver/trip/' + bookingId;
+  if (data.bookingId && (kind === 'extension_otp' || kind === 'order_assigned')) {
+    return '/driver/trip/' + data.bookingId;
   }
   return '/';
 }

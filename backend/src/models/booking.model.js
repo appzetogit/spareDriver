@@ -318,7 +318,14 @@ const rideStartOtpSchema = new mongoose.Schema(
     code: { type: String, default: null },
     generatedAt: { type: Date, default: null },
     verifiedAt: { type: Date, default: null },
+    /** Wrong codes in the current window; reset when a lockout starts. */
     attempts: { type: Number, default: 0 },
+    /**
+     * Set when `RIDE_OTP_MAX_ATTEMPTS` wrong codes land in a row. Attempts
+     * are refused until it passes. Without it `attempts` only ever changed
+     * the error message, leaving a 4-digit code open to being walked.
+     */
+    lockedUntil: { type: Date, default: null },
   },
   { _id: false },
 );
@@ -705,6 +712,47 @@ const bookingSchema = new mongoose.Schema(
      * commission/fee, a manual driver payout, and a user wallet refund.
      * Distinct from hourly no-show auto-complete.
      */
+    /**
+     * Which position the arrival proximity check actually believed.
+     *
+     * `server` means the driver's own tracked fix was recent enough to decide
+     * it — the normal case, and the one that cannot be forged from the app.
+     * `client` means the server had nothing recent and the request body's
+     * coordinates were trusted instead; that path is a deliberate fallback so
+     * a wedged uploader cannot strand a driver at the pickup, but it is also
+     * the only remaining way to claim arrival from the wrong place, so it is
+     * recorded rather than left invisible.
+     */
+    arrivalFix: {
+      source: { type: String, enum: ['', 'server', 'client'], default: '' },
+      distanceMeters: { type: Number, default: null },
+      /** Age of the server fix at decision time; null when there was none. */
+      serverAgeMs: { type: Number, default: null },
+    },
+
+    /**
+     * Stuck-booking recovery bookkeeping (DRIVER_ASSIGNED / EN_ROUTE past pickup).
+     *
+     * Written only by `runStuckBookingRecoverySweep`. The timestamps
+     * make each stage idempotent — the sweep re-runs every escalate-batch
+     * interval and must not re-notify on every pass. Cleared whenever the
+     * booking legitimately moves on (arrival, cancellation, reassignment)
+     * so a later wedge on the same booking is treated as fresh.
+     */
+    stuckRecovery: {
+      kind: {
+        type: String,
+        enum: ['', 'assigned_past_pickup', 'en_route_past_pickup'],
+        default: '',
+      },
+      /** Driver was pushed a "mark your arrival" reminder. */
+      nudgedAt: { type: Date, default: null },
+      /** Flagged for admin review + admin alert raised. */
+      escalatedAt: { type: Date, default: null },
+      /** Minutes past pickup at the moment of escalation (audit trail). */
+      minutesLate: { type: Number, default: 0, min: 0 },
+    },
+
     adminSettlement: {
       kind: {
         type: String,
@@ -729,6 +777,15 @@ const bookingSchema = new mongoose.Schema(
         default: null,
       },
     },
+
+    /**
+     * Set the first time this booking's coupon is counted against the
+     * code's `usedCount`. The increment is a bare `$inc`, so without a
+     * stamp a re-settle of the same booking burns a limited-use coupon
+     * twice — the completion path can be re-entered when an admin rewinds
+     * a finished booking and it completes again.
+     */
+    couponCountedAt: { type: Date, default: null },
 
     /**
      * Set after a completed-trip invoice email is successfully queued

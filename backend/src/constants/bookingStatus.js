@@ -154,6 +154,20 @@ export const PAYMENT_POLICY = Object.freeze({
   PRE_PAY_WINDOW_SECONDS: 60,
   RIDE_OTP_LENGTH: 4,
   RIDE_OTP_MAX_ATTEMPTS: 5,
+  /**
+   * Seconds the ride-start OTP refuses further attempts once
+   * `RIDE_OTP_MAX_ATTEMPTS` wrong codes land in a row.
+   *
+   * A cooldown rather than a hard stop, deliberately. The code is four
+   * digits, so with no limit at all the whole space is walkable and a driver
+   * can start a trip the customer never consented to; but locking a booking
+   * out permanently would recreate exactly the wedge this codebase keeps
+   * having to recover from — a confused customer reading the wrong number
+   * five times must not need an admin to rescue the trip. Five tries per
+   * five minutes puts a full sweep of the keyspace out of reach while a
+   * genuine mistake costs one short wait.
+   */
+  RIDE_OTP_LOCKOUT_SECONDS: 5 * 60,
   EXTENSION_PROMPT_LEAD_SECONDS: 15 * 60,
   RIDE_END_EXTENSION_GRACE_SECONDS: 10 * 60,
 });
@@ -257,6 +271,46 @@ export const SCHEDULED_BOOKING = Object.freeze({
   EMERGENCY_POOL_DAYS: 2,
   /** Cap for one-shot inbox broadcast (matching drivers within max radius). */
   INBOX_BROADCAST_LIMIT: 50,
+});
+
+/**
+ * Stuck-booking recovery policy.
+ *
+ * The arrival transition is guarded by a GPS proximity check
+ * (`ARRIVAL_PROXIMITY_METERS`), so a driver who taps "Start to pickup"
+ * but never physically reaches the pickup can never reach ARRIVED. No
+ * OTP is minted, the ride cannot start, and — because EN_ROUTE is one of
+ * the `ON_TRIP_LOCK_STATUSES` — the driver's `isOnTrip` flag stays set
+ * and the dispatcher skips them indefinitely.
+ *
+ * `selfHealDriverLockState` in bookingDispatch.service.js only walks back
+ * the *opposite* case (hourly SCHEDULED booking whose pickup is still in
+ * the future), so a booking wedged PAST its pickup time had no recovery
+ * path at all and could sit blocked for days.
+ *
+ * The same is true one step earlier: a driver who accepts and then never
+ * taps "On the way" leaves the booking in DRIVER_ASSIGNED, which nothing
+ * watched at all — no timeout, no retry, no escalation.
+ *
+ * These knobs drive `runStuckBookingRecoverySweep`, which runs off
+ * the existing recurring escalate-batch job:
+ *
+ *   NUDGE_MINUTES     Minutes past pickup at which the driver is pushed a
+ *                     "mark your arrival" reminder. Non-destructive — most
+ *                     cases are a driver who simply forgot to tap.
+ *   ESCALATE_MINUTES  Minutes past pickup at which the booking is flagged
+ *                     for admin review and an admin alert is raised, so a
+ *                     human can force-arrive / reassign / settle via the
+ *                     existing admin booking-ops paths.
+ *
+ * Deliberately does NOT auto-cancel, auto-complete, move money, or
+ * release the driver: the fare is prepaid and the driver may genuinely
+ * still be driving. Recovery escalates to a human instead — the same
+ * philosophy as the outstation stuck-at-ARRIVED settlement path.
+ */
+export const STUCK_RECOVERY = Object.freeze({
+  NUDGE_MINUTES: 30,
+  ESCALATE_MINUTES: 120,
 });
 
 /** Dispatch modes stored on `booking.dispatch.mode`. */

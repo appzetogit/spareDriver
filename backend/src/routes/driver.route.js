@@ -53,7 +53,10 @@ import {
   logFlutterTokenHit,
 } from '../middlewares/trackingAuth.js';
 import { getDriverFirebaseToken } from '../controllers/firebaseAuth.controller.js';
-import { driverLocationRateLimiter } from '../middlewares/rateLimit.js';
+import {
+  driverLocationRateLimiter,
+  rideStartOtpRateLimiter,
+} from '../middlewares/rateLimit.js';
 import {
   getMyOrders,
   getMyOrderById,
@@ -220,7 +223,7 @@ router.post('/bookings/:id/reject', protectDriver, driverRejectBooking);
 // Post-accept trip execution
 router.post('/bookings/:id/en-route', protectDriver, driverMarkEnRoute);
 router.post('/bookings/:id/arrived', protectDriver, driverMarkArrived);
-router.post('/bookings/:id/start', protectDriver, driverStartTrip);
+router.post('/bookings/:id/start', protectDriver, rideStartOtpRateLimiter, driverStartTrip);
 router.post('/bookings/:id/complete', protectDriver, driverCompleteTrip);
 router.post('/bookings/:id/cancel', protectDriver, driverCancelBooking);
 router.post(

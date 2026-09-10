@@ -61,6 +61,35 @@ export function createRateLimiter({
   };
 }
 
+/**
+ * Booking creation. The durable guard against a double charge is the
+ * idempotency claim in `createBookingService` (this limiter is in-memory,
+ * so it protects a single instance only and cannot be relied on for
+ * correctness). This is here to blunt a stuck client hammering the
+ * endpoint, not to enforce uniqueness.
+ *
+ * Ceiling is deliberately generous: a customer legitimately correcting a
+ * rejected booking — wrong car, bad time window, short wallet — can make
+ * several real attempts in a couple of minutes.
+ */
+export const bookingCreateRateLimiter = createRateLimiter({
+  keyPrefix: 'booking:create',
+  windowMs: 60_000,
+  max: 10,
+});
+
+/**
+ * Ride-start OTP submissions. The per-booking cooldown in `startTripService`
+ * is the real guard (it survives a restart and is scoped to the booking this
+ * limiter cannot see); this only stops one driver hammering the endpoint
+ * across many bookings, and is in-memory so it protects a single instance.
+ */
+export const rideStartOtpRateLimiter = createRateLimiter({
+  keyPrefix: 'booking:start-otp',
+  windowMs: 60_000,
+  max: 12,
+});
+
 export const sosCreateRateLimiter = createRateLimiter({
   keyPrefix: 'sos:create',
   windowMs: 5 * 60_000,

@@ -41,6 +41,8 @@ export const DRIVER_NOTIFICATION = Object.freeze({
   ORDER_ASSIGNED: 'order_assigned',
   SUBSCRIPTION_ASSIGNED: 'subscription_assigned',
   BOOKING_CANCELLED: 'booking_cancelled',
+  /** Stuck-recovery nudge: marked on the way but never marked arrival. */
+  ARRIVAL_REMINDER: 'arrival_reminder',
   EARNINGS_CREDITED: 'earnings_credited',
   TRIP_OVERTIME_STARTED: 'trip_overtime_started',
   BOOKING_REMINDER: 'booking_reminder',
@@ -62,6 +64,8 @@ export const ADMIN_NOTIFICATION = Object.freeze({
   WITHDRAWAL_REQUEST: 'withdrawal_request',
   SUBSCRIPTION_CANCEL_REQUEST: 'subscription_cancel_request',
   TRIP_CHAT_MESSAGE: 'trip_chat_message',
+  /** Outstation booking wedged at EN_ROUTE past pickup — needs a human. */
+  BOOKING_STUCK_EN_ROUTE: 'booking_stuck_en_route',
 });
 
 const USER_LIVE_KINDS = new Set([
@@ -203,6 +207,9 @@ function resolveNotificationNavigatePath(kind, data = {}, audience = 'user') {
         return '/admin/bookings/emergency-pool';
       case ADMIN_NOTIFICATION.NO_DRIVERS_FOUND:
         return '/admin/bookings';
+      case ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE:
+        if (data.bookingId) return `/admin/bookings?bookingId=${data.bookingId}`;
+        return '/admin/bookings';
       case ADMIN_NOTIFICATION.NEW_DRIVER_REGISTRATION:
         return '/admin/drivers';
       case ADMIN_NOTIFICATION.REFUND_REQUEST:
@@ -240,6 +247,8 @@ const NOTIFICATION_TYPE_LABELS = Object.freeze({
   [ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED]: 'Emergency pool',
   [ADMIN_NOTIFICATION.SUPPORT_TICKET_RECEIVED]: 'Support',
   [ADMIN_NOTIFICATION.NO_DRIVERS_FOUND]: 'No drivers',
+  [ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE]: 'Stuck en route',
+  [DRIVER_NOTIFICATION.ARRIVAL_REMINDER]: 'Mark arrival',
   [DRIVER_NOTIFICATION.BOOKING_OFFER]: 'New request',
   [DRIVER_NOTIFICATION.INBOX_OFFER]: 'Inbox request',
   [DRIVER_NOTIFICATION.ORDER_ASSIGNED]: 'Trip assigned',
@@ -251,6 +260,8 @@ const TYPE_BADGE_VARIANT = Object.freeze({
   [USER_NOTIFICATION.RIDE_ENDING_SOON]: 'warning',
   [ADMIN_NOTIFICATION.SOS_TRIGGERED]: 'danger',
   [ADMIN_NOTIFICATION.EMERGENCY_POOL_ENTERED]: 'warning',
+  [ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE]: 'warning',
+  [DRIVER_NOTIFICATION.ARRIVAL_REMINDER]: 'warning',
 });
 
 export function notificationTypeLabel(type) {

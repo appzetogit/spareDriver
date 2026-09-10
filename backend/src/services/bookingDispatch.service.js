@@ -770,6 +770,52 @@ export async function acceptBookingService(bookingId, driverId) {
     }
   }
 
+  // Take the driver lock BEFORE claiming the booking.
+  //
+  // The `isOnTrip` read at the top of this function is only advisory: two
+  // concurrent accepts for two DIFFERENT bookings both read `false`, both
+  // win their own booking claim (the claim filter is scoped to a booking,
+  // not to the driver), and both then set `isOnTrip: true` — leaving one
+  // driver committed to two rides. The conflict map above cannot catch it
+  // either, because at that point neither accept has committed anything.
+  //
+  // Acquiring the lock conditionally makes the driver itself the point of
+  // serialisation: exactly one of the racing accepts flips `false → true`
+  // and proceeds; the loser is told the driver is already on a trip, which
+  // is the same answer the advisory read would have given had it been
+  // late enough to see the truth.
+  //
+  // Far-future scheduled bookings deliberately do NOT lock (the driver
+  // stays dispatchable for non-overlapping work — see
+  // `shouldImmediatelyLockDriver`), so they keep relying on the overlap
+  // check above. Decided from `preview` because the decision has to be
+  // made before the claim exists.
+  const mustLockDriver = await shouldImmediatelyLockDriver(preview);
+  if (mustLockDriver) {
+    const locked = await Driver.findOneAndUpdate(
+      { _id: driverId, isOnTrip: false },
+      { $set: { isOnTrip: true } },
+      { new: true, projection: { _id: 1 } },
+    );
+    if (!locked) {
+      // The lock is held. If it is held because THIS driver already accepted
+      // THIS booking — a double-submit of an accept that succeeded — the
+      // caller's intent is already satisfied, so report success rather than
+      // the misleading "finish your current trip first".
+      const alreadyMine = await Booking.findOne({
+        _id: bookingId,
+        isDeleted: false,
+        driverId,
+      })
+        .select('status')
+        .lean();
+      if (alreadyMine) {
+        return { ok: true, status: alreadyMine.status, alreadyAccepted: true };
+      }
+      return { ok: false, reason: 'driver_on_trip' };
+    }
+  }
+
   // Atomic first-wins: claim the booking while still SEARCHING and this
   // driver is in the pending set. Concurrent accepts fail the filter.
   const booking = await Booking.findOneAndUpdate(
@@ -791,6 +837,19 @@ export async function acceptBookingService(bookingId, driverId) {
   );
 
   if (!booking) {
+    // Lost the booking race after locking the driver — hand the lock back
+    // or this driver stays undispatchable with nothing to show for it.
+    // Safe to release unconditionally: we only get here having flipped the
+    // flag ourselves, so no other accept can be holding it.
+    if (mustLockDriver) {
+      await Driver.updateOne({ _id: driverId }, { $set: { isOnTrip: false } }).catch(
+        (err) =>
+          console.warn(
+            '[bookingDispatch] failed to release driver lock after lost claim:',
+            err?.message,
+          ),
+      );
+    }
     const existing = await Booking.findOne({ _id: bookingId, isDeleted: false }).select(
       'status driverId dispatch.pendingOfferIds',
     );
@@ -851,9 +910,9 @@ export async function acceptBookingService(bookingId, driverId) {
   }
   await booking.save();
 
-  const shouldLockDriver = await shouldImmediatelyLockDriver(booking);
-  if (shouldLockDriver) {
-    await Driver.updateOne({ _id: driverId }, { $set: { isOnTrip: true } });
+  // `isOnTrip` was already set conditionally before the claim above, so
+  // there is nothing left to flip here — only the presence broadcast.
+  if (mustLockDriver) {
     syncFirebaseDriverStatus(driverId).catch(() => {});
   }
 

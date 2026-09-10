@@ -494,25 +494,33 @@ const ConfirmAndPayPage = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-bg min-h-dvh">
-      {/* Sticky header keeps Back + page title in view while the user
-          scrolls through trip + fare + wallet sections. */}
-      <div className="sticky top-0 z-30 bg-white px-4 pt-4 pb-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="p-2 -ml-2 rounded-xl hover:bg-gray-100"
-            aria-label="Back"
-          >
-            <ArrowLeft className="w-5 h-5 text-text" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold text-text">Review &amp; pay</h1>
+      {/* Sticky glassmorphic header keeps Back + page title & trip pill in view */}
+      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-border-light px-4 py-3 shadow-xs">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="p-2 -ml-2 rounded-xl hover:bg-gray-100 text-text transition"
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base font-bold text-text tracking-tight">Review &amp; Pay</h1>
+              <p className="text-[11px] text-text-muted truncate">Final trip verification</p>
+            </div>
           </div>
+          <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary-dark border border-primary/20">
+            {SERVICE_TYPE_LABELS[draft.serviceType] || draft.serviceType}
+            {isHourly && draft.hourly?.durationHours ? ` (${draft.hourly.durationHours}h)` : ''}
+            {isOutstation && draft.outstation?.days ? ` (${draft.outstation.days}d)` : ''}
+          </span>
         </div>
       </div>
 
-      <div className="flex-1 p-4 space-y-3">
+      <div className="flex-1 p-4 space-y-4 max-w-lg mx-auto w-full">
+        {/* Trip Summary Card */}
         <TripSummary
           draft={draft}
           car={selectedCar}
@@ -520,6 +528,7 @@ const ConfirmAndPayPage = () => {
           onEditPickup={handleEditPickup}
         />
 
+        {/* Overtime acknowledgement checkbox */}
         <OvertimeExtraChargeAck
           draft={draft}
           estimate={estimate}
@@ -527,6 +536,7 @@ const ConfirmAndPayPage = () => {
           onChange={setOvertimeAcknowledged}
         />
 
+        {/* Food & Stay options for outstation */}
         {isOutstation && (
           <FoodStayCard
             foodProvided={foodProvided}
@@ -541,8 +551,9 @@ const ConfirmAndPayPage = () => {
           />
         )}
 
+        {/* Fare Breakdown & Coupon Code Section */}
         <Card>
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <CouponCodeInput
               code={couponCode}
               appliedCode={
@@ -575,8 +586,10 @@ const ConfirmAndPayPage = () => {
           </div>
         </Card>
 
+        {/* Fare notice chips */}
         <FareNotices estimate={estimate} />
 
+        {/* Hourly meal arrangement acknowledgement */}
         {isHourly && foodRequired && (
           <FoodAcknowledgement
             thresholdHours={Number(
@@ -587,6 +600,7 @@ const ConfirmAndPayPage = () => {
           />
         )}
 
+        {/* Wallet Balance Widget */}
         <WalletBalanceCard
           balance={balance}
           available={available}
@@ -602,6 +616,7 @@ const ConfirmAndPayPage = () => {
           }}
         />
 
+        {/* Policy Summary Accordion */}
         {isOutstation ? (
           <OutstationCancellationPolicySummary
             policy={estimate?.cancellationPolicy?.outstation}
@@ -614,34 +629,41 @@ const ConfirmAndPayPage = () => {
         ) : null}
       </div>
 
-      {/* Sticky footer — pay CTA (with the running total) is always
-          reachable without scrolling. */}
-      <div className="sticky bottom-0 z-30 bg-white border-t border-border-light px-4 py-3 shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.15)]">
-        <Button
-          fullWidth
-          icon={WalletIcon}
-          loading={submitting}
-          disabled={
-            !!couponError
-            || !estimate
-            || estimating
-            || total <= 0
-            || foodGateUnmet
-          }
-          onClick={handlePay}
-        >
-          {couponError
-            ? 'Remove coupon to continue'
-            : !total
-              ? 'Calculating fare\u2026'
-              : foodGateUnmet
-                ? 'Confirm driver\u2019s meal to continue'
-                : !overtimeAcknowledged
-                  ? 'Confirm & pay'
-                : canPay
-                  ? `Pay \u20B9${total}`
-                  : `Add \u20B9${Math.max(0, total - available).toFixed(0)} & pay`}
-        </Button>
+      {/* Sticky footer — Pay CTA with total price overview */}
+      <div className="sticky bottom-0 z-30 bg-white/95 backdrop-blur-md border-t border-border-light px-4 py-3 shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.12)]">
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Total Payable</p>
+            <p className="text-lg font-extrabold text-text leading-tight">
+              {total > 0 ? `₹${total}` : '—'}
+            </p>
+          </div>
+          <Button
+            className="flex-1"
+            icon={WalletIcon}
+            loading={submitting}
+            disabled={
+              !!couponError
+              || !estimate
+              || estimating
+              || total <= 0
+              || foodGateUnmet
+            }
+            onClick={handlePay}
+          >
+            {couponError
+              ? 'Remove coupon'
+              : !total
+                ? 'Calculating fare…'
+                : foodGateUnmet
+                  ? 'Confirm driver meal'
+                  : !overtimeAcknowledged
+                    ? 'Confirm & pay'
+                  : canPay
+                    ? `Pay ₹${total}`
+                    : `Add ₹${Math.max(0, total - available).toFixed(0)} & pay`}
+          </Button>
+        </div>
       </div>
 
       <TopupSheet
@@ -804,39 +826,39 @@ function OvertimeExtraChargeAck({ draft, estimate, checked, onChange }) {
 
   return (
     <label
-      className={`rounded-2xl border p-3 flex items-start gap-3 cursor-pointer transition ${
+      className={`rounded-2xl border p-3.5 flex items-start gap-3 cursor-pointer transition-all ${
         checked
-          ? 'border-emerald-200 bg-emerald-50'
-          : 'border-amber-300 bg-amber-50'
+          ? 'border-emerald-200 bg-emerald-50/70 shadow-xs'
+          : 'border-amber-300 bg-amber-50/80 shadow-xs'
       }`}
     >
       <div
         className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
           checked
             ? 'bg-emerald-100 text-emerald-700'
-            : 'bg-amber-100 text-amber-700'
+            : 'bg-amber-100 text-amber-800'
         }`}
       >
-        <Clock className="w-4 h-4" />
+        <Clock className="w-4.5 h-4.5" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <p
-            className={`text-sm font-bold ${
-              checked ? 'text-emerald-900' : 'text-amber-900'
+            className={`text-xs font-bold tracking-tight ${
+              checked ? 'text-emerald-950' : 'text-amber-950'
             }`}
           >
             Extra charges beyond booked duration
           </p>
           {!checked && (
-            <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
-              Required
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
+              Action Required
             </span>
           )}
         </div>
         <p
-          className={`text-[12px] leading-snug mt-0.5 ${
-            checked ? 'text-emerald-800' : 'text-amber-800'
+          className={`text-xs leading-relaxed mt-0.5 ${
+            checked ? 'text-emerald-800' : 'text-amber-900/90'
           }`}
         >
           Your trip is booked for <strong>{duration}</strong>. If the ride
@@ -847,7 +869,7 @@ function OvertimeExtraChargeAck({ draft, estimate, checked, onChange }) {
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(!!e.target.checked)}
-        className="mt-1 w-4 h-4 accent-emerald-600 shrink-0"
+        className="mt-1 w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer"
         aria-label="Confirm extra charges beyond booked duration"
       />
     </label>
@@ -998,11 +1020,6 @@ function OvertimeExtraChargeAckDialog({
 
 /**
  * Rich wallet balance card with a live "balance vs fare" progress bar
- * so the customer can see at a glance whether they're funded for this
- * booking. Switches between two visual states:
- *
- *   funded     gradient slate card · big checkmark · "Ready to pay"
- *   short      cream/amber card    · clear shortfall callout · CTA
  */
 function WalletBalanceCard({
   balance,
@@ -1019,49 +1036,80 @@ function WalletBalanceCard({
   const fmt = (n) =>
     `\u20B9${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
+  const fillPercent = total > 0 ? Math.min(100, Math.round((available / total) * 100)) : 0;
+
   if (enough) {
     return (
-      <div className="rounded-2xl bg-slate-900 text-white px-4 py-3.5 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-emerald-400/20 text-emerald-300 flex items-center justify-center shrink-0">
-          <CheckCircle2 className="w-4 h-4" />
+      <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-md space-y-2.5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-400/20 text-emerald-400 border border-emerald-400/30 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold text-white tracking-wide uppercase">
+                Wallet Balance Ready
+              </p>
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300">
+                Sufficient
+              </span>
+            </div>
+            <p className="text-sm font-extrabold text-emerald-300 mt-0.5">
+              {fmt(available)} Available
+            </p>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white">
-            Wallet ready · {fmt(available)} available
-          </p>
-          <p className="text-[11px] text-white/60 mt-0.5">
-            Paying {fmt(fareTotal)}
-            {bufferRupees > 0 ? ` · ${fmt(bufferRupees)} held for waiting` : ''}
-          </p>
+        <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
+          <span>Paying {fmt(fareTotal)} direct fare</span>
+          {bufferRupees > 0 && (
+            <span className="text-amber-300 font-medium">+ {fmt(bufferRupees)} held buffer</span>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 space-y-3">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-          <WalletIcon className="w-4 h-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-text">
-            Need {fmt(shortBy)} more
-          </p>
-          <p className="text-[11px] text-text-muted mt-0.5">
-            {fmt(available)} available
-            {heldElsewhere > 0 ? ` · ${fmt(heldElsewhere)} locked` : ''}
-            {loading ? ' · updating…' : ''}
-          </p>
+    <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 space-y-3 shadow-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+            <WalletIcon className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+              Wallet Shortfall
+            </p>
+            <p className="text-base font-extrabold text-amber-950 mt-0.5">
+              Add {fmt(shortBy)} to confirm
+            </p>
+            <p className="text-[11px] text-amber-900/80 mt-0.5">
+              {fmt(available)} available {heldElsewhere > 0 ? `(${fmt(heldElsewhere)} locked elsewhere)` : ''}
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={onAddMoney}
-          className="inline-flex items-center gap-1 px-3 h-9 rounded-xl bg-primary text-white text-xs font-semibold shrink-0"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary hover:bg-primary-dark text-text font-bold text-xs shrink-0 shadow-xs transition active:scale-95"
         >
           <Plus className="w-3.5 h-3.5" />
           Add {fmt(Math.round(shortBy))}
         </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="space-y-1 pt-1">
+        <div className="w-full h-2 rounded-full bg-amber-200/80 overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all duration-300 rounded-full"
+            style={{ width: `${fillPercent}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-amber-900/80 font-medium">
+          <span>Available: {fmt(available)}</span>
+          <span>Required: {fmt(total)}</span>
+        </div>
       </div>
     </div>
   );
@@ -1172,121 +1220,129 @@ function TripSummary({ draft, car, onEditCar, onEditPickup }) {
   return (
     <Card>
       <div className="space-y-4">
-        {/* Pickup address */}
-        <div className="flex gap-3">
-          <div className="flex flex-col items-center gap-1 pt-1">
-            <CircleDot className="w-4 h-4 text-success" />
-            {!isHourly && dropAddress && (
-              <>
-                <div className="w-0.5 h-8 bg-gray-200" />
-                <MapPin className="w-4 h-4 text-danger" />
-              </>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div>
-              <p className="text-xs text-text-muted">Pickup</p>
-              <p className="text-sm font-medium text-text break-words">
-                {draft.pickup?.address}
-              </p>
-            </div>
-            {!isHourly && dropAddress && (
-              <div className="mt-3">
-                <p className="text-xs text-text-muted">Destination</p>
-                <p className="text-sm font-medium text-text break-words">{dropAddress}</p>
-                <p className="text-[11px] text-text-muted mt-0.5">
-                  Round trip — we drop you back at the pickup.
-                </p>
-              </div>
-            )}
+        {/* Header Title */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-text">Trip Overview</h2>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 text-text-secondary">
+              {isHourly ? 'Hourly Package' : 'Outstation Trip'}
+            </span>
           </div>
         </div>
 
-        {/* Car row — with edit button */}
-        {car && (
-          <>
-            <div className="h-px bg-border-light" />
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-                {car.image ? (
-                  <img src={car.image} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <Car className="w-5 h-5 text-text-muted" />
-                )}
+        {/* Pickup & Destination Timeline */}
+        <div className="rounded-xl bg-gray-50/70 p-3.5 border border-border-light space-y-3">
+          <div className="flex gap-3">
+            <div className="flex flex-col items-center pt-1">
+              <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <CircleDot className="w-3.5 h-3.5" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-text-muted">Your car</p>
-                <p className="text-sm font-semibold text-text truncate">
-                  {getCarBrandName(car)} · {getCarModelName(car)}
-                </p>
-                <p className="text-[11px] font-mono text-text-secondary">
-                  {car.vehicleNumber}
-                </p>
-              </div>
-              {onEditCar && (
-                <button
-                  type="button"
-                  onClick={onEditCar}
-                  className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-xl border border-border bg-gray-50 hover:bg-primary/5 hover:border-primary/30 text-text-muted hover:text-primary text-[11px] font-semibold transition"
-                >
-                  <Pencil className="w-3 h-3" />
-                  Edit
-                </button>
+              {!isHourly && dropAddress && (
+                <div className="w-0.5 flex-1 bg-gradient-to-b from-emerald-300 to-rose-300 my-1 rounded-full min-h-[24px]" />
               )}
             </div>
-          </>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pickup Location</p>
+              <p className="text-xs font-semibold text-text leading-snug break-words mt-0.5">
+                {draft.pickup?.address || 'Select pickup location'}
+              </p>
+            </div>
+          </div>
+
+          {!isHourly && dropAddress && (
+            <div className="flex gap-3 pt-1 border-t border-gray-200/50">
+              <div className="flex flex-col items-center pt-1">
+                <div className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <MapPin className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Destination / Drop</p>
+                <p className="text-xs font-semibold text-text leading-snug break-words mt-0.5">
+                  {dropAddress}
+                </p>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  Round trip — driver brings vehicle back to pickup.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Car Showcase Row */}
+        {car && (
+          <div className="rounded-xl border border-border-light bg-surface p-3 flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0 border border-gray-200/60 shadow-xs">
+              {car.image ? (
+                <img src={car.image} alt={car.model} className="w-full h-full object-cover" />
+              ) : (
+                <Car className="w-6 h-6 text-text-muted" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Assigned Vehicle</p>
+              <p className="text-xs font-bold text-text truncate mt-0.5">
+                {getCarBrandName(car)} {getCarModelName(car)}
+              </p>
+              <div className="mt-1">
+                <span className="inline-block bg-amber-100/90 border border-amber-300 text-amber-950 font-mono font-bold text-[10px] px-2 py-0.5 rounded shadow-2xs uppercase tracking-wider">
+                  {car.vehicleNumber}
+                </span>
+              </div>
+            </div>
+            {onEditCar && (
+              <button
+                type="button"
+                onClick={onEditCar}
+                className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-gray-50 hover:bg-primary/10 hover:border-primary/40 text-text-secondary hover:text-primary-dark text-xs font-semibold transition active:scale-95"
+              >
+                <Pencil className="w-3 h-3" />
+                Change
+              </button>
+            )}
+          </div>
         )}
 
-        <div className="h-px bg-border-light" />
+        {/* Schedule & Duration Grid */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Schedule &amp; Duration</p>
+            {onEditPickup && (
+              <button
+                type="button"
+                onClick={onEditPickup}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark hover:underline"
+              >
+                <Pencil className="w-3 h-3" />
+                Edit schedule
+              </button>
+            )}
+          </div>
 
-        {/* Schedule / duration grid — with edit button for hourly */}
-        <div className="flex items-start gap-2">
-          <div className="flex-1 grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <FactRow
               icon={Calendar}
-              label={isHourly ? 'Pickup time' : 'Pickup'}
+              label={isHourly ? 'Pickup Time' : 'Pickup Date'}
               value={formatPickupDateTime(schedule)}
             />
             {!isHourly && (
               <FactRow
                 icon={Calendar}
-                label="Expected return"
+                label="Expected Return"
                 value={formatPickupDateTime(expectedReturn)}
               />
             )}
             <FactRow
               icon={Clock}
-              label={isHourly ? 'Duration' : 'Days \u00b7 nights'}
+              label={isHourly ? 'Booked Duration' : 'Trip Length'}
               value={
                 isHourly
-                  ? `${draft.hourly?.durationHours || 0} h`
-                  : `${draft.outstation?.days || 1} day${(draft.outstation?.days || 1) === 1 ? '' : 's'} \u00b7 ${draft.outstation?.nights || 0} night${(draft.outstation?.nights || 0) === 1 ? '' : 's'}`
+                  ? `${draft.hourly?.durationHours || 0} Hours`
+                  : `${draft.outstation?.days || 1} Day${(draft.outstation?.days || 1) === 1 ? '' : 's'} · ${draft.outstation?.nights || 0} Night${(draft.outstation?.nights || 0) === 1 ? '' : 's'}`
               }
             />
-            <FactRow icon={Car} label="Service" value={SERVICE_TYPE_LABELS[draft.serviceType]} />
-            {!isHourly && (
-              <FactRow
-                icon={HandCoins}
-                label="Driver food & stay"
-                value={
-                  draft.outstation?.needsFood === true
-                    && draft.outstation?.needsStay === true
-                    ? 'Arranged by customer (no allowance)'
-                    : 'Allowance billed per night'
-                }
-              />
-            )}
+            <FactRow icon={Car} label="Booking Type" value={SERVICE_TYPE_LABELS[draft.serviceType] || draft.serviceType} />
           </div>
-          {onEditPickup && (
-            <button
-              type="button"
-              onClick={onEditPickup}
-              className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1.5 px-3 h-8 rounded-xl border border-border bg-gray-50 hover:bg-primary/5 hover:border-primary/30 text-text-muted hover:text-primary text-[11px] font-semibold transition"
-            >
-              <Pencil className="w-3 h-3" />
-              Edit
-            </button>
-          )}
         </div>
       </div>
     </Card>
@@ -1464,11 +1520,13 @@ function PickupTimeConfirmDialog({ open, onClose, onConfirm }) {
 
 function FactRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-start gap-2 min-w-0">
-      <Icon className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
-      <div className="min-w-0">
-        <p className="text-[10px] text-text-muted">{label}</p>
-        <p className="text-xs font-medium text-text truncate">{value}</p>
+    <div className="flex items-center gap-2.5 min-w-0 p-2.5 rounded-xl bg-gray-50/80 border border-border-light">
+      <div className="w-7 h-7 rounded-lg bg-surface flex items-center justify-center shrink-0 border border-gray-200/60 text-text-muted">
+        <Icon className="w-3.5 h-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[9px] uppercase font-bold tracking-wider text-text-muted">{label}</p>
+        <p className="text-xs font-semibold text-text truncate mt-0.5">{value}</p>
       </div>
     </div>
   );
@@ -1861,9 +1919,6 @@ function FoodStayCard({
   const useLegacy =
     !hasSplit && legacyAllowancePerNight > 0 && nights > 0;
 
-  // Per-row charged amounts. In split mode each toggle independently
-  // waives its own line; in legacy mode both toggles must be on or
-  // the full combined allowance still applies.
   const foodChargedAmount = hasSplit
     ? (foodProvided ? 0 : foodAllowancePerDay * days)
     : 0;
@@ -1876,67 +1931,73 @@ function FoodStayCard({
   const totalAllowanceCharged =
     foodChargedAmount + stayChargedAmount + legacyChargedAmount;
 
-  // Summary copy at the bottom — shows the net allowance left on the
-  // fare so the customer always knows how their choices affect the
-  // total.
-  let summary;
-  if (foodProvided && stayProvided) {
-    summary =
-      'No driver allowance charged \u2014 you take care of meals and stay directly.';
-  } else if (totalAllowanceCharged <= 0) {
-    summary = 'No driver allowance applies on this trip.';
-  } else {
-    summary = `Driver allowance currently added: \u20B9${totalAllowanceCharged}. Toggle either row on to remove that part of the charge.`;
-  }
-
   return (
     <Card>
-      <div className="space-y-3">
-        {/* ── Food row ─────────────────────────────────────────── */}
-        <ToggleRow
-          icon={Utensils}
-          label="I will arrange the driver's food"
-          description={describeFoodRow({
-            foodProvided,
-            hasSplit,
-            useLegacy,
-            foodAllowancePerDay,
-            days,
-          })}
-          checked={foodProvided}
-          onChange={onFoodChange}
-          ariaLabel="I will arrange the driver's food"
-        />
+      <div className="space-y-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-text">Driver Meals &amp; Stay</h3>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+              Optional Waiver
+            </span>
+          </div>
+        </div>
 
-        {/* ── Stay row ─────────────────────────────────────────── */}
-        <ToggleRow
-          icon={Moon}
-          label="I will arrange the driver's stay"
-          description={describeStayRow({
-            stayProvided,
-            hasSplit,
-            useLegacy,
-            stayAllowancePerNight,
-            legacyAllowancePerNight,
-            nights,
-          })}
-          checked={stayProvided}
-          onChange={onStayChange}
-          ariaLabel="I will arrange the driver's stay"
-        />
+        <div className="space-y-3">
+          {/* Food row */}
+          <ToggleRow
+            icon={Utensils}
+            label="I will arrange driver's meals"
+            description={describeFoodRow({
+              foodProvided,
+              hasSplit,
+              useLegacy,
+              foodAllowancePerDay,
+              days,
+            })}
+            checked={foodProvided}
+            onChange={onFoodChange}
+            ariaLabel="I will arrange driver's meals"
+          />
+
+          {/* Stay row */}
+          <ToggleRow
+            icon={Moon}
+            label="I will arrange driver's stay"
+            description={describeStayRow({
+              stayProvided,
+              hasSplit,
+              useLegacy,
+              stayAllowancePerNight,
+              legacyAllowancePerNight,
+              nights,
+            })}
+            checked={stayProvided}
+            onChange={onStayChange}
+            ariaLabel="I will arrange driver's stay"
+          />
+        </div>
+
+        <div className="rounded-xl bg-gray-50/80 border border-gray-200/60 p-2.5 text-xs text-text-secondary leading-snug">
+          {foodProvided && stayProvided ? (
+            <p className="text-emerald-700 font-semibold flex items-center gap-1.5">
+              <span>✓ No driver allowance added to fare — you provide meals &amp; stay directly.</span>
+            </p>
+          ) : totalAllowanceCharged > 0 ? (
+            <p>
+              Driver allowance added to fare: <strong className="text-text font-bold">₹{totalAllowanceCharged}</strong>. Toggle either option above if you wish to host the driver directly.
+            </p>
+          ) : (
+            <p>No extra driver allowance required for this trip configuration.</p>
+          )}
+
+          {useLegacy && !(foodProvided && stayProvided) && (
+            <p className="mt-1 text-amber-800 font-semibold text-[11px]">
+              This trip uses a combined per-night allowance — both toggles must be enabled to waive the allowance.
+            </p>
+          )}
+        </div>
       </div>
-
-      <p className="text-[11px] text-text-muted mt-3 pt-3 border-t border-border-light">
-        {summary}
-        {useLegacy && !(foodProvided && stayProvided) && (
-          <>
-            {' '}
-            <strong className="text-amber-700">
-              {'This trip uses a combined per-night allowance \u2014 both toggles must be on for it to be waived.'}
-            </strong>
-          </>
-        )}
-      </p>
     </Card>
   );
 }
@@ -1947,23 +2008,29 @@ function FoodStayCard({
 
 function ToggleRow({ icon: Icon, label, description, checked, onChange, ariaLabel }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-xl bg-bg flex items-center justify-center shrink-0">
-        <Icon className="w-4 h-4 text-text-muted" />
+    <div className={`p-3 rounded-xl border transition-all flex items-start gap-3 ${
+      checked ? 'border-primary-dark/30 bg-primary-50/50' : 'border-border-light bg-gray-50/50'
+    }`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+        checked ? 'bg-primary text-text font-bold' : 'bg-gray-200/70 text-text-muted'
+      }`}>
+        <Icon className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-text">{label}</p>
-        <p className="text-xs text-text-muted mt-0.5">{description}</p>
+        <p className="text-xs font-bold text-text">{label}</p>
+        <p className="text-[11px] text-text-muted mt-0.5 leading-snug">{description}</p>
       </div>
       <button
         type="button"
         onClick={() => onChange(!checked)}
-        className={`shrink-0 w-10 h-6 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-gray-300'} relative`}
+        className={`shrink-0 w-11 h-6 rounded-full transition-colors relative focus:outline-none ${
+          checked ? 'bg-primary-dark' : 'bg-gray-300'
+        }`}
         aria-pressed={checked}
         aria-label={ariaLabel}
       >
         <span
-          className={`absolute top-0.5 ${checked ? 'left-[18px]' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all`}
+          className={`absolute top-0.5 ${checked ? 'left-[22px]' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow-md transition-all`}
         />
       </button>
     </div>
@@ -2099,73 +2166,76 @@ function OutstationCancellationPolicySummary({ policy, dailyRate }) {
     const value = Number(amount) || 0;
     if (value <= 0) return zeroLabel;
     return type === 'percentage'
-      ? `${value}% of the fare`
+      ? `${value}% of fare`
       : `\u20B9${value}`;
   };
   const beforeFee = describeFee(
     cfg.beforeWindowFeeType,
     cfg.beforeWindowFeeAmount,
-    'no fee',
+    'Free cancellation',
   );
   const preFee = describeFee(
     cfg.preArrivalFeeType,
     cfg.preArrivalFeeAmount,
-    'no fee',
+    'No fee',
   );
   const arrivedFee = describeFee(
     cfg.arrivedFeeType,
     cfg.arrivedFeeAmount,
-    'no fee',
+    'No fee',
   );
 
   return (
-    <details className="rounded-2xl border border-border-light bg-white px-4 py-3 group">
-      <summary className="flex items-center gap-2 cursor-pointer list-none">
-        <ShieldCheck className="w-4 h-4 text-text-muted shrink-0" />
-        <span className="text-sm font-semibold text-text flex-1">Cancellation policy</span>
-        <span className="text-[11px] text-text-muted group-open:hidden">View</span>
+    <details className="rounded-2xl border border-border-light bg-surface px-4 py-3.5 group transition-all">
+      <summary className="flex items-center gap-2.5 cursor-pointer list-none select-none">
+        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+          <ShieldCheck className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-text">Cancellation Policy</p>
+          <p className="text-[11px] text-emerald-600 font-medium truncate">
+            Free cancellation up to {freeHours}h before pickup
+          </p>
+        </div>
+        <span className="text-xs font-semibold text-text-muted group-open:rotate-180 transition-transform">
+          ▼
+        </span>
       </summary>
-      <ul className="mt-3 space-y-2 text-[12px] text-text-secondary">
-        <li>
-          <strong className="text-text">More than {freeHours}h before pickup</strong>
-          {' '}— {beforeFee === 'no fee'
-            ? 'full refund.'
-            : `${beforeFee} deducted.`}
-        </li>
-        <li>
-          <strong className="text-text">Within {freeHours}h, before arrival</strong>
-          {' '}— {preFee === 'no fee' ? 'no fee.' : `${preFee} deducted.`}
-        </li>
-        <li>
-          <strong className="text-text">After driver arrives</strong>
-          {' '}— {arrivedFee}
-          {arrivedFloor > 0
-            ? ` or ₹${Math.round(arrivedFloor)} min, whichever is higher.`
-            : '.'}
-        </li>
-      </ul>
+      <div className="mt-3.5 pt-3 border-t border-border-light space-y-2 text-xs">
+        <div className="flex items-start justify-between gap-2 p-2 rounded-xl bg-gray-50/80">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold text-text block">&gt; {freeHours}h before pickup</span>
+            <span className="text-[11px] text-text-muted">Early cancellation window</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 shrink-0">
+            {beforeFee}
+          </span>
+        </div>
+        <div className="flex items-start justify-between gap-2 p-2 rounded-xl bg-gray-50/80">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold text-text block">Within {freeHours}h, before arrival</span>
+            <span className="text-[11px] text-text-muted">Late cancellation before driver reaches</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 shrink-0">
+            {preFee}
+          </span>
+        </div>
+        <div className="flex items-start justify-between gap-2 p-2 rounded-xl bg-gray-50/80">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold text-text block">After driver arrives</span>
+            <span className="text-[11px] text-text-muted">
+              {arrivedFloor > 0 ? `Minimum ₹${Math.round(arrivedFloor)} fee` : 'Arrival fee applied'}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-900 shrink-0">
+            {arrivedFee}
+          </span>
+        </div>
+      </div>
     </details>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* HourlyCancellationPolicySummary                                       */
-/* ------------------------------------------------------------------ */
-
-/**
- * Customer-facing summary of the hourly cancellation policy. Hourly
- * uses a STATUS-driven model (not time-driven like outstation) — the
- * fee depends on how far the booking has progressed:
- *
- *   searching                          no fee, full wallet refund
- *   driver assigned → en route         flat ₹ `flatFeeAfterAssignment`
- *   arrived / started                  `arrivedFeeType` decides:
- *                                        'flat'       → ₹ `arrivedFeeAmount`
- *                                        'percentage' → % of paid fare
- *
- * Driven entirely off `cancellationPolicy.hourly` from the estimate so
- * admin changes show up without redeploying the FE.
- */
 function HourlyCancellationPolicySummary({ policy }) {
   const cfg = policy || {};
   const flatFee = Math.max(0, Number(cfg.flatFeeAfterAssignment) || 0);
@@ -2173,37 +2243,55 @@ function HourlyCancellationPolicySummary({ policy }) {
   const isPct = cfg.arrivedFeeType === 'percentage';
   const arrivedLabel = arrivedAmount > 0
     ? isPct
-      ? `${arrivedAmount}% of the paid fare`
+      ? `${arrivedAmount}% of fare`
       : `\u20B9${arrivedAmount}`
-    : 'no fee';
+    : 'No fee';
 
   return (
-    <details className="rounded-2xl border border-border-light bg-white px-4 py-3 group">
-      <summary className="flex items-center gap-2 cursor-pointer list-none">
-        <ShieldCheck className="w-4 h-4 text-text-muted shrink-0" />
-        <span className="text-sm font-semibold text-text flex-1">Cancellation policy</span>
-        <span className="text-[11px] text-text-muted group-open:hidden">View</span>
+    <details className="rounded-2xl border border-border-light bg-surface px-4 py-3.5 group transition-all">
+      <summary className="flex items-center gap-2.5 cursor-pointer list-none select-none">
+        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+          <ShieldCheck className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-text">Cancellation Policy</p>
+          <p className="text-[11px] text-emerald-600 font-medium truncate">
+            100% refund if cancelled before driver assignment
+          </p>
+        </div>
+        <span className="text-xs font-semibold text-text-muted group-open:rotate-180 transition-transform">
+          ▼
+        </span>
       </summary>
-      <ul className="mt-3 space-y-2 text-[12px] text-text-secondary">
-        <li>
-          <strong className="text-text">Before a driver is assigned</strong>
-          {' '}&mdash; full refund.
-        </li>
-        <li>
-          <strong className="text-text">Driver assigned, not yet arrived</strong>
-          {' '}&mdash;{' '}
-          {flatFee > 0 ? (
-            <>₹{flatFee} fee, rest refunded.</>
-          ) : (
-            'no fee.'
-          )}
-        </li>
-        <li>
-          <strong className="text-text">After driver arrives</strong>
-          {' '}&mdash; {arrivedLabel}
-          {arrivedAmount > 0 ? ' deducted.' : '.'}
-        </li>
-      </ul>
+      <div className="mt-3.5 pt-3 border-t border-border-light space-y-2 text-xs">
+        <div className="flex items-start justify-between gap-2 p-2 rounded-xl bg-gray-50/80">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold text-text block">Before driver assigned</span>
+            <span className="text-[11px] text-text-muted">Searching phase</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 shrink-0">
+            Full Refund
+          </span>
+        </div>
+        <div className="flex items-start justify-between gap-2 p-2 rounded-xl bg-gray-50/80">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold text-text block">Driver assigned &amp; en-route</span>
+            <span className="text-[11px] text-text-muted">Driver on the way</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 shrink-0">
+            {flatFee > 0 ? `₹${flatFee} Fee` : 'No Fee'}
+          </span>
+        </div>
+        <div className="flex items-start justify-between gap-2 p-2 rounded-xl bg-gray-50/80">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold text-text block">After driver arrives</span>
+            <span className="text-[11px] text-text-muted">Driver waiting at location</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-900 shrink-0">
+            {arrivedLabel}
+          </span>
+        </div>
+      </div>
     </details>
   );
 }

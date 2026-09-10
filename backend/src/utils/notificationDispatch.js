@@ -86,14 +86,31 @@ export function notifyUserDriverAccepted(userId, booking) {
   );
 }
 
+/**
+ * Driver reached the pickup. Carries a deep link so tapping the push lands on
+ * the trip screen, where the ride-start OTP is waiting.
+ *
+ * The code itself is deliberately NOT in the title or body: a push body is
+ * rendered on the lock screen, and the OTP is the one thing standing between
+ * "a driver is outside" and "the trip has started". Tapping through is one
+ * extra step and keeps the code behind the device lock. Move it into `body`
+ * if the product decides lock-screen convenience is worth that trade.
+ */
 export function notifyUserDriverArrived(userId, booking) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
   return sendPushNotification(
     { userId },
     {
       title: 'Driver arrived',
-      body: 'Your driver has arrived at the pickup location.',
+      body: 'Your driver is at the pickup. Tap to see your start OTP.',
       type: USER_NOTIFICATION.DRIVER_ARRIVED,
-      data: bookingRef(booking),
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || 'arrived',
+        path: bookingId
+          ? `/user/book/assigned/${bookingId}`
+          : '/user/book/assigned',
+      },
     },
   );
 }
@@ -327,6 +344,83 @@ export function notifyDriverOutstationReturnReached(driverId, booking) {
       },
     },
   );
+}
+
+/**
+ * Stuck-recovery stage 1 — the driver is marked EN_ROUTE but never got
+ * close enough to the pickup for the GPS-guarded arrival check to pass,
+ * and the booked pickup time has come and gone. Usually a driver who
+ * simply forgot to tap "I've arrived", so this is a plain reminder.
+ */
+export function notifyDriverArrivalReminder(
+  driverId,
+  booking,
+  { minutesLate = 0, kind = 'en_route_past_pickup' } = {},
+) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  const late = Math.max(0, Math.round(Number(minutesLate) || 0));
+  const notStarted = kind === 'assigned_past_pickup';
+  return sendPushNotification(
+    { driverId },
+    {
+      title: notStarted ? 'Head to your pickup' : 'Mark your arrival',
+      body: notStarted
+        ? (late
+          ? `Pickup time passed ${late} min ago and you have not started this trip. Tap "On the way" if you are heading there, or cancel so we can find another driver.`
+          : 'You have not started this trip yet. Tap "On the way" if you are heading there, or cancel so we can find another driver.')
+        : (late
+          ? `Pickup time passed ${late} min ago and you're still marked on the way. Reach the pickup and tap the arrival button so the customer can share the OTP.`
+          : 'You are still marked on the way. Reach the pickup and tap the arrival button so the customer can share the OTP.'),
+      severity: 'warn',
+      type: DRIVER_NOTIFICATION.ARRIVAL_REMINDER,
+      data: {
+        ...bookingRef(booking),
+        status: booking.status || (notStarted ? 'driver_assigned' : 'en_route'),
+        minutesLate: String(late),
+        stuckKind: kind,
+        path: bookingId
+          ? `/driver/trips/active/${bookingId}`
+          : '/driver/trips/active',
+      },
+    },
+  );
+}
+
+/**
+ * Stuck-recovery stage 2 — the booking has been wedged at EN_ROUTE long
+ * enough that a human needs to force-arrive, reassign, or settle it. Sent
+ * once per wedge (guarded by `stuckRecovery.escalatedAt`).
+ */
+export function notifyAdminBookingStuckEnRoute(
+  booking,
+  { minutesLate = 0, kind = 'en_route_past_pickup' } = {},
+) {
+  const bookingId = String(booking._id || booking.id || booking.bookingId || '');
+  const late = Math.max(0, Math.round(Number(minutesLate) || 0));
+  const hours = Math.floor(late / 60);
+  const lateLabel = hours >= 1 ? `${hours}h ${late % 60}m` : `${late}m`;
+  const notStarted = kind === 'assigned_past_pickup';
+  return sendAdminNotification({
+    title: notStarted
+      ? 'Booking accepted but never started'
+      : 'Booking stuck en route',
+    body: notStarted
+      ? `${booking.bookingNumber || bookingId} is ${lateLabel} past pickup and the driver never set off — the customer is still waiting. Reassign, or cancel and refund.`
+      : `${booking.bookingNumber || bookingId} is still "on the way" ${lateLabel} past pickup — the driver never reached the pickup, so no OTP was generated. Force arrival, reassign, or settle.`,
+    type: ADMIN_NOTIFICATION.BOOKING_STUCK_EN_ROUTE,
+    severity: 'warn',
+    data: {
+      ...bookingRef(booking),
+      status: booking.status || (notStarted ? 'driver_assigned' : 'en_route'),
+      minutesLate: String(late),
+      stuckKind: kind,
+      driverId: booking.driverId ? String(booking.driverId) : '',
+      path: bookingId
+        ? `/admin/bookings?bookingId=${bookingId}`
+        : '/admin/bookings',
+    },
+    zoneIds: (booking.zoneIds || []).map((id) => String(id)),
+  });
 }
 
 export function notifyUserNoShowPrompt(userId, booking, { isFinal = false } = {}) {

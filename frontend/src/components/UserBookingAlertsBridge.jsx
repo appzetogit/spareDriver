@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useUserAuthStore from '../store/useUserAuthStore';
 import useUserActiveBookingStore from '../store/user/useUserActiveBookingStore';
@@ -9,6 +9,7 @@ import { S2C_EVENTS } from '../constants/socketEvents';
 import { SERVICE_TYPES } from '../constants/serviceTypes';
 import { BOOKING_STATUS } from '../constants/bookingStatus';
 import NoShowPromptModal from '../features/user/booking/components/NoShowPromptModal';
+import RideStartOtpModal from '../features/user/booking/components/RideStartOtpModal';
 import ExtendRideModal from '../features/user/booking/components/ExtendRideModal';
 import OvertimePaymentSheet from '../features/user/booking/components/OvertimePaymentSheet';
 import { useRideTimer } from '../features/user/booking/hooks/useRideTimer';
@@ -19,9 +20,13 @@ import { useInAppAlertRing } from '../hooks/useInAppAlertRing';
  *   - FCM / SW notification click → navigate or open extend sheet
  *   - "Are you on your way?" no-show prompt
  *   - "Ride ending soon — extend?" sheet + 5s ring
+ *   - "Driver arrived, here is your OTP" — the code is merged into the store
+ *     from any page, but only three pages render it, so this surfaces it
+ *     everywhere else
  */
 export function UserBookingAlertsBridge() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAuthenticated = useUserAuthStore((s) => s.isAuthenticated);
   const booking = useUserActiveBookingStore((s) => s.booking);
@@ -50,6 +55,9 @@ export function UserBookingAlertsBridge() {
   const lastExtendRingAtRef = useRef(0);
 
   const [noShowPrompt, setNoShowPrompt] = useState(null);
+  // Booking id whose arrival OTP the customer has dismissed. Scoped to the
+  // booking so "Got it" on one trip never hides the next trip's code.
+  const [otpDismissedFor, setOtpDismissedFor] = useState(null);
   const [overtimeSheetOpen, setOvertimeSheetOpen] = useState(false);
 
   const overtimeDue =
@@ -359,8 +367,40 @@ export function UserBookingAlertsBridge() {
     fetchWallet().catch(() => {});
   };
 
+  // Pages that already render the code inline — showing the modal on top of
+  // them would just cover the same digits with the same digits.
+  const otpShownInline = (path) =>
+    path.startsWith('/user/book/assigned')
+    || path.startsWith('/user/tracking/reached')
+    || /^\/user\/trips\//.test(path);
+
+  const arrivalOtpCode =
+    booking?.status === BOOKING_STATUS.ARRIVED
+    && !booking?.rideStartOtp?.verifiedAt
+      ? booking?.rideStartOtp?.code || null
+      : null;
+
+  // Derived, not latched in an effect: an effect here would have to run after
+  // an early return above it (a hooks-order violation) and would set state
+  // during render-commit for no gain. Keying the dismissal on the booking id
+  // gives the same "ask once" behaviour for free — a different booking has a
+  // different id, so the next trip's code is never suppressed by the last
+  // trip's dismissal.
+  const activeBookingId = booking?._id ? String(booking._id) : null;
+  const otpModalOpen =
+    Boolean(arrivalOtpCode)
+    && Boolean(activeBookingId)
+    && otpDismissedFor !== activeBookingId
+    && !otpShownInline(location.pathname || '');
+
   return (
     <>
+      <RideStartOtpModal
+        open={otpModalOpen}
+        code={arrivalOtpCode}
+        driverName={booking?.driverId?.name || ''}
+        onClose={() => setOtpDismissedFor(activeBookingId)}
+      />
       <NoShowPromptModal
         open={Boolean(noShowPrompt)}
         deadline={noShowPrompt?.promptDeadlineAt}
