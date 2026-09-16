@@ -17,6 +17,9 @@ import {
 } from '../../../../store/user/useUserPricingStore';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { useRazorpayCheckout } from '../../../../hooks/useRazorpayCheckout';
+import usePaymentConfigStore, {
+  selectSubscriptionRails,
+} from '../../../../store/usePaymentConfigStore';
 import { calculateSubscriptionCheckout, formatCurrency } from '../../../../utils/fareCalculator';
 import CouponCodeInput from '../../booking/components/CouponCodeInput';
 import api from '../../../../utils/api';
@@ -42,6 +45,10 @@ const SubscribeCheckoutPage = () => {
   const purchaseLoading = useUserSubscriptionStore((s) => s.purchaseLoading);
 
   const { openCheckout, loading: checkoutLoading } = useRazorpayCheckout();
+  const subscriptionRails = usePaymentConfigStore(selectSubscriptionRails);
+  // Cash for subscriptions lands in a later phase; until then an
+  // admin turning Razorpay off closes subscription checkout entirely.
+  const canCheckout = Boolean(subscriptionRails.razorpay);
 
   const [selectedCarId, setSelectedCarId] = useState('');
   const [selectedCar, setSelectedCar] = useState(null);
@@ -360,7 +367,8 @@ const SubscribeCheckoutPage = () => {
         <Button
           fullWidth
           disabled={
-            !selectedCarId
+            !canCheckout
+            || !selectedCarId
             || !dailyPickup
             || !dailyDropoff
             || !termsAccepted
@@ -372,7 +380,9 @@ const SubscribeCheckoutPage = () => {
           }
           onClick={handleConfirmPurchase}
         >
-          {subscribing || purchaseLoading || checkoutLoading ? (
+          {!canCheckout ? (
+            'Subscriptions temporarily unavailable'
+          ) : subscribing || purchaseLoading || checkoutLoading ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               Processing…

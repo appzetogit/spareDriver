@@ -407,6 +407,19 @@ export async function releaseWalletHoldService({ userId, amount }) {
  * client never returns — the admin can complete the top-up later.
  */
 export async function createTopupOrderService(userId, amount) {
+  // Top-up is the one flow with no fallback rail — a wallet can only be
+  // funded through Razorpay. When the rail is off (e.g. hidden for an
+  // App Store review) this must be a hard stop, not a silent failure
+  // later inside the checkout modal.
+  const { getPaymentMethodsConfigService } = await import('./appSettings.service.js');
+  const { isWalletTopupEnabled } = await import('../utils/paymentMethods.util.js');
+  const paymentConfig = await getPaymentMethodsConfigService();
+  if (!isWalletTopupEnabled(paymentConfig)) {
+    throw new ApiError(503, 'Wallet top-up is temporarily unavailable', {
+      code: 'PAYMENT_RAIL_DISABLED',
+    });
+  }
+
   const amt = ensurePositive(amount, 'amount');
   if (amt < MIN_TOPUP_RUPEES) {
     throw new ApiError(400, `Minimum top-up is \u20B9${MIN_TOPUP_RUPEES}`);

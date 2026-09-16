@@ -185,6 +185,8 @@ import {
   updateAdminSubscriptionDispatch,
   getAdminDriverDocumentRequirements,
   updateAdminDriverDocumentRequirements,
+  getAdminPaymentMethods,
+  updateAdminPaymentMethods,
 } from '../controllers/appSettings.controller.js';
 import { listPlatformRevenue, listKitRevenue } from '../controllers/revenue.controller.js';
 import {
@@ -646,6 +648,18 @@ router.put(
   protectStaff,
   restrictTo(...SUPER_ADMIN),
   updateAdminDriverDocumentRequirements,
+);
+router.get(
+  '/settings/payment-methods',
+  protectStaff,
+  restrictTo(...OPERATIONS),
+  getAdminPaymentMethods,
+);
+router.put(
+  '/settings/payment-methods',
+  protectStaff,
+  restrictTo(...SUPER_ADMIN),
+  updateAdminPaymentMethods,
 );
 router.get(
   '/settings/subscription-dispatch',

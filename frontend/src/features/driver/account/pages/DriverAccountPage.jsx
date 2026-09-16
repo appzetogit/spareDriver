@@ -15,6 +15,7 @@ import {
   Headphones,
   Star,
   Gift,
+  Trash2,
 } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
@@ -265,7 +266,6 @@ const DriverAccountPage = () => {
         ))}
       </div>
 
-      {/*
       <button
         type="button"
         onClick={() => setDeleteOpen(true)}
@@ -274,7 +274,6 @@ const DriverAccountPage = () => {
         <Trash2 className="w-4 h-4" />
         Delete account
       </button>
-      */}
 
       <div className="px-4 mt-4 space-y-3">
         <button

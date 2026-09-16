@@ -17,6 +17,7 @@ import UserOnboardingGuard from './guards/UserOnboardingGuard';
 import SuperAdminOnlyGuard from './guards/SuperAdminOnlyGuard';
 import AdminLayout from './layouts/AdminLayout';
 import useAuthSessionStore from './store/useAuthSessionStore';
+import usePaymentConfigStore from './store/usePaymentConfigStore';
 
 // Side-effect: starts the global Socket.IO lifecycle (auto-connects when any
 // auth store has a session, auto-disconnects on logout).
@@ -204,10 +205,18 @@ const DevBookingTestPage = lazy(() => import('./features/admin/pages/DevBookingT
 
 function App() {
   const bootstrap = useAuthSessionStore((s) => s.bootstrap);
+  const fetchPaymentConfig = usePaymentConfigStore((s) => s.fetchConfig);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  // Which payment rails are live. Public, unauthenticated and cheap, so
+  // it is fetched once at boot alongside the session — every Razorpay
+  // entry point in both apps reads it before rendering.
+  useEffect(() => {
+    void fetchPaymentConfig();
+  }, [fetchPaymentConfig]);
 
   return (
     <Suspense fallback={<RouteShellSkeleton />}>
