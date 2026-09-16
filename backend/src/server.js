@@ -1,4 +1,9 @@
+import dns from 'node:dns/promises';
 import dotenv from 'dotenv';
+
+// The local resolver can refuse MongoDB's SRV query. Use public resolvers
+// before Mongoose starts resolving the mongodb+srv connection string.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 dotenv.config();
 
