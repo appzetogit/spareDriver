@@ -4,3 +4,5 @@ temp_interactive_push.bat
 
 # Local Redis persistence — never commit
 dump.rdb
+config.bat
+node_modules
