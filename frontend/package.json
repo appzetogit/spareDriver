@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "node scripts/generate-fcm-sw.mjs && vite build",
+    "dev": "node init && vite",
+    "build": "node init && node scripts/generate-fcm-sw.mjs && vite build",
     "test": "node --test src/utils/trackingDecision.test.js",
     "lint": "eslint .",
     "preview": "vite preview"
