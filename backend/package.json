@@ -5,8 +5,8 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "start": "node api.js && node src/server.js",
+    "dev": "node api.js && nodemon src/server.js",
     "fix:payment-index": "node scripts/fixPaymentIndex.js",
     "backfill:subscription-numbers": "node scripts/backfillSubscriptionNumbers.js",
     "backfill:driver-numbers": "node scripts/backfillDriverNumbers.js",
