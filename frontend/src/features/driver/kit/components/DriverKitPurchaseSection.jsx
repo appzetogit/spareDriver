@@ -13,6 +13,9 @@ import KitCatalogCard from './KitCatalogCard';
 import KitItemSelector, { buildItemSelectionsPayload, validateSelections } from './KitItemSelector';
 import KitOrderItemsList from './KitOrderItemsList';
 import PayNowButton from './PayNowButton';
+import usePaymentConfigStore, {
+  selectDriverKitRails,
+} from '../../../../store/usePaymentConfigStore';
 import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 
 /**
@@ -21,6 +24,7 @@ import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 const DriverKitPurchaseSection = ({ onPurchaseComplete, compact = false }) => {
   const navigate = useNavigate();
   const { createAndPay, paying } = useKitOrderPayment();
+  const kitRails = usePaymentConfigStore(selectDriverKitRails);
 
   const kitsKey = buildCacheKey('driver-kits-list', {});
   const activeKey = buildCacheKey('driver-kit-active', {});
@@ -389,15 +393,20 @@ const DriverKitPurchaseSection = ({ onPurchaseComplete, compact = false }) => {
               size="md"
               fullWidth
               loading={paying}
+              disabled={!kitRails.razorpay}
               onClick={handlePurchase}
               className="rounded-full py-4 font-bold mt-6"
             >
-              Pay ₹{selectedKit.price?.toLocaleString('en-IN')}
+              {kitRails.razorpay
+                ? `Pay ₹${selectedKit.price?.toLocaleString('en-IN')}`
+                : 'Payment temporarily unavailable'}
             </Button>
-            <p className="text-[10px] text-slate-500 text-center mt-2 flex items-center justify-center gap-1">
-              <CreditCard className="w-3 h-3" />
-              Secure Razorpay checkout opens next
-            </p>
+            {kitRails.razorpay && (
+              <p className="text-[10px] text-slate-500 text-center mt-2 flex items-center justify-center gap-1">
+                <CreditCard className="w-3 h-3" />
+                Secure Razorpay checkout opens next
+              </p>
+            )}
           </Card>
         </div>
       )}

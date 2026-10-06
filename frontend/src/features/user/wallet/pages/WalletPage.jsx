@@ -17,6 +17,9 @@ import Button from '../../../../components/Button';
 import BottomSheet from '../../../../components/BottomSheet';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import TopupSheet from '../components/TopupSheet';
+import usePaymentConfigStore, {
+  selectWalletTopupEnabled,
+} from '../../../../store/usePaymentConfigStore';
 import { useAfterPaint } from '../../../../hooks/useAfterPaint';
 import {
   WalletBalanceSkeleton,
@@ -41,6 +44,7 @@ const fmtRupees = (n) =>
 
 const WalletPage = () => {
   const navigate = useNavigate();
+  const topupEnabled = usePaymentConfigStore(selectWalletTopupEnabled);
   const wallet = useUserWalletStore((s) => s.wallet);
   const transactions = useUserWalletStore((s) => s.transactions);
   const loading = useUserWalletStore((s) => s.loading);
@@ -154,16 +158,23 @@ const WalletPage = () => {
               </p>
             </div>
           </div>
-          <div className="mt-5">
-            <Button
-              fullWidth
-              variant="primary"
-              icon={Plus}
-              onClick={() => setTopupOpen(true)}
-            >
-              Add money
-            </Button>
-          </div>
+          {topupEnabled ? (
+            <div className="mt-5">
+              <Button
+                fullWidth
+                variant="primary"
+                icon={Plus}
+                onClick={() => setTopupOpen(true)}
+              >
+                Add money
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-5 text-[11px] text-white/70">
+              Adding money is temporarily unavailable. You can still spend your
+              existing balance, or pay your driver in cash.
+            </p>
+          )}
         </Card>
         )}
 

@@ -7,6 +7,9 @@ import {
   updateGstDetailsService,
   getDriverDocumentRequirementsService,
   updateDriverDocumentRequirementsService,
+  getPaymentMethodsConfigService,
+  updatePaymentMethodsConfigService,
+  getPublicPaymentMethodsConfigService,
 } from '../services/appSettings.service.js';
 
 export const getAdminSupportConfig = asyncHandler(async (_req, res) => {
@@ -72,4 +75,21 @@ export const getPublicDriverDocumentRequirements = asyncHandler(async (_req, res
   return res
     .status(200)
     .json(new ApiResponse(200, config, 'Driver document requirements fetched'));
+});
+
+export const getAdminPaymentMethods = asyncHandler(async (_req, res) => {
+  const config = await getPaymentMethodsConfigService({ fresh: true });
+  return res.status(200).json(new ApiResponse(200, config, 'Payment methods fetched'));
+});
+
+export const updateAdminPaymentMethods = asyncHandler(async (req, res) => {
+  const staffId = req.staff?._id || null;
+  const config = await updatePaymentMethodsConfigService(req.body, staffId);
+  return res.status(200).json(new ApiResponse(200, config, 'Payment methods updated'));
+});
+
+/** Public read — both apps use this to decide which rails to render. */
+export const getPublicPaymentMethods = asyncHandler(async (_req, res) => {
+  const config = await getPublicPaymentMethodsConfigService();
+  return res.status(200).json(new ApiResponse(200, config, 'Payment methods fetched'));
 });

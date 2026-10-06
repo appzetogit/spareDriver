@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Sparkles,
   Gift,
+  Trash2,
 } from 'lucide-react';
 import Card from '../../../../components/Card';
 import Avatar from '../../../../components/Avatar';
@@ -124,7 +125,6 @@ const UserAccountPage = () => {
           })}
         </Card>
 
-        {/* 
         <button
           onClick={() => setDeleteOpen(true)}
           className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 bg-white rounded-2xl shadow-card text-danger font-medium text-sm hover:bg-danger-light transition-colors"
@@ -132,7 +132,6 @@ const UserAccountPage = () => {
           <Trash2 className="w-5 h-5" />
           Delete account
         </button>
-        */}
 
         <button
           onClick={logout}

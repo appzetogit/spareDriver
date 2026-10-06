@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SERVICE_TYPES, SERVICE_TYPE_LIST } from '../constants/serviceTypes.js';
 
 const appSettingsSchema = new mongoose.Schema(
   {
@@ -71,6 +72,84 @@ const appSettingsSchema = new mongoose.Schema(
      */
     driverDocumentRequirements: {
       policeVerificationRequired: { type: Boolean, default: false },
+    },
+    /**
+     * Payment-rail master switches + per-flow overrides.
+     *
+     * Effective enablement is ALWAYS `master && flow` — a per-flow
+     * toggle can only narrow its master rail, never widen it. That is
+     * what makes `razorpayEnabled: false` a genuine kill switch (used
+     * to hide Razorpay entirely for an App Store review).
+     *
+     * Read at CHECKOUT TIME ONLY. Every downstream path keys off the
+     * `paymentMethod` persisted on the booking/order, so flipping a
+     * toggle never reprices work that is already in flight.
+     *
+     * See utils/paymentMethods.util.js for the resolution rules — this
+     * schema only stores them.
+     */
+    paymentMethods: {
+      razorpayEnabled: { type: Boolean, default: true },
+      codEnabled: { type: Boolean, default: false },
+      flows: {
+        /** Razorpay-only: there is no other way to fund a wallet. */
+        walletTopup: {
+          razorpay: { type: Boolean, default: true },
+        },
+        booking: {
+          wallet: { type: Boolean, default: true },
+          razorpay: { type: Boolean, default: true },
+          cod: { type: Boolean, default: false },
+        },
+        subscriptionCheckout: {
+          razorpay: { type: Boolean, default: true },
+          cod: { type: Boolean, default: false },
+        },
+        driverKit: {
+          razorpay: { type: Boolean, default: true },
+          cod: { type: Boolean, default: false },
+        },
+      },
+      cod: {
+        /**
+         * Service types COD is offered on. Hourly only — outstation is
+         * multi-day and high-value, so the cash exposure and the
+         * driver's commission debt would both be large.
+         *
+         * Function default: a shared array literal would be mutated
+         * across documents.
+         */
+        serviceTypes: {
+          type: [String],
+          enum: SERVICE_TYPE_LIST,
+          default: () => [SERVICE_TYPES.HOURLY],
+        },
+        allowInstant: { type: Boolean, default: true },
+        allowScheduled: { type: Boolean, default: true },
+        /** 0 = uncapped. Refuses COD above this cash total. */
+        maxBookingValueRupees: { type: Number, default: 0, min: 0 },
+
+        /** Driver cash-dues gating (₹). warn <= block. */
+        driverDuesWarnRupees: { type: Number, default: 1000, min: 0 },
+        driverDuesBlockRupees: { type: Number, default: 2000, min: 0 },
+        /** Stop offering new COD rides at/above this — softer than the online block. */
+        driverDuesCodOfferBlockRupees: { type: Number, default: 2000, min: 0 },
+
+        /** Above this, the user cannot book on ANY rail until they settle. */
+        userMaxPendingDuesRupees: { type: Number, default: 1000, min: 0 },
+
+        duesSettlement: {
+          razorpay: { type: Boolean, default: true },
+          /**
+           * Always effectively true — `resolveDuesSettlementModes()`
+           * forces it on regardless of what is stored here. Without
+           * that floor, turning Razorpay off would trap every driver
+           * who owes dues: unable to clear them, unable to go online,
+           * unable to earn.
+           */
+          adminManual: { type: Boolean, default: true },
+        },
+      },
     },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },

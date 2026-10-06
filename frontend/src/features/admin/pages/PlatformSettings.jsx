@@ -12,6 +12,8 @@ import {
   Building2,
   Receipt,
   ShieldCheck,
+  CreditCard,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TrainingVideosTab from '../components/PlatformSettings/TrainingVideosTab';
@@ -29,6 +31,21 @@ import {
   canManagePlatformSettings,
   canViewPlatformSettings,
 } from '../../../constants/staffRoles';
+
+/**
+ * One labelled toggle in a settings group. Module-level so it keeps its
+ * identity across renders (a component defined inside PlatformSettings
+ * would remount the Toggle on every keystroke elsewhere on the page).
+ */
+const ToggleRow = ({ title, description, checked, onChange, disabled }) => (
+  <div className="flex items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl">
+    <div className="min-w-0">
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+    </div>
+    <Toggle checked={Boolean(checked)} onChange={onChange} disabled={disabled} />
+  </div>
+);
 
 const EMPTY_SUPPORT_FORM = {
   supportPhone: '',
@@ -117,25 +134,39 @@ const PlatformSettings = () => {
   const [policeVerificationRequired, setPoliceVerificationRequired] = useState(false);
   const [policeVerificationBaseline, setPoliceVerificationBaseline] = useState(false);
   const [driverDocsSaving, setDriverDocsSaving] = useState(false);
+  const [payments, setPayments] = useState(null);
+  const [paymentsBaseline, setPaymentsBaseline] = useState(null);
+  const [paymentsSaving, setPaymentsSaving] = useState(false);
 
   const supportDirty =
     JSON.stringify(supportForm) !== JSON.stringify(supportBaseline);
   const gstDirty = JSON.stringify(gstForm) !== JSON.stringify(gstBaseline);
   const driverDocsDirty = policeVerificationRequired !== policeVerificationBaseline;
+  const paymentsDirty =
+    JSON.stringify(payments) !== JSON.stringify(paymentsBaseline);
 
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const [carsRes, condRes, trainingRes, supportRes, banksRes, gstRes, driverDocsRes] =
-        await Promise.all([
-          api.get('/admin/settings/car-types'),
-          api.get('/admin/settings/conditions'),
-          api.get('/admin/settings/training-videos'),
-          api.get('/admin/settings/support'),
-          api.get('/admin/settings/banks'),
-          api.get('/admin/settings/gst'),
-          api.get('/admin/settings/driver-documents'),
-        ]);
+      const [
+        carsRes,
+        condRes,
+        trainingRes,
+        supportRes,
+        banksRes,
+        gstRes,
+        driverDocsRes,
+        paymentsRes,
+      ] = await Promise.all([
+        api.get('/admin/settings/car-types'),
+        api.get('/admin/settings/conditions'),
+        api.get('/admin/settings/training-videos'),
+        api.get('/admin/settings/support'),
+        api.get('/admin/settings/banks'),
+        api.get('/admin/settings/gst'),
+        api.get('/admin/settings/driver-documents'),
+        api.get('/admin/settings/payment-methods'),
+      ]);
       setCarTypes(carsRes.data.data);
       setConditions(condRes.data.data);
       setTrainingVideos(trainingRes.data.data);
@@ -149,6 +180,9 @@ const PlatformSettings = () => {
       const pvcRequired = Boolean(driverDocsRes.data?.data?.policeVerificationRequired);
       setPoliceVerificationRequired(pvcRequired);
       setPoliceVerificationBaseline(pvcRequired);
+      const paymentCfg = paymentsRes.data?.data || null;
+      setPayments(paymentCfg);
+      setPaymentsBaseline(paymentCfg);
     } catch (err) {
       console.error('Failed to fetch platform data', err);
       if (!silent) {
@@ -285,6 +319,52 @@ const PlatformSettings = () => {
     }
   };
 
+  /** Flip a master rail switch (`razorpayEnabled` / `codEnabled`). */
+  const setPaymentMaster = (key) => (val) =>
+    setPayments((prev) => (prev ? { ...prev, [key]: val } : prev));
+
+  /** Flip one rail on one checkout flow, e.g. flows.booking.cod. */
+  const setPaymentFlow = (flow, rail) => (val) =>
+    setPayments((prev) =>
+      prev
+        ? {
+            ...prev,
+            flows: {
+              ...prev.flows,
+              [flow]: { ...prev.flows?.[flow], [rail]: val },
+            },
+          }
+        : prev,
+    );
+
+  /** Set a numeric knob under `cod`. Empty input means 0, not NaN. */
+  const setCodNumber = (key) => (e) => {
+    const raw = e.target.value;
+    const n = raw === '' ? 0 : Number(raw);
+    if (!Number.isFinite(n) || n < 0) return;
+    setPayments((prev) => (prev ? { ...prev, cod: { ...prev.cod, [key]: n } } : prev));
+  };
+
+  const setCodBool = (key) => (val) =>
+    setPayments((prev) => (prev ? { ...prev, cod: { ...prev.cod, [key]: val } } : prev));
+
+  const handlePaymentsSave = async (e) => {
+    e.preventDefault();
+    if (!paymentsDirty || paymentsSaving || loading || !payments) return;
+    setPaymentsSaving(true);
+    try {
+      const res = await api.put('/admin/settings/payment-methods', payments);
+      const saved = res.data?.data || payments;
+      setPayments(saved);
+      setPaymentsBaseline(saved);
+      toast.success('Payment methods saved');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save payment methods');
+    } finally {
+      setPaymentsSaving(false);
+    }
+  };
+
   if (!canViewPlatformSettings(admin?.role)) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -320,6 +400,7 @@ const PlatformSettings = () => {
             { id: 'banks', label: 'Banks', icon: Building2 },
             { id: 'training', label: 'Driver Training', icon: Video },
             { id: 'driver-docs', label: 'Driver Docs', icon: ShieldCheck },
+            { id: 'payments', label: 'Payments', icon: CreditCard },
             { id: 'support', label: 'Website & Contact', icon: Headphones },
             { id: 'gst', label: 'GST Details', icon: Receipt },
             { id: 'legal', label: 'Legal Pages', icon: FileText },
@@ -433,6 +514,191 @@ const PlatformSettings = () => {
                   </Button>
                 )}
               </form>
+            </Card>
+          )}
+
+          {activeTab === 'payments' && (
+            <Card className="max-w-2xl space-y-5">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Payment methods</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Master switches for each payment rail, plus per-flow overrides. A flow can
+                  only narrow its master switch — turning Razorpay off here hides it
+                  everywhere, whatever the flow toggles say.
+                </p>
+              </div>
+
+              {!payments ? (
+                <div className="py-10 flex justify-center">
+                  <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                </div>
+              ) : (
+                <form onSubmit={handlePaymentsSave} className="space-y-6">
+                  {/* Master rails */}
+                  <div className="space-y-3">
+                    <p className="text-[11px] uppercase tracking-wide font-bold text-slate-400">
+                      Master rails
+                    </p>
+                    <ToggleRow
+                      title="Razorpay"
+                      description={
+                        payments.razorpayEnabled
+                          ? 'Online payments are live — wallet top-up, subscriptions and kit purchase all work.'
+                          : 'Razorpay is hidden across both apps. Wallet top-up is disabled entirely.'
+                      }
+                      checked={payments.razorpayEnabled}
+                      onChange={setPaymentMaster('razorpayEnabled')}
+                      disabled={!canEdit}
+                    />
+                    <ToggleRow
+                      title="Cash on delivery"
+                      description={
+                        payments.codEnabled
+                          ? 'Customers can pay the driver in cash. Commission is recovered from the driver wallet.'
+                          : 'Cash is not offered anywhere.'
+                      }
+                      checked={payments.codEnabled}
+                      onChange={setPaymentMaster('codEnabled')}
+                      disabled={!canEdit}
+                    />
+
+                    {!payments.razorpayEnabled && !payments.codEnabled && (
+                      <div className="flex gap-3 p-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-800">
+                        <AlertTriangle className="w-5 h-5 shrink-0" />
+                        <p>
+                          Both rails are off. Customers with an empty wallet will not be able
+                          to book at all.
+                        </p>
+                      </div>
+                    )}
+
+                    {!payments.razorpayEnabled && payments.codEnabled && (
+                      <div className="flex gap-3 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
+                        <AlertTriangle className="w-5 h-5 shrink-0" />
+                        <p>
+                          Cash-only mode. Wallet top-up is off, so existing wallet balances can
+                          be spent but not refilled. Drivers clear cash dues by paying an admin.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Per-flow */}
+                  <div className="space-y-3">
+                    <p className="text-[11px] uppercase tracking-wide font-bold text-slate-400">
+                      Per-flow overrides
+                    </p>
+                    <ToggleRow
+                      title="Wallet top-up (Razorpay)"
+                      description="The only way to fund a wallet. Dies with the Razorpay master switch."
+                      checked={payments.flows?.walletTopup?.razorpay}
+                      onChange={setPaymentFlow('walletTopup', 'razorpay')}
+                      disabled={!canEdit || !payments.razorpayEnabled}
+                    />
+                    <ToggleRow
+                      title="Booking — pay from wallet"
+                      description="Fare is debited from the customer's wallet when the booking is created."
+                      checked={payments.flows?.booking?.wallet}
+                      onChange={setPaymentFlow('booking', 'wallet')}
+                      disabled={!canEdit}
+                    />
+                    <ToggleRow
+                      title="Booking — cash"
+                      description="Hourly rides only. The driver collects cash and owes the platform its commission."
+                      checked={payments.flows?.booking?.cod}
+                      onChange={setPaymentFlow('booking', 'cod')}
+                      disabled={!canEdit || !payments.codEnabled}
+                    />
+                    <ToggleRow
+                      title="Subscription checkout — cash"
+                      description="Plan stays unpaid until an admin records the cash."
+                      checked={payments.flows?.subscriptionCheckout?.cod}
+                      onChange={setPaymentFlow('subscriptionCheckout', 'cod')}
+                      disabled={!canEdit || !payments.codEnabled}
+                    />
+                    <ToggleRow
+                      title="Driver kit — cash on delivery"
+                      description="Driver pays the delivery agent; an admin marks it collected."
+                      checked={payments.flows?.driverKit?.cod}
+                      onChange={setPaymentFlow('driverKit', 'cod')}
+                      disabled={!canEdit || !payments.codEnabled}
+                    />
+                  </div>
+
+                  {/* COD policy */}
+                  <div className="space-y-3">
+                    <p className="text-[11px] uppercase tracking-wide font-bold text-slate-400">
+                      Cash policy
+                    </p>
+                    <ToggleRow
+                      title="Allow on instant rides"
+                      checked={payments.cod?.allowInstant}
+                      onChange={setCodBool('allowInstant')}
+                      disabled={!canEdit || !payments.codEnabled}
+                    />
+                    <ToggleRow
+                      title="Allow on scheduled rides"
+                      checked={payments.cod?.allowScheduled}
+                      onChange={setCodBool('allowScheduled')}
+                      disabled={!canEdit || !payments.codEnabled}
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Input
+                        label="Max cash booking value (₹)"
+                        helper="0 means no cap"
+                        type="number"
+                        min="0"
+                        value={payments.cod?.maxBookingValueRupees ?? 0}
+                        onChange={setCodNumber('maxBookingValueRupees')}
+                        disabled={!canEdit || !payments.codEnabled}
+                      />
+                      <Input
+                        label="Customer dues limit (₹)"
+                        helper="Above this the customer cannot book on any rail"
+                        type="number"
+                        min="0"
+                        value={payments.cod?.userMaxPendingDuesRupees ?? 0}
+                        onChange={setCodNumber('userMaxPendingDuesRupees')}
+                        disabled={!canEdit || !payments.codEnabled}
+                      />
+                      <Input
+                        label="Driver dues warning (₹)"
+                        helper="Driver is warned but can keep working"
+                        type="number"
+                        min="0"
+                        value={payments.cod?.driverDuesWarnRupees ?? 0}
+                        onChange={setCodNumber('driverDuesWarnRupees')}
+                        disabled={!canEdit || !payments.codEnabled}
+                      />
+                      <Input
+                        label="Driver dues block (₹)"
+                        helper="Cannot go online or withdraw above this"
+                        type="number"
+                        min="0"
+                        value={payments.cod?.driverDuesBlockRupees ?? 0}
+                        onChange={setCodNumber('driverDuesBlockRupees')}
+                        disabled={!canEdit || !payments.codEnabled}
+                      />
+                    </div>
+                    {Number(payments.cod?.driverDuesWarnRupees) >
+                      Number(payments.cod?.driverDuesBlockRupees) && (
+                      <p className="text-xs font-semibold text-red-600">
+                        The warning threshold must not be higher than the block threshold.
+                      </p>
+                    )}
+                  </div>
+
+                  {canEdit && (
+                    <Button
+                      type="submit"
+                      loading={paymentsSaving}
+                      disabled={!paymentsDirty || paymentsSaving}
+                    >
+                      Save payment methods
+                    </Button>
+                  )}
+                </form>
+              )}
             </Card>
           )}
 

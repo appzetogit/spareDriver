@@ -5,6 +5,9 @@ import Button from '../../../../components/Button';
 import useUserWalletStore from '../../../../store/user/useUserWalletStore';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
 import { useRazorpayCheckout } from '../../../../hooks/useRazorpayCheckout';
+import usePaymentConfigStore, {
+  selectWalletTopupEnabled,
+} from '../../../../store/usePaymentConfigStore';
 
 /**
  * Bottom-sheet wallet top-up flow.
@@ -49,6 +52,7 @@ const TopupSheet = ({
   const topupLoading = useUserWalletStore((s) => s.topupLoading);
   const user = useUserAuthStore((s) => s.user);
   const { openCheckout, loading: checkoutLoading } = useRazorpayCheckout();
+  const topupEnabled = usePaymentConfigStore(selectWalletTopupEnabled);
 
   const cushioned = useMemo(
     () => (suggestedAmount > 0 ? roundUpToFifty(suggestedAmount) : 0),
@@ -64,7 +68,12 @@ const TopupSheet = ({
     if (cushioned > 0) setAmount(cushioned);
   }, [open, cushioned]);
 
-  if (!open) return null;
+  // A wallet can only be funded through Razorpay, so when that rail is
+  // switched off top-up has no fallback. Refuse to render at all rather
+  // than let the user reach a checkout the server will 503. Callers are
+  // also expected to hide their "Add money" buttons, but this is the
+  // backstop that covers every entry point at once.
+  if (!open || !topupEnabled) return null;
 
   const min = limits?.MIN_TOPUP_RUPEES || 10;
   const max = limits?.MAX_TOPUP_RUPEES || 100_000;
