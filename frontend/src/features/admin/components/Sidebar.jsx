@@ -42,6 +42,7 @@ function NavBadge({ count }) {
 
 const developerNavItems = [
   {
+    section: 'Developer',
     path: '/admin/dev/booking-test',
     label: 'Dev Booking Test',
     icon: FlaskConical,
@@ -51,30 +52,47 @@ const developerNavItems = [
 
 const navItems = [
   {
+    section: 'Overview',
     path: '/admin',
     label: 'Dashboard',
     icon: LayoutDashboard,
     end: true,
     roles: ['admin'],
   },
-  { path: '/admin/users', label: 'Users', icon: Users, roles: ['admin', 'sub_admin'] },
-  { path: '/admin/drivers', label: 'Drivers', icon: Car, end: true },
-  { path: '/admin/kit-orders', label: 'Kit Orders', icon: Package },
-  { path: '/admin/drivers/live', label: 'Live Map', icon: Navigation },
-  { path: '/admin/drivers/locations', label: 'Driver Locations', icon: MapPin },
-  { path: '/admin/tasks', label: 'Team Tasks', icon: CheckSquare },
-  { path: '/admin/sos', label: 'SOS Alerts', icon: ShieldAlert, roles: ['admin', 'sub_admin', 'team_member'] },
-  { path: '/admin/support', label: 'Support', icon: Headphones, roles: ['admin', 'sub_admin', 'team_member'] },
   {
-    path: '/admin/push-notifications',
-    label: 'Push Notifications',
-    icon: BellRing,
-    roles: ['admin'],
+    section: 'People',
+    path: '/admin/users',
+    label: 'Users',
+    icon: Users,
+    roles: ['admin', 'sub_admin'],
   },
-  // Ads management — admin + sub_admin can publish promotional images
-  // and short videos that surface on the user home screen.
-  { path: '/admin/ads', label: 'Ads', icon: Megaphone, roles: ['admin', 'sub_admin'] },
   {
+    section: 'People',
+    path: '/admin/drivers',
+    label: 'Drivers',
+    icon: Car,
+    end: true,
+  },
+  {
+    section: 'People',
+    path: '/admin/kit-orders',
+    label: 'Kit Orders',
+    icon: Package,
+  },
+  {
+    section: 'Live Tracking',
+    path: '/admin/drivers/live',
+    label: 'Live Map',
+    icon: Navigation,
+  },
+  {
+    section: 'Live Tracking',
+    path: '/admin/drivers/locations',
+    label: 'Driver Locations',
+    icon: MapPin,
+  },
+  {
+    section: 'Operations',
     label: 'Bookings',
     icon: CalendarCheck,
     roles: ['admin', 'sub_admin', 'team_member'],
@@ -126,6 +144,43 @@ const navItems = [
     ],
   },
   {
+    section: 'Operations',
+    path: '/admin/tasks',
+    label: 'Team Tasks',
+    icon: CheckSquare,
+  },
+  {
+    section: 'Operations',
+    path: '/admin/sos',
+    label: 'SOS Alerts',
+    icon: ShieldAlert,
+    roles: ['admin', 'sub_admin', 'team_member'],
+  },
+  {
+    section: 'Operations',
+    path: '/admin/support',
+    label: 'Support',
+    icon: Headphones,
+    roles: ['admin', 'sub_admin', 'team_member'],
+  },
+  {
+    section: 'Marketing',
+    path: '/admin/push-notifications',
+    label: 'Push Notifications',
+    icon: BellRing,
+    roles: ['admin'],
+  },
+  // Ads management — admin + sub_admin can publish promotional images
+  // and short videos that surface on the user home screen.
+  {
+    section: 'Marketing',
+    path: '/admin/ads',
+    label: 'Ads',
+    icon: Megaphone,
+    roles: ['admin', 'sub_admin'],
+  },
+  {
+    section: 'Finance & Reports',
     label: 'Reports & Analytics',
     icon: BarChart3,
     roles: ['admin'],
@@ -170,6 +225,7 @@ const navItems = [
     ],
   },
   {
+    section: 'Finance & Reports',
     label: 'Account',
     icon: Wallet,
     roles: ['admin'],
@@ -226,6 +282,7 @@ const navItems = [
     ],
   },
   {
+    section: 'Configuration',
     label: 'Settings',
     icon: Settings,
     roles: ['admin', 'sub_admin'],
@@ -395,11 +452,8 @@ const Sidebar = ({ isOpen, onClose }) => {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 custom-scrollbar">
-          <p className="px-3 mb-2 text-[10px] font-semibold text-white/30 uppercase tracking-wider">
-            Main Menu
-          </p>
-
-          {filteredNavItems.map((item) => {
+          {filteredNavItems.map((item, index) => {
+            const showSection = item.section && item.section !== filteredNavItems[index - 1]?.section;
             const hasChildren = item.children?.length > 0;
             const isExpanded = expandedItems.includes(item.label);
             const isActive = item.path
@@ -410,6 +464,15 @@ const Sidebar = ({ isOpen, onClose }) => {
 
             return (
               <div key={item.label} className="space-y-1">
+                {showSection && (
+                  <p
+                    className={`px-3 mb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider ${
+                      index === 0 ? '' : 'pt-4'
+                    }`}
+                  >
+                    {item.section}
+                  </p>
+                )}
                 {hasChildren ? (
                   <button
                     type="button"
