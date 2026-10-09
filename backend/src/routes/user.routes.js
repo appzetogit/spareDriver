@@ -12,6 +12,7 @@ import {
   getUserProfile,
   getRegistrationStatus,
   sendUserEmailVerificationOtp,
+  updateMyProfile,
   verifyUserEmailOtp,
   addCar,
   getUserCars,
@@ -210,6 +211,7 @@ router.get('/onboarding/status', getRegistrationStatus);
 router.post('/onboarding/email/send-otp', sendUserEmailVerificationOtp);
 router.post('/onboarding/email/verify', verifyUserEmailOtp);
 router.put('/onboarding/step', updateUserOnboardingStep);
+router.put('/profile', updateMyProfile);
 
 // Cars management
 router.post('/cars', addCar);

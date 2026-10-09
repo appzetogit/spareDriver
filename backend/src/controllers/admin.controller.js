@@ -96,6 +96,13 @@ export const unsuspendDriver = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, result, 'Driver unsuspended successfully'));
 });
 
+export const reapproveDriver = asyncHandler(async (req, res) => {
+  const result = await adminService.reapproveDriverService(req.staff, req.params.id, {
+    note: req.body?.note,
+  });
+  return res.status(200).json(new ApiResponse(200, result, 'Driver re-approved successfully'));
+});
+
 export const addAdminMember = asyncHandler(async (req, res) => {
   const result = await adminService.addAdminMemberService(req.body);
   return res.status(201).json(new ApiResponse(201, result, "Admin team member added successfully"));

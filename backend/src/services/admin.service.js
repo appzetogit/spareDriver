@@ -552,6 +552,62 @@ export const unsuspendDriverService = async (staffOrId, driverId) => {
   return driver;
 };
 
+/**
+ * Re-approve a previously rejected driver (e.g. rejected by mistake, or the
+ * issue was resolved off-platform). Skips the per-step review gate on purpose;
+ * a written reason is required and recorded in the approval history.
+ */
+export const reapproveDriverService = async (staffOrId, driverId, data = {}) => {
+  const staffId = staffOrId?._id || staffOrId;
+  const driver = await Driver.findById(driverId);
+  if (!driver) {
+    throw new ApiError(404, 'Driver not found');
+  }
+
+  if (driver.approvalStatus !== 'rejected') {
+    throw new ApiError(400, 'Only rejected drivers can be re-approved');
+  }
+
+  const note = (data.note || data.approvalNote || '').trim();
+  if (note.length < 10) {
+    throw new ApiError(400, 'Approval note is required (minimum 10 characters)');
+  }
+
+  let byName = staffOrId?.name || staffOrId?.email || '';
+  if (!byName && staffId) {
+    const actor = await User.findById(staffId).select('name email');
+    byName = staffDisplayName(actor);
+  }
+
+  driver.approvalStatus = 'approved';
+  driver.approvalNote = note;
+  driver.approvedAt = new Date();
+  driver.approvedBy = staffId;
+  driver.revisionInProgress = false;
+  appendApprovalHistory(driver, {
+    status: 'approved',
+    by: staffId,
+    byName,
+    note: `Re-approved after rejection: ${note}`,
+    submissionAttempt: driver.submissionCount || null,
+  });
+
+  await driver.save();
+
+  // Close any review task still open for this driver.
+  await upsertDriverReviewTask(driver).catch(() => null);
+
+  const { syncDriverKitEligibility } = await import('../utils/kitEligibility.util.js');
+  await syncDriverKitEligibility(driverId).catch(() => null);
+  const { createDriverReferralOnApproval } = await import('./referral.service.js');
+  await createDriverReferralOnApproval(driver).catch((err) =>
+    console.warn('[admin] driver referral on re-approval failed:', err?.message),
+  );
+
+  notifyDriverAccountApproved(String(driver._id), { note }).catch(() => null);
+  return driver;
+};
+
 async function assertSingleSuperAdmin(role, excludeUserId = null) {
   if (role !== USER_ROLES.ADMIN) return;
 

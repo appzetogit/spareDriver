@@ -14,7 +14,9 @@ export const uploadVideo = asyncHandler(async (req, res) => {
 });
 
 export const refreshAccessToken = asyncHandler(async (req, res) => {
-  const incomingRefreshToken = req.cookies[COOKIE_NAMES.refreshToken] || req.body.refreshToken;
+  // Body first: the cookie is shared by every app on the same origin, so the
+  // explicit per-app token the client sends must win over it.
+  const incomingRefreshToken = req.body?.refreshToken || req.cookies[COOKIE_NAMES.refreshToken];
   const tokens = await commonService.refreshSessionTokens(incomingRefreshToken);
   setAuthCookies(res, tokens);
   return res.status(200).json(

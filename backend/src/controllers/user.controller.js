@@ -94,6 +94,16 @@ export const loginUser = asyncHandler(async (req, res) => {
   );
 });
 
+export const updateMyProfile = asyncHandler(async (req, res) => {
+  const { name, alternatePhone, profilePicture } = req.body || {};
+  const result = await userService.updateMyProfileService(req.user._id, {
+    name,
+    alternatePhone,
+    profilePicture,
+  });
+  return res.status(200).json(new ApiResponse(200, result, 'Profile updated'));
+});
+
 export const updateUserOnboardingStep = asyncHandler(async (req, res) => {
   const result = await userService.updateUserOnboardingStepService(req.user._id, req.body);
   return res.status(200).json(new ApiResponse(200, result, 'Onboarding step updated'));

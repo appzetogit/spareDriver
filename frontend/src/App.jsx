@@ -229,6 +229,9 @@ function App() {
         <Route path="/pricing-and-shipping-policy" element={<PricingShippingPolicyPage />} />
         <Route path="/contact-us" element={<ContactUsPage />} />
 
+        <Route path="/user" element={<Navigate to="/user/home" replace />} />
+        <Route path="/driver" element={<Navigate to="/driver/home" replace />} />
+
         <Route element={<MobileLayout />}>
           {/* ========== Auth Routes ========== */}
           <Route element={<AuthLayout />}>

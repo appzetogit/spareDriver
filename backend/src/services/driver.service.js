@@ -715,6 +715,112 @@ export const updateOutstationAvailabilityService = async (
   return driver.toObject();
 };
 
+/** Post-onboarding update: basic personal details (phone is the login id, not editable here). */
+export const updateDriverProfileService = async (driverId, input = {}) => {
+  const update = {};
+
+  if (input.name !== undefined) {
+    const name = String(input.name).trim();
+    if (name.length < 2) throw new ApiError(400, 'Name must be at least 2 characters');
+    update.name = name;
+  }
+  if (input.email !== undefined) {
+    const email = String(input.email).trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new ApiError(400, 'Invalid email address');
+    }
+    update.email = email;
+  }
+  if (input.gender !== undefined) {
+    if (!['male', 'female', 'other', ''].includes(input.gender)) {
+      throw new ApiError(400, 'Invalid gender');
+    }
+    update.gender = input.gender;
+  }
+  if (input.dateOfBirth !== undefined) {
+    if (input.dateOfBirth === '' || input.dateOfBirth === null) {
+      update.dateOfBirth = null;
+    } else {
+      const dob = new Date(input.dateOfBirth);
+      if (Number.isNaN(dob.getTime()) || dob > new Date()) {
+        throw new ApiError(400, 'Invalid date of birth');
+      }
+      update.dateOfBirth = dob;
+    }
+  }
+
+  if (Object.keys(update).length === 0) {
+    throw new ApiError(400, 'Nothing to update');
+  }
+
+  const driver = await Driver.findByIdAndUpdate(
+    driverId,
+    { $set: update },
+    { new: true, runValidators: true },
+  ).populate(vehicleExperiencePopulate);
+
+  if (!driver) throw new ApiError(404, 'Driver not found');
+
+  driver.documents = dedupeDocumentsByType(driver.documents);
+  return driver.toObject();
+};
+
+const REUPLOADABLE_DOCUMENT_TYPES = [
+  'driving_license',
+  'selfie',
+  'aadhaar_front',
+  'aadhaar_back',
+  'police_verification',
+];
+
+/**
+ * Approved driver replaces one or more documents. The new files are marked
+ * pending and the driver goes back to `under_review` so admin re-verifies them
+ * (same queue as a first-time application). They are taken offline until approved.
+ */
+export const reuploadDriverDocumentsService = async (driverId, documents) => {
+  const incoming = (Array.isArray(documents) ? documents : []).filter(
+    (d) => d?.type && d?.fileUrl,
+  );
+  if (!incoming.length) {
+    throw new ApiError(400, 'Upload at least one document');
+  }
+  if (incoming.some((d) => !REUPLOADABLE_DOCUMENT_TYPES.includes(d.type))) {
+    throw new ApiError(400, 'Invalid document type');
+  }
+
+  const driver = await Driver.findById(driverId);
+  if (!driver) throw new ApiError(404, 'Driver not found');
+
+  if (driver.approvalStatus !== 'approved') {
+    throw new ApiError(400, 'Documents can be re-uploaded only on an approved profile');
+  }
+  if (driver.isOnTrip) {
+    throw new ApiError(400, 'Finish your current trip before re-uploading documents');
+  }
+
+  mergeDocumentsByType(driver.documents, incoming);
+
+  driver.approvalStatus = 'under_review';
+  driver.onboardingStep = DRIVER_ONBOARDING_STEP.SUBMITTED;
+  driver.revisionInProgress = false;
+  driver.isOnline = false;
+  driver.submissionCount = (driver.submissionCount || 0) + 1;
+  driver.approvalNote = '';
+  driver.onboardingStepReviews = createEmptyStepReviews();
+  driver.markModified('onboardingStepReviews');
+  await driver.save();
+
+  const { upsertDriverReviewTask } = await import('./adminTask.service.js');
+  await upsertDriverReviewTask(driver);
+
+  const { notifyAdminNewDriverRegistration } = await import('../utils/notificationDispatch.js');
+  notifyAdminNewDriverRegistration(driver).catch(() => null);
+
+  driver.documents = dedupeDocumentsByType(driver.documents);
+  return driver.toObject();
+};
+
 /** Post-onboarding update: payout bank details. Resets isVerified. */
 export const updateBankDetailsService = async (driverId, bankDetailsInput) => {
   const bankDetails = await parseBankDetailsInput(bankDetailsInput || {});

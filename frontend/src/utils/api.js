@@ -4,6 +4,7 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 import useUserAuthStore from '../store/useUserAuthStore';
 import {
   clearAuthTokens,
+  getAuthAudience,
   getAccessToken,
   getRefreshToken,
   persistTokensFromPayload,
@@ -40,11 +41,16 @@ function shouldSkipTokenRefresh(config) {
 
 /** Wipe in-memory auth + localStorage + cookies after a failed refresh. */
 function clearClientSession() {
-  useDriverAuthStore.setState({ driver: null, isAuthenticated: false });
-  useAdminAuthStore.setState({ admin: null, isAuthenticated: false });
-  useUserAuthStore.setState({ user: null, isAuthenticated: false, onboarding: null });
+  // Only this app's session — the other apps in the browser stay signed in.
+  const audience = getAuthAudience();
+  if (audience === 'driver') {
+    useDriverAuthStore.setState({ driver: null, isAuthenticated: false });
+  } else if (audience === 'admin') {
+    useAdminAuthStore.setState({ admin: null, isAuthenticated: false });
+  } else {
+    useUserAuthStore.setState({ user: null, isAuthenticated: false, onboarding: null });
+  }
   clearAuthTokens();
-  api.post('/auth/logout').catch(() => {});
 }
 
 api.interceptors.request.use((config) => {

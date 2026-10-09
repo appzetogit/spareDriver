@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ban, UserCheck, Loader2 } from 'lucide-react';
+import { Ban, UserCheck, Loader2, RotateCcw } from 'lucide-react';
 import api from '../../../../utils/api';
 import toast from 'react-hot-toast';
 import Modal from '../../../../components/Modal';
@@ -27,15 +27,19 @@ const DriverSuspendActions = ({
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [note, setNote] = useState('');
   const [noteError, setNoteError] = useState('');
+  const [reapproveOpen, setReapproveOpen] = useState(false);
+  const [reapproveNote, setReapproveNote] = useState('');
+  const [reapproveError, setReapproveError] = useState('');
 
   if (!driver?._id) return null;
 
   const isSuspended = driver.approvalStatus === 'suspended';
   const canSuspend = driver.approvalStatus === 'approved';
   const canUnsuspend = isSuspended;
+  const canReapprove = driver.approvalStatus === 'rejected';
 
-  if (!canSuspend && !canUnsuspend && variant === 'buttons') return null;
-  if (variant === 'menu' && !canSuspend && !canUnsuspend && !extraMenuItems.length) {
+  if (!canSuspend && !canUnsuspend && !canReapprove && variant === 'buttons') return null;
+  if (variant === 'menu' && !canSuspend && !canUnsuspend && !canReapprove && !extraMenuItems.length) {
     return null;
   }
 
@@ -44,6 +48,13 @@ const DriverSuspendActions = ({
     setSuspendOpen(false);
     setNote('');
     setNoteError('');
+  };
+
+  const closeReapproveModal = () => {
+    if (loading) return;
+    setReapproveOpen(false);
+    setReapproveNote('');
+    setReapproveError('');
   };
 
   const finishSuccess = (updatedDriver, fallbackStatus) => {
@@ -73,6 +84,28 @@ const DriverSuspendActions = ({
       finishSuccess(res.data?.data, 'suspended');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to suspend driver');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleReapproveConfirm = async () => {
+    if (!isApprovalNoteValid(reapproveNote)) {
+      setReapproveError(`Please provide a reason (minimum ${MIN_APPROVAL_NOTE_LENGTH} characters).`);
+      return;
+    }
+
+    setLoading('reapprove');
+    setReapproveError('');
+    try {
+      const res = await api.patch(`/admin/drivers/${driver._id}/reapprove`, {
+        note: reapproveNote.trim(),
+      });
+      toast.success('Driver approved again');
+      closeReapproveModal();
+      finishSuccess(res.data?.data, 'approved');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to approve driver');
     } finally {
       setLoading(null);
     }
@@ -146,8 +179,62 @@ const DriverSuspendActions = ({
     </Modal>
   );
 
+  const reapproveModal = (
+    <Modal
+      isOpen={reapproveOpen}
+      onClose={closeReapproveModal}
+      title={`Approve ${driver.name} again?`}
+    >
+      <div className="p-1 space-y-4">
+        <p className="text-sm text-slate-600">
+          This overrides the earlier rejection. The driver becomes approved, can go online again,
+          and is notified. The reason is saved in their approval history.
+        </p>
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            Reason for approving
+          </label>
+          <textarea
+            value={reapproveNote}
+            onChange={(e) => {
+              setReapproveNote(e.target.value);
+              if (reapproveError && isApprovalNoteValid(e.target.value)) setReapproveError('');
+            }}
+            rows={4}
+            placeholder="Why is this driver being approved after rejection…"
+            className={`mt-2 w-full rounded-xl border bg-slate-50 p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+              reapproveError ? 'border-rose-300' : 'border-slate-200'
+            }`}
+          />
+          {reapproveError ? (
+            <p className="text-xs text-rose-600 mt-1">{reapproveError}</p>
+          ) : (
+            <p className="text-[11px] text-slate-400 mt-1">
+              {reapproveNote.trim().length}/{MIN_APPROVAL_NOTE_LENGTH} characters minimum
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" fullWidth onClick={closeReapproveModal} disabled={Boolean(loading)}>
+            Cancel
+          </Button>
+          <Button fullWidth loading={loading === 'reapprove'} onClick={handleReapproveConfirm}>
+            Approve driver
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+
   if (variant === 'menu') {
     const items = [...extraMenuItems];
+    if (canReapprove) {
+      items.push({
+        label: loading === 'reapprove' ? 'Approving…' : 'Approve again',
+        icon: RotateCcw,
+        onClick: () => setReapproveOpen(true),
+      });
+    }
     if (canSuspend) {
       items.push({
         label: loading === 'suspend' ? 'Suspending…' : 'Suspend',
@@ -168,6 +255,7 @@ const DriverSuspendActions = ({
       <>
         <RowActionsMenu items={items} />
         {suspendModal}
+        {reapproveModal}
       </>
     );
   }
@@ -202,6 +290,24 @@ const DriverSuspendActions = ({
             Suspend
           </button>
         )}
+        {canReapprove && (
+          <button
+            type="button"
+            disabled={Boolean(loading)}
+            onClick={(e) => {
+              e?.stopPropagation?.();
+              setReapproveOpen(true);
+            }}
+            className={`${btnBase} border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100`}
+          >
+            {loading === 'reapprove' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="w-3.5 h-3.5" />
+            )}
+            Approve again
+          </button>
+        )}
         {canUnsuspend && (
           <button
             type="button"
@@ -219,6 +325,7 @@ const DriverSuspendActions = ({
         )}
       </div>
       {suspendModal}
+      {reapproveModal}
     </>
   );
 };

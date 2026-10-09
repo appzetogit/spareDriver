@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Smartphone,
+  Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useUserAuthStore from '../../../../store/useUserAuthStore';
@@ -17,6 +18,7 @@ import Avatar from '../../../../components/Avatar';
 import Button from '../../../../components/Button';
 import Input from '../../../../components/Input';
 import Modal from '../../../../components/Modal';
+import EditProfileForm from '../components/EditProfileForm';
 import OtpResendRow from '../../../../components/OtpResendRow';
 import api from '../../../../utils/api';
 import { useOtpResendCooldown } from '../../../../hooks/useOtpResendCooldown';
@@ -369,6 +371,7 @@ const UserProfilePage = () => {
   const navigate = useNavigate();
   const user = useUserAuthStore((s) => s.user);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const phone = user?.phone_no || '';
   const email = (user?.email && !user.email.includes('@placeholder') && user.isEmailVerified)
@@ -383,12 +386,20 @@ const UserProfilePage = () => {
           <ArrowLeft className="w-5 h-5 text-slate-600" />
         </button>
         <div className="flex items-center gap-4 mt-1">
-          <Avatar name={user?.name || 'User'} size="xl" />
+          <Avatar src={user?.profilePicture || undefined} name={user?.name || 'User'} size="xl" />
           <div className="min-w-0">
             <h1 className="text-xl font-extrabold text-slate-900 truncate">{user?.name || 'My Profile'}</h1>
             {phone && <p className="text-sm text-slate-500 mt-0.5">+91 {phone}</p>}
             {email && <p className="text-xs text-slate-400 mt-0.5 truncate">{email}</p>}
           </div>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Pencil className="w-4 h-4" />
+            Edit
+          </button>
         </div>
       </div>
 
@@ -436,6 +447,12 @@ const UserProfilePage = () => {
           </div>
         </div>
       </div>
+
+      <Modal isOpen={editOpen} onClose={() => setEditOpen(false)} title="Edit Profile">
+        <div className="px-5 pb-6 pt-3">
+          <EditProfileForm user={user} onDone={() => setEditOpen(false)} />
+        </div>
+      </Modal>
 
       {/* ── Change Password Modal ── */}
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Change Password">

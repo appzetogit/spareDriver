@@ -39,7 +39,7 @@ const MENU_GROUPS = [
   {
     title: 'Profile',
     items: [
-      { icon: User, label: 'Profile Info', path: '/driver/account/info' },
+      { icon: User, label: 'Edit Profile', path: '/driver/account/info' },
       { icon: IdCard, label: 'SpareDriver ID Card', path: '/driver/account/id-card' },
       { icon: FileText, label: 'Documents', path: '/driver/account/documents' },
     ],

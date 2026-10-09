@@ -11,6 +11,8 @@ import {
   getProfile,
   updateVehicleExperience,
   updateBankDetails,
+  updateProfile,
+  reuploadDocuments,
   getTraining,
   updateTrainingProgress,
   uploadLiveVerification,
@@ -136,6 +138,8 @@ router.post('/onboarding/submit', protectDriver, submitApplication);
 router.post('/application/reopen', protectDriver, reopenRejectedApplication);
 router.get('/profile', protectDriver, getProfile);
 router.get('/id-card/pdf', protectDriver, downloadDriverIdCardPdf);
+router.put('/profile', protectDriver, updateProfile);
+router.post('/documents/reupload', protectDriver, reuploadDocuments);
 router.put('/profile/vehicle-experience', protectDriver, updateVehicleExperience);
 router.put('/profile/bank-details', protectDriver, updateBankDetails);
 router.post('/fcm-token', protectDriver, registerDriverFcmToken);

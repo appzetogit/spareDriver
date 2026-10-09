@@ -13,6 +13,7 @@ import {
   updateDriverStepReview,
   suspendDriver,
   unsuspendDriver,
+  reapproveDriver,
   addAdminMember,
   getAdminTeam,
   updateAdminMember,
@@ -539,6 +540,7 @@ router.put('/drivers/:id/status', protectStaff, restrictTo(...ALL_STAFF), update
 router.put('/drivers/:id/step-review', protectStaff, restrictTo(...ALL_STAFF), updateDriverStepReview);
 router.patch('/drivers/:id/suspend', protectStaff, restrictTo(...ALL_STAFF), suspendDriver);
 router.patch('/drivers/:id/unsuspend', protectStaff, restrictTo(...ALL_STAFF), unsuspendDriver);
+router.patch('/drivers/:id/reapprove', protectStaff, restrictTo(...ALL_STAFF), reapproveDriver);
 
 /* ---- Ads (admin + sub_admin manage; users get the public feed) ------ */
 // Admins upload either an image OR a short video to Cloudinary via

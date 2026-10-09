@@ -655,6 +655,34 @@ export const verifyUserEmailOtpService = async (userId, { email, otp }) => {
   return sanitizeUser(user);
 };
 
+/** Self-service profile edit. Phone/email changes go through their own OTP flows. */
+export const updateMyProfileService = async (userId, input = {}) => {
+  const user = await User.findById(userId);
+  if (!user || user.isDeleted) throw new ApiError(404, 'User not found');
+
+  if (input.name !== undefined) {
+    const name = String(input.name).trim();
+    if (name.length < 2) throw new ApiError(400, 'Name must be at least 2 characters');
+    user.name = name;
+  }
+  if (input.alternatePhone !== undefined) {
+    const alt = String(input.alternatePhone).trim();
+    if (alt && !/^[0-9]{10}$/.test(alt)) {
+      throw new ApiError(400, 'Alternate phone must be a valid 10-digit number');
+    }
+    if (alt && alt === user.phone_no) {
+      throw new ApiError(400, 'Alternate phone must differ from your primary number');
+    }
+    user.alternatePhone = alt;
+  }
+  if (input.profilePicture !== undefined) {
+    user.profilePicture = String(input.profilePicture).trim();
+  }
+
+  await user.save();
+  return sanitizeUser(user);
+};
+
 export const updateUserOnboardingStepService = async (userId, data) => {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(404, 'User not found');

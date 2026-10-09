@@ -90,6 +90,27 @@ export const updateVehicleExperience = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, result, 'Vehicle experience updated'));
 });
 
+export const updateProfile = asyncHandler(async (req, res) => {
+  const { name, email, gender, dateOfBirth } = req.body || {};
+  const result = await driverService.updateDriverProfileService(req.driver._id, {
+    name,
+    email,
+    gender,
+    dateOfBirth,
+  });
+  return res.status(200).json(new ApiResponse(200, result, 'Profile updated'));
+});
+
+export const reuploadDocuments = asyncHandler(async (req, res) => {
+  const result = await driverService.reuploadDriverDocumentsService(
+    req.driver._id,
+    req.body?.documents,
+  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Documents submitted for re-verification'));
+});
+
 export const updateBankDetails = asyncHandler(async (req, res) => {
   const result = await driverService.updateBankDetailsService(
     req.driver._id,
