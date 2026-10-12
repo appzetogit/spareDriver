@@ -10,6 +10,7 @@ import authRoutes from './routes/user.routes.js';
 import webhookRoutes from './routes/webhook.route.js';
 import sosRoutes from './routes/sos.route.js';
 import supportRoutes from './routes/support.route.js';
+import referralLinkRoutes from './routes/referralLink.route.js';
 import { protectUser } from './middlewares/authMiddleware.js';
 import { getUserFirebaseToken } from './controllers/firebaseAuth.controller.js';
 
@@ -41,6 +42,8 @@ app.use('/v1/driver', driverRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/sos', sosRoutes);
 app.use('/api/v1/support', supportRoutes);
+// Public shareable referral links: /r/:code -> Play Store / App Store.
+app.use('/r', referralLinkRoutes);
 
 // Mount dev test routes in non-production environments only.
 if (process.env.NODE_ENV !== 'production') {

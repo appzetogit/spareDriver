@@ -10,6 +10,7 @@ import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 import { useOtpResendCooldown } from '../../../hooks/useOtpResendCooldown';
+import { captureReferralFromUrl, clearPendingReferral } from '../../../utils/referralLink';
 import { isValidUserEmail, normalizeUserEmail, sanitizeEmailInput } from '../../../utils/email';
 
 function VerifiedBadge() {
@@ -31,7 +32,7 @@ const RegisterPage = () => {
     email: '',
     password: '',
     alternatePhone: '',
-    referralCode: '',
+    referralCode: captureReferralFromUrl(),
   });
   const [phoneOtp, setPhoneOtp] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
@@ -250,6 +251,7 @@ const RegisterPage = () => {
         ...(referralCode ? { referralCode } : {}),
       }));
       const { user } = res.data.data;
+      clearPendingReferral();
       setAuth(user);
       navigateUserAfterAuth(navigate, user);
     } catch (err) {

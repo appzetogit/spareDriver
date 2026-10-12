@@ -11,6 +11,7 @@ import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { driverNeedsPhone, navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
 import { useOtpResendCooldown } from '../../../../hooks/useOtpResendCooldown';
+import { captureReferralFromUrl, clearPendingReferral } from '../../../../utils/referralLink';
 import DriverRegistrationLogoutButton from '../components/DriverRegistrationLogoutButton';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
@@ -36,7 +37,7 @@ const IdentityDetailsPage = () => {
     }
   }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.revisionInProgress, navigate]);
 
-  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '', referralCode: '' });
+  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '', referralCode: captureReferralFromUrl() });
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState('');
@@ -118,6 +119,7 @@ const IdentityDetailsPage = () => {
       }));
 
       setAuth(res.data.data.driver);
+      clearPendingReferral();
       
       setIsPhoneVerified(true);
       setShowOtpModal(false);

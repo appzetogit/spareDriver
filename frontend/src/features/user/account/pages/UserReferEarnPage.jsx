@@ -8,6 +8,7 @@ import Loader from '../../../../components/Loader';
 import api from '../../../../utils/api';
 import { formatCurrency } from '../../../../utils/formatters';
 import { shareText } from '../../../../utils/nativeShare';
+import { buildReferralLink } from '../../../../utils/referralLink';
 
 const STATUS_LABEL = {
   pending: 'Pending',
@@ -81,6 +82,7 @@ const UserReferEarnPage = () => {
     const result = await shareText({
       title: 'Sparedriver',
       text: `Join Sparedriver using my referral code ${code}.`,
+      url: buildReferralLink(code),
     });
     if (result.via === 'clipboard') toast.success('Share message copied');
     else if (!result.ok && result.reason === 'failed') toast.error('Could not share');
