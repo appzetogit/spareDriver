@@ -11,6 +11,7 @@ import { useInAppAlertRing } from '../../hooks/useInAppAlertRing';
 import { ADMIN_NOTIFICATION, DRIVER_NOTIFICATION } from '../../constants/notificationTypes';
 import { BOOKING_STATUS } from '../../constants/bookingStatus';
 import { syncDriverDashboardFromBookingUpdate } from '../../store/driver/useDriverActiveTripStore';
+import { playBeep } from '../../utils/beep';
 
 function isAdminAlertKind(kind) {
   return (
@@ -88,7 +89,12 @@ export function AdminNotificationBridge() {
   useFcmRegistration({ enabled: isAuthenticated, audience: 'admin' });
   useNotificationListener({
     enabled: isAuthenticated,
-    onNotification: () => fetchUnread({ force: true }).catch(() => null),
+    onNotification: (payload) => {
+      fetchUnread({ force: true }).catch(() => null);
+      // SOS / emergency pool already ring the long alert via ADMIN_ALERT.
+      const kind = payload?.type || payload?.data?.kind;
+      if (!isAdminAlertKind(kind)) playBeep();
+    },
   });
 
   useSocketEvent(S2C_EVENTS.ADMIN_ALERT, (payload) => {
