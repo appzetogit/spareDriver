@@ -2,7 +2,10 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["REPLACE_TEAM_ID.REPLACE_BUNDLE_ID"],
+        "appIDs": [
+          "M7LK6345UM.com.spareDriver.user",
+          "M7LK6345UM.com.spareDriver.driver"
+        ],
         "components": [
           { "/": "/r/*", "comment": "Referral invite links" }
         ]
