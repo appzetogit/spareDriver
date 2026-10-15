@@ -3,8 +3,16 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "REPLACE_WITH_ANDROID_PACKAGE_NAME",
-      "sha256_cert_fingerprints": ["REPLACE:WITH:SHA256:SIGNING:CERT:FINGERPRINT"]
+      "package_name": "com.spareDriver.user",
+      "sha256_cert_fingerprints": ["68:48:DF:BF:F2:E9:61:65:0C:57:5D:37:66:1A:6F:C4:4E:2E:F6:2F:D5:DD:87:C8:F4:A5:07:27:92:BE:F4:4E"]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.spareDriver.driver",
+      "sha256_cert_fingerprints": ["40:91:B8:54:B2:60:B9:94:CC:D3:CB:76:64:FA:7C:1F:28:EF:8D:70:57:92:D9:13:D7:CC:83:6A:A2:95:76:5C"]
     }
   }
 ]
