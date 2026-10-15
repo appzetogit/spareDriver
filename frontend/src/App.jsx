@@ -22,6 +22,7 @@ import usePaymentConfigStore from './store/usePaymentConfigStore';
 // Side-effect: starts the global Socket.IO lifecycle (auto-connects when any
 // auth store has a session, auto-disconnects on logout).
 import './store/useSocketStore';
+import { isIosAppWebView, recoverDeferredReferral } from './utils/referralLink';
 
 // Auth
 const WelcomePage = lazy(() => import('./features/auth/pages/WelcomePage'));
@@ -102,6 +103,7 @@ const SubscribeCheckoutPage = lazy(
 );
 const MySubscriptionPage = lazy(() => import('./features/user/account/pages/MySubscriptionPage'));
 const UserReferEarnPage = lazy(() => import('./features/user/account/pages/UserReferEarnPage'));
+const ReferralLandingPage = lazy(() => import('./features/referral/pages/ReferralLandingPage'));
 
 // Driver Registration
 const DriverLoginPage = lazy(() => import('./features/driver/auth/pages/DriverLoginPage'));
@@ -211,6 +213,13 @@ function App() {
     void bootstrap();
   }, [bootstrap]);
 
+  // iOS app first launch: recover an invite code from the Safari click
+  // (deferred deep link). Once per install; no-op elsewhere.
+  useEffect(() => {
+    if (!isIosAppWebView()) return;
+    void recoverDeferredReferral();
+  }, []);
+
   // Which payment rails are live. Public, unauthenticated and cheap, so
   // it is fetched once at boot alongside the session — every Razorpay
   // entry point in both apps reads it before rendering.
@@ -223,6 +232,7 @@ function App() {
       <Routes>
         {/* ========== Marketing / Landing Routes (Outside MobileLayout) ========== */}
         <Route path="/" element={<LandingPage />} />
+        <Route path="/r/:code" element={<ReferralLandingPage />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
         <Route path="/refund-and-cancellation-policy" element={<RefundCancellationPolicyPage />} />

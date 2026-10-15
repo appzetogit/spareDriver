@@ -11,6 +11,11 @@ import { listActiveZones, checkZoneForPoint } from '../controllers/zone.controll
 import { listActiveAds } from '../controllers/ad.controller.js';
 import { getSupportConfig } from '../controllers/support.controller.js';
 import { getPublicReferralConfig } from '../controllers/referral.controller.js';
+import {
+  recordDeferredReferralClick,
+  matchDeferredReferral,
+} from '../controllers/deferredReferral.controller.js';
+import { createRateLimiter } from '../middlewares/rateLimit.js';
 import { getPublicLegalDocument } from '../controllers/legalDocument.controller.js';
 import {
   getPublicDriverDocumentRequirements,
@@ -39,6 +44,11 @@ router.get('/zones/check', checkZoneForPoint);
 router.get('/ads', listActiveAds);
 router.get('/support-config', getSupportConfig);
 router.get('/referral-config', getPublicReferralConfig);
+
+// iOS deferred deep linking (see controllers/deferredReferral.controller.js).
+const deferredLimiter = createRateLimiter({ windowMs: 60_000, max: 20, keyPrefix: 'referral:deferred' });
+router.post('/referral/deferred/click', deferredLimiter, recordDeferredReferralClick);
+router.post('/referral/deferred/match', deferredLimiter, matchDeferredReferral);
 router.get('/driver-document-requirements', getPublicDriverDocumentRequirements);
 router.get('/payment-methods', getPublicPaymentMethods);
 router.get('/legal/:type', getPublicLegalDocument);

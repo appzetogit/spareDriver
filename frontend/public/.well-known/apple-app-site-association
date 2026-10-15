@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_TEAM_ID.REPLACE_BUNDLE_ID"],
+        "components": [
+          { "/": "/r/*", "comment": "Referral invite links" }
+        ]
+      }
+    ]
+  }
+}

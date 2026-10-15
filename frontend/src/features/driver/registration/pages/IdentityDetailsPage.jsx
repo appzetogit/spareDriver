@@ -11,7 +11,7 @@ import useDriverAuthStore from '../../../../store/useDriverAuthStore';
 import { driverNeedsPhone, navigateDriverAfterAuth } from '../../../auth/utils/authNavigation';
 import { withFcmAuthPayload } from '../../../../utils/fcmTokenClient';
 import { useOtpResendCooldown } from '../../../../hooks/useOtpResendCooldown';
-import { captureReferralFromUrl, clearPendingReferral } from '../../../../utils/referralLink';
+import { captureReferralFromUrl, clearPendingReferral, REFERRAL_RECOVERED_EVENT } from '../../../../utils/referralLink';
 import DriverRegistrationLogoutButton from '../components/DriverRegistrationLogoutButton';
 
 import { DRIVER_ONBOARDING_STEPS } from '../../../../utils/driverOnboarding';
@@ -37,7 +37,7 @@ const IdentityDetailsPage = () => {
     }
   }, [isAuthenticated, driver?.id, driver?.phone, driver?.onboardingStep, driver?.approvalStatus, driver?.revisionInProgress, navigate]);
 
-  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '', referralCode: captureReferralFromUrl() });
+  const [form, setForm] = useState({ name: '', phone: '', password: '', alternatePhone: '', referralCode: captureReferralFromUrl('driver') });
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState('');
@@ -56,6 +56,16 @@ const IdentityDetailsPage = () => {
       }
     };
     loadReferralConfig();
+  }, []);
+
+  // iOS: the code is recovered after the app's first launch, possibly after this page mounted.
+  useEffect(() => {
+    const onRecovered = (e) => {
+      if (e.detail?.role !== 'driver') return;
+      setForm((prev) => (prev.referralCode ? prev : { ...prev, referralCode: e.detail.code }));
+    };
+    window.addEventListener(REFERRAL_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(REFERRAL_RECOVERED_EVENT, onRecovered);
   }, []);
 
   const handleChange = (f) => (e) => {

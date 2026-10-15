@@ -10,7 +10,7 @@ import useUserAuthStore from '../../../store/useUserAuthStore';
 import { navigateUserAfterAuth } from '../utils/authNavigation';
 import { withFcmAuthPayload } from '../../../utils/fcmTokenClient';
 import { useOtpResendCooldown } from '../../../hooks/useOtpResendCooldown';
-import { captureReferralFromUrl, clearPendingReferral } from '../../../utils/referralLink';
+import { captureReferralFromUrl, clearPendingReferral, REFERRAL_RECOVERED_EVENT } from '../../../utils/referralLink';
 import { isValidUserEmail, normalizeUserEmail, sanitizeEmailInput } from '../../../utils/email';
 
 function VerifiedBadge() {
@@ -32,7 +32,7 @@ const RegisterPage = () => {
     email: '',
     password: '',
     alternatePhone: '',
-    referralCode: captureReferralFromUrl(),
+    referralCode: captureReferralFromUrl('user'),
   });
   const [phoneOtp, setPhoneOtp] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
@@ -66,6 +66,16 @@ const RegisterPage = () => {
       }
     };
     loadReferralConfig();
+  }, []);
+
+  // iOS: the code is recovered after the app's first launch, possibly after this page mounted.
+  useEffect(() => {
+    const onRecovered = (e) => {
+      if (e.detail?.role !== 'user') return;
+      setFormData((prev) => (prev.referralCode ? prev : { ...prev, referralCode: e.detail.code }));
+    };
+    window.addEventListener(REFERRAL_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(REFERRAL_RECOVERED_EVENT, onRecovered);
   }, []);
 
   const handleChange = (field) => (e) => {
