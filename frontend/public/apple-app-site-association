@@ -1,0 +1,25 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "M7LK6345UM.com.spareDriver.user",
+          "M7LK6345UM.com.spareDriver.driver"
+        ],
+        "components": [
+          { "/": "/r/*", "comment": "Referral invite links" }
+        ],
+        "paths": [
+          "/r/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "M7LK6345UM.com.spareDriver.user",
+      "M7LK6345UM.com.spareDriver.driver"
+    ]
+  }
+}

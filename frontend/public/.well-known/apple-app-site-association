@@ -1,5 +1,6 @@
 {
   "applinks": {
+    "apps": [],
     "details": [
       {
         "appIDs": [
@@ -8,8 +9,17 @@
         ],
         "components": [
           { "/": "/r/*", "comment": "Referral invite links" }
+        ],
+        "paths": [
+          "/r/*"
         ]
       }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "M7LK6345UM.com.spareDriver.user",
+      "M7LK6345UM.com.spareDriver.driver"
     ]
   }
 }

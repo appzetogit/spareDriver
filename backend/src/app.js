@@ -50,6 +50,67 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// Apple Universal Links (AASA) & Android App Links
+const appleAppSiteAssociation = {
+  applinks: {
+    apps: [],
+    details: [
+      {
+        appIDs: [
+          'M7LK6345UM.com.spareDriver.user',
+          'M7LK6345UM.com.spareDriver.driver',
+        ],
+        components: [
+          { '/': '/r/*', comment: 'Referral invite links' },
+        ],
+        paths: ['/r/*'],
+      },
+    ],
+  },
+  webcredentials: {
+    apps: [
+      'M7LK6345UM.com.spareDriver.user',
+      'M7LK6345UM.com.spareDriver.driver',
+    ],
+  },
+};
+
+const assetlinks = [
+  {
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'com.spareDriver.user',
+      sha256_cert_fingerprints: [
+        '68:48:DF:BF:F2:E9:61:65:0C:57:5D:37:66:1A:6F:C4:4E:2E:F6:2F:D5:DD:87:C8:F4:A5:07:27:92:BE:F4:4E',
+      ],
+    },
+  },
+  {
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'com.spareDriver.driver',
+      sha256_cert_fingerprints: [
+        '40:91:B8:54:B2:60:B9:94:CC:D3:CB:76:64:FA:7C:1F:28:EF:8D:70:57:92:D9:13:D7:CC:83:6A:A2:95:76:5C',
+      ],
+    },
+  },
+];
+
+app.get(
+  ['/.well-known/apple-app-site-association', '/apple-app-site-association'],
+  (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json(appleAppSiteAssociation);
+  },
+);
+
+app.get(['/.well-known/assetlinks.json', '/assetlinks.json'], (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json(assetlinks);
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
